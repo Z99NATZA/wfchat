@@ -1,0 +1,8 @@
+services:
+  wfchat:
+    build:
+      context: .
+      target: runtime
+    ports:
+      - "8080:80"
+    restart: unless-stopped

@@ -1,0 +1,74 @@
+import { FormEvent } from "react";
+import { Image, Mic, Paperclip, Send } from "lucide-react";
+import IconButton from "@/components/ui/IconButton";
+
+type ChatComposerProps = {
+	draft: string;
+	quickPrompts: string[];
+	onDraftChange: (draft: string) => void;
+	onSend: () => void;
+	onUseQuickPrompt: (prompt: string) => void;
+};
+
+function ChatComposer({
+	draft,
+	quickPrompts,
+	onDraftChange,
+	onSend,
+	onUseQuickPrompt
+}: ChatComposerProps) {
+	function handleSubmit(event: FormEvent<HTMLFormElement>) {
+		event.preventDefault();
+		onSend();
+	}
+
+	return (
+		<div className="border-t border-app-border bg-app-panel px-4 py-4 lg:px-8">
+			<div className="mx-auto max-w-3xl">
+				<div className="mb-3 flex gap-2 overflow-x-auto pb-1">
+					{quickPrompts.map((prompt) => (
+						<button
+							key={prompt}
+							type="button"
+							className="shrink-0 rounded-lg border border-app-border bg-app-soft px-3 py-2 text-xs font-medium text-muted transition hover:border-primary hover:text-primary"
+							onClick={() => onUseQuickPrompt(prompt)}
+						>
+							{prompt}
+						</button>
+					))}
+				</div>
+
+				<form
+					className="flex items-end gap-2 rounded-lg border border-app-border bg-app-soft p-2 shadow-soft focus-within:border-primary focus-within:ring-4 focus-within:ring-primary/15"
+					onSubmit={handleSubmit}
+				>
+					<IconButton className="shrink-0" aria-label="Attach file">
+						<Paperclip size={18} aria-hidden="true" />
+					</IconButton>
+					<textarea
+						className="max-h-32 min-h-11 flex-1 resize-none bg-transparent px-2 py-3 text-sm outline-none placeholder:text-muted"
+						value={draft}
+						placeholder="Message Aiko"
+						rows={1}
+						onChange={(event) => onDraftChange(event.target.value)}
+					/>
+					<IconButton className="hidden shrink-0 sm:flex" aria-label="Voice message">
+						<Mic size={18} aria-hidden="true" />
+					</IconButton>
+					<IconButton className="hidden shrink-0 sm:flex" aria-label="Image prompt">
+						<Image size={18} aria-hidden="true" />
+					</IconButton>
+					<button
+						type="submit"
+						className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-primary text-white shadow-soft transition hover:bg-primary-600 focus:outline-none focus:ring-4 focus:ring-primary/25"
+						aria-label="Send message"
+					>
+						<Send size={18} aria-hidden="true" />
+					</button>
+				</form>
+			</div>
+		</div>
+	);
+}
+
+export default ChatComposer;

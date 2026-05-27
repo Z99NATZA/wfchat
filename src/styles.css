@@ -1,0 +1,78 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+	--color-primary: var(--brand-primary);
+	--color-primary-600: var(--brand-primary-hover);
+	--color-app-bg: var(--app-bg);
+	--color-app-panel: var(--app-panel);
+	--color-app-soft: var(--app-soft);
+	--color-app-text: var(--app-text);
+	--color-app-border: var(--app-border);
+	--color-muted: var(--muted);
+	--shadow-soft: 0 14px 36px -26px rgb(15 23 42 / 0.55);
+}
+
+@layer base {
+	:root {
+		--brand-primary: #4070f4;
+		--brand-primary-hover: #2f5fdd;
+		--app-bg: #f6f8fc;
+		--app-panel: #ffffff;
+		--app-soft: #f0f4fb;
+		--app-text: #111827;
+		--app-border: #dce3ef;
+		--muted: #69758a;
+	}
+
+	.dark {
+		--brand-primary: #282c33;
+		--brand-primary-hover: #343a43;
+		--app-bg: #0d1119;
+		--app-panel: #121826;
+		--app-soft: #182132;
+		--app-text: #edf3ff;
+		--app-border: #263247;
+		--muted: #9da9ba;
+	}
+
+	* {
+		box-sizing: border-box;
+	}
+
+	body {
+		min-width: 320px;
+		margin: 0;
+		font-family:
+			Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+			sans-serif;
+	}
+
+	button,
+	input,
+	textarea {
+		font: inherit;
+	}
+}
+
+@layer components {
+	.icon-button {
+		@apply flex size-10 items-center justify-center rounded-lg border border-app-border bg-app-soft text-muted transition hover:border-primary hover:text-primary focus:outline-none focus:ring-4 focus:ring-primary/15;
+	}
+
+	.status-dot {
+		@apply size-2 rounded-full bg-emerald-400 ring-4 ring-emerald-400/15;
+	}
+}
+
+@layer utilities {
+	.bg-primary\/8 {
+		background-color: color-mix(in srgb, var(--brand-primary) 8%, transparent);
+	}
+
+	.chat-scroll {
+		scrollbar-width: thin;
+		scrollbar-color: color-mix(in srgb, var(--brand-primary) 45%, transparent) transparent;
+	}
+}
