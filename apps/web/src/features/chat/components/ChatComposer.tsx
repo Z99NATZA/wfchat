@@ -1,4 +1,4 @@
-import { FormEvent, KeyboardEvent } from "react";
+import { FormEvent, KeyboardEvent, useEffect, useRef } from "react";
 import { Image, Mic, Paperclip, Send } from "lucide-react";
 import IconButton from "@/components/ui/IconButton";
 
@@ -21,6 +21,20 @@ function ChatComposer({
 	isDisabled = false,
 	isSending = false
 }: ChatComposerProps) {
+	const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+	useEffect(() => {
+		const textarea = textareaRef.current;
+
+		if (!textarea) {
+			return;
+		}
+
+		textarea.style.height = "auto";
+		textarea.style.height = `${Math.min(textarea.scrollHeight, 160)}px`;
+		textarea.style.overflowY = textarea.scrollHeight > 160 ? "auto" : "hidden";
+	}, [draft]);
+
 	function handleSubmit(event: FormEvent<HTMLFormElement>) {
 		event.preventDefault();
 		onSend();
@@ -61,7 +75,8 @@ function ChatComposer({
 						<Paperclip size={18} aria-hidden="true" />
 					</IconButton>
 					<textarea
-						className="max-h-32 min-h-11 flex-1 resize-none bg-transparent px-2 py-3 text-sm outline-none placeholder:text-muted"
+						ref={textareaRef}
+						className="min-h-11 flex-1 resize-none bg-transparent px-2 py-3 text-sm leading-6 outline-none placeholder:text-muted"
 						value={draft}
 						placeholder="Message Aiko"
 						rows={1}
