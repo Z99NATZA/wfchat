@@ -82,7 +82,23 @@ pub async fn complete_chat_completions(
         .and_then(|choice| choice.message.content)
         .ok_or_else(|| AppError::Ai("provider response did not include content".to_owned()))?;
 
-    Ok(AiMessage::assistant(content))
+    Ok(AiMessage::assistant(apply_character_response_guard(
+        provider.ai_profile_id,
+        content,
+    )))
+}
+
+fn apply_character_response_guard(ai_profile_id: &str, content: String) -> String {
+    if !characters::is_aiko_profile(ai_profile_id) {
+        return content;
+    }
+
+    content
+        .replace("ครับนะ", "ค่ะนะ")
+        .replace("ครับผม", "ค่ะ")
+        .replace("ครับ", "ค่ะ")
+        .replace("คับ", "ค่ะ")
+        .replace("ผม", "ไอโกะ")
 }
 
 fn build_messages<'a>(ai_profile_id: &str, messages: &'a [AiMessage]) -> Vec<ProviderMessage<'a>> {

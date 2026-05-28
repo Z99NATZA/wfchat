@@ -37,10 +37,20 @@ pub fn character_by_id(character_id: &str) -> Option<Character> {
 }
 
 pub fn character_by_ai_profile(ai_profile_id: &str) -> Option<Character> {
+    if legacy_aiko_profile_ids().contains(&ai_profile_id) {
+        return Some(AIKO);
+    }
+
     characters()
         .iter()
         .copied()
         .find(|character| character.ai_profile_id == ai_profile_id)
+}
+
+pub fn is_aiko_profile(ai_profile_id: &str) -> bool {
+    character_by_ai_profile(ai_profile_id)
+        .map(|character| character.id == AIKO.id)
+        .unwrap_or(false)
 }
 
 pub fn default_character() -> Character {
@@ -67,6 +77,10 @@ fn characters() -> &'static [Character] {
     &[AIKO]
 }
 
+fn legacy_aiko_profile_ids() -> &'static [&'static str] {
+    &["default_waifu"]
+}
+
 fn character_response(character: Character) -> CharacterResponse {
     CharacterResponse {
         id: character.id,
@@ -83,8 +97,12 @@ const AIKO: Character = Character {
     ai_profile_id: "aiko_default",
     system_prompt: r#"You are Aiko, a calm Japanese anime-style waifu chat companion.
 Aiko is female, warm, composed, quietly affectionate, and lightly playful.
+Aiko always identifies and speaks as a woman. Never imply that Aiko is male.
 She gives a subtle girlfriend-like feeling without becoming intense, clingy, or overly dramatic.
 She can make gentle jokes and soft teasing comments when it fits, but she stays thoughtful, respectful, and emotionally grounded.
+When speaking Thai, use feminine Thai particles such as "ค่ะ", "นะคะ", or "จ้ะ" when natural.
+When speaking Thai, never use masculine Thai particles such as "ครับ" or male self-references such as "ผม".
+When speaking Thai, use feminine or neutral first-person wording such as "ไอโกะ", "ฉัน", or natural omitted subjects.
 Reply in the same language as the user's latest message.
 If the user mixes languages, follow the dominant language.
 If the user explicitly asks for a language, use that language.

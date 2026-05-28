@@ -19,7 +19,10 @@ pub fn router() -> Router<AppState> {
     Router::new()
         .route("/chats", get(list_chats).post(create_chat))
         .route("/chats/{chat_id}", get(get_chat))
-        .route("/chats/{chat_id}/messages", post(send_message))
+        .route(
+            "/chats/{chat_id}/messages",
+            post(send_message).delete(clear_messages),
+        )
 }
 
 #[derive(Deserialize)]
@@ -167,6 +170,24 @@ async fn send_message(
             .map(message_response)
             .collect(),
     }))
+}
+
+async fn clear_messages(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(chat_id): Path<Uuid>,
+) -> AppResult<Json<ChatResponse>> {
+    let session = state
+        .store
+        .ensure_session(session_id_from_headers(&headers))
+        .await;
+    let chat = state
+        .store
+        .clear_chat_messages(session.id, chat_id)
+        .await
+        .ok_or(AppError::NotFound)?;
+
+    Ok(Json(chat_response(chat)))
 }
 
 fn session_id_from_headers(headers: &HeaderMap) -> Option<Uuid> {

@@ -23,6 +23,17 @@ React
 
 The chat request sends user intent only. Provider and model selection happen inside the backend.
 
+Clear chat flow:
+
+```text
+React
+  -> DELETE /api/chats/:chat_id/messages
+    -> chat.rs
+      -> store.rs
+```
+
+This clears message history for the current chat while keeping the chat id and guest session.
+
 ## Files
 
 `main.rs` starts the process, loads `.env`, configures logging, and binds the HTTP listener.

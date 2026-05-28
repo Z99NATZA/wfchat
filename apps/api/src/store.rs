@@ -9,7 +9,10 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 use uuid::Uuid;
 
-use crate::ai::{AiMessage, AiRole};
+use crate::{
+    ai::{AiMessage, AiRole},
+    characters,
+};
 
 #[derive(Clone)]
 pub struct ChatStore {
@@ -61,10 +64,11 @@ pub struct StoredMessage {
 impl ChatStore {
     pub async fn load(path: impl Into<PathBuf>) -> Self {
         let path = path.into();
-        let data = match tokio::fs::read_to_string(&path).await {
+        let mut data = match tokio::fs::read_to_string(&path).await {
             Ok(content) => serde_json::from_str(&content).unwrap_or_default(),
             Err(_) => StoreData::default(),
         };
+        migrate_store_data(&mut data);
 
         Self {
             path,
@@ -176,6 +180,23 @@ impl ChatStore {
         Some(updated_chat)
     }
 
+    pub async fn clear_chat_messages(&self, session_id: Uuid, chat_id: Uuid) -> Option<ChatRecord> {
+        let updated_chat = {
+            let mut data = self.inner.write().await;
+            let chat = data
+                .chats
+                .get_mut(&chat_id)
+                .filter(|chat| chat.owner_session_id == session_id)?;
+
+            chat.messages.clear();
+            chat.updated_at = now_unix_seconds();
+            chat.clone()
+        };
+
+        self.save().await;
+        Some(updated_chat)
+    }
+
     async fn save(&self) {
         let snapshot = {
             let data = self.inner.read().await;
@@ -215,4 +236,16 @@ fn now_unix_seconds() -> u64 {
         .duration_since(UNIX_EPOCH)
         .map(|duration| duration.as_secs())
         .unwrap_or_default()
+}
+
+fn migrate_store_data(data: &mut StoreData) {
+    for chat in data.chats.values_mut() {
+        if chat.character_id == "aiko" && !characters::is_aiko_profile(&chat.ai_profile_id) {
+            chat.ai_profile_id = characters::default_character().ai_profile_id.to_owned();
+        }
+
+        if chat.character_id == "aiko" && chat.ai_profile_id == "default_waifu" {
+            chat.ai_profile_id = characters::default_character().ai_profile_id.to_owned();
+        }
+    }
 }

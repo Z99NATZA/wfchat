@@ -1,6 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { CHAT_PERSONAS, QUICK_PROMPTS, STARTER_MESSAGES } from "@/features/chat/data/chatFixtures";
-import { getOrCreateChat, sendChatMessage } from "@/features/chat/services/chatApiService";
+import {
+	clearChatMessages,
+	getOrCreateChat,
+	sendChatMessage
+} from "@/features/chat/services/chatApiService";
 import type { ChatMessage } from "@/types/chat";
 import { formatMessageTime } from "@/utils/date";
 
@@ -11,6 +15,7 @@ export function useChatSession() {
 	const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 	const [activeChatId, setActiveChatId] = useState<string | null>(null);
 	const [isSending, setIsSending] = useState(false);
+	const [isClearing, setIsClearing] = useState(false);
 	const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
 	const activePersona = useMemo(
@@ -80,12 +85,36 @@ export function useChatSession() {
 		}
 	}
 
+	async function clearChat() {
+		if (!activeChatId || isSending || isClearing || messages.length === 0) {
+			return;
+		}
+
+		if (!window.confirm("Clear this chat history?")) {
+			return;
+		}
+
+		setIsClearing(true);
+		setErrorMessage(null);
+
+		try {
+			const nextMessages = await clearChatMessages(activeChatId);
+			setMessages(nextMessages);
+		} catch {
+			setErrorMessage("Could not clear this chat. Try again.");
+		} finally {
+			setIsClearing(false);
+		}
+	}
+
 	return {
 		activePersona,
 		activeChatId,
+		clearChat,
 		closeSidebar: () => setIsSidebarOpen(false),
 		draft,
 		errorMessage,
+		isClearing,
 		isSidebarOpen,
 		isSending,
 		messages,

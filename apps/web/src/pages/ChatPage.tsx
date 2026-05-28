@@ -30,6 +30,9 @@ function ChatPage({ theme, onToggleTheme }: ChatPageProps) {
 				<ChatHeader
 					persona={chat.activePersona}
 					theme={theme}
+					canClearChat={chat.messages.length > 0}
+					isClearing={chat.isClearing}
+					onClearChat={chat.clearChat}
 					onOpenSidebar={chat.openSidebar}
 					onToggleTheme={onToggleTheme}
 				/>

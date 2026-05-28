@@ -25,6 +25,8 @@ The chat UI uses `apps/web/src/features/chat/services/chatApiService.ts` to crea
 
 The current supported chat companion is Aiko only. If a browser has no stored session/chat history, the message list starts empty.
 
+The clear chat button in the header is supported. It calls `DELETE /api/chats/:chat_id/messages` after a browser confirmation and leaves the current chat/session intact.
+
 ## Rules
 
 - Keep chat UI focused on chats, characters, and messages.
@@ -32,4 +34,4 @@ The current supported chat companion is Aiko only. If a browser has no stored se
 - Use admin screens for AI profile configuration later.
 - Keep `VITE_*` variables limited to non-secret browser configuration.
 - Put reusable browser infrastructure in `apps/web/src/services`.
-- Keep unsupported controls disabled and visually muted. This currently includes attachments, voice input, image prompts, quick prompts, search, notifications, settings, chat modes, memory, response-shape controls, and safety toggles.
+- Keep unsupported controls disabled and visually muted. This currently includes attachments, voice input, image prompts, quick prompts, search, notifications, settings, chat modes, memory, response-shape controls, and safety toggles. Theme toggle, send message, and clear chat are supported controls.

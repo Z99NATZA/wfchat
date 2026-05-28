@@ -78,6 +78,15 @@ export async function sendChatMessage(chatId: string, content: string): Promise<
 	return response.data.messages.map(toChatMessage);
 }
 
+export async function clearChatMessages(chatId: string): Promise<ChatMessage[]> {
+	const sessionId = await ensureGuestSession();
+	const response = await apiClient.delete<ApiChat>(`/api/chats/${chatId}/messages`, {
+		headers: sessionHeaders(sessionId)
+	});
+
+	return response.data.messages.map(toChatMessage);
+}
+
 async function ensureGuestSession(): Promise<string> {
 	const existingSessionId = readStorageItem(sessionStorageKey);
 

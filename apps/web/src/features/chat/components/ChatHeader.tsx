@@ -1,4 +1,4 @@
-import { Bell, ChevronLeft, Menu, Moon, Settings, Sun } from "lucide-react";
+import { Bell, ChevronLeft, Menu, Moon, Settings, Sun, Trash2 } from "lucide-react";
 import IconButton from "@/components/ui/IconButton";
 import StatusDot from "@/components/ui/StatusDot";
 import type { ChatPersona } from "@/types/chat";
@@ -7,11 +7,22 @@ import type { Theme } from "@/types/theme";
 type ChatHeaderProps = {
 	persona: ChatPersona;
 	theme: Theme;
+	canClearChat: boolean;
+	isClearing?: boolean;
+	onClearChat: () => void;
 	onOpenSidebar: () => void;
 	onToggleTheme: () => void;
 };
 
-function ChatHeader({ persona, theme, onOpenSidebar, onToggleTheme }: ChatHeaderProps) {
+function ChatHeader({
+	persona,
+	theme,
+	canClearChat,
+	isClearing = false,
+	onClearChat,
+	onOpenSidebar,
+	onToggleTheme
+}: ChatHeaderProps) {
 	const nextThemeLabel = theme === "dark" ? "Switch to light theme" : "Switch to dark theme";
 
 	return (
@@ -45,6 +56,14 @@ function ChatHeader({ persona, theme, onOpenSidebar, onToggleTheme }: ChatHeader
 				</IconButton>
 				<IconButton onClick={onToggleTheme} aria-label={nextThemeLabel}>
 					{theme === "dark" ? <Sun size={18} aria-hidden="true" /> : <Moon size={18} aria-hidden="true" />}
+				</IconButton>
+				<IconButton
+					aria-label="Clear chat"
+					disabled={!canClearChat || isClearing}
+					title={canClearChat ? "Clear chat" : "No messages to clear"}
+					onClick={onClearChat}
+				>
+					<Trash2 size={18} aria-hidden="true" />
 				</IconButton>
 				<IconButton className="opacity-45 grayscale cursor-not-allowed" aria-label="Settings" disabled title="Not supported yet">
 					<Settings size={18} aria-hidden="true" />
