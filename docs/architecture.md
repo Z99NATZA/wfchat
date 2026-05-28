@@ -1,23 +1,23 @@
 # Architecture
 
-WFChat is organized around a small feature-first frontend architecture. The application shell stays thin, feature behavior lives inside feature folders, and shared primitives stay isolated.
+WFChat frontend code is organized around a small feature-first architecture in `apps/web/src`. The application shell stays thin, feature behavior lives inside feature folders, and shared primitives stay isolated.
 
 ## Principles
 
 - Keep files readable without forcing excessive jumps.
 - Put feature-specific UI, data, hooks, and services inside the feature boundary.
-- Put reusable UI in `src/components`.
-- Put app-wide state helpers in `src/stores`.
-- Put browser and infrastructure helpers in `src/services`.
-- Put pure helpers in `src/utils`.
-- Put cross-feature TypeScript models in `src/types`.
+- Put reusable UI in `apps/web/src/components`.
+- Put app-wide state helpers in `apps/web/src/stores`.
+- Put browser and infrastructure helpers in `apps/web/src/services`.
+- Put pure helpers in `apps/web/src/utils`.
+- Put cross-feature TypeScript models in `apps/web/src/types`.
 
 ## Runtime Flow
 
-1. `src/main.tsx` mounts React and imports global styles.
-2. `src/app/App.tsx` initializes app-level theme state.
-3. `src/pages/ChatPage.tsx` composes the chat screen.
-4. `src/features/chat/hooks/useChatSession.ts` owns the chat screen state.
+1. `apps/web/src/main.tsx` mounts React and imports global styles.
+2. `apps/web/src/app/App.tsx` initializes app-level theme state.
+3. `apps/web/src/pages/ChatPage.tsx` composes the chat screen.
+4. `apps/web/src/features/chat/hooks/useChatSession.ts` owns the chat screen state.
 5. Feature components render the chat sidebar, header, messages, composer, and details panel.
 
 ## Feature Boundaries

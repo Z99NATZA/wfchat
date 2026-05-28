@@ -1,10 +1,6 @@
 node_modules
 dist
-target
-data
-apps/api/data
 .env
 .env.*
 !.env.example
 npm-debug.log*
-Dockerfile.*

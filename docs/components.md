@@ -2,7 +2,7 @@
 
 ## Shared UI
 
-Shared UI lives in `src/components/ui`.
+Shared UI lives in `apps/web/src/components/ui`.
 
 Current shared components:
 
@@ -13,7 +13,7 @@ Shared components should be generic. Do not place chat-specific text, fixtures, 
 
 ## Feature Components
 
-Chat feature components live in `src/features/chat/components`.
+Chat feature components live in `apps/web/src/features/chat/components`.
 
 - `ChatSidebar`: companion list, search field, and mobile sidebar close action.
 - `ChatHeader`: active companion identity and global chat actions.

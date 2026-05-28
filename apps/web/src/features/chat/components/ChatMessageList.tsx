@@ -6,9 +6,17 @@ type ChatMessageListProps = {
 	messages: ChatMessage[];
 	companionName: string;
 	companionAvatarUrl: string;
+	errorMessage?: string | null;
+	isSending?: boolean;
 };
 
-function ChatMessageList({ messages, companionName, companionAvatarUrl }: ChatMessageListProps) {
+function ChatMessageList({
+	messages,
+	companionName,
+	companionAvatarUrl,
+	errorMessage,
+	isSending = false
+}: ChatMessageListProps) {
 	return (
 		<div className="chat-scroll flex-1 space-y-5 overflow-y-auto px-4 py-6 lg:px-8">
 			<div className="mx-auto flex max-w-3xl items-center gap-3 rounded-lg border border-primary/20 bg-primary/8 p-3 text-sm text-app-text">
@@ -48,6 +56,19 @@ function ChatMessageList({ messages, companionName, companionAvatarUrl }: ChatMe
 						</article>
 					);
 				})}
+				{isSending && (
+					<article className="flex items-end gap-3 justify-start">
+						<img className="size-9 shrink-0 rounded-lg object-cover" src={companionAvatarUrl} alt="" />
+						<div className="max-w-[min(36rem,82vw)] rounded-lg border border-app-border bg-app-panel px-4 py-3 text-app-text shadow-soft">
+							<p className="text-sm leading-6 text-muted">{companionName} is thinking...</p>
+						</div>
+					</article>
+				)}
+				{errorMessage && (
+					<div className="rounded-lg border border-red-400/30 bg-red-500/10 px-4 py-3 text-sm text-red-500">
+						{errorMessage}
+					</div>
+				)}
 			</div>
 		</div>
 	);

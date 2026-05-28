@@ -40,10 +40,14 @@ function ChatPage({ theme, onToggleTheme }: ChatPageProps) {
 				messages={chat.messages}
 				companionName={chat.activePersona.name}
 				companionAvatarUrl={chat.activePersona.avatarUrl}
+				errorMessage={chat.errorMessage}
+				isSending={chat.isSending}
 			/>
 			<ChatComposer
 				draft={chat.draft}
 				quickPrompts={chat.quickPrompts}
+				isDisabled={!chat.activeChatId}
+				isSending={chat.isSending}
 				onDraftChange={chat.setDraft}
 				onSend={chat.sendMessage}
 				onUseQuickPrompt={chat.useQuickPrompt}

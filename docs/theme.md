@@ -4,9 +4,9 @@ The theme system is CSS-variable driven and Tailwind CSS v4 friendly.
 
 ## Source Files
 
-- `src/styles.css`: Tailwind import, CSS variables, theme tokens, shared component classes.
-- `src/hooks/useTheme.ts`: React-facing theme API.
-- `src/stores/themeStore.ts`: persistence and document class application.
+- `apps/web/src/styles.css`: Tailwind import, CSS variables, theme tokens, shared component classes.
+- `apps/web/src/hooks/useTheme.ts`: React-facing theme API.
+- `apps/web/src/stores/themeStore.ts`: persistence and document class application.
 
 ## Theme Tokens
 

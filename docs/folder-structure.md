@@ -1,48 +1,59 @@
 # Folder Structure
 
 ```text
-src/
-	app/
-		App.tsx
-	components/
-		ui/
-			IconButton.tsx
-			StatusDot.tsx
-	features/
-		chat/
+apps/
+	api/
+		src/
+			main.rs
+			app.rs
+			auth.rs
+			chat.rs
+			characters.rs
+			admin.rs
+			ai/
+				mod.rs
+				providers/
+	web/
+		src/
+			app/
 			components/
-			data/
+			features/
 			hooks/
+			layouts/
+			pages/
 			services/
-	hooks/
-	layouts/
-	pages/
-	services/
-	stores/
-	types/
-	utils/
-	main.tsx
-	styles.css
+			stores/
+			types/
+			utils/
+docs/
 ```
 
 ## Folder Roles
 
-`app/` contains top-level app wiring. Keep this small.
+`apps/web` contains the standalone React frontend. It can be moved to another repo later because it talks to the backend through HTTP only.
 
-`pages/` contains route-level screens. A page composes layouts, features, and app-level dependencies.
+`apps/api` contains the standalone Rust Axum backend. It owns auth, admin-only AI configuration, API keys, chat persistence, and provider adapters.
 
-`layouts/` contains structural layout components that do not own domain behavior.
+`docs/` contains architecture and implementation notes. The root `README.md` is intentionally limited to run commands.
 
-`features/` contains domain-specific code. Each feature can have its own `components`, `data`, `hooks`, and `services`.
+## Frontend Shape
 
-`components/` contains shared reusable UI. Components here should be generic and feature-agnostic.
+`apps/web/src/app` contains top-level app wiring. Keep this small.
 
-`hooks/` contains reusable app-level hooks.
+`apps/web/src/pages` contains route-level screens. A page composes layouts, features, and app-level dependencies.
 
-`stores/` contains app-level state adapters and persistence rules.
+`apps/web/src/features` contains domain-specific frontend code. Each feature can have its own `components`, `data`, `hooks`, and `services`.
 
-`services/` contains infrastructure-facing helpers such as storage, API clients, or transport wrappers.
+`apps/web/src/services` contains infrastructure-facing helpers such as storage, axios clients, or transport wrappers.
 
-`utils/` contains pure utilities with no React dependency.
+## Backend Shape
 
-`types/` contains cross-feature TypeScript types.
+`apps/api/src/app.rs` wires the Axum router.
+
+`apps/api/src/chat.rs` keeps chat routes and flow close together so one chat request is understandable in one file.
+
+`apps/api/src/ai/mod.rs` owns provider selection and AI profile usage.
+
+`apps/api/src/ai/providers` keeps external provider details isolated from chat code.
+
+`apps/api/src/admin.rs` is the boundary for admin-only AI configuration endpoints.

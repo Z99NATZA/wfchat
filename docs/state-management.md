@@ -4,7 +4,7 @@ The project currently uses local React state because the app surface is small. T
 
 ## Chat State
 
-Chat screen state is isolated in `src/features/chat/hooks/useChatSession.ts`.
+Chat screen state is isolated in `apps/web/src/features/chat/hooks/useChatSession.ts`.
 
 It owns:
 
@@ -20,9 +20,9 @@ The hook imports chat fixtures and the companion reply service. UI components re
 
 Theme state is app-level state.
 
-- `src/hooks/useTheme.ts` exposes React state and actions.
-- `src/stores/themeStore.ts` resolves, persists, and applies the theme.
-- `src/services/storageService.ts` wraps browser local storage access.
+- `apps/web/src/hooks/useTheme.ts` exposes React state and actions.
+- `apps/web/src/stores/themeStore.ts` resolves, persists, and applies the theme.
+- `apps/web/src/services/storageService.ts` wraps browser local storage access.
 
 This split keeps browser persistence separate from React rendering.
 

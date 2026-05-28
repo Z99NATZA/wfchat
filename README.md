@@ -1,22 +1,28 @@
 # WFChat
 
-React, TypeScript, Tailwind CSS v4, and Docker scaffold for a light/dark waifu chat UI.
-
-## Installation
+## Install
 
 ```bash
 npm install
 ```
 
-## Development
+## Run Frontend
 
 ```bash
-npm run dev
+npm run dev:web
 ```
 
-The Vite dev server listens on `http://localhost:5173`.
+Frontend: `http://localhost:5173`
 
-## Build
+## Run Backend
+
+```bash
+npm run dev:api
+```
+
+Backend API: `http://localhost:8080`
+
+## Build And Check
 
 ```bash
 npm run build
@@ -28,8 +34,6 @@ npm run build
 docker compose up --build
 ```
 
-The container serves the app at `http://localhost:8080`.
+Docker frontend: `http://localhost:5173`
 
-## Environment
-
-No environment variables are required for the current local UI.
+Docker backend API: `http://localhost:8080`

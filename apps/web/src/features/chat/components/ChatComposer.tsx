@@ -8,6 +8,8 @@ type ChatComposerProps = {
 	onDraftChange: (draft: string) => void;
 	onSend: () => void;
 	onUseQuickPrompt: (prompt: string) => void;
+	isDisabled?: boolean;
+	isSending?: boolean;
 };
 
 function ChatComposer({
@@ -15,7 +17,9 @@ function ChatComposer({
 	quickPrompts,
 	onDraftChange,
 	onSend,
-	onUseQuickPrompt
+	onUseQuickPrompt,
+	isDisabled = false,
+	isSending = false
 }: ChatComposerProps) {
 	function handleSubmit(event: FormEvent<HTMLFormElement>) {
 		event.preventDefault();
@@ -50,6 +54,7 @@ function ChatComposer({
 						value={draft}
 						placeholder="Message Aiko"
 						rows={1}
+						disabled={isDisabled || isSending}
 						onChange={(event) => onDraftChange(event.target.value)}
 					/>
 					<IconButton className="hidden shrink-0 sm:flex" aria-label="Voice message">
@@ -60,8 +65,9 @@ function ChatComposer({
 					</IconButton>
 					<button
 						type="submit"
-						className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-primary text-white shadow-soft transition hover:bg-primary-600 focus:outline-none focus:ring-4 focus:ring-primary/25"
+						className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-primary text-white shadow-soft transition hover:bg-primary-600 focus:outline-none focus:ring-4 focus:ring-primary/25 disabled:cursor-not-allowed disabled:opacity-60"
 						aria-label="Send message"
+						disabled={isDisabled || isSending || !draft.trim()}
 					>
 						<Send size={18} aria-hidden="true" />
 					</button>
