@@ -1,113 +1,73 @@
-import { Bot, Check, MoreHorizontal } from "lucide-react";
-import IconButton from "@/components/ui/IconButton";
-import {
-	CHAT_MODES,
-	MEMORY_ITEMS,
-	RESPONSE_METRICS,
-	SAFETY_SETTING
-} from "@/features/chat/data/chatFixtures";
+import { Languages, Sparkles } from "lucide-react";
 import type { ChatPersona } from "@/types/chat";
-import { cn } from "@/utils/classNames";
 
 type ChatDetailsPanelProps = {
 	persona: ChatPersona;
 };
+
+const toneItems = ["Calm", "Warm", "Lightly playful", "Respectful"];
 
 function ChatDetailsPanel({ persona }: ChatDetailsPanelProps) {
 	return (
 		<aside className="hidden min-h-0 border-l border-app-border bg-app-panel xl:flex xl:flex-col">
 			<div className="border-b border-app-border p-5">
 				<div className="relative overflow-hidden rounded-lg bg-app-soft">
-					<img className="aspect-[16/11] w-full object-cover" src={persona.avatarUrl} alt={`${persona.name} profile`} />
+					<img
+						className="aspect-[16/11] w-full object-cover"
+						src={persona.avatarUrl}
+						alt={`${persona.name} profile`}
+					/>
 				</div>
-					<div className="mt-4 flex items-start justify-between gap-3">
-						<div>
-							<h2 className="text-lg font-semibold">{persona.name}</h2>
-							<p className="text-sm text-muted">{persona.title}</p>
-						</div>
-					<IconButton className="opacity-45 grayscale cursor-not-allowed" aria-label="More options" disabled title="Not supported yet">
-						<MoreHorizontal size={18} aria-hidden="true" />
-					</IconButton>
+				<div className="mt-4">
+					<h2 className="text-lg font-semibold">{persona.name}</h2>
+					<p className="text-sm text-muted">{persona.title}</p>
 				</div>
 			</div>
 
 			<div className="chat-scroll flex-1 space-y-5 overflow-y-auto p-5">
 				<section>
-					<h3 className="text-sm font-semibold">Chat modes</h3>
-					<div className="mt-3 grid grid-cols-2 gap-2">
-						{CHAT_MODES.map((mode) => (
-							<button
-								key={mode.id}
-								type="button"
-								className={cn(
-									"cursor-not-allowed rounded-lg border border-app-border bg-app-soft px-3 py-2 text-sm font-medium text-muted/50 opacity-70"
-								)}
-								disabled
-								title="Not supported yet"
+					<h3 className="text-sm font-semibold">About Aiko</h3>
+					<p className="mt-3 rounded-lg border border-app-border bg-app-soft p-4 text-sm leading-6 text-muted">
+						Aiko is calm, warm, and quietly affectionate. She keeps the conversation gentle,
+						grounded, and lightly playful.
+					</p>
+				</section>
+
+				<section>
+					<h3 className="text-sm font-semibold">Tone</h3>
+					<div className="mt-3 flex flex-wrap gap-2">
+						{toneItems.map((tone) => (
+							<span
+								key={tone}
+								className="rounded-lg border border-app-border bg-app-soft px-3 py-2 text-xs font-medium text-muted"
 							>
-								{mode.label}
-							</button>
+								{tone}
+							</span>
 						))}
 					</div>
 				</section>
 
 				<section>
-					<h3 className="text-sm font-semibold">Memory</h3>
+					<h3 className="text-sm font-semibold">Conversation</h3>
 					<div className="mt-3 space-y-2">
-						{MEMORY_ITEMS.map((memory) => (
-							<div
-								key={memory.id}
-								className="flex items-center gap-3 rounded-lg border border-app-border bg-app-soft p-3 opacity-55 grayscale"
-								title="Not supported yet"
-							>
-								<span className="flex size-6 items-center justify-center rounded-md bg-primary/10 text-primary">
-									<Check size={15} aria-hidden="true" />
-								</span>
-								<span className="text-sm">{memory.label}</span>
-							</div>
-						))}
-					</div>
-				</section>
-
-				<section>
-					<h3 className="text-sm font-semibold">Response shape</h3>
-					<div className="mt-3 rounded-lg border border-app-border bg-app-soft p-4">
-						{RESPONSE_METRICS.map((metric, index) => (
-							<div key={metric.id} className={cn(index > 0 && "mt-4")}>
-								<div className="flex items-center justify-between text-sm">
-									<span className="text-muted">{metric.label}</span>
-									<span className="font-semibold text-primary">{metric.value}%</span>
-								</div>
-								<input
-									className="mt-3 w-full cursor-not-allowed accent-primary opacity-50 grayscale"
-									type="range"
-									min="0"
-									max="100"
-									defaultValue={metric.value}
-									aria-label={metric.label}
-									disabled
-									title="Not supported yet"
-								/>
-							</div>
-						))}
-					</div>
-				</section>
-
-				<section>
-					<h3 className="text-sm font-semibold">Safety</h3>
-					<div className="mt-3 flex items-center justify-between rounded-lg border border-app-border bg-app-soft p-3 opacity-55 grayscale" title="Not supported yet">
-						<div className="flex items-center gap-3">
+						<div className="flex items-center gap-3 rounded-lg border border-app-border bg-app-soft p-3">
 							<div className="flex size-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
-								<Bot size={18} aria-hidden="true" />
+								<Languages size={18} aria-hidden="true" />
 							</div>
 							<div>
-								<p className="text-sm font-medium">{SAFETY_SETTING.title}</p>
-								<p className="text-xs text-muted">{SAFETY_SETTING.description}</p>
+								<p className="text-sm font-medium">Replies in your language</p>
+								<p className="text-xs text-muted">Aiko follows the language you use.</p>
 							</div>
 						</div>
-						<span className="h-6 w-11 rounded-full bg-primary p-1">
-							<span className="block size-4 translate-x-5 rounded-full bg-white" />
-						</span>
+						<div className="flex items-center gap-3 rounded-lg border border-app-border bg-app-soft p-3">
+							<div className="flex size-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
+								<Sparkles size={18} aria-hidden="true" />
+							</div>
+							<div>
+								<p className="text-sm font-medium">Gentle companion mode</p>
+								<p className="text-xs text-muted">Soft humor, calm replies, and clear boundaries.</p>
+							</div>
+						</div>
 					</div>
 				</section>
 			</div>
