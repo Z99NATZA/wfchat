@@ -1,4 +1,4 @@
-import { FormEvent } from "react";
+import { FormEvent, KeyboardEvent } from "react";
 import { Image, Mic, Paperclip, Send } from "lucide-react";
 import IconButton from "@/components/ui/IconButton";
 
@@ -22,6 +22,15 @@ function ChatComposer({
 	isSending = false
 }: ChatComposerProps) {
 	function handleSubmit(event: FormEvent<HTMLFormElement>) {
+		event.preventDefault();
+		onSend();
+	}
+
+	function handleDraftKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+		if (event.key !== "Enter" || event.shiftKey) {
+			return;
+		}
+
 		event.preventDefault();
 		onSend();
 	}
@@ -58,6 +67,7 @@ function ChatComposer({
 						rows={1}
 						disabled={isDisabled || isSending}
 						onChange={(event) => onDraftChange(event.target.value)}
+						onKeyDown={handleDraftKeyDown}
 					/>
 					<IconButton className="hidden shrink-0 opacity-45 grayscale cursor-not-allowed sm:flex" aria-label="Voice message" disabled title="Not supported yet">
 						<Mic size={18} aria-hidden="true" />

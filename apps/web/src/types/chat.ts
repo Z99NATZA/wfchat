@@ -10,7 +10,6 @@ export type ChatPersona = {
 	lastMessage: string;
 	lastActiveAt: string;
 	unreadCount: number;
-	accentClass: string;
 	avatarUrl: string;
 };
 

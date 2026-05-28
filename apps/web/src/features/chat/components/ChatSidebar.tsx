@@ -71,10 +71,12 @@ function ChatSidebar({
 							)}
 							onClick={() => onSelectPersona(persona.id)}
 						>
-							<div className={cn("size-11 shrink-0 rounded-lg bg-gradient-to-br p-0.5", persona.accentClass)}>
-								<div className="flex h-full w-full items-center justify-center rounded-[7px] bg-app-panel font-semibold">
-									{persona.name.slice(0, 1)}
-								</div>
+							<div className="size-11 shrink-0 overflow-hidden rounded-lg border-2 border-primary/35 bg-app-soft">
+								<img
+									className="h-full w-full object-cover"
+									src={persona.avatarUrl}
+									alt={`${persona.name} avatar`}
+								/>
 							</div>
 							<span className="min-w-0 flex-1">
 								<span className="flex items-center justify-between gap-3">

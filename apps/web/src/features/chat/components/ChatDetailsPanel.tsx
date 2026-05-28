@@ -23,7 +23,7 @@ function ChatDetailsPanel({ persona }: ChatDetailsPanelProps) {
 					<div className="mt-4 flex items-start justify-between gap-3">
 						<div>
 							<h2 className="text-lg font-semibold">{persona.name}</h2>
-							<p className="text-sm text-muted">OpenAI chat enabled</p>
+							<p className="text-sm text-muted">{persona.title}</p>
 						</div>
 					<IconButton className="opacity-45 grayscale cursor-not-allowed" aria-label="More options" disabled title="Not supported yet">
 						<MoreHorizontal size={18} aria-hidden="true" />
