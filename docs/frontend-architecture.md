@@ -1,6 +1,6 @@
 # Frontend Architecture
 
-The frontend is a standalone React app in `apps/web`. It is kept close to the backend in this repo, but it should behave like a deployable client that can move out later.
+The frontend is a standalone ReactJS + TypeScript app in `apps/web`. It is kept close to the backend in this repo, but it should behave like a deployable client that can move out later.
 
 ## API Boundary
 

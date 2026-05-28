@@ -1,5 +1,13 @@
 # Architecture
 
+## Stack Overview
+
+```text
+frontend: ReactJS + TypeScript in apps/web
+backend: Rust + Axum in apps/api
+runtime: Docker Compose for local full-stack runs
+```
+
 WFChat frontend code is organized around a small feature-first architecture in `apps/web/src`. The application shell stays thin, feature behavior lives inside feature folders, and shared primitives stay isolated.
 
 ## Principles

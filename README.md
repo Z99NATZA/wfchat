@@ -1,5 +1,11 @@
 # WFChat
 
+## Stack
+
+Frontend: ReactJS + TypeScript
+
+Backend: Rust + Axum
+
 ## Install
 
 ```bash
