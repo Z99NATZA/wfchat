@@ -52,6 +52,8 @@ docs/
 
 `apps/api/src/chat.rs` keeps chat routes and flow close together so one chat request is understandable in one file.
 
+`apps/api/src/characters.rs` keeps the static character registry and character prompts until this moves to a database.
+
 `apps/api/src/ai/mod.rs` owns provider selection and AI profile usage.
 
 `apps/api/src/ai/providers` keeps external provider details isolated from chat code.

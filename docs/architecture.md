@@ -17,16 +17,16 @@ WFChat frontend code is organized around a small feature-first architecture in `
 1. `apps/web/src/main.tsx` mounts React and imports global styles.
 2. `apps/web/src/app/App.tsx` initializes app-level theme state.
 3. `apps/web/src/pages/ChatPage.tsx` composes the chat screen.
-4. `apps/web/src/features/chat/hooks/useChatSession.ts` owns the chat screen state.
+4. `apps/web/src/features/chat/hooks/useChatSession.ts` owns the chat screen state and calls the backend chat API.
 5. Feature components render the chat sidebar, header, messages, composer, and details panel.
 
 ## Feature Boundaries
 
 The chat feature owns chat-specific behavior:
 
-- chat fixtures
+- Aiko frontend fixture metadata
 - chat state hook
-- companion reply service
+- backend chat API service
 - chat-only components
 
 Shared layers should not import from feature components. Feature modules may import shared UI, hooks, utilities, services, and types.

@@ -20,12 +20,12 @@ function ChatDetailsPanel({ persona }: ChatDetailsPanelProps) {
 				<div className="relative overflow-hidden rounded-lg bg-app-soft">
 					<img className="aspect-[16/11] w-full object-cover" src={persona.avatarUrl} alt={`${persona.name} profile`} />
 				</div>
-				<div className="mt-4 flex items-start justify-between gap-3">
-					<div>
-						<h2 className="text-lg font-semibold">{persona.name}</h2>
-						<p className="text-sm text-muted">Memory enabled - fast replies</p>
-					</div>
-					<IconButton aria-label="More options">
+					<div className="mt-4 flex items-start justify-between gap-3">
+						<div>
+							<h2 className="text-lg font-semibold">{persona.name}</h2>
+							<p className="text-sm text-muted">OpenAI chat enabled</p>
+						</div>
+					<IconButton className="opacity-45 grayscale cursor-not-allowed" aria-label="More options" disabled title="Not supported yet">
 						<MoreHorizontal size={18} aria-hidden="true" />
 					</IconButton>
 				</div>
@@ -40,11 +40,10 @@ function ChatDetailsPanel({ persona }: ChatDetailsPanelProps) {
 								key={mode.id}
 								type="button"
 								className={cn(
-									"rounded-lg border px-3 py-2 text-sm font-medium transition",
-									mode.isActive
-										? "border-primary bg-primary text-white"
-										: "border-app-border bg-app-soft text-muted hover:border-primary hover:text-primary"
+									"cursor-not-allowed rounded-lg border border-app-border bg-app-soft px-3 py-2 text-sm font-medium text-muted/50 opacity-70"
 								)}
+								disabled
+								title="Not supported yet"
 							>
 								{mode.label}
 							</button>
@@ -58,7 +57,8 @@ function ChatDetailsPanel({ persona }: ChatDetailsPanelProps) {
 						{MEMORY_ITEMS.map((memory) => (
 							<div
 								key={memory.id}
-								className="flex items-center gap-3 rounded-lg border border-app-border bg-app-soft p-3"
+								className="flex items-center gap-3 rounded-lg border border-app-border bg-app-soft p-3 opacity-55 grayscale"
+								title="Not supported yet"
 							>
 								<span className="flex size-6 items-center justify-center rounded-md bg-primary/10 text-primary">
 									<Check size={15} aria-hidden="true" />
@@ -79,12 +79,14 @@ function ChatDetailsPanel({ persona }: ChatDetailsPanelProps) {
 									<span className="font-semibold text-primary">{metric.value}%</span>
 								</div>
 								<input
-									className="mt-3 w-full accent-primary"
+									className="mt-3 w-full cursor-not-allowed accent-primary opacity-50 grayscale"
 									type="range"
 									min="0"
 									max="100"
 									defaultValue={metric.value}
 									aria-label={metric.label}
+									disabled
+									title="Not supported yet"
 								/>
 							</div>
 						))}
@@ -93,7 +95,7 @@ function ChatDetailsPanel({ persona }: ChatDetailsPanelProps) {
 
 				<section>
 					<h3 className="text-sm font-semibold">Safety</h3>
-					<div className="mt-3 flex items-center justify-between rounded-lg border border-app-border bg-app-soft p-3">
+					<div className="mt-3 flex items-center justify-between rounded-lg border border-app-border bg-app-soft p-3 opacity-55 grayscale" title="Not supported yet">
 						<div className="flex items-center gap-3">
 							<div className="flex size-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
 								<Bot size={18} aria-hidden="true" />

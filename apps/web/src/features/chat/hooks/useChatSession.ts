@@ -31,7 +31,7 @@ export function useChatSession() {
 				}
 
 				setActiveChatId(chat.chatId);
-				setMessages(chat.messages.length > 0 ? chat.messages : STARTER_MESSAGES);
+				setMessages(chat.messages);
 			})
 			.catch(() => {
 				if (isCurrent) {
@@ -64,7 +64,7 @@ export function useChatSession() {
 			time: timestamp
 		};
 
-		setMessages((currentMessages) => [...withoutStarterMessages(currentMessages), optimisticMessage]);
+		setMessages((currentMessages) => [...currentMessages, optimisticMessage]);
 		setDraft("");
 		setIsSending(true);
 		setErrorMessage(null);
@@ -97,12 +97,4 @@ export function useChatSession() {
 		setDraft,
 		useQuickPrompt: setDraft
 	};
-}
-
-function withoutStarterMessages(messages: ChatMessage[]): ChatMessage[] {
-	if (messages.every((message) => message.id.startsWith("starter-"))) {
-		return [];
-	}
-
-	return messages;
 }

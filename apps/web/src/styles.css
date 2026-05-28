@@ -61,6 +61,10 @@
 		@apply flex size-10 items-center justify-center rounded-lg border border-app-border bg-app-soft text-muted transition hover:border-primary hover:text-primary focus:outline-none focus:ring-4 focus:ring-primary/15;
 	}
 
+	.icon-button:disabled {
+		@apply cursor-not-allowed border-app-border text-muted/50 opacity-60 grayscale hover:border-app-border hover:text-muted/50 focus:ring-0;
+	}
+
 	.status-dot {
 		@apply size-2 rounded-full bg-emerald-400 ring-4 ring-emerald-400/15;
 	}

@@ -49,9 +49,11 @@ function ChatSidebar({
 							aria-hidden="true"
 						/>
 						<input
-							className="h-11 w-full rounded-lg border border-app-border bg-app-soft pl-10 pr-3 text-sm outline-none transition focus:border-primary focus:ring-4 focus:ring-primary/15"
+							className="h-11 w-full cursor-not-allowed rounded-lg border border-app-border bg-app-soft pl-10 pr-3 text-sm text-muted/50 opacity-70 outline-none"
 							placeholder="Search chats"
 							type="search"
+							disabled
+							title="Not supported yet"
 						/>
 					</label>
 				</div>
@@ -91,7 +93,7 @@ function ChatSidebar({
 				</nav>
 
 				<div className="border-t border-app-border p-4">
-					<div className="rounded-lg bg-app-soft p-3">
+					<div className="rounded-lg bg-app-soft p-3 opacity-55 grayscale" title="Not supported yet">
 						<div className="flex items-center gap-3">
 							<div className="flex size-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
 								<Sparkles size={18} aria-hidden="true" />

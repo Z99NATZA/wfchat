@@ -27,6 +27,14 @@ function ChatMessageList({
 			</div>
 
 			<div className="mx-auto flex max-w-3xl flex-col gap-4">
+				{messages.length === 0 && !isSending && (
+					<div className="rounded-lg border border-dashed border-app-border bg-app-panel px-5 py-8 text-center">
+						<p className="text-sm font-semibold text-app-text">Start a conversation with {companionName}</p>
+						<p className="mt-2 text-sm text-muted">
+							Your chat is empty. Send the first message when you are ready.
+						</p>
+					</div>
+				)}
 				{messages.map((message) => {
 					const isUser = message.author === "user";
 

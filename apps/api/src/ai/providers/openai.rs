@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     ai::{AiMessage, AiRole},
+    characters,
     error::{AppError, AppResult},
     state::AppState,
 };
@@ -99,14 +100,11 @@ fn build_messages<'a>(ai_profile_id: &str, messages: &'a [AiMessage]) -> Vec<Pro
 }
 
 fn system_prompt(ai_profile_id: &str) -> &'static str {
-    match ai_profile_id {
-        "default_waifu" => {
-            "You are Aiko, a warm, concise waifu chat companion. Reply naturally, keep boundaries respectful, and ask gentle follow-up questions when useful."
-        }
-        _ => {
-            "You are a helpful chat companion. Reply naturally, stay concise, and keep boundaries respectful."
-        }
-    }
+    characters::character_by_ai_profile(ai_profile_id)
+        .map(|character| character.system_prompt)
+        .unwrap_or(
+            "You are a helpful chat companion. Reply naturally, stay concise, and keep boundaries respectful.",
+        )
 }
 
 fn role_name(role: &AiRole) -> &'static str {

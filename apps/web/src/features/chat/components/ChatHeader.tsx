@@ -20,7 +20,7 @@ function ChatHeader({ persona, theme, onOpenSidebar, onToggleTheme }: ChatHeader
 				<IconButton className="lg:hidden" onClick={onOpenSidebar} aria-label="Open sidebar">
 					<Menu size={18} aria-hidden="true" />
 				</IconButton>
-				<IconButton className="hidden md:flex" aria-label="Back">
+				<IconButton className="hidden opacity-45 grayscale cursor-not-allowed md:flex" aria-label="Back" disabled title="Not supported yet">
 					<ChevronLeft size={18} aria-hidden="true" />
 				</IconButton>
 				<img
@@ -40,13 +40,13 @@ function ChatHeader({ persona, theme, onOpenSidebar, onToggleTheme }: ChatHeader
 			</div>
 
 			<div className="flex items-center gap-2">
-				<IconButton aria-label="Notifications">
+				<IconButton className="opacity-45 grayscale cursor-not-allowed" aria-label="Notifications" disabled title="Not supported yet">
 					<Bell size={18} aria-hidden="true" />
 				</IconButton>
 				<IconButton onClick={onToggleTheme} aria-label={nextThemeLabel}>
 					{theme === "dark" ? <Sun size={18} aria-hidden="true" /> : <Moon size={18} aria-hidden="true" />}
 				</IconButton>
-				<IconButton aria-label="Settings">
+				<IconButton className="opacity-45 grayscale cursor-not-allowed" aria-label="Settings" disabled title="Not supported yet">
 					<Settings size={18} aria-hidden="true" />
 				</IconButton>
 			</div>

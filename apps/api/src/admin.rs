@@ -1,7 +1,7 @@
 use axum::{extract::State, routing::get, Json, Router};
 use serde::Serialize;
 
-use crate::state::AppState;
+use crate::{characters, state::AppState};
 
 pub fn router() -> Router<AppState> {
     Router::new()
@@ -24,9 +24,11 @@ struct ProviderStatusResponse {
 }
 
 async fn list_ai_profiles(State(state): State<AppState>) -> Json<Vec<AiProfileResponse>> {
+    let character = characters::default_character();
+
     Json(vec![AiProfileResponse {
-        id: "default_waifu",
-        label: "Default Waifu",
+        id: character.ai_profile_id,
+        label: character.name,
         provider: state.config.ai_provider.clone(),
         model: state.config.active_model().to_owned(),
     }])

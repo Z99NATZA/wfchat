@@ -34,8 +34,10 @@ function ChatComposer({
 						<button
 							key={prompt}
 							type="button"
-							className="shrink-0 rounded-lg border border-app-border bg-app-soft px-3 py-2 text-xs font-medium text-muted transition hover:border-primary hover:text-primary"
+							className="shrink-0 rounded-lg border border-app-border bg-app-soft px-3 py-2 text-xs font-medium text-muted transition hover:border-primary hover:text-primary disabled:border-app-border disabled:bg-app-soft disabled:text-muted/50 disabled:opacity-70 disabled:cursor-not-allowed"
 							onClick={() => onUseQuickPrompt(prompt)}
+							disabled
+							title="Not supported yet"
 						>
 							{prompt}
 						</button>
@@ -46,7 +48,7 @@ function ChatComposer({
 					className="flex items-end gap-2 rounded-lg border border-app-border bg-app-soft p-2 shadow-soft focus-within:border-primary focus-within:ring-4 focus-within:ring-primary/15"
 					onSubmit={handleSubmit}
 				>
-					<IconButton className="shrink-0" aria-label="Attach file">
+					<IconButton className="shrink-0 opacity-45 grayscale cursor-not-allowed" aria-label="Attach file" disabled title="Not supported yet">
 						<Paperclip size={18} aria-hidden="true" />
 					</IconButton>
 					<textarea
@@ -57,10 +59,10 @@ function ChatComposer({
 						disabled={isDisabled || isSending}
 						onChange={(event) => onDraftChange(event.target.value)}
 					/>
-					<IconButton className="hidden shrink-0 sm:flex" aria-label="Voice message">
+					<IconButton className="hidden shrink-0 opacity-45 grayscale cursor-not-allowed sm:flex" aria-label="Voice message" disabled title="Not supported yet">
 						<Mic size={18} aria-hidden="true" />
 					</IconButton>
-					<IconButton className="hidden shrink-0 sm:flex" aria-label="Image prompt">
+					<IconButton className="hidden shrink-0 opacity-45 grayscale cursor-not-allowed sm:flex" aria-label="Image prompt" disabled title="Not supported yet">
 						<Image size={18} aria-hidden="true" />
 					</IconButton>
 					<button

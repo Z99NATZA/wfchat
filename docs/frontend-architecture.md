@@ -21,7 +21,9 @@ apps/web/src/main.tsx
       -> apps/web/src/features/chat
 ```
 
-The current chat UI still uses local fixture/reply behavior. Backend integration should happen through feature-local services that call the shared axios client.
+The chat UI uses `apps/web/src/features/chat/services/chatApiService.ts` to create a guest session, create/load a chat, and send messages through the Rust backend.
+
+The current supported chat companion is Aiko only. If a browser has no stored session/chat history, the message list starts empty.
 
 ## Rules
 
@@ -30,3 +32,4 @@ The current chat UI still uses local fixture/reply behavior. Backend integration
 - Use admin screens for AI profile configuration later.
 - Keep `VITE_*` variables limited to non-secret browser configuration.
 - Put reusable browser infrastructure in `apps/web/src/services`.
+- Keep unsupported controls disabled and visually muted. This currently includes attachments, voice input, image prompts, quick prompts, search, notifications, settings, chat modes, memory, response-shape controls, and safety toggles.

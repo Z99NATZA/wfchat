@@ -118,13 +118,18 @@ impl ChatStore {
         chats
     }
 
-    pub async fn create_chat(&self, session_id: Uuid, character_id: String) -> ChatRecord {
+    pub async fn create_chat(
+        &self,
+        session_id: Uuid,
+        character_id: String,
+        ai_profile_id: String,
+    ) -> ChatRecord {
         let now = now_unix_seconds();
         let chat = ChatRecord {
             id: Uuid::new_v4(),
             owner_session_id: session_id,
             character_id,
-            ai_profile_id: "default_waifu".to_owned(),
+            ai_profile_id,
             messages: Vec::new(),
             created_at: now,
             updated_at: now,

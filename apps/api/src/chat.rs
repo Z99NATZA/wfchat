@@ -9,6 +9,7 @@ use uuid::Uuid;
 
 use crate::{
     ai::{AiMessage, AiRole, AiService},
+    characters,
     error::{AppError, AppResult},
     state::AppState,
     store::{ChatRecord, StoredMessage},
@@ -69,20 +70,27 @@ async fn create_chat(
     State(state): State<AppState>,
     headers: HeaderMap,
     Json(payload): Json<CreateChatRequest>,
-) -> Json<ChatResponse> {
+) -> AppResult<Json<ChatResponse>> {
     let session = state
         .store
         .ensure_session(session_id_from_headers(&headers))
         .await;
+    let requested_character_id = payload
+        .character_id
+        .unwrap_or_else(|| characters::default_character().id.to_owned());
+    let character = characters::character_by_id(&requested_character_id).ok_or_else(|| {
+        AppError::BadRequest(format!("unknown character: {requested_character_id}"))
+    })?;
     let chat = state
         .store
         .create_chat(
             session.id,
-            payload.character_id.unwrap_or_else(|| "aiko".to_owned()),
+            character.id.to_owned(),
+            character.ai_profile_id.to_owned(),
         )
         .await;
 
-    Json(chat_response(chat))
+    Ok(Json(chat_response(chat)))
 }
 
 async fn get_chat(

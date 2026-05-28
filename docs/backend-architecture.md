@@ -39,7 +39,7 @@ The chat request sends user intent only. Provider and model selection happen ins
 
 `chat.rs` owns chat routes and the main chat flow.
 
-`characters.rs` owns character-facing endpoints.
+`characters.rs` owns character-facing endpoints, the current static character registry, and character-specific system prompts.
 
 `admin.rs` owns admin-only AI profile and provider endpoints.
 
@@ -86,3 +86,29 @@ character -> ai_profile -> provider/model/settings
 ```
 
 This lets an admin switch OpenAI, LM Studio, xAI, or Claude without changing chat UI code.
+
+## Characters
+
+The active character registry is static code in `apps/api/src/characters.rs`.
+
+Current character:
+
+```text
+aiko -> ai_profile_id: aiko_default
+```
+
+Aiko's prompt is intentionally character-specific and provider-independent. It defines her as a calm Japanese anime-style female waifu companion with a subtle girlfriend-like feeling, composed warmth, and light humor.
+
+Prompt language rule:
+
+```text
+Reply in the same language as the user's latest message.
+If the user mixes languages, follow the dominant language.
+If the user explicitly asks for a language, use that language.
+```
+
+When adding more companions, add another `Character` entry first. The chat flow should continue to resolve:
+
+```text
+character_id -> Character -> ai_profile_id -> provider adapter
+```
