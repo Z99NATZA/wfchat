@@ -1,6 +1,7 @@
 import { ArrowDown, Ellipsis, EyeOff } from "lucide-react";
 import { UIEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Wand2 } from "lucide-react";
+import { useDialog } from "@/components/dialog/DialogProvider";
 import type { ChatMessage } from "@/types/chat";
 import { cn } from "@/utils/classNames";
 
@@ -19,6 +20,7 @@ function ChatMessageList({
 	errorMessage,
 	isSending = false
 }: ChatMessageListProps) {
+	const { confirm } = useDialog();
 	const scrollContainerRef = useRef<HTMLDivElement>(null);
 	const menuContainerRef = useRef<HTMLDivElement>(null);
 	const shouldStickToBottomRef = useRef(true);
@@ -96,10 +98,12 @@ function ChatMessageList({
 		return () => window.removeEventListener("mousedown", handlePointerDown);
 	}, [activeMessageMenuId]);
 
-	function hideUserMessage(messageId: string) {
-		const shouldHide = window.confirm(
-			"Hide this message from your view only? This will not delete it from server history."
-		);
+	async function hideUserMessage(messageId: string) {
+		const shouldHide = await confirm({
+			title: "Hide this message?",
+			description: "This hides it from your view only. It will not be deleted from server history.",
+			confirmLabel: "Hide message"
+		});
 
 		if (!shouldHide) {
 			return;

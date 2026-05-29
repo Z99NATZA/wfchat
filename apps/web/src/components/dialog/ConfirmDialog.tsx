@@ -1,0 +1,50 @@
+import Dialog from "@/components/dialog/Dialog";
+
+type ConfirmDialogProps = {
+	isOpen: boolean;
+	title: string;
+	description?: string;
+	confirmLabel?: string;
+	cancelLabel?: string;
+	onCancel: () => void;
+	onConfirm: () => void;
+};
+
+function ConfirmDialog({
+	isOpen,
+	title,
+	description,
+	confirmLabel = "Confirm",
+	cancelLabel = "Cancel",
+	onCancel,
+	onConfirm
+}: ConfirmDialogProps) {
+	return (
+		<Dialog
+			isOpen={isOpen}
+			title={title}
+			description={description}
+			onClose={onCancel}
+			actions={
+				<>
+					<button
+						type="button"
+						className="rounded-lg border border-app-border bg-app-soft px-4 py-2 text-sm font-medium text-app-text transition hover:border-primary hover:text-primary"
+						onClick={onCancel}
+					>
+						{cancelLabel}
+					</button>
+					<button
+						type="button"
+						className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white transition hover:bg-primary-600"
+						onClick={onConfirm}
+					>
+						{confirmLabel}
+					</button>
+				</>
+			}
+		/>
+	);
+}
+
+export default ConfirmDialog;

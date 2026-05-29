@@ -9,6 +9,18 @@ Current shared components:
 - `IconButton`: consistent icon-only button styling and accessibility defaults.
 - `StatusDot`: small presence indicator used by chat headers.
 
+Dialog primitives live in `apps/web/src/components/dialog`.
+
+- `DialogProvider`: app-level dialog state host and API.
+- `Dialog`: base modal shell (overlay, focus/escape close, draggable header, actions slot).
+- `ConfirmDialog`: reusable confirm modal built on top of `Dialog`.
+
+Use `useDialog()` from `DialogProvider` for consistent app-wide behavior:
+
+- `confirm(options)`: yes/no confirmation.
+- `alert(options)`: one-button information modal.
+- `openCustom(options)`: custom content modal using a render callback.
+
 Shared components should be generic. Do not place chat-specific text, fixtures, or business behavior in this folder.
 
 ## Feature Components

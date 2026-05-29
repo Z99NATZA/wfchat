@@ -6,10 +6,12 @@ import {
 	getOrCreateChat,
 	sendChatMessage
 } from "@/features/chat/services/chatApiService";
+import { useDialog } from "@/components/dialog/DialogProvider";
 import type { ChatMessage } from "@/types/chat";
 import { formatMessageTime } from "@/utils/date";
 
 export function useChatSession() {
+	const { confirm } = useDialog();
 	const [personas, setPersonas] = useState(CHAT_PERSONAS);
 	const [quickPrompts, setQuickPrompts] = useState(QUICK_PROMPTS);
 	const [selectedPersonaId, setSelectedPersonaId] = useState(CHAT_PERSONAS[0]?.id ?? "");
@@ -133,7 +135,12 @@ export function useChatSession() {
 			return;
 		}
 
-		if (!window.confirm("Clear this chat history?")) {
+		const shouldClear = await confirm({
+			title: "Clear chat history?",
+			description: "This removes all messages from this chat."
+		});
+
+		if (!shouldClear) {
 			return;
 		}
 
