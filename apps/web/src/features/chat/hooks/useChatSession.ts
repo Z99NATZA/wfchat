@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { CHAT_PERSONAS, QUICK_PROMPTS, STARTER_MESSAGES } from "@/features/chat/data/chatFixtures";
 import {
 	clearChatMessages,
+	getChatUiConfig,
 	getOrCreateChat,
 	sendChatMessage
 } from "@/features/chat/services/chatApiService";
@@ -9,7 +10,9 @@ import type { ChatMessage } from "@/types/chat";
 import { formatMessageTime } from "@/utils/date";
 
 export function useChatSession() {
-	const [selectedPersonaId, setSelectedPersonaId] = useState(CHAT_PERSONAS[0].id);
+	const [personas, setPersonas] = useState(CHAT_PERSONAS);
+	const [quickPrompts, setQuickPrompts] = useState(QUICK_PROMPTS);
+	const [selectedPersonaId, setSelectedPersonaId] = useState(CHAT_PERSONAS[0]?.id ?? "");
 	const [messages, setMessages] = useState<ChatMessage[]>(STARTER_MESSAGES);
 	const [draft, setDraft] = useState("");
 	const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -18,13 +21,53 @@ export function useChatSession() {
 	const [isClearing, setIsClearing] = useState(false);
 	const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-	const activePersona = useMemo(
-		() => CHAT_PERSONAS.find((persona) => persona.id === selectedPersonaId) ?? CHAT_PERSONAS[0],
-		[selectedPersonaId]
-	);
+	const activePersona = useMemo(() => {
+		const firstPersona = personas[0] ?? CHAT_PERSONAS[0];
+		return personas.find((persona) => persona.id === selectedPersonaId) ?? firstPersona;
+	}, [personas, selectedPersonaId]);
 
 	useEffect(() => {
 		let isCurrent = true;
+
+		getChatUiConfig()
+			.then((config) => {
+				if (!isCurrent || config.personas.length === 0) {
+					return;
+				}
+
+				setPersonas(config.personas);
+				setQuickPrompts(config.quickPrompts);
+				setSelectedPersonaId((currentId) =>
+					config.personas.some((persona) => persona.id === currentId)
+						? currentId
+						: config.personas[0].id
+				);
+			})
+			.catch(() => {
+				if (!isCurrent) {
+					return;
+				}
+
+				setPersonas(CHAT_PERSONAS);
+				setQuickPrompts(QUICK_PROMPTS);
+				setSelectedPersonaId((currentId) =>
+					CHAT_PERSONAS.some((persona) => persona.id === currentId)
+						? currentId
+						: (CHAT_PERSONAS[0]?.id ?? "")
+				);
+			});
+
+		return () => {
+			isCurrent = false;
+		};
+	}, []);
+
+	useEffect(() => {
+		let isCurrent = true;
+
+		if (!selectedPersonaId) {
+			return;
+		}
 
 		setErrorMessage(null);
 		setActiveChatId(null);
@@ -119,8 +162,8 @@ export function useChatSession() {
 		isSending,
 		messages,
 		openSidebar: () => setIsSidebarOpen(true),
-		personas: CHAT_PERSONAS,
-		quickPrompts: QUICK_PROMPTS,
+		personas,
+		quickPrompts,
 		selectPersona,
 		sendMessage,
 		setDraft,

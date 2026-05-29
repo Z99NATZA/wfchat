@@ -1,7 +1,7 @@
 import { AxiosError } from "axios";
 import { apiClient } from "@/services/apiClient";
 import { readStorageItem, writeStorageItem } from "@/services/storageService";
-import type { ChatMessage } from "@/types/chat";
+import type { ChatMessage, ChatPersona } from "@/types/chat";
 import { formatMessageTime } from "@/utils/date";
 
 const sessionStorageKey = "wfchat.sessionId";
@@ -30,6 +30,22 @@ type ApiSendMessageResponse = {
 	assistant_message: ApiMessage;
 	user_message: ApiMessage;
 	messages: ApiMessage[];
+};
+
+type ApiChatUiPersona = {
+	id: string;
+	name: string;
+	title: string;
+	status: "Online" | "Typing" | "Away";
+	last_message: string;
+	last_active_at: string;
+	unread_count: number;
+	avatar_url: string;
+};
+
+type ApiChatUiConfig = {
+	personas: ApiChatUiPersona[];
+	quick_prompts: string[];
 };
 
 export async function getOrCreateChat(characterId: string): Promise<{ chatId: string; messages: ChatMessage[] }> {
@@ -85,6 +101,24 @@ export async function clearChatMessages(chatId: string): Promise<ChatMessage[]> 
 	});
 
 	return response.data.messages.map(toChatMessage);
+}
+
+export async function getChatUiConfig(): Promise<{ personas: ChatPersona[]; quickPrompts: string[] }> {
+	const response = await apiClient.get<ApiChatUiConfig>("/api/chat-ui/config");
+
+	return {
+		personas: response.data.personas.map((persona) => ({
+			id: persona.id,
+			name: persona.name,
+			title: persona.title,
+			status: persona.status,
+			lastMessage: persona.last_message,
+			lastActiveAt: persona.last_active_at,
+			unreadCount: persona.unread_count,
+			avatarUrl: persona.avatar_url
+		})),
+		quickPrompts: response.data.quick_prompts
+	};
 }
 
 async function ensureGuestSession(): Promise<string> {

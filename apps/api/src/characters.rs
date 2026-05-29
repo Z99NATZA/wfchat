@@ -8,8 +8,8 @@ use crate::{
 
 pub fn router() -> Router<AppState> {
     Router::new()
-        .route("/characters", get(list_characters))
-        .route("/characters/{id}", get(get_character))
+        .route("/characters", get(list_characters_handler))
+        .route("/characters/{id}", get(get_character_handler))
 }
 
 #[derive(Clone, Copy)]
@@ -21,12 +21,12 @@ pub struct Character {
     pub system_prompt: &'static str,
 }
 
-#[derive(Serialize)]
-struct CharacterResponse {
-    id: &'static str,
-    name: &'static str,
-    title: &'static str,
-    ai_profile_id: &'static str,
+#[derive(Clone, Serialize)]
+pub struct CharacterResponse {
+    pub id: &'static str,
+    pub name: &'static str,
+    pub title: &'static str,
+    pub ai_profile_id: &'static str,
 }
 
 pub fn character_by_id(character_id: &str) -> Option<Character> {
@@ -57,17 +57,19 @@ pub fn default_character() -> Character {
     AIKO
 }
 
-async fn list_characters() -> Json<Vec<CharacterResponse>> {
-    Json(
-        characters()
-            .iter()
-            .copied()
-            .map(character_response)
-            .collect(),
-    )
+pub fn list_characters() -> Vec<CharacterResponse> {
+    characters()
+        .iter()
+        .copied()
+        .map(character_response)
+        .collect()
 }
 
-async fn get_character(Path(id): Path<String>) -> AppResult<Json<CharacterResponse>> {
+async fn list_characters_handler() -> Json<Vec<CharacterResponse>> {
+    Json(list_characters())
+}
+
+async fn get_character_handler(Path(id): Path<String>) -> AppResult<Json<CharacterResponse>> {
     let character = character_by_id(&id).ok_or(AppError::NotFound)?;
 
     Ok(Json(character_response(character)))
