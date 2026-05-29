@@ -1,4 +1,4 @@
-import { Bell, ChevronLeft, Languages, Menu, Moon, Settings, Sun, Trash2 } from "lucide-react";
+import { Bell, ChevronLeft, Languages, Menu, Moon, Settings, Sun, Trash2, Type } from "lucide-react";
 import IconButton from "@/components/ui/IconButton";
 import StatusDot from "@/components/ui/StatusDot";
 import { SUPPORTED_LOCALES, useI18n } from "@/i18n";
@@ -14,6 +14,12 @@ type ChatHeaderProps = {
 	onOpenSidebar: () => void;
 	onToggleTheme: () => void;
 };
+
+const SUPPORTED_FONTS = [
+	{ id: "arial", label: "Arial" },
+	{ id: "jetbrains-mono", label: "JetBrains Mono" },
+	{ id: "georgia", label: "Georgia" }
+] as const;
 
 function ChatHeader({
 	persona,
@@ -69,6 +75,24 @@ function ChatHeader({
 						{SUPPORTED_LOCALES.map((language) => (
 							<option key={language.code} value={language.code}>
 								{language.label}
+							</option>
+						))}
+					</select>
+				</label>
+				<label
+					className="relative inline-flex h-10 items-center rounded-lg border border-app-border bg-app-soft pl-2 pr-1 text-xs font-semibold text-app-text opacity-45 grayscale cursor-not-allowed"
+					title={t("common.notSupportedYet")}
+				>
+					<Type size={18} aria-hidden="true" />
+					<select
+						value={SUPPORTED_FONTS[0].id}
+						aria-label={t("chat.header.font")}
+						disabled
+						className="h-full cursor-not-allowed bg-transparent pl-2 pr-6 outline-none"
+					>
+						{SUPPORTED_FONTS.map((font) => (
+							<option key={font.id} value={font.id}>
+								{font.label}
 							</option>
 						))}
 					</select>
