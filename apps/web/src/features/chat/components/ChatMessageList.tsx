@@ -21,16 +21,31 @@ function ChatMessageList({
 }: ChatMessageListProps) {
 	const scrollContainerRef = useRef<HTMLDivElement>(null);
 	const shouldStickToBottomRef = useRef(true);
+	const previousMessageCountRef = useRef(messages.length);
 	const [showJumpToLatest, setShowJumpToLatest] = useState(false);
+	const [unseenMessageCount, setUnseenMessageCount] = useState(0);
 
 	function handleScroll(event: UIEvent<HTMLDivElement>) {
 		const { scrollTop, scrollHeight, clientHeight } = event.currentTarget;
 		const distanceFromBottom = scrollHeight - (scrollTop + clientHeight);
 		shouldStickToBottomRef.current = distanceFromBottom < 80;
 		setShowJumpToLatest(distanceFromBottom > 180);
+
+		if (distanceFromBottom < 80) {
+			setUnseenMessageCount(0);
+		}
 	}
 
 	useEffect(() => {
+		const previousMessageCount = previousMessageCountRef.current;
+		const nextMessageCount = messages.length;
+		const newMessageCount = Math.max(nextMessageCount - previousMessageCount, 0);
+		previousMessageCountRef.current = nextMessageCount;
+
+		if (newMessageCount > 0 && !shouldStickToBottomRef.current) {
+			setUnseenMessageCount((count) => count + newMessageCount);
+		}
+
 		if (!shouldStickToBottomRef.current) {
 			return;
 		}
@@ -46,6 +61,7 @@ function ChatMessageList({
 			behavior: "smooth"
 		});
 		setShowJumpToLatest(false);
+		setUnseenMessageCount(0);
 	}, [messages, isSending]);
 
 	function scrollToLatest() {
@@ -57,6 +73,7 @@ function ChatMessageList({
 
 		shouldStickToBottomRef.current = true;
 		setShowJumpToLatest(false);
+		setUnseenMessageCount(0);
 		container.scrollTo({
 			top: container.scrollHeight,
 			behavior: "smooth"
@@ -132,7 +149,7 @@ function ChatMessageList({
 			</div>
 
 			{showJumpToLatest && (
-				<div className="pointer-events-none absolute bottom-5 left-1/2 z-10 -translate-x-1/2">
+				<div className="pointer-events-none absolute bottom-5 right-4 z-10 sm:right-8">
 					<button
 						type="button"
 						onClick={scrollToLatest}
@@ -140,6 +157,11 @@ function ChatMessageList({
 					>
 						<ArrowDown size={16} aria-hidden="true" />
 						Jump to latest
+						{unseenMessageCount > 0 && (
+							<span className="rounded-full bg-primary px-2 py-0.5 text-xs font-semibold text-white">
+								+{unseenMessageCount}
+							</span>
+						)}
 					</button>
 				</div>
 			)}
