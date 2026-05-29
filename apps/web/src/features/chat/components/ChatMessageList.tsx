@@ -2,6 +2,7 @@ import { ArrowDown, Ellipsis, EyeOff } from "lucide-react";
 import { UIEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Wand2 } from "lucide-react";
 import { useDialog } from "@/components/dialog/DialogProvider";
+import { useI18n } from "@/i18n";
 import type { ChatMessage } from "@/types/chat";
 import { cn } from "@/utils/classNames";
 
@@ -21,6 +22,7 @@ function ChatMessageList({
 	isSending = false
 }: ChatMessageListProps) {
 	const { confirm } = useDialog();
+	const { t } = useI18n();
 	const scrollContainerRef = useRef<HTMLDivElement>(null);
 	const menuContainerRef = useRef<HTMLDivElement>(null);
 	const shouldStickToBottomRef = useRef(true);
@@ -100,9 +102,9 @@ function ChatMessageList({
 
 	async function hideUserMessage(messageId: string) {
 		const shouldHide = await confirm({
-			title: "Hide this message?",
-			description: "This hides it from your view only. It will not be deleted from server history.",
-			confirmLabel: "Hide message"
+			title: t("chat.messageList.hideConfirmTitle"),
+			description: t("chat.messageList.hideConfirmDesc"),
+			confirmLabel: t("chat.messageList.hideConfirmLabel")
 		});
 
 		if (!shouldHide) {
@@ -144,15 +146,15 @@ function ChatMessageList({
 					<div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary text-white">
 						<Wand2 size={17} aria-hidden="true" />
 					</div>
-					<p>{companionName} is tuned for warm roleplay, soft coaching, and concise creative rewrites.</p>
+					<p>{t("chat.messageList.banner", { name: companionName })}</p>
 				</div>
 
 				<div className="mx-auto flex max-w-3xl flex-col gap-4">
 					{visibleMessages.length === 0 && !isSending && (
 						<div className="rounded-lg border border-dashed border-app-border bg-app-panel px-5 py-8 text-center">
-							<p className="text-sm font-semibold text-app-text">Start a conversation with {companionName}</p>
+							<p className="text-sm font-semibold text-app-text">{t("chat.messageList.emptyTitle", { name: companionName })}</p>
 							<p className="mt-2 text-sm text-muted">
-								Your chat is empty. Send the first message when you are ready.
+								{t("chat.messageList.emptyDesc")}
 							</p>
 						</div>
 					)}
@@ -187,7 +189,7 @@ function ChatMessageList({
 													? "bg-app-soft text-app-text"
 													: "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 hover:bg-app-soft hover:text-app-text"
 											)}
-											aria-label="Open message actions"
+											aria-label={t("chat.messageList.openMessageActions")}
 											aria-expanded={isMenuOpen}
 										>
 											<Ellipsis size={14} aria-hidden="true" />
@@ -200,7 +202,7 @@ function ChatMessageList({
 													className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition hover:bg-app-soft"
 												>
 													<EyeOff size={15} aria-hidden="true" />
-													Hide message
+													{t("chat.messageList.hideMessage")}
 												</button>
 											</div>
 										)}
@@ -224,7 +226,7 @@ function ChatMessageList({
 						<article className="flex items-end gap-3 justify-start">
 							<img className="size-9 shrink-0 rounded-lg object-cover" src={companionAvatarUrl} alt="" />
 							<div className="max-w-[min(36rem,82vw)] rounded-lg border border-app-border bg-app-panel px-4 py-3 text-app-text shadow-soft">
-								<p className="text-sm leading-6 text-muted">{companionName} is thinking...</p>
+								<p className="text-sm leading-6 text-muted">{t("chat.messageList.thinking", { name: companionName })}</p>
 							</div>
 						</article>
 					)}
@@ -244,7 +246,7 @@ function ChatMessageList({
 						className="pointer-events-auto inline-flex items-center gap-2 rounded-full border border-app-border bg-app-panel/95 px-4 py-2 text-sm font-medium text-app-text shadow-soft backdrop-blur transition hover:border-primary hover:text-primary"
 					>
 						<ArrowDown size={16} aria-hidden="true" />
-						Jump to latest
+						{t("chat.messageList.jumpToLatest")}
 						{unseenMessageCount > 0 && (
 							<span className="rounded-full bg-primary px-2 py-0.5 text-xs font-semibold text-white">
 								+{unseenMessageCount}

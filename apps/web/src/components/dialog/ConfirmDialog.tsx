@@ -1,4 +1,5 @@
 import Dialog from "@/components/dialog/Dialog";
+import { useI18n } from "@/i18n";
 
 type ConfirmDialogProps = {
 	isOpen: boolean;
@@ -14,11 +15,13 @@ function ConfirmDialog({
 	isOpen,
 	title,
 	description,
-	confirmLabel = "Confirm",
-	cancelLabel = "Cancel",
+	confirmLabel,
+	cancelLabel,
 	onCancel,
 	onConfirm
 }: ConfirmDialogProps) {
+	const { t } = useI18n();
+
 	return (
 		<Dialog
 			isOpen={isOpen}
@@ -32,14 +35,14 @@ function ConfirmDialog({
 						className="rounded-lg border border-app-border bg-app-soft px-4 py-2 text-sm font-medium text-app-text transition hover:border-primary hover:text-primary"
 						onClick={onCancel}
 					>
-						{cancelLabel}
+						{cancelLabel ?? t("common.cancel")}
 					</button>
 					<button
 						type="button"
 						className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white transition hover:bg-primary-600"
 						onClick={onConfirm}
 					>
-						{confirmLabel}
+						{confirmLabel ?? t("common.confirm")}
 					</button>
 				</>
 			}

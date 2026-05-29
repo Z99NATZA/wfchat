@@ -1,5 +1,6 @@
 import { FormEvent, KeyboardEvent, useEffect, useRef } from "react";
 import { Image, Mic, Paperclip, Send } from "lucide-react";
+import { useI18n } from "@/i18n";
 import IconButton from "@/components/ui/IconButton";
 
 type ChatComposerProps = {
@@ -21,6 +22,7 @@ function ChatComposer({
 	isDisabled = false,
 	isSending = false
 }: ChatComposerProps) {
+	const { t } = useI18n();
 	const textareaRef = useRef<HTMLTextAreaElement>(null);
 	const wasSendingRef = useRef(false);
 
@@ -83,7 +85,7 @@ function ChatComposer({
 							className="shrink-0 rounded-lg border border-app-border bg-app-soft px-3 py-2 text-xs font-medium text-muted transition hover:border-primary hover:text-primary disabled:border-app-border disabled:bg-app-soft disabled:text-muted/50 disabled:opacity-70 disabled:cursor-not-allowed"
 							onClick={() => onUseQuickPrompt(prompt)}
 							disabled
-							title="Not supported yet"
+							title={t("common.notSupportedYet")}
 						>
 							{prompt}
 						</button>
@@ -94,31 +96,31 @@ function ChatComposer({
 					className="flex items-end gap-2 rounded-lg border border-app-border bg-app-soft p-2 shadow-soft focus-within:border-primary focus-within:ring-4 focus-within:ring-primary/15"
 					onSubmit={handleSubmit}
 				>
-					<IconButton className="shrink-0 opacity-45 grayscale cursor-not-allowed" aria-label="Attach file" disabled title="Not supported yet">
+					<IconButton className="shrink-0 opacity-45 grayscale cursor-not-allowed" aria-label={t("chat.composer.attachFile")} disabled title={t("common.notSupportedYet")}>
 						<Paperclip size={18} aria-hidden="true" />
 					</IconButton>
 					<textarea
 						ref={textareaRef}
 						className="min-h-11 flex-1 resize-none bg-transparent px-2 py-3 text-sm leading-6 outline-none placeholder:text-muted"
 						value={draft}
-						placeholder="Message Aiko"
+						placeholder={t("chat.composer.placeholder")}
 						rows={1}
 						disabled={isDisabled}
 						onChange={(event) => onDraftChange(event.target.value)}
 						onKeyDown={handleDraftKeyDown}
 					/>
-					<IconButton className="hidden shrink-0 opacity-45 grayscale cursor-not-allowed sm:flex" aria-label="Voice message" disabled title="Not supported yet">
+					<IconButton className="hidden shrink-0 opacity-45 grayscale cursor-not-allowed sm:flex" aria-label={t("chat.composer.voiceMessage")} disabled title={t("common.notSupportedYet")}>
 						<Mic size={18} aria-hidden="true" />
 					</IconButton>
-					<IconButton className="hidden shrink-0 opacity-45 grayscale cursor-not-allowed sm:flex" aria-label="Image prompt" disabled title="Not supported yet">
+					<IconButton className="hidden shrink-0 opacity-45 grayscale cursor-not-allowed sm:flex" aria-label={t("chat.composer.imagePrompt")} disabled title={t("common.notSupportedYet")}>
 						<Image size={18} aria-hidden="true" />
 					</IconButton>
 					<button
 						type="submit"
 						className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-primary text-white shadow-soft transition hover:bg-primary-600 focus:outline-none focus:ring-4 focus:ring-primary/25 disabled:cursor-not-allowed disabled:opacity-60"
-						aria-label={isSending ? "Waiting for response" : "Send message"}
+						aria-label={isSending ? t("chat.composer.waitingForResponse") : t("chat.composer.sendMessage")}
 						disabled={isDisabled || isSending || !draft.trim()}
-						title={isSending ? "Wait for Aiko to reply before sending again" : "Send message"}
+						title={isSending ? t("chat.composer.waitBeforeSending") : t("chat.composer.sendMessage")}
 					>
 						<Send size={18} aria-hidden="true" />
 					</button>

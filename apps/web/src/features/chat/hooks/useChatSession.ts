@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { CHAT_PERSONAS, QUICK_PROMPTS, STARTER_MESSAGES } from "@/features/chat/data/chatFixtures";
+import { useI18n } from "@/i18n";
 import {
 	clearChatMessages,
 	getChatUiConfig,
@@ -12,6 +13,7 @@ import { formatMessageTime } from "@/utils/date";
 
 export function useChatSession() {
 	const { confirm } = useDialog();
+	const { t } = useI18n();
 	const [personas, setPersonas] = useState(CHAT_PERSONAS);
 	const [quickPrompts, setQuickPrompts] = useState(QUICK_PROMPTS);
 	const [selectedPersonaId, setSelectedPersonaId] = useState(CHAT_PERSONAS[0]?.id ?? "");
@@ -85,7 +87,7 @@ export function useChatSession() {
 			})
 			.catch(() => {
 				if (isCurrent) {
-					setErrorMessage("Could not connect to the chat API.");
+					setErrorMessage(t("chat.session.connectError"));
 				}
 			});
 
@@ -124,7 +126,7 @@ export function useChatSession() {
 			setMessages(nextMessages);
 		} catch {
 			setMessages((currentMessages) => currentMessages.filter((message) => message.id !== optimisticMessage.id));
-			setErrorMessage("The AI service did not respond. Check the backend console and API key.");
+			setErrorMessage(t("chat.session.aiNoResponse"));
 		} finally {
 			setIsSending(false);
 		}
@@ -136,8 +138,8 @@ export function useChatSession() {
 		}
 
 		const shouldClear = await confirm({
-			title: "Clear chat history?",
-			description: "This removes all messages from this chat."
+			title: t("chat.session.clearConfirmTitle"),
+			description: t("chat.session.clearConfirmDesc")
 		});
 
 		if (!shouldClear) {
@@ -151,7 +153,7 @@ export function useChatSession() {
 			const nextMessages = await clearChatMessages(activeChatId);
 			setMessages(nextMessages);
 		} catch {
-			setErrorMessage("Could not clear this chat. Try again.");
+			setErrorMessage(t("chat.session.clearError"));
 		} finally {
 			setIsClearing(false);
 		}

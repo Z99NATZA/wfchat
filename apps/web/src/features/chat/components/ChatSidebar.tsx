@@ -1,5 +1,6 @@
 import { MessageCircle, Search, Sparkles, X } from "lucide-react";
 import IconButton from "@/components/ui/IconButton";
+import { useI18n } from "@/i18n";
 import type { ChatPersona } from "@/types/chat";
 import { cn } from "@/utils/classNames";
 
@@ -18,6 +19,8 @@ function ChatSidebar({
 	onCloseSidebar,
 	onSelectPersona
 }: ChatSidebarProps) {
+	const { t } = useI18n();
+
 	return (
 		<aside
 			className={cn(
@@ -32,11 +35,11 @@ function ChatSidebar({
 							<MessageCircle size={20} aria-hidden="true" />
 						</div>
 						<div>
-							<p className="text-base font-semibold">WFChat</p>
-							<p className="text-xs text-muted">Waifu companion UI</p>
+							<p className="text-base font-semibold">{t("chat.sidebar.title")}</p>
+							<p className="text-xs text-muted">{t("chat.sidebar.subtitle")}</p>
 						</div>
 					</div>
-					<IconButton className="lg:hidden" onClick={onCloseSidebar} aria-label="Close sidebar">
+					<IconButton className="lg:hidden" onClick={onCloseSidebar} aria-label={t("chat.sidebar.closeSidebar")}>
 						<X size={18} aria-hidden="true" />
 					</IconButton>
 				</div>
@@ -50,15 +53,15 @@ function ChatSidebar({
 						/>
 						<input
 							className="h-11 w-full cursor-not-allowed rounded-lg border border-app-border bg-app-soft pl-10 pr-3 text-sm text-muted/50 opacity-70 outline-none"
-							placeholder="Search chats"
+							placeholder={t("chat.sidebar.searchChats")}
 							type="search"
 							disabled
-							title="Not supported yet"
+							title={t("common.notSupportedYet")}
 						/>
 					</label>
 				</div>
 
-				<nav className="flex-1 space-y-2 overflow-y-auto p-3" aria-label="Companions">
+				<nav className="flex-1 space-y-2 overflow-y-auto p-3" aria-label={t("chat.sidebar.companions")}>
 					{personas.map((persona) => (
 						<button
 							key={persona.id}
@@ -95,14 +98,14 @@ function ChatSidebar({
 				</nav>
 
 				<div className="border-t border-app-border p-4">
-					<div className="rounded-lg bg-app-soft p-3 opacity-55 grayscale" title="Not supported yet">
+					<div className="rounded-lg bg-app-soft p-3 opacity-55 grayscale" title={t("common.notSupportedYet")}>
 						<div className="flex items-center gap-3">
 							<div className="flex size-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
 								<Sparkles size={18} aria-hidden="true" />
 							</div>
 							<div className="min-w-0">
-								<p className="text-sm font-semibold">Mood sync</p>
-								<p className="truncate text-xs text-muted">Gentle, witty, attentive</p>
+								<p className="text-sm font-semibold">{t("chat.sidebar.moodSync")}</p>
+								<p className="truncate text-xs text-muted">{t("chat.sidebar.moodSyncDetail")}</p>
 							</div>
 						</div>
 					</div>
