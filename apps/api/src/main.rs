@@ -14,7 +14,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with(tracing_subscriber::fmt::layer())
         .init();
 
-    let config = Config::from_env();
+    let config = Config::from_env().map_err(|error| {
+        std::io::Error::new(std::io::ErrorKind::InvalidInput, format!("config error: {error}"))
+    })?;
     let addr: SocketAddr = config.bind_addr()?;
     let state = AppState::new(config).await;
     let app = build_router(state);

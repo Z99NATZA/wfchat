@@ -7,6 +7,7 @@
     "apps/web"
   ],
   "scripts": {
+    "init": "node scripts/init-env.mjs",
     "dev:web": "npm --prefix apps/web run dev",
     "dev:api": "cargo run --manifest-path apps/api/Cargo.toml",
     "build:web": "npm --prefix apps/web run build",

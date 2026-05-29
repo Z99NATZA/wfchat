@@ -10,6 +10,7 @@ Backend: Rust + Axum
 
 ```bash
 npm install
+npm run init
 ```
 
 ## Run Frontend
@@ -43,3 +44,5 @@ docker compose up --build
 Docker frontend: `http://localhost:5173`
 
 Docker backend API: `http://localhost:8080`
+
+More runtime and environment details: `docs/docker.md`
