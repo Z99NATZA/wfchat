@@ -1,6 +1,6 @@
-import { ArrowDown } from "lucide-react";
+import { ArrowDown, Ellipsis, EyeOff } from "lucide-react";
+import { UIEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Wand2 } from "lucide-react";
-import { UIEvent, useEffect, useRef, useState } from "react";
 import type { ChatMessage } from "@/types/chat";
 import { cn } from "@/utils/classNames";
 
@@ -20,10 +20,17 @@ function ChatMessageList({
 	isSending = false
 }: ChatMessageListProps) {
 	const scrollContainerRef = useRef<HTMLDivElement>(null);
+	const menuContainerRef = useRef<HTMLDivElement>(null);
 	const shouldStickToBottomRef = useRef(true);
 	const previousMessageCountRef = useRef(messages.length);
+	const [hiddenUserMessageIds, setHiddenUserMessageIds] = useState<Set<string>>(new Set());
+	const [activeMessageMenuId, setActiveMessageMenuId] = useState<string | null>(null);
 	const [showJumpToLatest, setShowJumpToLatest] = useState(false);
 	const [unseenMessageCount, setUnseenMessageCount] = useState(0);
+	const visibleMessages = useMemo(
+		() => messages.filter((message) => !(message.author === "user" && hiddenUserMessageIds.has(message.id))),
+		[messages, hiddenUserMessageIds]
+	);
 
 	function handleScroll(event: UIEvent<HTMLDivElement>) {
 		const { scrollTop, scrollHeight, clientHeight } = event.currentTarget;
@@ -64,6 +71,48 @@ function ChatMessageList({
 		setUnseenMessageCount(0);
 	}, [messages, isSending]);
 
+	useEffect(() => {
+		setActiveMessageMenuId(null);
+	}, [messages]);
+
+	useEffect(() => {
+		if (!activeMessageMenuId) {
+			return;
+		}
+
+		function handlePointerDown(event: MouseEvent) {
+			const menuContainer = menuContainerRef.current;
+
+			if (!menuContainer) {
+				return;
+			}
+
+			if (!menuContainer.contains(event.target as Node)) {
+				setActiveMessageMenuId(null);
+			}
+		}
+
+		window.addEventListener("mousedown", handlePointerDown);
+		return () => window.removeEventListener("mousedown", handlePointerDown);
+	}, [activeMessageMenuId]);
+
+	function hideUserMessage(messageId: string) {
+		const shouldHide = window.confirm(
+			"Hide this message from your view only? This will not delete it from server history."
+		);
+
+		if (!shouldHide) {
+			return;
+		}
+
+		setHiddenUserMessageIds((currentIds) => {
+			const nextIds = new Set(currentIds);
+			nextIds.add(messageId);
+			return nextIds;
+		});
+		setActiveMessageMenuId(null);
+	}
+
 	function scrollToLatest() {
 		const container = scrollContainerRef.current;
 
@@ -95,7 +144,7 @@ function ChatMessageList({
 				</div>
 
 				<div className="mx-auto flex max-w-3xl flex-col gap-4">
-					{messages.length === 0 && !isSending && (
+					{visibleMessages.length === 0 && !isSending && (
 						<div className="rounded-lg border border-dashed border-app-border bg-app-panel px-5 py-8 text-center">
 							<p className="text-sm font-semibold text-app-text">Start a conversation with {companionName}</p>
 							<p className="mt-2 text-sm text-muted">
@@ -103,13 +152,14 @@ function ChatMessageList({
 							</p>
 						</div>
 					)}
-					{messages.map((message) => {
+					{visibleMessages.map((message) => {
 						const isUser = message.author === "user";
+						const isMenuOpen = activeMessageMenuId === message.id;
 
 						return (
 							<article
 								key={message.id}
-								className={cn("flex items-end gap-3", isUser ? "justify-end" : "justify-start")}
+								className={cn("group flex items-end gap-2", isUser ? "justify-end" : "justify-start")}
 							>
 								{!isUser && (
 									<img
@@ -117,6 +167,40 @@ function ChatMessageList({
 										src={companionAvatarUrl}
 										alt=""
 									/>
+								)}
+								{isUser && (
+									<div className="relative w-8 shrink-0 self-end" ref={isMenuOpen ? menuContainerRef : null}>
+										<button
+											type="button"
+											onClick={() =>
+												setActiveMessageMenuId((currentId) =>
+													currentId === message.id ? null : message.id
+												)
+											}
+											className={cn(
+												"ml-auto flex size-7 items-center justify-center rounded-md text-muted transition focus:outline-none focus:ring-2 focus:ring-primary/35",
+												isMenuOpen
+													? "bg-app-soft text-app-text"
+													: "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 hover:bg-app-soft hover:text-app-text"
+											)}
+											aria-label="Open message actions"
+											aria-expanded={isMenuOpen}
+										>
+											<Ellipsis size={14} aria-hidden="true" />
+										</button>
+										{isMenuOpen && (
+											<div className="absolute bottom-8 left-0 z-20 min-w-44 rounded-lg border border-app-border bg-app-panel p-1 text-app-text shadow-soft">
+												<button
+													type="button"
+													onClick={() => hideUserMessage(message.id)}
+													className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition hover:bg-app-soft"
+												>
+													<EyeOff size={15} aria-hidden="true" />
+													Hide message
+												</button>
+											</div>
+										)}
+									</div>
 								)}
 								<div
 									className={cn(
