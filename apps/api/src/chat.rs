@@ -62,20 +62,8 @@ struct SendMessageResponse {
 
 #[derive(Serialize)]
 struct ChatUiConfigResponse {
-    personas: Vec<ChatUiPersona>,
+    personas: Vec<characters::CharacterUiResponse>,
     quick_prompts: Vec<&'static str>,
-}
-
-#[derive(Serialize)]
-struct ChatUiPersona {
-    id: &'static str,
-    name: &'static str,
-    title: &'static str,
-    status: &'static str,
-    last_message: &'static str,
-    last_active_at: &'static str,
-    unread_count: u32,
-    avatar_url: &'static str,
 }
 
 async fn list_chats(State(state): State<AppState>, headers: HeaderMap) -> Json<Vec<ChatResponse>> {
@@ -89,22 +77,8 @@ async fn list_chats(State(state): State<AppState>, headers: HeaderMap) -> Json<V
 }
 
 async fn get_chat_ui_config() -> Json<ChatUiConfigResponse> {
-    let personas = characters::list_characters()
-        .into_iter()
-        .map(|character| ChatUiPersona {
-            id: character.id,
-            name: character.name,
-            title: character.title,
-            status: "Online",
-            last_message: "Ready when you are.",
-            last_active_at: "Now",
-            unread_count: 0,
-            avatar_url: "/images/aiko-avatar.png",
-        })
-        .collect();
-
     Json(ChatUiConfigResponse {
-        personas,
+        personas: characters::list_chat_ui_characters(),
         quick_prompts: vec![
             "Make it sweeter",
             "Add playful banter",

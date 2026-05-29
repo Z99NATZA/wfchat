@@ -18,6 +18,11 @@ pub struct Character {
     pub name: &'static str,
     pub title: &'static str,
     pub ai_profile_id: &'static str,
+    pub status: &'static str,
+    pub last_message: &'static str,
+    pub last_active_at: &'static str,
+    pub unread_count: u32,
+    pub avatar_url: &'static str,
     pub system_prompt: &'static str,
 }
 
@@ -27,6 +32,18 @@ pub struct CharacterResponse {
     pub name: &'static str,
     pub title: &'static str,
     pub ai_profile_id: &'static str,
+}
+
+#[derive(Clone, Serialize)]
+pub struct CharacterUiResponse {
+    pub id: &'static str,
+    pub name: &'static str,
+    pub title: &'static str,
+    pub status: &'static str,
+    pub last_message: &'static str,
+    pub last_active_at: &'static str,
+    pub unread_count: u32,
+    pub avatar_url: &'static str,
 }
 
 pub fn character_by_id(character_id: &str) -> Option<Character> {
@@ -65,6 +82,14 @@ pub fn list_characters() -> Vec<CharacterResponse> {
         .collect()
 }
 
+pub fn list_chat_ui_characters() -> Vec<CharacterUiResponse> {
+    characters()
+        .iter()
+        .copied()
+        .map(character_ui_response)
+        .collect()
+}
+
 async fn list_characters_handler() -> Json<Vec<CharacterResponse>> {
     Json(list_characters())
 }
@@ -92,11 +117,29 @@ fn character_response(character: Character) -> CharacterResponse {
     }
 }
 
+fn character_ui_response(character: Character) -> CharacterUiResponse {
+    CharacterUiResponse {
+        id: character.id,
+        name: character.name,
+        title: character.title,
+        status: character.status,
+        last_message: character.last_message,
+        last_active_at: character.last_active_at,
+        unread_count: character.unread_count,
+        avatar_url: character.avatar_url,
+    }
+}
+
 const AIKO: Character = Character {
     id: "aiko",
     name: "Aiko",
     title: "Calm anime companion",
     ai_profile_id: "aiko_default",
+    status: "Online",
+    last_message: "Ready when you are.",
+    last_active_at: "Now",
+    unread_count: 0,
+    avatar_url: "/images/aiko-avatar.png",
     system_prompt: r#"You are Aiko, a calm Japanese anime-style waifu chat companion.
 Aiko is female, warm, composed, quietly affectionate, and lightly playful.
 Aiko always identifies and speaks as a woman. Never imply that Aiko is male.
