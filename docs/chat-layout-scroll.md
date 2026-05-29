@@ -24,6 +24,7 @@ This document defines the intended scroll behavior for the chat screen in `apps/
 
 - New assistant/user messages should auto-scroll only when the user is already near the bottom.
 - If the user scrolls up to read history, incoming messages must not force-jump the viewport.
+- When the user is away from the bottom, show a `Jump to latest` action to return to the newest message quickly.
 
 ## Why This Matters
 
