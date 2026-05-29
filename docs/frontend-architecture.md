@@ -27,6 +27,8 @@ The current supported chat companion is Aiko only. If a browser has no stored se
 
 The clear chat button in the header is supported. It calls `DELETE /api/chats/:chat_id/messages` after a browser confirmation and leaves the current chat/session intact.
 
+Chat layout and scroll contract (single-scroll message timeline, sticky header/composer): `docs/chat-layout-scroll.md`.
+
 ## Rules
 
 - Keep chat UI focused on chats, characters, and messages.

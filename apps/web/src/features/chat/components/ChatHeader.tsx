@@ -26,7 +26,7 @@ function ChatHeader({
 	const nextThemeLabel = theme === "dark" ? "Switch to light theme" : "Switch to dark theme";
 
 	return (
-		<header className="flex h-16 items-center justify-between border-b border-app-border bg-app-panel/95 px-4 backdrop-blur lg:px-6">
+		<header className="sticky top-0 z-20 flex h-16 items-center justify-between border-b border-app-border bg-app-panel/95 px-4 backdrop-blur lg:px-6">
 			<div className="flex min-w-0 items-center gap-3">
 				<IconButton className="lg:hidden" onClick={onOpenSidebar} aria-label="Open sidebar">
 					<Menu size={18} aria-hidden="true" />

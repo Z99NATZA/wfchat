@@ -1,4 +1,5 @@
 import { Wand2 } from "lucide-react";
+import { UIEvent, useEffect, useRef } from "react";
 import type { ChatMessage } from "@/types/chat";
 import { cn } from "@/utils/classNames";
 
@@ -17,8 +18,38 @@ function ChatMessageList({
 	errorMessage,
 	isSending = false
 }: ChatMessageListProps) {
+	const scrollContainerRef = useRef<HTMLDivElement>(null);
+	const shouldStickToBottomRef = useRef(true);
+
+	function handleScroll(event: UIEvent<HTMLDivElement>) {
+		const { scrollTop, scrollHeight, clientHeight } = event.currentTarget;
+		const distanceFromBottom = scrollHeight - (scrollTop + clientHeight);
+		shouldStickToBottomRef.current = distanceFromBottom < 80;
+	}
+
+	useEffect(() => {
+		if (!shouldStickToBottomRef.current) {
+			return;
+		}
+
+		const container = scrollContainerRef.current;
+
+		if (!container) {
+			return;
+		}
+
+		container.scrollTo({
+			top: container.scrollHeight,
+			behavior: "smooth"
+		});
+	}, [messages, isSending]);
+
 	return (
-		<div className="chat-scroll flex-1 space-y-5 overflow-y-auto px-4 py-6 lg:px-8">
+		<div
+			ref={scrollContainerRef}
+			onScroll={handleScroll}
+			className="chat-scroll flex-1 space-y-5 overflow-y-auto px-4 py-6 lg:px-8"
+		>
 			<div className="mx-auto flex max-w-3xl items-center gap-3 rounded-lg border border-primary/20 bg-primary/8 p-3 text-sm text-app-text">
 				<div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary text-white">
 					<Wand2 size={17} aria-hidden="true" />

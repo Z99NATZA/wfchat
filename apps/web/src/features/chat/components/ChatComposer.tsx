@@ -73,7 +73,7 @@ function ChatComposer({
 	}
 
 	return (
-		<div className="border-t border-app-border bg-app-panel px-4 py-4 lg:px-8">
+		<div className="sticky bottom-0 z-20 border-t border-app-border bg-app-panel/95 px-4 py-4 backdrop-blur lg:px-8">
 			<div className="mx-auto max-w-3xl">
 				<div className="mb-3 flex gap-2 overflow-x-auto pb-1">
 					{quickPrompts.map((prompt) => (
