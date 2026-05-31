@@ -1,4 +1,5 @@
-import { MessageCircle, Plus, Search, Sparkles, X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Ellipsis, MessageCircle, Plus, Search, Sparkles, Trash2, X } from "lucide-react";
 import IconButton from "@/components/ui/IconButton";
 import { useI18n } from "@/i18n";
 import type { ChatPersona, ChatSessionSummary } from "@/types/chat";
@@ -16,6 +17,7 @@ type ChatSidebarProps = {
 	onCloseSidebar: () => void;
 	onSelectPersona: (personaId: string) => void;
 	onSelectSession: (sessionId: string) => void;
+	onDeleteSession: (sessionId: string) => Promise<void>;
 };
 
 function ChatSidebar({
@@ -28,9 +30,31 @@ function ChatSidebar({
 	onCreateSession,
 	onCloseSidebar,
 	onSelectPersona,
-	onSelectSession
+	onSelectSession,
+	onDeleteSession
 }: ChatSidebarProps) {
 	const { t } = useI18n();
+	const [activeSessionMenuId, setActiveSessionMenuId] = useState<string | null>(null);
+	const sessionMenuRef = useRef<HTMLDivElement>(null);
+
+	useEffect(() => {
+		if (!activeSessionMenuId) {
+			return;
+		}
+
+		function handlePointerDown(event: MouseEvent) {
+			const menuRoot = sessionMenuRef.current;
+			if (!menuRoot) {
+				return;
+			}
+			if (!menuRoot.contains(event.target as Node)) {
+				setActiveSessionMenuId(null);
+			}
+		}
+
+		window.addEventListener("mousedown", handlePointerDown);
+		return () => window.removeEventListener("mousedown", handlePointerDown);
+	}, [activeSessionMenuId]);
 
 	return (
 		<aside
@@ -121,26 +145,66 @@ function ChatSidebar({
 					</button>
 				</div>
 				<div className="flex-1 space-y-1 overflow-y-auto px-3 py-3">
-					{sessions.map((session) => (
-						<button
-							key={session.id}
-							type="button"
-							onClick={() => onSelectSession(session.id)}
-							className={cn(
-								"w-full rounded-lg border px-3 py-2 text-left transition",
-								session.id === activeSessionId
-									? "border-primary/30 bg-primary/10"
-									: "border-transparent hover:border-app-border hover:bg-app-soft"
-							)}
-						>
-							<p className="truncate text-sm font-medium text-app-text">
-								{session.lastMessage || t("chat.sidebar.newChat")}
-							</p>
-							<p className="mt-1 text-[11px] text-muted">
-								{formatMessageTime(new Date(session.updatedAt * 1000))}
-							</p>
-						</button>
-					))}
+					{sessions.map((session) => {
+						const isMenuOpen = activeSessionMenuId === session.id;
+						return (
+							<div
+								key={session.id}
+								ref={isMenuOpen ? sessionMenuRef : null}
+								className={cn(
+									"group relative rounded-lg border transition",
+									session.id === activeSessionId
+										? "border-primary/30 bg-primary/10"
+										: "border-transparent hover:border-app-border hover:bg-app-soft"
+								)}
+							>
+								<button
+									type="button"
+									onClick={() => onSelectSession(session.id)}
+									className="w-full px-3 py-2 pr-10 text-left"
+								>
+									<p className="truncate text-sm font-medium text-app-text">
+										{session.lastMessage || t("chat.sidebar.newChat")}
+									</p>
+									<p className="mt-1 text-[11px] text-muted">
+										{formatMessageTime(new Date(session.updatedAt * 1000))}
+									</p>
+								</button>
+								<button
+									type="button"
+									aria-label={t("chat.sidebar.chatActions")}
+									onClick={() =>
+										setActiveSessionMenuId((currentId) =>
+											currentId === session.id ? null : session.id
+										)
+									}
+									className={cn(
+										"absolute right-1.5 top-1.5 flex size-7 items-center justify-center rounded-md text-muted transition hover:bg-app-panel hover:text-app-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
+										isMenuOpen
+											? "opacity-100"
+											: "opacity-100 lg:opacity-0 lg:group-hover:opacity-100 lg:group-focus-within:opacity-100"
+									)}
+								>
+									<Ellipsis size={14} aria-hidden="true" />
+								</button>
+								{isMenuOpen && (
+									<div className="absolute right-1.5 top-9 z-20 min-w-36 rounded-lg border border-app-border bg-app-panel p-1 shadow-soft">
+										<button
+											type="button"
+											onClick={async () => {
+												setActiveSessionMenuId(null);
+												await onDeleteSession(session.id);
+											}}
+											className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-red-500 transition hover:bg-app-soft"
+										>
+											<Trash2 size={14} aria-hidden="true" />
+											{t("chat.sidebar.deleteChat")}
+										</button>
+									</div>
+								)}
+							</div>
+						);
+					})}
 				</div>
 
 				<div className="border-t border-app-border p-4">

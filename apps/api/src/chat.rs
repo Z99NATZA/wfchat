@@ -5,6 +5,7 @@ use axum::{
     Json, Router,
 };
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use uuid::Uuid;
 
 use crate::{
@@ -19,7 +20,7 @@ pub fn router() -> Router<AppState> {
     Router::new()
         .route("/chat-ui/config", get(get_chat_ui_config))
         .route("/personas/{persona_id}/chats", get(list_chats_for_persona).post(create_chat_for_persona))
-        .route("/chats/{chat_id}", get(get_chat))
+        .route("/chats/{chat_id}", get(get_chat).delete(delete_chat))
         .route(
             "/chats/{chat_id}/messages",
             axum::routing::post(send_message).delete(clear_messages),
@@ -225,6 +226,23 @@ async fn clear_messages(
         .ok_or(AppError::NotFound)?;
 
     Ok(Json(chat_response(chat)))
+}
+
+async fn delete_chat(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(chat_id): Path<Uuid>,
+) -> AppResult<Json<serde_json::Value>> {
+    let session = state
+        .store
+        .ensure_session(session_id_from_headers(&headers))
+        .await;
+
+    if !state.store.delete_chat(session.id, chat_id).await {
+        return Err(AppError::NotFound);
+    }
+
+    Ok(Json(json!({ "ok": true })))
 }
 
 fn session_id_from_headers(headers: &HeaderMap) -> Option<Uuid> {

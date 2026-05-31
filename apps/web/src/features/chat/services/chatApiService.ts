@@ -115,6 +115,13 @@ export async function clearChatMessages(chatId: string): Promise<ChatMessage[]> 
 	return response.data.messages.map(toChatMessage);
 }
 
+export async function deleteChat(chatId: string): Promise<void> {
+	const sessionId = await ensureGuestSession();
+	await apiClient.delete(`/api/chats/${chatId}`, {
+		headers: sessionHeaders(sessionId)
+	});
+}
+
 export async function getChatUiConfig(): Promise<{ personas: ChatPersona[]; quickPrompts: string[] }> {
 	const response = await apiClient.get<ApiChatUiConfig>("/api/chat-ui/config");
 

@@ -23,6 +23,8 @@
 	"chat.sidebar.companions": "Companions",
 	"chat.sidebar.chats": "Chats",
 	"chat.sidebar.newChat": "New chat",
+	"chat.sidebar.chatActions": "Chat actions",
+	"chat.sidebar.deleteChat": "Delete chat",
 	"chat.sidebar.moodSync": "Mood sync",
 	"chat.sidebar.moodSyncDetail": "Gentle, witty, attentive",
 	"chat.details.about": "About Aiko",
@@ -63,5 +65,8 @@
 	"chat.session.aiNoResponse": "The AI service did not respond. Check the backend console and API key.",
 	"chat.session.clearConfirmTitle": "Clear chat history?",
 	"chat.session.clearConfirmDesc": "This removes all messages from this chat.",
-	"chat.session.clearError": "Could not clear this chat. Try again."
+	"chat.session.clearError": "Could not clear this chat. Try again.",
+	"chat.session.deleteConfirmTitle": "Delete this chat?",
+	"chat.session.deleteConfirmDesc": "This permanently deletes this chat and all its messages.",
+	"chat.session.deleteError": "Could not delete this chat. Try again."
 }

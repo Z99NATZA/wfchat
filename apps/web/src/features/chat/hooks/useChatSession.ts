@@ -6,6 +6,7 @@ import {
 	createMemoryFact,
 	createMemorySummary,
 	createPersonaChat,
+	deleteChat,
 	deleteMemoryFact,
 	deleteMemorySummary,
 	getChat,
@@ -452,6 +453,42 @@ export function useChatSession() {
 		}
 	}
 
+	async function removeSession(sessionId: string) {
+		const targetSession = sessions.find((session) => session.id === sessionId);
+		if (!targetSession) {
+			return;
+		}
+
+		const shouldDelete = await confirm({
+			title: t("chat.session.deleteConfirmTitle"),
+			description: t("chat.session.deleteConfirmDesc")
+		});
+
+		if (!shouldDelete) {
+			return;
+		}
+
+		try {
+			await deleteChat(sessionId);
+			const nextSessions = sessions.filter((session) => session.id !== sessionId);
+			setSessions(nextSessions);
+
+			if (activeChatId !== sessionId) {
+				return;
+			}
+
+			const fallbackSession = nextSessions[0];
+			if (fallbackSession) {
+				await selectSession(fallbackSession.id);
+				return;
+			}
+
+			await createNewSession();
+		} catch {
+			setErrorMessage(t("chat.session.deleteError"));
+		}
+	}
+
 	return {
 		activePersona,
 		activeChatId,
@@ -481,6 +518,7 @@ export function useChatSession() {
 		saveMemorySummary,
 		removeMemoryFact,
 		removeMemorySummary,
+		removeSession,
 		useQuickPrompt: setDraft
 	};
 }

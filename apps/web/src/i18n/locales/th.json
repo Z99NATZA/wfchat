@@ -23,6 +23,8 @@
 	"chat.sidebar.companions": "คู่สนทนา",
 	"chat.sidebar.chats": "แชต",
 	"chat.sidebar.newChat": "แชตใหม่",
+	"chat.sidebar.chatActions": "ตัวเลือกแชต",
+	"chat.sidebar.deleteChat": "ลบแชต",
 	"chat.sidebar.moodSync": "ซิงก์อารมณ์",
 	"chat.sidebar.moodSyncDetail": "อ่อนโยน ขี้เล่น ใส่ใจ",
 	"chat.details.about": "เกี่ยวกับ Aiko",
@@ -63,5 +65,8 @@
 	"chat.session.aiNoResponse": "บริการ AI ไม่ตอบกลับ ตรวจสอบ backend console และ API key",
 	"chat.session.clearConfirmTitle": "ล้างประวัติแชตใช่ไหม?",
 	"chat.session.clearConfirmDesc": "การกระทำนี้จะลบข้อความทั้งหมดในแชตนี้",
-	"chat.session.clearError": "ไม่สามารถล้างแชตนี้ได้ กรุณาลองใหม่"
+	"chat.session.clearError": "ไม่สามารถล้างแชตนี้ได้ กรุณาลองใหม่",
+	"chat.session.deleteConfirmTitle": "ลบแชตนี้ใช่ไหม?",
+	"chat.session.deleteConfirmDesc": "การกระทำนี้จะลบแชตนี้และข้อความทั้งหมดอย่างถาวร",
+	"chat.session.deleteError": "ไม่สามารถลบแชตนี้ได้ กรุณาลองใหม่"
 }

@@ -284,6 +284,16 @@ impl ChatStore {
         self.get_chat(session_id, chat_id).await
     }
 
+    pub async fn delete_chat(&self, session_id: Uuid, chat_id: Uuid) -> bool {
+        sqlx::query("delete from chats where id = $1 and owner_session_id = $2")
+            .bind(chat_id)
+            .bind(session_id)
+            .execute(self.db.as_ref())
+            .await
+            .map(|result| result.rows_affected() > 0)
+            .unwrap_or(false)
+    }
+
     pub async fn list_memory_facts(&self, session_id: Uuid, character_id: &str) -> Vec<MemoryFactRecord> {
         let rows = sqlx::query(
             "select id, owner_session_id, character_id, content, confidence, source_chat_id, extract(epoch from created_at)::bigint as created_at, extract(epoch from updated_at)::bigint as updated_at from memory_facts where owner_session_id = $1 and character_id = $2 order by updated_at desc",

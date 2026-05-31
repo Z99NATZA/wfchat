@@ -30,6 +30,7 @@ function ChatPage({ theme, font, onFontChange, onToggleTheme }: ChatPageProps) {
 					isCreatingSession={chat.isCreatingSession}
 					onCreateSession={chat.createNewSession}
 					onCloseSidebar={chat.closeSidebar}
+					onDeleteSession={chat.removeSession}
 					onSelectPersona={chat.selectPersona}
 					onSelectSession={chat.selectSession}
 				/>
