@@ -77,12 +77,7 @@ impl ChatStore {
     }
 
     pub async fn create_guest_session(&self) -> SessionRecord {
-        let session = SessionRecord {
-            id: Uuid::new_v4(),
-            user_id: Uuid::new_v4(),
-            kind: UserKind::Guest,
-            created_at: now_unix_seconds(),
-        };
+        let session = Self::build_guest_session(Uuid::new_v4());
 
         {
             let mut data = self.inner.write().await;
@@ -98,6 +93,14 @@ impl ChatStore {
             if let Some(session) = self.get_session(session_id).await {
                 return session;
             }
+
+            let session = Self::build_guest_session(session_id);
+            {
+                let mut data = self.inner.write().await;
+                data.sessions.insert(session.id, session.clone());
+            }
+            self.save().await;
+            return session;
         }
 
         self.create_guest_session().await
@@ -209,6 +212,15 @@ impl ChatStore {
 
         if let Ok(content) = serde_json::to_string_pretty(&snapshot) {
             let _ = tokio::fs::write(&self.path, content).await;
+        }
+    }
+
+    fn build_guest_session(id: Uuid) -> SessionRecord {
+        SessionRecord {
+            id,
+            user_id: Uuid::new_v4(),
+            kind: UserKind::Guest,
+            created_at: now_unix_seconds(),
         }
     }
 }
