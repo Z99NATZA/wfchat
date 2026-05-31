@@ -9,6 +9,7 @@
 	"chat.header.notifications": "การแจ้งเตือน",
 	"chat.header.language": "ภาษา",
 	"chat.header.font": "ฟอนต์",
+	"chat.header.moreActions": "ตัวเลือกเพิ่มเติม",
 	"chat.header.switchToThai": "สลับเป็นภาษาไทย",
 	"chat.header.switchToEnglish": "สลับเป็นภาษาอังกฤษ",
 	"chat.header.switchToLightTheme": "สลับเป็นธีมสว่าง",

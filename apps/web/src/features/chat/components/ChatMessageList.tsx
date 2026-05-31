@@ -187,7 +187,7 @@ function ChatMessageList({
 												"ml-auto flex size-7 items-center justify-center rounded-md text-muted transition focus:outline-none focus:ring-2 focus:ring-primary/35",
 												isMenuOpen
 													? "bg-app-soft text-app-text"
-													: "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 hover:bg-app-soft hover:text-app-text"
+													: "opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100 hover:bg-app-soft hover:text-app-text"
 											)}
 											aria-label={t("chat.messageList.openMessageActions")}
 											aria-expanded={isMenuOpen}
