@@ -18,7 +18,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         std::io::Error::new(std::io::ErrorKind::InvalidInput, format!("config error: {error}"))
     })?;
     let addr: SocketAddr = config.bind_addr()?;
-    let state = AppState::new(config).await;
+    let state = AppState::new(config).await.map_err(|error| {
+        std::io::Error::new(
+            std::io::ErrorKind::ConnectionRefused,
+            format!("database connection error: {error}"),
+        )
+    })?;
     let app = build_router(state);
     let listener = TcpListener::bind(addr).await?;
 

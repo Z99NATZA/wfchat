@@ -1,11 +1,10 @@
 import { AxiosError } from "axios";
 import { apiClient } from "@/services/apiClient";
 import { readStorageItem, writeStorageItem } from "@/services/storageService";
-import type { ChatMessage, ChatPersona } from "@/types/chat";
+import type { ChatMessage, ChatPersona, ChatSessionSummary } from "@/types/chat";
 import { formatMessageTime } from "@/utils/date";
 
 const sessionStorageKey = "wfchat.sessionId";
-const chatStorageKeyPrefix = "wfchat.chatId.";
 
 type ApiSessionResponse = {
 	session_id: string;
@@ -24,11 +23,11 @@ type ApiChat = {
 	id: string;
 	character_id: string;
 	messages: ApiMessage[];
+	created_at: number;
+	updated_at: number;
 };
 
 type ApiSendMessageResponse = {
-	assistant_message: ApiMessage;
-	user_message: ApiMessage;
 	messages: ApiMessage[];
 };
 
@@ -48,35 +47,30 @@ type ApiChatUiConfig = {
 	quick_prompts: string[];
 };
 
-export async function getOrCreateChat(characterId: string): Promise<{ chatId: string; messages: ChatMessage[] }> {
+export async function listPersonaChats(characterId: string): Promise<ChatSessionSummary[]> {
 	const sessionId = await ensureGuestSession();
-	const cachedChatId = readStorageItem(chatStorageKey(characterId));
+	const response = await apiClient.get<ApiChat[]>(`/api/personas/${characterId}/chats`, {
+		headers: sessionHeaders(sessionId)
+	});
+	return response.data.map(toSessionSummary);
+}
 
-	if (cachedChatId) {
-		try {
-			const response = await apiClient.get<ApiChat>(`/api/chats/${cachedChatId}`, {
-				headers: sessionHeaders(sessionId)
-			});
+export async function createPersonaChat(characterId: string): Promise<{ chatId: string; messages: ChatMessage[] }> {
+	const sessionId = await ensureGuestSession();
+	const response = await apiClient.post<ApiChat>(`/api/personas/${characterId}/chats`, undefined, {
+		headers: sessionHeaders(sessionId)
+	});
+	return {
+		chatId: response.data.id,
+		messages: response.data.messages.map(toChatMessage)
+	};
+}
 
-			return {
-				chatId: response.data.id,
-				messages: response.data.messages.map(toChatMessage)
-			};
-		} catch (error) {
-			if (!isNotFound(error)) {
-				throw error;
-			}
-		}
-	}
-
-	const response = await apiClient.post<ApiChat>(
-		"/api/chats",
-		{ character_id: characterId },
-		{ headers: sessionHeaders(sessionId) }
-	);
-
-	writeStorageItem(chatStorageKey(characterId), response.data.id);
-
+export async function getChat(chatId: string): Promise<{ chatId: string; messages: ChatMessage[] }> {
+	const sessionId = await ensureGuestSession();
+	const response = await apiClient.get<ApiChat>(`/api/chats/${chatId}`, {
+		headers: sessionHeaders(sessionId)
+	});
 	return {
 		chatId: response.data.id,
 		messages: response.data.messages.map(toChatMessage)
@@ -140,10 +134,6 @@ function sessionHeaders(sessionId: string) {
 	};
 }
 
-function chatStorageKey(characterId: string): string {
-	return `${chatStorageKeyPrefix}${characterId}`;
-}
-
 function toChatMessage(message: ApiMessage): ChatMessage {
 	return {
 		id: message.id,
@@ -153,6 +143,16 @@ function toChatMessage(message: ApiMessage): ChatMessage {
 	};
 }
 
-function isNotFound(error: unknown): boolean {
+function toSessionSummary(chat: ApiChat): ChatSessionSummary {
+	return {
+		id: chat.id,
+		characterId: chat.character_id,
+		createdAt: chat.created_at,
+		updatedAt: chat.updated_at,
+		lastMessage: chat.messages.at(-1)?.content ?? ""
+	};
+}
+
+export function isNotFound(error: unknown): boolean {
 	return error instanceof AxiosError && error.response?.status === 404;
 }

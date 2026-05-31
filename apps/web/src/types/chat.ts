@@ -19,3 +19,11 @@ export type ChatMessage = {
 	text: string;
 	time: string;
 };
+
+export type ChatSessionSummary = {
+	id: string;
+	characterId: string;
+	createdAt: number;
+	updatedAt: number;
+	lastMessage: string;
+};

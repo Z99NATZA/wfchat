@@ -21,6 +21,8 @@
 	"chat.sidebar.closeSidebar": "Close sidebar",
 	"chat.sidebar.searchChats": "Search chats",
 	"chat.sidebar.companions": "Companions",
+	"chat.sidebar.chats": "Chats",
+	"chat.sidebar.newChat": "New chat",
 	"chat.sidebar.moodSync": "Mood sync",
 	"chat.sidebar.moodSyncDetail": "Gentle, witty, attentive",
 	"chat.details.about": "About Aiko",

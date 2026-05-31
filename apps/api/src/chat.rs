@@ -1,7 +1,7 @@
 use axum::{
     extract::{Path, State},
     http::HeaderMap,
-    routing::{get, post},
+    routing::get,
     Json, Router,
 };
 use serde::{Deserialize, Serialize};
@@ -18,17 +18,12 @@ use crate::{
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/chat-ui/config", get(get_chat_ui_config))
-        .route("/chats", get(list_chats).post(create_chat))
+        .route("/personas/{persona_id}/chats", get(list_chats_for_persona).post(create_chat_for_persona))
         .route("/chats/{chat_id}", get(get_chat))
         .route(
             "/chats/{chat_id}/messages",
-            post(send_message).delete(clear_messages),
+            axum::routing::post(send_message).delete(clear_messages),
         )
-}
-
-#[derive(Deserialize)]
-struct CreateChatRequest {
-    character_id: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -37,6 +32,8 @@ struct ChatResponse {
     character_id: String,
     ai_profile_id: String,
     messages: Vec<MessageResponse>,
+    updated_at: u64,
+    created_at: u64,
 }
 
 #[derive(Serialize)]
@@ -66,12 +63,22 @@ struct ChatUiConfigResponse {
     quick_prompts: Vec<&'static str>,
 }
 
-async fn list_chats(State(state): State<AppState>, headers: HeaderMap) -> Json<Vec<ChatResponse>> {
+async fn list_chats_for_persona(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(persona_id): Path<String>,
+) -> Json<Vec<ChatResponse>> {
     let session = state
         .store
         .ensure_session(session_id_from_headers(&headers))
         .await;
-    let chats = state.store.list_chats(session.id).await;
+    let chats = state
+        .store
+        .list_chats(session.id)
+        .await
+        .into_iter()
+        .filter(|chat| chat.character_id == persona_id)
+        .collect::<Vec<_>>();
 
     Json(chats.into_iter().map(chat_response).collect())
 }
@@ -88,21 +95,17 @@ async fn get_chat_ui_config() -> Json<ChatUiConfigResponse> {
     })
 }
 
-async fn create_chat(
+async fn create_chat_for_persona(
     State(state): State<AppState>,
     headers: HeaderMap,
-    Json(payload): Json<CreateChatRequest>,
+    Path(persona_id): Path<String>,
 ) -> AppResult<Json<ChatResponse>> {
     let session = state
         .store
         .ensure_session(session_id_from_headers(&headers))
         .await;
-    let requested_character_id = payload
-        .character_id
-        .unwrap_or_else(|| characters::default_character().id.to_owned());
-    let character = characters::character_by_id(&requested_character_id).ok_or_else(|| {
-        AppError::BadRequest(format!("unknown character: {requested_character_id}"))
-    })?;
+    let character = characters::character_by_id(&persona_id)
+        .ok_or_else(|| AppError::BadRequest(format!("unknown character: {persona_id}")))?;
     let chat = state
         .store
         .create_chat(
@@ -222,6 +225,8 @@ fn chat_response(chat: ChatRecord) -> ChatResponse {
         character_id: chat.character_id,
         ai_profile_id: chat.ai_profile_id,
         messages: chat.messages.into_iter().map(message_response).collect(),
+        updated_at: chat.updated_at,
+        created_at: chat.created_at,
     }
 }
 

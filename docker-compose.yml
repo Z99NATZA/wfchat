@@ -1,4 +1,16 @@
 services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: wfchat
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
+
   api:
     build:
       context: .
@@ -9,11 +21,11 @@ services:
       APP_HOST: 0.0.0.0
       APP_PORT: 8080
       FRONTEND_ORIGIN: http://localhost:5173
-      DATA_PATH: /app/data/wfchat.json
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/wfchat
     ports:
       - "8080:8080"
-    volumes:
-      - ./apps/api/data:/app/data
+    depends_on:
+      - postgres
     restart: unless-stopped
 
   web:
@@ -26,3 +38,6 @@ services:
     depends_on:
       - api
     restart: unless-stopped
+
+volumes:
+  pgdata:

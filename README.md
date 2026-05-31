@@ -23,6 +23,14 @@ Frontend: `http://localhost:5173`
 
 ## Run Backend
 
+Start PostgreSQL first:
+
+```bash
+docker run --name wfchat-postgres -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=wfchat -p 5432:5432 -d postgres:16-alpine
+```
+
+Then set `DATABASE_URL` in `apps/api/.env` (copy from `apps/api/.env.example`) and run:
+
 ```bash
 npm run dev:api
 ```

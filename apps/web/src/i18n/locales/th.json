@@ -21,6 +21,8 @@
 	"chat.sidebar.closeSidebar": "ปิดแถบด้านข้าง",
 	"chat.sidebar.searchChats": "ค้นหาแชต",
 	"chat.sidebar.companions": "คู่สนทนา",
+	"chat.sidebar.chats": "แชต",
+	"chat.sidebar.newChat": "แชตใหม่",
 	"chat.sidebar.moodSync": "ซิงก์อารมณ์",
 	"chat.sidebar.moodSyncDetail": "อ่อนโยน ขี้เล่น ใส่ใจ",
 	"chat.details.about": "เกี่ยวกับ Aiko",

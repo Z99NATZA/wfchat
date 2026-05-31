@@ -1,23 +1,34 @@
-import { MessageCircle, Search, Sparkles, X } from "lucide-react";
+import { MessageCircle, Plus, Search, Sparkles, X } from "lucide-react";
 import IconButton from "@/components/ui/IconButton";
 import { useI18n } from "@/i18n";
-import type { ChatPersona } from "@/types/chat";
+import type { ChatPersona, ChatSessionSummary } from "@/types/chat";
 import { cn } from "@/utils/classNames";
+import { formatMessageTime } from "@/utils/date";
 
 type ChatSidebarProps = {
 	personas: ChatPersona[];
+	sessions: ChatSessionSummary[];
+	activeSessionId: string | null;
 	activePersonaId: string;
 	isOpen: boolean;
+	isCreatingSession?: boolean;
+	onCreateSession: () => void;
 	onCloseSidebar: () => void;
 	onSelectPersona: (personaId: string) => void;
+	onSelectSession: (sessionId: string) => void;
 };
 
 function ChatSidebar({
 	personas,
+	sessions,
+	activeSessionId,
 	activePersonaId,
 	isOpen,
+	isCreatingSession = false,
+	onCreateSession,
 	onCloseSidebar,
-	onSelectPersona
+	onSelectPersona,
+	onSelectSession
 }: ChatSidebarProps) {
 	const { t } = useI18n();
 
@@ -61,7 +72,7 @@ function ChatSidebar({
 					</label>
 				</div>
 
-				<nav className="flex-1 space-y-2 overflow-y-auto p-3" aria-label={t("chat.sidebar.companions")}>
+				<nav className="space-y-2 border-b border-app-border p-3" aria-label={t("chat.sidebar.companions")}>
 					{personas.map((persona) => (
 						<button
 							key={persona.id}
@@ -96,6 +107,41 @@ function ChatSidebar({
 						</button>
 					))}
 				</nav>
+
+				<div className="flex items-center justify-between px-4 pt-3">
+					<p className="text-xs font-semibold uppercase tracking-wide text-muted">{t("chat.sidebar.chats")}</p>
+					<button
+						type="button"
+						onClick={onCreateSession}
+						disabled={isCreatingSession}
+						className="inline-flex h-8 items-center gap-1 rounded-lg border border-app-border bg-app-soft px-2 text-xs font-semibold text-app-text transition hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-60"
+					>
+						<Plus size={14} aria-hidden="true" />
+						{t("chat.sidebar.newChat")}
+					</button>
+				</div>
+				<div className="flex-1 space-y-1 overflow-y-auto px-3 py-3">
+					{sessions.map((session) => (
+						<button
+							key={session.id}
+							type="button"
+							onClick={() => onSelectSession(session.id)}
+							className={cn(
+								"w-full rounded-lg border px-3 py-2 text-left transition",
+								session.id === activeSessionId
+									? "border-primary/30 bg-primary/10"
+									: "border-transparent hover:border-app-border hover:bg-app-soft"
+							)}
+						>
+							<p className="truncate text-sm font-medium text-app-text">
+								{session.lastMessage || t("chat.sidebar.newChat")}
+							</p>
+							<p className="mt-1 text-[11px] text-muted">
+								{formatMessageTime(new Date(session.updatedAt * 1000))}
+							</p>
+						</button>
+					))}
+				</div>
 
 				<div className="border-t border-app-border p-4">
 					<div className="rounded-lg bg-app-soft p-3 opacity-55 grayscale" title={t("common.notSupportedYet")}>

@@ -23,10 +23,15 @@ function ChatPage({ theme, font, onFontChange, onToggleTheme }: ChatPageProps) {
 			sidebar={
 				<ChatSidebar
 					personas={chat.personas}
+					sessions={chat.sessions}
+					activeSessionId={chat.activeChatId}
 					activePersonaId={chat.activePersona.id}
 					isOpen={chat.isSidebarOpen}
+					isCreatingSession={chat.isCreatingSession}
+					onCreateSession={chat.createNewSession}
 					onCloseSidebar={chat.closeSidebar}
 					onSelectPersona={chat.selectPersona}
+					onSelectSession={chat.selectSession}
 				/>
 			}
 			header={

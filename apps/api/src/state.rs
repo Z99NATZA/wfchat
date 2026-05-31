@@ -10,13 +10,13 @@ pub struct AppState {
 }
 
 impl AppState {
-    pub async fn new(config: Config) -> Self {
-        let store = ChatStore::load(&config.data_path).await;
+    pub async fn new(config: Config) -> Result<Self, sqlx::Error> {
+        let store = ChatStore::connect(&config.database_url).await?;
 
-        Self {
+        Ok(Self {
             config,
             http: Client::new(),
             store,
-        }
+        })
     }
 }
