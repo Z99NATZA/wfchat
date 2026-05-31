@@ -54,7 +54,7 @@
 	"chat.messageList.openMessageActions": "เปิดเมนูข้อความ",
 	"chat.messageList.hideMessage": "ซ่อนข้อความ",
 	"chat.messageList.thinking": "{name} กำลังคิดคำตอบ...",
-	"chat.messageList.jumpToLatest": "ไปข้อความล่าสุด",
+	"chat.messageList.jumpToLatest": "ล่าสุด",
 	"chat.messageList.hideConfirmTitle": "ซ่อนข้อความนี้ใช่ไหม?",
 	"chat.messageList.hideConfirmDesc": "ซ่อนเฉพาะมุมมองของคุณเท่านั้น และจะไม่ลบจากประวัติบนเซิร์ฟเวอร์",
 	"chat.messageList.hideConfirmLabel": "ซ่อนข้อความ",
