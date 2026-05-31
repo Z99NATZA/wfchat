@@ -61,6 +61,8 @@ function ChatPage({ theme, font, onFontChange, onToggleTheme }: ChatPageProps) {
 					onSaveMemorySummary={chat.saveMemorySummary}
 					onDeleteMemoryFact={chat.removeMemoryFact}
 					onDeleteMemorySummary={chat.removeMemorySummary}
+					onEditMemoryFact={chat.editMemoryFact}
+					onEditMemorySummary={chat.editMemorySummary}
 				/>
 			}
 		>

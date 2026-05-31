@@ -362,6 +362,36 @@ impl ChatStore {
             .unwrap_or(false)
     }
 
+    pub async fn update_memory_fact(
+        &self,
+        session_id: Uuid,
+        fact_id: Uuid,
+        content: String,
+        confidence: f32,
+    ) -> Option<MemoryFactRecord> {
+        let row = sqlx::query(
+            "update memory_facts set content = $1, confidence = $2, updated_at = now() where id = $3 and owner_session_id = $4 returning id, owner_session_id, character_id, content, confidence, source_chat_id, extract(epoch from created_at)::bigint as created_at, extract(epoch from updated_at)::bigint as updated_at",
+        )
+        .bind(&content)
+        .bind(confidence as f64)
+        .bind(fact_id)
+        .bind(session_id)
+        .fetch_optional(self.db.as_ref())
+        .await
+        .ok()??;
+
+        Some(MemoryFactRecord {
+            id: row.get("id"),
+            owner_session_id: row.get("owner_session_id"),
+            character_id: row.get("character_id"),
+            content: row.get("content"),
+            confidence: row.get::<f64, _>("confidence") as f32,
+            source_chat_id: row.get("source_chat_id"),
+            created_at: row.get::<i64, _>("created_at") as u64,
+            updated_at: row.get::<i64, _>("updated_at") as u64,
+        })
+    }
+
     pub async fn list_memory_summaries(
         &self,
         session_id: Uuid,
@@ -426,6 +456,32 @@ impl ChatStore {
             .await
             .map(|result| result.rows_affected() > 0)
             .unwrap_or(false)
+    }
+
+    pub async fn update_memory_summary(
+        &self,
+        session_id: Uuid,
+        summary_id: Uuid,
+        summary: String,
+    ) -> Option<MemorySummaryRecord> {
+        let row = sqlx::query(
+            "update memory_summaries set summary = $1 where id = $2 and owner_session_id = $3 returning id, owner_session_id, character_id, summary, source_chat_id, extract(epoch from created_at)::bigint as created_at",
+        )
+        .bind(&summary)
+        .bind(summary_id)
+        .bind(session_id)
+        .fetch_optional(self.db.as_ref())
+        .await
+        .ok()??;
+
+        Some(MemorySummaryRecord {
+            id: row.get("id"),
+            owner_session_id: row.get("owner_session_id"),
+            character_id: row.get("character_id"),
+            summary: row.get("summary"),
+            source_chat_id: row.get("source_chat_id"),
+            created_at: row.get::<i64, _>("created_at") as u64,
+        })
     }
 
     async fn messages_for_chat(&self, chat_id: Uuid) -> Vec<StoredMessage> {

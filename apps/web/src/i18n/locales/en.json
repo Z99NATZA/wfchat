@@ -41,6 +41,8 @@
 	"chat.details.memorySummaries": "Memory summaries",
 	"chat.details.memorySummaryPlaceholder": "Add a short memory summary",
 	"chat.details.memorySave": "Save",
+	"chat.details.memoryActions": "Memory actions",
+	"chat.details.memoryEdit": "Edit",
 	"chat.details.memoryDelete": "Delete memory fact",
 	"chat.details.memorySummaryDelete": "Delete memory summary",
 	"chat.details.memoryEmpty": "No memory facts yet.",

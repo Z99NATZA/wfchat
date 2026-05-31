@@ -41,6 +41,8 @@
 	"chat.details.memorySummaries": "สรุปความทรงจำ",
 	"chat.details.memorySummaryPlaceholder": "เพิ่มสรุปสั้น ๆ ที่อยากให้จำ",
 	"chat.details.memorySave": "บันทึก",
+	"chat.details.memoryActions": "ตัวเลือกความทรงจำ",
+	"chat.details.memoryEdit": "แก้ไข",
 	"chat.details.memoryDelete": "ลบความทรงจำ",
 	"chat.details.memorySummaryDelete": "ลบสรุปความทรงจำ",
 	"chat.details.memoryEmpty": "ยังไม่มีความทรงจำ",

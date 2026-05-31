@@ -15,7 +15,9 @@ import {
 	listMemoryFacts,
 	listMemorySummaries,
 	listPersonaChats,
-	sendChatMessage
+	sendChatMessage,
+	updateMemoryFact,
+	updateMemorySummary
 } from "@/features/chat/services/chatApiService";
 import { useDialog } from "@/components/dialog/DialogProvider";
 import type { ChatMessage, ChatSessionSummary, MemoryFact, MemorySummary } from "@/types/chat";
@@ -448,6 +450,20 @@ export function useChatSession() {
 		}
 	}
 
+	async function editMemoryFact(factId: string, content: string) {
+		const trimmed = content.trim();
+		if (!trimmed) {
+			return false;
+		}
+		try {
+			const updated = await updateMemoryFact(factId, trimmed, 0.7);
+			setMemoryFacts((current) => current.map((fact) => (fact.id === factId ? updated : fact)));
+			return true;
+		} catch {
+			return false;
+		}
+	}
+
 	async function saveMemorySummary(summary: string) {
 		const trimmed = summary.trim();
 		if (!trimmed || !selectedPersonaId || isSavingMemorySummary) {
@@ -471,6 +487,22 @@ export function useChatSession() {
 			setMemorySummaries((current) => current.filter((summary) => summary.id !== summaryId));
 		} catch {
 			// no-op
+		}
+	}
+
+	async function editMemorySummary(summaryId: string, summary: string) {
+		const trimmed = summary.trim();
+		if (!trimmed) {
+			return false;
+		}
+		try {
+			const updated = await updateMemorySummary(summaryId, trimmed);
+			setMemorySummaries((current) =>
+				current.map((item) => (item.id === summaryId ? updated : item))
+			);
+			return true;
+		} catch {
+			return false;
 		}
 	}
 
@@ -541,6 +573,8 @@ export function useChatSession() {
 		saveMemorySummary,
 		removeMemoryFact,
 		removeMemorySummary,
+		editMemoryFact,
+		editMemorySummary,
 		removeSession,
 		useQuickPrompt: setDraft
 	};

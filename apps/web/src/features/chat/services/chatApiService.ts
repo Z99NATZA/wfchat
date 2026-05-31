@@ -170,6 +170,20 @@ export async function deleteMemoryFact(factId: string): Promise<void> {
 	});
 }
 
+export async function updateMemoryFact(
+	factId: string,
+	content: string,
+	confidence?: number
+): Promise<MemoryFact> {
+	const sessionId = await ensureGuestSession();
+	const response = await apiClient.patch<ApiMemoryFact>(
+		`/api/memory/facts/${factId}`,
+		{ content, confidence },
+		{ headers: sessionHeaders(sessionId) }
+	);
+	return toMemoryFact(response.data);
+}
+
 export async function listMemorySummaries(characterId: string): Promise<MemorySummary[]> {
 	const sessionId = await ensureGuestSession();
 	const response = await apiClient.get<ApiMemorySummary[]>(
@@ -200,6 +214,16 @@ export async function deleteMemorySummary(summaryId: string): Promise<void> {
 	await apiClient.delete(`/api/memory/summaries/${summaryId}`, {
 		headers: sessionHeaders(sessionId)
 	});
+}
+
+export async function updateMemorySummary(summaryId: string, summary: string): Promise<MemorySummary> {
+	const sessionId = await ensureGuestSession();
+	const response = await apiClient.patch<ApiMemorySummary>(
+		`/api/memory/summaries/${summaryId}`,
+		{ summary },
+		{ headers: sessionHeaders(sessionId) }
+	);
+	return toMemorySummary(response.data);
 }
 
 async function ensureGuestSession(): Promise<string> {

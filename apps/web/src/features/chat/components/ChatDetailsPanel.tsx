@@ -1,5 +1,5 @@
-import { FormEvent, useState } from "react";
-import { Languages, Sparkles, Trash2 } from "lucide-react";
+import { FormEvent, useEffect, useRef, useState } from "react";
+import { Ellipsis, Languages, Pencil, Sparkles, Trash2 } from "lucide-react";
 import { useI18n } from "@/i18n";
 import type { ChatPersona, MemoryFact, MemorySummary } from "@/types/chat";
 
@@ -13,6 +13,8 @@ type ChatDetailsPanelProps = {
 	onSaveMemorySummary: (summary: string) => Promise<boolean>;
 	onDeleteMemoryFact: (factId: string) => Promise<void>;
 	onDeleteMemorySummary: (summaryId: string) => Promise<void>;
+	onEditMemoryFact: (factId: string, content: string) => Promise<boolean>;
+	onEditMemorySummary: (summaryId: string, summary: string) => Promise<boolean>;
 };
 
 const toneItems = ["Calm", "Warm", "Lightly playful", "Respectful"];
@@ -26,12 +28,41 @@ function ChatDetailsPanel({
 	onSaveMemoryFact,
 	onSaveMemorySummary,
 	onDeleteMemoryFact,
-	onDeleteMemorySummary
+	onDeleteMemorySummary,
+	onEditMemoryFact,
+	onEditMemorySummary
 }: ChatDetailsPanelProps) {
 	const { locale, t } = useI18n();
 	const [memoryDraft, setMemoryDraft] = useState("");
 	const [summaryDraft, setSummaryDraft] = useState("");
+	const [openFactMenuId, setOpenFactMenuId] = useState<string | null>(null);
+	const [openSummaryMenuId, setOpenSummaryMenuId] = useState<string | null>(null);
+	const [editingFactId, setEditingFactId] = useState<string | null>(null);
+	const [editingSummaryId, setEditingSummaryId] = useState<string | null>(null);
+	const [editingFactDraft, setEditingFactDraft] = useState("");
+	const [editingSummaryDraft, setEditingSummaryDraft] = useState("");
+	const actionMenuRootRef = useRef<HTMLDivElement>(null);
 	const toneItemsByLocale = locale === "th" ? ["สุขุม", "อบอุ่น", "ขี้เล่นเล็กน้อย", "ให้เกียรติ"] : toneItems;
+
+	useEffect(() => {
+		if (!openFactMenuId && !openSummaryMenuId) {
+			return;
+		}
+
+		function handlePointerDown(event: MouseEvent) {
+			const menuRoot = actionMenuRootRef.current;
+			if (!menuRoot) {
+				return;
+			}
+			if (!menuRoot.contains(event.target as Node)) {
+				setOpenFactMenuId(null);
+				setOpenSummaryMenuId(null);
+			}
+		}
+
+		window.addEventListener("mousedown", handlePointerDown);
+		return () => window.removeEventListener("mousedown", handlePointerDown);
+	}, [openFactMenuId, openSummaryMenuId]);
 
 	async function handleSaveMemory(event: FormEvent<HTMLFormElement>) {
 		event.preventDefault();
@@ -46,6 +77,22 @@ function ChatDetailsPanel({
 		const isSaved = await onSaveMemorySummary(summaryDraft);
 		if (isSaved) {
 			setSummaryDraft("");
+		}
+	}
+
+	async function handleSaveFactEdit(factId: string) {
+		const ok = await onEditMemoryFact(factId, editingFactDraft);
+		if (ok) {
+			setEditingFactId(null);
+			setEditingFactDraft("");
+		}
+	}
+
+	async function handleSaveSummaryEdit(summaryId: string) {
+		const ok = await onEditMemorySummary(summaryId, editingSummaryDraft);
+		if (ok) {
+			setEditingSummaryId(null);
+			setEditingSummaryDraft("");
 		}
 	}
 
@@ -65,7 +112,7 @@ function ChatDetailsPanel({
 				</div>
 			</div>
 
-			<div className="chat-scroll flex-1 space-y-5 overflow-y-auto p-5">
+			<div ref={actionMenuRootRef} className="chat-scroll flex-1 space-y-5 overflow-y-auto p-5">
 				<section>
 					<h3 className="text-sm font-semibold">{t("chat.details.about")}</h3>
 					<p className="mt-3 rounded-lg border border-app-border bg-app-soft p-4 text-sm leading-6 text-muted">
@@ -133,16 +180,71 @@ function ChatDetailsPanel({
 					</form>
 					<div className="mt-3 space-y-2">
 						{memoryFacts.slice(0, 8).map((fact) => (
-							<div key={fact.id} className="flex items-start gap-2 rounded-lg border border-app-border bg-app-soft p-3">
-								<p className="min-w-0 flex-1 text-xs leading-5 text-app-text">{fact.content}</p>
+							<div key={fact.id} className="relative flex items-start gap-2 rounded-lg border border-app-border bg-app-soft p-3">
+								<div className="min-w-0 flex-1">
+									{editingFactId === fact.id ? (
+										<div className="space-y-2">
+											<input
+												value={editingFactDraft}
+												onChange={(event) => setEditingFactDraft(event.target.value)}
+												className="h-8 w-full rounded-md border border-app-border bg-app-panel px-2 text-xs text-app-text outline-none focus:border-primary"
+											/>
+											<div className="flex gap-2">
+												<button
+													type="button"
+													onClick={() => void handleSaveFactEdit(fact.id)}
+													className="h-7 rounded-md bg-primary px-2 text-xs font-semibold text-white"
+												>
+													{t("chat.details.memorySave")}
+												</button>
+												<button
+													type="button"
+													onClick={() => setEditingFactId(null)}
+													className="h-7 rounded-md border border-app-border px-2 text-xs text-muted"
+												>
+													{t("common.cancel")}
+												</button>
+											</div>
+										</div>
+									) : (
+										<p className="text-xs leading-5 text-app-text">{fact.content}</p>
+									)}
+								</div>
 								<button
 									type="button"
-									onClick={() => onDeleteMemoryFact(fact.id)}
-									className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted transition hover:bg-app-panel hover:text-red-500"
-									aria-label={t("chat.details.memoryDelete")}
+									onClick={() => setOpenFactMenuId((current) => (current === fact.id ? null : fact.id))}
+									className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted transition hover:bg-app-panel hover:text-app-text"
+									aria-label={t("chat.details.memoryActions")}
 								>
-									<Trash2 size={14} aria-hidden="true" />
+									<Ellipsis size={14} aria-hidden="true" />
 								</button>
+								{openFactMenuId === fact.id && (
+									<div className="absolute right-2 top-10 z-10 min-w-32 rounded-md border border-app-border bg-app-panel p-1 shadow-soft">
+										<button
+											type="button"
+											onClick={() => {
+												setOpenFactMenuId(null);
+												setEditingFactId(fact.id);
+												setEditingFactDraft(fact.content);
+											}}
+											className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-app-text hover:bg-app-soft"
+										>
+											<Pencil size={12} aria-hidden="true" />
+											{t("chat.details.memoryEdit")}
+										</button>
+										<button
+											type="button"
+											onClick={async () => {
+												setOpenFactMenuId(null);
+												await onDeleteMemoryFact(fact.id);
+											}}
+											className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-red-500 hover:bg-app-soft"
+										>
+											<Trash2 size={12} aria-hidden="true" />
+											{t("chat.details.memoryDelete")}
+										</button>
+									</div>
+								)}
 							</div>
 						))}
 						{memoryFacts.length === 0 && (
@@ -175,16 +277,73 @@ function ChatDetailsPanel({
 					</form>
 					<div className="mt-3 space-y-2">
 						{memorySummaries.slice(0, 6).map((summary) => (
-							<div key={summary.id} className="flex items-start gap-2 rounded-lg border border-app-border bg-app-soft p-3">
-								<p className="min-w-0 flex-1 text-xs leading-5 text-app-text">{summary.summary}</p>
+							<div key={summary.id} className="relative flex items-start gap-2 rounded-lg border border-app-border bg-app-soft p-3">
+								<div className="min-w-0 flex-1">
+									{editingSummaryId === summary.id ? (
+										<div className="space-y-2">
+											<input
+												value={editingSummaryDraft}
+												onChange={(event) => setEditingSummaryDraft(event.target.value)}
+												className="h-8 w-full rounded-md border border-app-border bg-app-panel px-2 text-xs text-app-text outline-none focus:border-primary"
+											/>
+											<div className="flex gap-2">
+												<button
+													type="button"
+													onClick={() => void handleSaveSummaryEdit(summary.id)}
+													className="h-7 rounded-md bg-primary px-2 text-xs font-semibold text-white"
+												>
+													{t("chat.details.memorySave")}
+												</button>
+												<button
+													type="button"
+													onClick={() => setEditingSummaryId(null)}
+													className="h-7 rounded-md border border-app-border px-2 text-xs text-muted"
+												>
+													{t("common.cancel")}
+												</button>
+											</div>
+										</div>
+									) : (
+										<p className="text-xs leading-5 text-app-text">{summary.summary}</p>
+									)}
+								</div>
 								<button
 									type="button"
-									onClick={() => onDeleteMemorySummary(summary.id)}
-									className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted transition hover:bg-app-panel hover:text-red-500"
-									aria-label={t("chat.details.memorySummaryDelete")}
+									onClick={() =>
+										setOpenSummaryMenuId((current) => (current === summary.id ? null : summary.id))
+									}
+									className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted transition hover:bg-app-panel hover:text-app-text"
+									aria-label={t("chat.details.memoryActions")}
 								>
-									<Trash2 size={14} aria-hidden="true" />
+									<Ellipsis size={14} aria-hidden="true" />
 								</button>
+								{openSummaryMenuId === summary.id && (
+									<div className="absolute right-2 top-10 z-10 min-w-32 rounded-md border border-app-border bg-app-panel p-1 shadow-soft">
+										<button
+											type="button"
+											onClick={() => {
+												setOpenSummaryMenuId(null);
+												setEditingSummaryId(summary.id);
+												setEditingSummaryDraft(summary.summary);
+											}}
+											className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-app-text hover:bg-app-soft"
+										>
+											<Pencil size={12} aria-hidden="true" />
+											{t("chat.details.memoryEdit")}
+										</button>
+										<button
+											type="button"
+											onClick={async () => {
+												setOpenSummaryMenuId(null);
+												await onDeleteMemorySummary(summary.id);
+											}}
+											className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-red-500 hover:bg-app-soft"
+										>
+											<Trash2 size={12} aria-hidden="true" />
+											{t("chat.details.memorySummaryDelete")}
+										</button>
+									</div>
+								)}
 							</div>
 						))}
 						{memorySummaries.length === 0 && (
