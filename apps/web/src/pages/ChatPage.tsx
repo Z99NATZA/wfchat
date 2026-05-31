@@ -76,12 +76,11 @@ function ChatPage({ theme, font, onFontChange, onToggleTheme }: ChatPageProps) {
 			<ChatComposer
 				draft={chat.draft}
 				font={font}
-				quickPrompts={chat.quickPrompts}
+				companionName={chat.activePersona.name}
 				isDisabled={!chat.activeChatId}
 				isSending={chat.isSending}
 				onDraftChange={chat.setDraft}
 				onSend={chat.sendMessage}
-				onUseQuickPrompt={chat.useQuickPrompt}
 			/>
 		</AppLayout>
 	);

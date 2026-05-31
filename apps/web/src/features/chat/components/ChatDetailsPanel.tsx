@@ -114,9 +114,9 @@ function ChatDetailsPanel({
 
 			<div ref={actionMenuRootRef} className="chat-scroll flex-1 space-y-5 overflow-y-auto p-5">
 				<section>
-					<h3 className="text-sm font-semibold">{t("chat.details.about")}</h3>
+					<h3 className="text-sm font-semibold">{t("chat.details.about", { name: persona.name })}</h3>
 					<p className="mt-3 rounded-lg border border-app-border bg-app-soft p-4 text-sm leading-6 text-muted">
-						{t("chat.details.aboutText")}
+						{t("chat.details.aboutText", { name: persona.name })}
 					</p>
 				</section>
 
@@ -143,7 +143,9 @@ function ChatDetailsPanel({
 							</div>
 							<div>
 								<p className="text-sm font-medium">{t("chat.details.repliesInLanguage")}</p>
-								<p className="text-xs text-muted">{t("chat.details.repliesInLanguageDesc")}</p>
+								<p className="text-xs text-muted">
+									{t("chat.details.repliesInLanguageDesc", { name: persona.name })}
+								</p>
 							</div>
 						</div>
 						<div className="flex items-center gap-3 rounded-lg border border-app-border bg-app-soft p-3">
@@ -167,7 +169,7 @@ function ChatDetailsPanel({
 						<input
 							value={memoryDraft}
 							onChange={(event) => setMemoryDraft(event.target.value)}
-							placeholder={t("chat.details.memoryPlaceholder")}
+							placeholder={t("chat.details.memoryPlaceholder", { name: persona.name })}
 							className="h-9 min-w-0 flex-1 rounded-lg border border-app-border bg-app-soft px-3 text-sm text-app-text outline-none focus:border-primary"
 						/>
 						<button

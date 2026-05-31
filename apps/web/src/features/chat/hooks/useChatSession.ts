@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { CHAT_PERSONAS, QUICK_PROMPTS } from "@/features/chat/data/chatFixtures";
+import { CHAT_PERSONAS } from "@/features/chat/data/chatFixtures";
 import { useI18n } from "@/i18n";
 import {
 	clearChatMessages,
@@ -41,7 +41,6 @@ export function useChatSession() {
 	const { confirm } = useDialog();
 	const { t } = useI18n();
 	const [personas, setPersonas] = useState(CHAT_PERSONAS);
-	const [quickPrompts, setQuickPrompts] = useState(QUICK_PROMPTS);
 	const [selectedPersonaId, setSelectedPersonaId] = useState(CHAT_PERSONAS[0]?.id ?? "");
 	const [messages, setMessages] = useState<ChatMessage[]>([]);
 	const [draft, setDraft] = useState("");
@@ -104,7 +103,6 @@ export function useChatSession() {
 				}
 
 				setPersonas(config.personas);
-				setQuickPrompts(config.quickPrompts);
 				setSelectedPersonaId((currentId) =>
 					config.personas.some((persona) => persona.id === currentId)
 						? currentId
@@ -117,7 +115,6 @@ export function useChatSession() {
 				}
 
 				setPersonas(CHAT_PERSONAS);
-				setQuickPrompts(QUICK_PROMPTS);
 				setSelectedPersonaId((currentId) =>
 					CHAT_PERSONAS.some((persona) => persona.id === currentId)
 						? currentId
@@ -562,7 +559,6 @@ export function useChatSession() {
 		openSidebar: () => setIsSidebarOpen(true),
 		personas,
 		chatSearchQuery,
-		quickPrompts,
 		selectPersona,
 		selectSession,
 		sendMessage,
@@ -576,6 +572,5 @@ export function useChatSession() {
 		editMemoryFact,
 		editMemorySummary,
 		removeSession,
-		useQuickPrompt: setDraft
 	};
 }
