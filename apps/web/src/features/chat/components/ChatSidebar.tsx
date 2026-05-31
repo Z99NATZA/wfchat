@@ -13,7 +13,9 @@ type ChatSidebarProps = {
 	activePersonaId: string;
 	isOpen: boolean;
 	isCreatingSession?: boolean;
+	searchQuery: string;
 	onCreateSession: () => void;
+	onSearchQueryChange: (value: string) => void;
 	onCloseSidebar: () => void;
 	onSelectPersona: (personaId: string) => void;
 	onSelectSession: (sessionId: string) => void;
@@ -27,7 +29,9 @@ function ChatSidebar({
 	activePersonaId,
 	isOpen,
 	isCreatingSession = false,
+	searchQuery,
 	onCreateSession,
+	onSearchQueryChange,
 	onCloseSidebar,
 	onSelectPersona,
 	onSelectSession,
@@ -87,11 +91,11 @@ function ChatSidebar({
 							aria-hidden="true"
 						/>
 						<input
-							className="h-11 w-full cursor-not-allowed rounded-lg border border-app-border bg-app-soft pl-10 pr-3 text-sm text-muted/50 opacity-70 outline-none"
+							className="h-11 w-full rounded-lg border border-app-border bg-app-soft pl-10 pr-3 text-sm text-app-text outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/25"
 							placeholder={t("chat.sidebar.searchChats")}
 							type="search"
-							disabled
-							title={t("common.notSupportedYet")}
+							value={searchQuery}
+							onChange={(event) => onSearchQueryChange(event.target.value)}
 						/>
 					</label>
 				</div>
@@ -205,6 +209,11 @@ function ChatSidebar({
 							</div>
 						);
 					})}
+					{sessions.length === 0 && (
+						<p className="rounded-lg border border-dashed border-app-border px-3 py-3 text-xs text-muted">
+							{t("chat.sidebar.noChatsFound")}
+						</p>
+					)}
 				</div>
 
 				<div className="border-t border-app-border p-4">

@@ -20,6 +20,7 @@
 	"chat.sidebar.subtitle": "UI คู่หูวาอิฟุ",
 	"chat.sidebar.closeSidebar": "ปิดแถบด้านข้าง",
 	"chat.sidebar.searchChats": "ค้นหาแชต",
+	"chat.sidebar.noChatsFound": "ไม่พบแชตที่ค้นหา",
 	"chat.sidebar.companions": "คู่สนทนา",
 	"chat.sidebar.chats": "แชต",
 	"chat.sidebar.newChat": "แชตใหม่",

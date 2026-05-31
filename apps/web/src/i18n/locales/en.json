@@ -20,6 +20,7 @@
 	"chat.sidebar.subtitle": "Waifu companion UI",
 	"chat.sidebar.closeSidebar": "Close sidebar",
 	"chat.sidebar.searchChats": "Search chats",
+	"chat.sidebar.noChatsFound": "No chats found",
 	"chat.sidebar.companions": "Companions",
 	"chat.sidebar.chats": "Chats",
 	"chat.sidebar.newChat": "New chat",

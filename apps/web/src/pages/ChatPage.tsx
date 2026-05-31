@@ -28,7 +28,9 @@ function ChatPage({ theme, font, onFontChange, onToggleTheme }: ChatPageProps) {
 					activePersonaId={chat.activePersona.id}
 					isOpen={chat.isSidebarOpen}
 					isCreatingSession={chat.isCreatingSession}
+					searchQuery={chat.chatSearchQuery}
 					onCreateSession={chat.createNewSession}
+					onSearchQueryChange={chat.setChatSearchQuery}
 					onCloseSidebar={chat.closeSidebar}
 					onDeleteSession={chat.removeSession}
 					onSelectPersona={chat.selectPersona}

@@ -46,6 +46,8 @@ export function useChatSession() {
 	const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 	const [activeChatId, setActiveChatId] = useState<string | null>(null);
 	const [sessions, setSessions] = useState<ChatSessionSummary[]>([]);
+	const [chatSearchQuery, setChatSearchQuery] = useState("");
+	const [debouncedChatSearchQuery, setDebouncedChatSearchQuery] = useState("");
 	const [isSending, setIsSending] = useState(false);
 	const [isClearing, setIsClearing] = useState(false);
 	const [isCreatingSession, setIsCreatingSession] = useState(false);
@@ -62,6 +64,25 @@ export function useChatSession() {
 		const firstPersona = personas[0] ?? CHAT_PERSONAS[0];
 		return personas.find((persona) => persona.id === selectedPersonaId) ?? firstPersona;
 	}, [personas, selectedPersonaId]);
+	const filteredSessions = useMemo(() => {
+		const query = debouncedChatSearchQuery.trim().toLowerCase();
+		if (!query) {
+			return sessions;
+		}
+
+		return sessions.filter((session) => {
+			const haystack = (session.lastMessage || "new chat").toLowerCase();
+			return haystack.includes(query);
+		});
+	}, [debouncedChatSearchQuery, sessions]);
+
+	useEffect(() => {
+		const timeoutId = window.setTimeout(() => {
+			setDebouncedChatSearchQuery(chatSearchQuery);
+		}, 200);
+
+		return () => window.clearTimeout(timeoutId);
+	}, [chatSearchQuery]);
 
 	useEffect(() => {
 		function onPopState() {
@@ -508,12 +529,14 @@ export function useChatSession() {
 		messages,
 		openSidebar: () => setIsSidebarOpen(true),
 		personas,
+		chatSearchQuery,
 		quickPrompts,
 		selectPersona,
 		selectSession,
 		sendMessage,
-		sessions,
+		sessions: filteredSessions,
 		setDraft,
+		setChatSearchQuery,
 		saveMemoryFact,
 		saveMemorySummary,
 		removeMemoryFact,
