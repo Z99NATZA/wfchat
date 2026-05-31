@@ -28,6 +28,17 @@ services:
       - postgres
     restart: unless-stopped
 
+  db-init:
+    image: postgres:16-alpine
+    environment:
+      DATABASE_URL: postgres://postgres:postgres@postgres:5432/wfchat
+    volumes:
+      - ./apps/api/db/init.sql:/sql/init.sql:ro
+    depends_on:
+      - postgres
+    command: ["sh", "-c", "psql \"$DATABASE_URL\" -v ON_ERROR_STOP=1 -f /sql/init.sql"]
+    restart: "no"
+
   web:
     build:
       context: ./apps/web

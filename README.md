@@ -37,6 +37,23 @@ npm run dev:api
 
 Backend API: `http://localhost:8080`
 
+## Database Schema (Single SQL)
+
+Schema file: `apps/api/db/init.sql`
+
+Manual apply (to any PostgreSQL):
+
+```bash
+psql "postgres://postgres:postgres@localhost:5432/wfchat" -v ON_ERROR_STOP=1 -f apps/api/db/init.sql
+```
+
+Docker apply (from this repo):
+
+```bash
+docker compose up -d postgres
+docker compose run --rm db-init
+```
+
 ## Build And Check
 
 ```bash

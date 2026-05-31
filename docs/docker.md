@@ -11,7 +11,7 @@ The web image builds `apps/web` and serves the Vite build through nginx.
 
 The api image builds `apps/api` and runs the Axum binary.
 
-The api service reads backend-only secrets from `apps/api/.env` and persists local chat data in `apps/api/data`.
+The api service reads backend-only secrets from `apps/api/.env`.
 
 ## Environment Setup
 
@@ -49,3 +49,26 @@ VITE_API_BASE_URL=http://localhost:8080
 ```
 
 Use `http://api:8080` only for server-to-server calls from inside Docker.
+
+## Database Init Options
+
+Single schema SQL lives at `apps/api/db/init.sql`.
+
+Apply manually:
+
+```bash
+psql "postgres://postgres:postgres@localhost:5432/wfchat" -v ON_ERROR_STOP=1 -f apps/api/db/init.sql
+```
+
+Apply with Docker job:
+
+```bash
+docker compose up -d postgres
+docker compose run --rm db-init
+```
+
+This `db-init` container can target any reachable PostgreSQL by overriding `DATABASE_URL`:
+
+```bash
+docker compose run --rm -e DATABASE_URL="postgres://USER:PASS@HOST:5432/DB" db-init
+```
