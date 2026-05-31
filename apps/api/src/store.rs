@@ -47,6 +47,28 @@ pub struct StoredMessage {
     pub created_at: u64,
 }
 
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct MemoryFactRecord {
+    pub id: Uuid,
+    pub owner_session_id: Uuid,
+    pub character_id: String,
+    pub content: String,
+    pub confidence: f32,
+    pub source_chat_id: Option<Uuid>,
+    pub created_at: u64,
+    pub updated_at: u64,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct MemorySummaryRecord {
+    pub id: Uuid,
+    pub owner_session_id: Uuid,
+    pub character_id: String,
+    pub summary: String,
+    pub source_chat_id: Option<Uuid>,
+    pub created_at: u64,
+}
+
 impl ChatStore {
     pub async fn connect(database_url: &str) -> Result<Self, sqlx::Error> {
         let db = PgPool::connect(database_url).await?;
@@ -262,6 +284,140 @@ impl ChatStore {
         self.get_chat(session_id, chat_id).await
     }
 
+    pub async fn list_memory_facts(&self, session_id: Uuid, character_id: &str) -> Vec<MemoryFactRecord> {
+        let rows = sqlx::query(
+            "select id, owner_session_id, character_id, content, confidence, source_chat_id, extract(epoch from created_at)::bigint as created_at, extract(epoch from updated_at)::bigint as updated_at from memory_facts where owner_session_id = $1 and character_id = $2 order by updated_at desc",
+        )
+        .bind(session_id)
+        .bind(character_id)
+        .fetch_all(self.db.as_ref())
+        .await
+        .unwrap_or_default();
+
+        rows.into_iter()
+            .map(|row| MemoryFactRecord {
+                id: row.get("id"),
+                owner_session_id: row.get("owner_session_id"),
+                character_id: row.get("character_id"),
+                content: row.get("content"),
+                confidence: row.get::<f64, _>("confidence") as f32,
+                source_chat_id: row.get("source_chat_id"),
+                created_at: row.get::<i64, _>("created_at") as u64,
+                updated_at: row.get::<i64, _>("updated_at") as u64,
+            })
+            .collect()
+    }
+
+    pub async fn create_memory_fact(
+        &self,
+        session_id: Uuid,
+        character_id: String,
+        content: String,
+        confidence: f32,
+        source_chat_id: Option<Uuid>,
+    ) -> Option<MemoryFactRecord> {
+        let id = Uuid::new_v4();
+        let row = sqlx::query(
+            "insert into memory_facts (id, owner_session_id, character_id, content, confidence, source_chat_id) values ($1, $2, $3, $4, $5, $6) returning extract(epoch from created_at)::bigint as created_at, extract(epoch from updated_at)::bigint as updated_at",
+        )
+        .bind(id)
+        .bind(session_id)
+        .bind(&character_id)
+        .bind(&content)
+        .bind(confidence as f64)
+        .bind(source_chat_id)
+        .fetch_one(self.db.as_ref())
+        .await
+        .ok()?;
+
+        Some(MemoryFactRecord {
+            id,
+            owner_session_id: session_id,
+            character_id,
+            content,
+            confidence,
+            source_chat_id,
+            created_at: row.get::<i64, _>("created_at") as u64,
+            updated_at: row.get::<i64, _>("updated_at") as u64,
+        })
+    }
+
+    pub async fn delete_memory_fact(&self, session_id: Uuid, fact_id: Uuid) -> bool {
+        sqlx::query("delete from memory_facts where id = $1 and owner_session_id = $2")
+            .bind(fact_id)
+            .bind(session_id)
+            .execute(self.db.as_ref())
+            .await
+            .map(|result| result.rows_affected() > 0)
+            .unwrap_or(false)
+    }
+
+    pub async fn list_memory_summaries(
+        &self,
+        session_id: Uuid,
+        character_id: &str,
+    ) -> Vec<MemorySummaryRecord> {
+        let rows = sqlx::query(
+            "select id, owner_session_id, character_id, summary, source_chat_id, extract(epoch from created_at)::bigint as created_at from memory_summaries where owner_session_id = $1 and character_id = $2 order by created_at desc",
+        )
+        .bind(session_id)
+        .bind(character_id)
+        .fetch_all(self.db.as_ref())
+        .await
+        .unwrap_or_default();
+
+        rows.into_iter()
+            .map(|row| MemorySummaryRecord {
+                id: row.get("id"),
+                owner_session_id: row.get("owner_session_id"),
+                character_id: row.get("character_id"),
+                summary: row.get("summary"),
+                source_chat_id: row.get("source_chat_id"),
+                created_at: row.get::<i64, _>("created_at") as u64,
+            })
+            .collect()
+    }
+
+    pub async fn create_memory_summary(
+        &self,
+        session_id: Uuid,
+        character_id: String,
+        summary: String,
+        source_chat_id: Option<Uuid>,
+    ) -> Option<MemorySummaryRecord> {
+        let id = Uuid::new_v4();
+        let row = sqlx::query(
+            "insert into memory_summaries (id, owner_session_id, character_id, summary, source_chat_id) values ($1, $2, $3, $4, $5) returning extract(epoch from created_at)::bigint as created_at",
+        )
+        .bind(id)
+        .bind(session_id)
+        .bind(&character_id)
+        .bind(&summary)
+        .bind(source_chat_id)
+        .fetch_one(self.db.as_ref())
+        .await
+        .ok()?;
+
+        Some(MemorySummaryRecord {
+            id,
+            owner_session_id: session_id,
+            character_id,
+            summary,
+            source_chat_id,
+            created_at: row.get::<i64, _>("created_at") as u64,
+        })
+    }
+
+    pub async fn delete_memory_summary(&self, session_id: Uuid, summary_id: Uuid) -> bool {
+        sqlx::query("delete from memory_summaries where id = $1 and owner_session_id = $2")
+            .bind(summary_id)
+            .bind(session_id)
+            .execute(self.db.as_ref())
+            .await
+            .map(|result| result.rows_affected() > 0)
+            .unwrap_or(false)
+    }
+
     async fn messages_for_chat(&self, chat_id: Uuid) -> Vec<StoredMessage> {
         let rows = sqlx::query(
             "select id, role, content, extract(epoch from created_at)::bigint as created_at from chat_messages where chat_id = $1 order by created_at asc, id asc",
@@ -329,6 +485,38 @@ impl ChatStore {
             .execute(self.db.as_ref())
             .await?;
         sqlx::query("create index if not exists idx_messages_chat_created on chat_messages(chat_id, created_at asc)")
+            .execute(self.db.as_ref())
+            .await?;
+        sqlx::query(
+            "create table if not exists memory_facts (
+                id uuid primary key,
+                owner_session_id uuid not null references auth_sessions(id) on delete cascade,
+                character_id text not null,
+                content text not null,
+                confidence double precision not null default 0.5,
+                source_chat_id uuid references chats(id) on delete set null,
+                created_at timestamptz not null default now(),
+                updated_at timestamptz not null default now()
+            )",
+        )
+        .execute(self.db.as_ref())
+        .await?;
+        sqlx::query(
+            "create table if not exists memory_summaries (
+                id uuid primary key,
+                owner_session_id uuid not null references auth_sessions(id) on delete cascade,
+                character_id text not null,
+                summary text not null,
+                source_chat_id uuid references chats(id) on delete set null,
+                created_at timestamptz not null default now()
+            )",
+        )
+        .execute(self.db.as_ref())
+        .await?;
+        sqlx::query("create index if not exists idx_memory_facts_owner_character_updated on memory_facts(owner_session_id, character_id, updated_at desc)")
+            .execute(self.db.as_ref())
+            .await?;
+        sqlx::query("create index if not exists idx_memory_summaries_owner_character_created on memory_summaries(owner_session_id, character_id, created_at desc)")
             .execute(self.db.as_ref())
             .await?;
         Ok(())
