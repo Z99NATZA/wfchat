@@ -69,7 +69,7 @@ function ChatHeader({
 						aria-label={t("chat.header.language")}
 						title={t("chat.header.language")}
 						onChange={(event) => setLocale(event.target.value as (typeof SUPPORTED_LOCALES)[number]["code"])}
-						className="h-full cursor-pointer bg-transparent pl-2 pr-6 uppercase outline-none"
+						className="h-full cursor-pointer appearance-none bg-transparent pl-2 pr-6 uppercase text-app-text outline-none"
 					>
 						{SUPPORTED_LOCALES.map((language) => (
 							<option key={language.code} value={language.code}>
@@ -87,7 +87,7 @@ function ChatHeader({
 						aria-label={t("chat.header.font")}
 						title={t("chat.header.font")}
 						onChange={(event) => onFontChange(event.target.value as AppFont)}
-						className="h-full min-w-0 flex-1 cursor-pointer bg-transparent pl-2 pr-6 outline-none"
+						className="h-full min-w-0 flex-1 cursor-pointer appearance-none bg-transparent pl-2 pr-6 text-app-text outline-none"
 					>
 						{FONT_OPTIONS.map((fontOption) => (
 							<option key={fontOption.id} value={fontOption.id}>
