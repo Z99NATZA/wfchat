@@ -1,7 +1,7 @@
 import { AxiosError } from "axios";
 import { apiClient } from "@/services/apiClient";
 import { readStorageItem, writeStorageItem } from "@/services/storageService";
-import type { ChatMessage, ChatPersona, ChatSessionSummary, MemoryFact } from "@/types/chat";
+import type { ChatMessage, ChatPersona, ChatSessionSummary, MemoryFact, MemorySummary } from "@/types/chat";
 import { formatMessageTime } from "@/utils/date";
 
 const sessionStorageKey = "wfchat.sessionId";
@@ -55,6 +55,14 @@ type ApiMemoryFact = {
 	source_chat_id?: string | null;
 	created_at: number;
 	updated_at: number;
+};
+
+type ApiMemorySummary = {
+	id: string;
+	character_id: string;
+	summary: string;
+	source_chat_id?: string | null;
+	created_at: number;
 };
 
 export async function listPersonaChats(characterId: string): Promise<ChatSessionSummary[]> {
@@ -155,6 +163,38 @@ export async function deleteMemoryFact(factId: string): Promise<void> {
 	});
 }
 
+export async function listMemorySummaries(characterId: string): Promise<MemorySummary[]> {
+	const sessionId = await ensureGuestSession();
+	const response = await apiClient.get<ApiMemorySummary[]>(
+		`/api/personas/${characterId}/memory/summaries`,
+		{
+			headers: sessionHeaders(sessionId)
+		}
+	);
+	return response.data.map(toMemorySummary);
+}
+
+export async function createMemorySummary(
+	characterId: string,
+	summary: string,
+	sourceChatId?: string
+): Promise<MemorySummary> {
+	const sessionId = await ensureGuestSession();
+	const response = await apiClient.post<ApiMemorySummary>(
+		`/api/personas/${characterId}/memory/summaries`,
+		{ summary, source_chat_id: sourceChatId },
+		{ headers: sessionHeaders(sessionId) }
+	);
+	return toMemorySummary(response.data);
+}
+
+export async function deleteMemorySummary(summaryId: string): Promise<void> {
+	const sessionId = await ensureGuestSession();
+	await apiClient.delete(`/api/memory/summaries/${summaryId}`, {
+		headers: sessionHeaders(sessionId)
+	});
+}
+
 async function ensureGuestSession(): Promise<string> {
 	const existingSessionId = readStorageItem(sessionStorageKey);
 
@@ -206,5 +246,15 @@ function toMemoryFact(fact: ApiMemoryFact): MemoryFact {
 		sourceChatId: fact.source_chat_id,
 		createdAt: fact.created_at,
 		updatedAt: fact.updated_at
+	};
+}
+
+function toMemorySummary(summary: ApiMemorySummary): MemorySummary {
+	return {
+		id: summary.id,
+		characterId: summary.character_id,
+		summary: summary.summary,
+		sourceChatId: summary.source_chat_id,
+		createdAt: summary.created_at
 	};
 }

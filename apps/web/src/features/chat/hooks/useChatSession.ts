@@ -4,17 +4,20 @@ import { useI18n } from "@/i18n";
 import {
 	clearChatMessages,
 	createMemoryFact,
+	createMemorySummary,
 	createPersonaChat,
 	deleteMemoryFact,
+	deleteMemorySummary,
 	getChat,
 	getChatUiConfig,
 	isNotFound,
 	listMemoryFacts,
+	listMemorySummaries,
 	listPersonaChats,
 	sendChatMessage
 } from "@/features/chat/services/chatApiService";
 import { useDialog } from "@/components/dialog/DialogProvider";
-import type { ChatMessage, ChatSessionSummary, MemoryFact } from "@/types/chat";
+import type { ChatMessage, ChatSessionSummary, MemoryFact, MemorySummary } from "@/types/chat";
 import { formatMessageTime } from "@/utils/date";
 
 const CHAT_PATH_PREFIX = "/chat/";
@@ -46,7 +49,9 @@ export function useChatSession() {
 	const [isClearing, setIsClearing] = useState(false);
 	const [isCreatingSession, setIsCreatingSession] = useState(false);
 	const [memoryFacts, setMemoryFacts] = useState<MemoryFact[]>([]);
+	const [memorySummaries, setMemorySummaries] = useState<MemorySummary[]>([]);
 	const [isSavingMemoryFact, setIsSavingMemoryFact] = useState(false);
+	const [isSavingMemorySummary, setIsSavingMemorySummary] = useState(false);
 	const [errorMessage, setErrorMessage] = useState<string | null>(null);
 	const [routeChatId, setRouteChatId] = useState<string | null>(() =>
 		typeof window === "undefined" ? null : parseChatIdFromPath(window.location.pathname)
@@ -142,6 +147,29 @@ export function useChatSession() {
 			.catch(() => {
 				if (isCurrent) {
 					setMemoryFacts([]);
+				}
+			});
+
+		return () => {
+			isCurrent = false;
+		};
+	}, [selectedPersonaId]);
+
+	useEffect(() => {
+		let isCurrent = true;
+		if (!selectedPersonaId) {
+			return;
+		}
+
+		listMemorySummaries(selectedPersonaId)
+			.then((summaries) => {
+				if (isCurrent) {
+					setMemorySummaries(summaries);
+				}
+			})
+			.catch(() => {
+				if (isCurrent) {
+					setMemorySummaries([]);
 				}
 			});
 
@@ -398,6 +426,32 @@ export function useChatSession() {
 		}
 	}
 
+	async function saveMemorySummary(summary: string) {
+		const trimmed = summary.trim();
+		if (!trimmed || !selectedPersonaId || isSavingMemorySummary) {
+			return false;
+		}
+		setIsSavingMemorySummary(true);
+		try {
+			const created = await createMemorySummary(selectedPersonaId, trimmed, activeChatId ?? undefined);
+			setMemorySummaries((current) => [created, ...current]);
+			return true;
+		} catch {
+			return false;
+		} finally {
+			setIsSavingMemorySummary(false);
+		}
+	}
+
+	async function removeMemorySummary(summaryId: string) {
+		try {
+			await deleteMemorySummary(summaryId);
+			setMemorySummaries((current) => current.filter((summary) => summary.id !== summaryId));
+		} catch {
+			// no-op
+		}
+	}
+
 	return {
 		activePersona,
 		activeChatId,
@@ -409,9 +463,11 @@ export function useChatSession() {
 		isClearing,
 		isCreatingSession,
 		isSavingMemoryFact,
+		isSavingMemorySummary,
 		isSidebarOpen,
 		isSending,
 		memoryFacts,
+		memorySummaries,
 		messages,
 		openSidebar: () => setIsSidebarOpen(true),
 		personas,
@@ -422,7 +478,9 @@ export function useChatSession() {
 		sessions,
 		setDraft,
 		saveMemoryFact,
+		saveMemorySummary,
 		removeMemoryFact,
+		removeMemorySummary,
 		useQuickPrompt: setDraft
 	};
 }

@@ -1,14 +1,18 @@
 import { FormEvent, useState } from "react";
 import { Languages, Sparkles, Trash2 } from "lucide-react";
 import { useI18n } from "@/i18n";
-import type { ChatPersona, MemoryFact } from "@/types/chat";
+import type { ChatPersona, MemoryFact, MemorySummary } from "@/types/chat";
 
 type ChatDetailsPanelProps = {
 	persona: ChatPersona;
 	memoryFacts: MemoryFact[];
+	memorySummaries: MemorySummary[];
 	isSavingMemoryFact?: boolean;
+	isSavingMemorySummary?: boolean;
 	onSaveMemoryFact: (content: string) => Promise<boolean>;
+	onSaveMemorySummary: (summary: string) => Promise<boolean>;
 	onDeleteMemoryFact: (factId: string) => Promise<void>;
+	onDeleteMemorySummary: (summaryId: string) => Promise<void>;
 };
 
 const toneItems = ["Calm", "Warm", "Lightly playful", "Respectful"];
@@ -16,12 +20,17 @@ const toneItems = ["Calm", "Warm", "Lightly playful", "Respectful"];
 function ChatDetailsPanel({
 	persona,
 	memoryFacts,
+	memorySummaries,
 	isSavingMemoryFact = false,
+	isSavingMemorySummary = false,
 	onSaveMemoryFact,
-	onDeleteMemoryFact
+	onSaveMemorySummary,
+	onDeleteMemoryFact,
+	onDeleteMemorySummary
 }: ChatDetailsPanelProps) {
 	const { locale, t } = useI18n();
 	const [memoryDraft, setMemoryDraft] = useState("");
+	const [summaryDraft, setSummaryDraft] = useState("");
 	const toneItemsByLocale = locale === "th" ? ["สุขุม", "อบอุ่น", "ขี้เล่นเล็กน้อย", "ให้เกียรติ"] : toneItems;
 
 	async function handleSaveMemory(event: FormEvent<HTMLFormElement>) {
@@ -29,6 +38,14 @@ function ChatDetailsPanel({
 		const isSaved = await onSaveMemoryFact(memoryDraft);
 		if (isSaved) {
 			setMemoryDraft("");
+		}
+	}
+
+	async function handleSaveSummary(event: FormEvent<HTMLFormElement>) {
+		event.preventDefault();
+		const isSaved = await onSaveMemorySummary(summaryDraft);
+		if (isSaved) {
+			setSummaryDraft("");
 		}
 	}
 
@@ -131,6 +148,48 @@ function ChatDetailsPanel({
 						{memoryFacts.length === 0 && (
 							<p className="rounded-lg border border-dashed border-app-border px-3 py-2 text-xs text-muted">
 								{t("chat.details.memoryEmpty")}
+							</p>
+						)}
+					</div>
+				</section>
+
+				<section>
+					<div className="flex items-center justify-between gap-2">
+						<h3 className="text-sm font-semibold">{t("chat.details.memorySummaries")}</h3>
+						<span className="text-xs text-muted">{memorySummaries.length}</span>
+					</div>
+					<form className="mt-3 flex gap-2" onSubmit={handleSaveSummary}>
+						<input
+							value={summaryDraft}
+							onChange={(event) => setSummaryDraft(event.target.value)}
+							placeholder={t("chat.details.memorySummaryPlaceholder")}
+							className="h-9 min-w-0 flex-1 rounded-lg border border-app-border bg-app-soft px-3 text-sm text-app-text outline-none focus:border-primary"
+						/>
+						<button
+							type="submit"
+							disabled={!summaryDraft.trim() || isSavingMemorySummary}
+							className="h-9 shrink-0 rounded-lg bg-primary px-3 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
+						>
+							{t("chat.details.memorySave")}
+						</button>
+					</form>
+					<div className="mt-3 space-y-2">
+						{memorySummaries.slice(0, 6).map((summary) => (
+							<div key={summary.id} className="flex items-start gap-2 rounded-lg border border-app-border bg-app-soft p-3">
+								<p className="min-w-0 flex-1 text-xs leading-5 text-app-text">{summary.summary}</p>
+								<button
+									type="button"
+									onClick={() => onDeleteMemorySummary(summary.id)}
+									className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted transition hover:bg-app-panel hover:text-red-500"
+									aria-label={t("chat.details.memorySummaryDelete")}
+								>
+									<Trash2 size={14} aria-hidden="true" />
+								</button>
+							</div>
+						))}
+						{memorySummaries.length === 0 && (
+							<p className="rounded-lg border border-dashed border-app-border px-3 py-2 text-xs text-muted">
+								{t("chat.details.memorySummaryEmpty")}
 							</p>
 						)}
 					</div>

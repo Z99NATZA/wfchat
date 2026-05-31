@@ -37,3 +37,11 @@ export type MemoryFact = {
 	createdAt: number;
 	updatedAt: number;
 };
+
+export type MemorySummary = {
+	id: string;
+	characterId: string;
+	summary: string;
+	sourceChatId?: string | null;
+	createdAt: number;
+};
