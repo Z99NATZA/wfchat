@@ -5,14 +5,17 @@ import ChatHeader from "@/features/chat/components/ChatHeader";
 import ChatMessageList from "@/features/chat/components/ChatMessageList";
 import ChatSidebar from "@/features/chat/components/ChatSidebar";
 import { useChatSession } from "@/features/chat/hooks/useChatSession";
+import type { AppFont } from "@/types/font";
 import type { Theme } from "@/types/theme";
 
 type ChatPageProps = {
 	theme: Theme;
+	font: AppFont;
+	onFontChange: (font: AppFont) => void;
 	onToggleTheme: () => void;
 };
 
-function ChatPage({ theme, onToggleTheme }: ChatPageProps) {
+function ChatPage({ theme, font, onFontChange, onToggleTheme }: ChatPageProps) {
 	const chat = useChatSession();
 
 	return (
@@ -30,9 +33,11 @@ function ChatPage({ theme, onToggleTheme }: ChatPageProps) {
 				<ChatHeader
 					persona={chat.activePersona}
 					theme={theme}
+					font={font}
 					canClearChat={chat.messages.length > 0}
 					isClearing={chat.isClearing}
 					onClearChat={chat.clearChat}
+					onFontChange={onFontChange}
 					onOpenSidebar={chat.openSidebar}
 					onToggleTheme={onToggleTheme}
 				/>
@@ -48,6 +53,7 @@ function ChatPage({ theme, onToggleTheme }: ChatPageProps) {
 			/>
 			<ChatComposer
 				draft={chat.draft}
+				font={font}
 				quickPrompts={chat.quickPrompts}
 				isDisabled={!chat.activeChatId}
 				isSending={chat.isSending}

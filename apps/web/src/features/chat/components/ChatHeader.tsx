@@ -2,31 +2,30 @@ import { Bell, ChevronLeft, Languages, Menu, Moon, Settings, Sun, Trash2, Type }
 import IconButton from "@/components/ui/IconButton";
 import StatusDot from "@/components/ui/StatusDot";
 import { SUPPORTED_LOCALES, useI18n } from "@/i18n";
+import { FONT_OPTIONS, type AppFont } from "@/types/font";
 import type { ChatPersona } from "@/types/chat";
 import type { Theme } from "@/types/theme";
 
 type ChatHeaderProps = {
 	persona: ChatPersona;
 	theme: Theme;
+	font: AppFont;
 	canClearChat: boolean;
 	isClearing?: boolean;
 	onClearChat: () => void;
+	onFontChange: (font: AppFont) => void;
 	onOpenSidebar: () => void;
 	onToggleTheme: () => void;
 };
 
-const SUPPORTED_FONTS = [
-	{ id: "arial", label: "Arial" },
-	{ id: "jetbrains-mono", label: "JetBrains Mono" },
-	{ id: "georgia", label: "Georgia" }
-] as const;
-
 function ChatHeader({
 	persona,
 	theme,
+	font,
 	canClearChat,
 	isClearing = false,
 	onClearChat,
+	onFontChange,
 	onOpenSidebar,
 	onToggleTheme
 }: ChatHeaderProps) {
@@ -80,19 +79,19 @@ function ChatHeader({
 					</select>
 				</label>
 				<label
-					className="relative inline-flex h-10 items-center rounded-lg border border-app-border bg-app-soft pl-2 pr-1 text-xs font-semibold text-app-text opacity-45 grayscale cursor-not-allowed"
-					title={t("common.notSupportedYet")}
+					className="relative inline-flex h-10 w-40 shrink-0 items-center rounded-lg border border-app-border bg-app-soft pl-2 pr-1 text-xs font-semibold text-app-text transition hover:border-primary focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/35"
 				>
 					<Type size={18} aria-hidden="true" />
 					<select
-						value={SUPPORTED_FONTS[0].id}
+						value={font}
 						aria-label={t("chat.header.font")}
-						disabled
-						className="h-full cursor-not-allowed bg-transparent pl-2 pr-6 outline-none"
+						title={t("chat.header.font")}
+						onChange={(event) => onFontChange(event.target.value as AppFont)}
+						className="h-full min-w-0 flex-1 cursor-pointer bg-transparent pl-2 pr-6 outline-none"
 					>
-						{SUPPORTED_FONTS.map((font) => (
-							<option key={font.id} value={font.id}>
-								{font.label}
+						{FONT_OPTIONS.map((fontOption) => (
+							<option key={fontOption.id} value={fontOption.id}>
+								{fontOption.label}
 							</option>
 						))}
 					</select>

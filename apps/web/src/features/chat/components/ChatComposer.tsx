@@ -2,9 +2,11 @@ import { FormEvent, KeyboardEvent, useEffect, useRef } from "react";
 import { Image, Mic, Paperclip, Send } from "lucide-react";
 import { useI18n } from "@/i18n";
 import IconButton from "@/components/ui/IconButton";
+import type { AppFont } from "@/types/font";
 
 type ChatComposerProps = {
 	draft: string;
+	font: AppFont;
 	quickPrompts: string[];
 	onDraftChange: (draft: string) => void;
 	onSend: () => void;
@@ -15,6 +17,7 @@ type ChatComposerProps = {
 
 function ChatComposer({
 	draft,
+	font,
 	quickPrompts,
 	onDraftChange,
 	onSend,
@@ -28,15 +31,17 @@ function ChatComposer({
 
 	useEffect(() => {
 		const textarea = textareaRef.current;
+		const minComposerHeight = 44;
+		const maxComposerHeight = 160;
 
 		if (!textarea) {
 			return;
 		}
 
 		textarea.style.height = "auto";
-		textarea.style.height = `${Math.min(textarea.scrollHeight, 160)}px`;
-		textarea.style.overflowY = textarea.scrollHeight > 160 ? "auto" : "hidden";
-	}, [draft]);
+		textarea.style.height = `${Math.min(Math.max(textarea.scrollHeight, minComposerHeight), maxComposerHeight)}px`;
+		textarea.style.overflowY = textarea.scrollHeight > maxComposerHeight ? "auto" : "hidden";
+	}, [draft, font]);
 
 	useEffect(() => {
 		if (wasSendingRef.current && !isSending && !isDisabled) {
@@ -101,7 +106,7 @@ function ChatComposer({
 					</IconButton>
 					<textarea
 						ref={textareaRef}
-						className="min-h-11 flex-1 resize-none bg-transparent px-2 py-3 text-sm leading-6 outline-none placeholder:text-muted"
+						className="min-h-11 flex-1 resize-none bg-transparent px-2 py-2.5 text-sm leading-6 outline-none placeholder:text-muted"
 						value={draft}
 						placeholder={t("chat.composer.placeholder")}
 						rows={1}
