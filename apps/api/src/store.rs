@@ -420,7 +420,7 @@ impl ChatStore {
 
     async fn messages_for_chat(&self, chat_id: Uuid) -> Vec<StoredMessage> {
         let rows = sqlx::query(
-            "select id, role, content, extract(epoch from created_at)::bigint as created_at from chat_messages where chat_id = $1 order by created_at asc, id asc",
+            "select id, role, content, extract(epoch from created_at)::bigint as created_at from chat_messages where chat_id = $1 order by sort_order asc",
         )
         .bind(chat_id)
         .fetch_all(self.db.as_ref())
@@ -470,6 +470,7 @@ impl ChatStore {
             "create table if not exists chat_messages (
                 id uuid primary key,
                 chat_id uuid not null references chats(id) on delete cascade,
+                sort_order bigserial not null,
                 role text not null,
                 content text not null,
                 created_at timestamptz not null default now()
@@ -477,6 +478,9 @@ impl ChatStore {
         )
         .execute(self.db.as_ref())
         .await?;
+        sqlx::query("alter table chat_messages add column if not exists sort_order bigserial")
+            .execute(self.db.as_ref())
+            .await?;
 
         sqlx::query("create index if not exists idx_chats_owner_updated on chats(owner_session_id, updated_at desc)")
             .execute(self.db.as_ref())
@@ -485,6 +489,9 @@ impl ChatStore {
             .execute(self.db.as_ref())
             .await?;
         sqlx::query("create index if not exists idx_messages_chat_created on chat_messages(chat_id, created_at asc)")
+            .execute(self.db.as_ref())
+            .await?;
+        sqlx::query("create index if not exists idx_messages_chat_sort on chat_messages(chat_id, sort_order asc)")
             .execute(self.db.as_ref())
             .await?;
         sqlx::query(
