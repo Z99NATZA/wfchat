@@ -3,15 +3,18 @@ import { CHAT_PERSONAS, QUICK_PROMPTS } from "@/features/chat/data/chatFixtures"
 import { useI18n } from "@/i18n";
 import {
 	clearChatMessages,
+	createMemoryFact,
 	createPersonaChat,
+	deleteMemoryFact,
 	getChat,
 	getChatUiConfig,
 	isNotFound,
+	listMemoryFacts,
 	listPersonaChats,
 	sendChatMessage
 } from "@/features/chat/services/chatApiService";
 import { useDialog } from "@/components/dialog/DialogProvider";
-import type { ChatMessage, ChatSessionSummary } from "@/types/chat";
+import type { ChatMessage, ChatSessionSummary, MemoryFact } from "@/types/chat";
 import { formatMessageTime } from "@/utils/date";
 
 const CHAT_PATH_PREFIX = "/chat/";
@@ -42,6 +45,8 @@ export function useChatSession() {
 	const [isSending, setIsSending] = useState(false);
 	const [isClearing, setIsClearing] = useState(false);
 	const [isCreatingSession, setIsCreatingSession] = useState(false);
+	const [memoryFacts, setMemoryFacts] = useState<MemoryFact[]>([]);
+	const [isSavingMemoryFact, setIsSavingMemoryFact] = useState(false);
 	const [errorMessage, setErrorMessage] = useState<string | null>(null);
 	const [routeChatId, setRouteChatId] = useState<string | null>(() =>
 		typeof window === "undefined" ? null : parseChatIdFromPath(window.location.pathname)
@@ -121,6 +126,29 @@ export function useChatSession() {
 			isCurrent = false;
 		};
 	}, [selectedPersonaId, t]);
+
+	useEffect(() => {
+		let isCurrent = true;
+		if (!selectedPersonaId) {
+			return;
+		}
+
+		listMemoryFacts(selectedPersonaId)
+			.then((facts) => {
+				if (isCurrent) {
+					setMemoryFacts(facts);
+				}
+			})
+			.catch(() => {
+				if (isCurrent) {
+					setMemoryFacts([]);
+				}
+			});
+
+		return () => {
+			isCurrent = false;
+		};
+	}, [selectedPersonaId]);
 
 	useEffect(() => {
 		let isCurrent = true;
@@ -344,6 +372,32 @@ export function useChatSession() {
 		}
 	}
 
+	async function saveMemoryFact(content: string) {
+		const trimmed = content.trim();
+		if (!trimmed || !selectedPersonaId || isSavingMemoryFact) {
+			return false;
+		}
+		setIsSavingMemoryFact(true);
+		try {
+			const fact = await createMemoryFact(selectedPersonaId, trimmed, 0.7, activeChatId ?? undefined);
+			setMemoryFacts((current) => [fact, ...current]);
+			return true;
+		} catch {
+			return false;
+		} finally {
+			setIsSavingMemoryFact(false);
+		}
+	}
+
+	async function removeMemoryFact(factId: string) {
+		try {
+			await deleteMemoryFact(factId);
+			setMemoryFacts((current) => current.filter((fact) => fact.id !== factId));
+		} catch {
+			// no-op
+		}
+	}
+
 	return {
 		activePersona,
 		activeChatId,
@@ -354,8 +408,10 @@ export function useChatSession() {
 		errorMessage,
 		isClearing,
 		isCreatingSession,
+		isSavingMemoryFact,
 		isSidebarOpen,
 		isSending,
+		memoryFacts,
 		messages,
 		openSidebar: () => setIsSidebarOpen(true),
 		personas,
@@ -365,6 +421,8 @@ export function useChatSession() {
 		sendMessage,
 		sessions,
 		setDraft,
+		saveMemoryFact,
+		removeMemoryFact,
 		useQuickPrompt: setDraft
 	};
 }

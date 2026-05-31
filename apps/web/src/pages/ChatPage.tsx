@@ -47,7 +47,15 @@ function ChatPage({ theme, font, onFontChange, onToggleTheme }: ChatPageProps) {
 					onToggleTheme={onToggleTheme}
 				/>
 			}
-			details={<ChatDetailsPanel persona={chat.activePersona} />}
+			details={
+				<ChatDetailsPanel
+					persona={chat.activePersona}
+					memoryFacts={chat.memoryFacts}
+					isSavingMemoryFact={chat.isSavingMemoryFact}
+					onSaveMemoryFact={chat.saveMemoryFact}
+					onDeleteMemoryFact={chat.removeMemoryFact}
+				/>
+			}
 		>
 			<ChatMessageList
 				messages={chat.messages}

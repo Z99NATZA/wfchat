@@ -27,3 +27,13 @@ export type ChatSessionSummary = {
 	updatedAt: number;
 	lastMessage: string;
 };
+
+export type MemoryFact = {
+	id: string;
+	characterId: string;
+	content: string;
+	confidence: number;
+	sourceChatId?: string | null;
+	createdAt: number;
+	updatedAt: number;
+};

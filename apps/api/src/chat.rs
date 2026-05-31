@@ -163,6 +163,21 @@ async fn send_message(
         .iter()
         .map(StoredMessage::to_ai_message)
         .collect::<Vec<_>>();
+    let memory_facts = state.store.list_memory_facts(session.id, &chat.character_id).await;
+    let memory_summaries = state
+        .store
+        .list_memory_summaries(session.id, &chat.character_id)
+        .await;
+    let memory_context = build_memory_context(&memory_facts, &memory_summaries);
+    if let Some(memory_note) = memory_context {
+        ai_messages.insert(
+            0,
+            AiMessage {
+                role: AiRole::System,
+                content: memory_note,
+            },
+        );
+    }
     let user_ai_message = AiMessage::user(content.to_owned());
     ai_messages.push(user_ai_message.clone());
 
@@ -237,4 +252,34 @@ fn message_response(message: StoredMessage) -> MessageResponse {
         content: message.content,
         created_at: message.created_at,
     }
+}
+
+fn build_memory_context(
+    facts: &[crate::store::MemoryFactRecord],
+    summaries: &[crate::store::MemorySummaryRecord],
+) -> Option<String> {
+    if facts.is_empty() && summaries.is_empty() {
+        return None;
+    }
+
+    let mut lines = vec![
+        "Memory notes from past conversations. Use only as soft guidance; if uncertain, ask follow-up."
+            .to_owned(),
+    ];
+
+    if !summaries.is_empty() {
+        lines.push("Summaries:".to_owned());
+        for summary in summaries.iter().take(5) {
+            lines.push(format!("- {}", summary.summary));
+        }
+    }
+
+    if !facts.is_empty() {
+        lines.push("Facts:".to_owned());
+        for fact in facts.iter().take(15) {
+            lines.push(format!("- {} (confidence {:.2})", fact.content, fact.confidence));
+        }
+    }
+
+    Some(lines.join("\n"))
 }

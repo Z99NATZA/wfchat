@@ -16,3 +16,4 @@ Cross-session memory is separated from chat messages and scoped by session + per
 - Facts accept `content`, optional `confidence` (`0..1`), and optional `source_chat_id`.
 - Summaries accept `summary` and optional `source_chat_id`.
 - Delete operations are owner-scoped by current session header (`X-WFChat-Session`).
+- During `POST /api/chats/:chat_id/messages`, backend prepends recent memory summaries/facts as a system memory note.

@@ -1,7 +1,7 @@
 import { AxiosError } from "axios";
 import { apiClient } from "@/services/apiClient";
 import { readStorageItem, writeStorageItem } from "@/services/storageService";
-import type { ChatMessage, ChatPersona, ChatSessionSummary } from "@/types/chat";
+import type { ChatMessage, ChatPersona, ChatSessionSummary, MemoryFact } from "@/types/chat";
 import { formatMessageTime } from "@/utils/date";
 
 const sessionStorageKey = "wfchat.sessionId";
@@ -45,6 +45,16 @@ type ApiChatUiPersona = {
 type ApiChatUiConfig = {
 	personas: ApiChatUiPersona[];
 	quick_prompts: string[];
+};
+
+type ApiMemoryFact = {
+	id: string;
+	character_id: string;
+	content: string;
+	confidence: number;
+	source_chat_id?: string | null;
+	created_at: number;
+	updated_at: number;
 };
 
 export async function listPersonaChats(characterId: string): Promise<ChatSessionSummary[]> {
@@ -115,6 +125,36 @@ export async function getChatUiConfig(): Promise<{ personas: ChatPersona[]; quic
 	};
 }
 
+export async function listMemoryFacts(characterId: string): Promise<MemoryFact[]> {
+	const sessionId = await ensureGuestSession();
+	const response = await apiClient.get<ApiMemoryFact[]>(`/api/personas/${characterId}/memory/facts`, {
+		headers: sessionHeaders(sessionId)
+	});
+	return response.data.map(toMemoryFact);
+}
+
+export async function createMemoryFact(
+	characterId: string,
+	content: string,
+	confidence?: number,
+	sourceChatId?: string
+): Promise<MemoryFact> {
+	const sessionId = await ensureGuestSession();
+	const response = await apiClient.post<ApiMemoryFact>(
+		`/api/personas/${characterId}/memory/facts`,
+		{ content, confidence, source_chat_id: sourceChatId },
+		{ headers: sessionHeaders(sessionId) }
+	);
+	return toMemoryFact(response.data);
+}
+
+export async function deleteMemoryFact(factId: string): Promise<void> {
+	const sessionId = await ensureGuestSession();
+	await apiClient.delete(`/api/memory/facts/${factId}`, {
+		headers: sessionHeaders(sessionId)
+	});
+}
+
 async function ensureGuestSession(): Promise<string> {
 	const existingSessionId = readStorageItem(sessionStorageKey);
 
@@ -155,4 +195,16 @@ function toSessionSummary(chat: ApiChat): ChatSessionSummary {
 
 export function isNotFound(error: unknown): boolean {
 	return error instanceof AxiosError && error.response?.status === 404;
+}
+
+function toMemoryFact(fact: ApiMemoryFact): MemoryFact {
+	return {
+		id: fact.id,
+		characterId: fact.character_id,
+		content: fact.content,
+		confidence: fact.confidence,
+		sourceChatId: fact.source_chat_id,
+		createdAt: fact.created_at,
+		updatedAt: fact.updated_at
+	};
 }
