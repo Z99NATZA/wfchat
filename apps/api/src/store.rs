@@ -653,6 +653,7 @@ impl ChatStore {
         let row = sqlx::query(
             "insert into sync_commits (operation_id, session_id, user_id, merged_count, conflict_count)
              values ($1, $2, $3, $4, $5)
+             on conflict (operation_id, session_id) do nothing
              returning extract(epoch from committed_at)::bigint as committed_at",
         )
         .bind(operation_id)
@@ -660,9 +661,13 @@ impl ChatStore {
         .bind(user_id)
         .bind(merged_count as i32)
         .bind(conflict_count as i32)
-        .fetch_one(self.db.as_ref())
+        .fetch_optional(self.db.as_ref())
         .await
         .ok()?;
+
+        if row.is_none() {
+            return self.get_sync_commit(session_id, operation_id).await;
+        }
 
         Some(SyncCommitRecord {
             operation_id: operation_id.to_owned(),
@@ -670,7 +675,7 @@ impl ChatStore {
             user_id,
             merged_count,
             conflict_count,
-            committed_at: row.get::<i64, _>("committed_at") as u64,
+            committed_at: row?.get::<i64, _>("committed_at") as u64,
         })
     }
 
