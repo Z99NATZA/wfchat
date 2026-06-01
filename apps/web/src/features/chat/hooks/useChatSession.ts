@@ -19,7 +19,12 @@ import {
 	updateMemoryFact,
 	updateMemorySummary
 } from "@/features/chat/services/chatApiService";
-import { readMemoryFactsCache, readMemorySummariesCache } from "@/services/syncService";
+import {
+	markMemoryFactDeleted,
+	markMemorySummaryDeleted,
+	readMemoryFactsCache,
+	readMemorySummariesCache
+} from "@/services/syncService";
 import { useDialog } from "@/components/dialog/DialogProvider";
 import type { ChatMessage, ChatSessionSummary, MemoryFact, MemorySummary } from "@/types/chat";
 import { formatMessageTime } from "@/utils/date";
@@ -455,6 +460,7 @@ export function useChatSession() {
 		try {
 			await deleteMemoryFact(factId);
 			setMemoryFacts((current) => current.filter((fact) => fact.id !== factId));
+			markMemoryFactDeleted(factId);
 		} catch {
 			// no-op
 		}
@@ -495,6 +501,7 @@ export function useChatSession() {
 		try {
 			await deleteMemorySummary(summaryId);
 			setMemorySummaries((current) => current.filter((summary) => summary.id !== summaryId));
+			markMemorySummaryDeleted(summaryId);
 		} catch {
 			// no-op
 		}

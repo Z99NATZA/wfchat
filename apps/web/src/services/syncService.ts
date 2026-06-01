@@ -15,6 +15,7 @@ const themeStorageKey = "wfchat-theme";
 const fontStorageKey = "wfchat-font";
 const memoryFactsCacheKey = "wfchat-memory-facts-cache";
 const memorySummariesCacheKey = "wfchat-memory-summaries-cache";
+const memoryDeletesCacheKey = "wfchat-memory-deletes-cache";
 const maxRetryDelaySeconds = 300;
 
 type ApiSessionResponse = {
@@ -71,6 +72,12 @@ type CachedMemorySummary = {
 	createdAt: string;
 };
 
+type CachedMemoryDelete = {
+	item_id: string;
+	item_type: "memory_fact" | "memory_summary";
+	deleted_at: number;
+};
+
 export async function enqueueGuestSync(): Promise<void> {
 	const items = buildSyncItems();
 	if (items.length === 0) {
@@ -90,7 +97,7 @@ export async function enqueueGuestSyncWithMemory(
 	memoryFacts: MemoryFact[],
 	memorySummaries: MemorySummary[]
 ): Promise<void> {
-	const items = buildSyncItems().concat(buildMemorySyncItems(memoryFacts, memorySummaries));
+	const items = buildSyncItems().concat(buildMemorySyncItems(memoryFacts, memorySummaries, readMemoryDeletesCache()));
 	if (items.length === 0) {
 		return;
 	}
@@ -102,6 +109,22 @@ export async function enqueueGuestSyncWithMemory(
 		next_retry_at: 0
 	});
 	writeSyncQueue(queue);
+}
+
+export function markMemoryFactDeleted(id: string): void {
+	upsertMemoryDelete({
+		item_id: `memory.fact.${id}`,
+		item_type: "memory_fact",
+		deleted_at: Math.floor(Date.now() / 1000)
+	});
+}
+
+export function markMemorySummaryDeleted(id: string): void {
+	upsertMemoryDelete({
+		item_id: `memory.summary.${id}`,
+		item_type: "memory_summary",
+		deleted_at: Math.floor(Date.now() / 1000)
+	});
 }
 
 export async function flushGuestSyncQueue(): Promise<SyncCommitResponse | null> {
@@ -256,6 +279,17 @@ function buildSyncItems(): SyncItem[] {
 }
 
 function applySyncItem(item: SyncItem, onLocaleChange?: (locale: "en" | "th") => void) {
+	if (item.deleted_at && item.deleted_at > 0) {
+		if (item.item_type === "memory_fact") {
+			removeMemoryFactFromCache(item.item_id);
+			return;
+		}
+		if (item.item_type === "memory_summary") {
+			removeMemorySummaryFromCache(item.item_id);
+			return;
+		}
+	}
+
 	if (item.item_type === "memory_fact") {
 		upsertMemoryFactCache(item);
 		return;
@@ -290,7 +324,11 @@ function applySyncItem(item: SyncItem, onLocaleChange?: (locale: "en" | "th") =>
 	}
 }
 
-function buildMemorySyncItems(memoryFacts: MemoryFact[], memorySummaries: MemorySummary[]): SyncItem[] {
+function buildMemorySyncItems(
+	memoryFacts: MemoryFact[],
+	memorySummaries: MemorySummary[],
+	deletes: CachedMemoryDelete[]
+): SyncItem[] {
 	const factItems = memoryFacts.map((fact) => ({
 		item_id: `memory.fact.${fact.id}`,
 		item_type: "memory_fact",
@@ -320,7 +358,15 @@ function buildMemorySyncItems(memoryFacts: MemoryFact[], memorySummaries: Memory
 		}
 	}));
 
-	return [...factItems, ...summaryItems];
+	const deleteItems = deletes.map((item) => ({
+		item_id: item.item_id,
+		item_type: item.item_type,
+		updated_at: item.deleted_at,
+		deleted_at: item.deleted_at,
+		payload: {}
+	}));
+
+	return [...factItems, ...summaryItems, ...deleteItems];
 }
 
 function upsertMemoryFactCache(item: SyncItem) {
@@ -332,6 +378,7 @@ function upsertMemoryFactCache(item: SyncItem) {
 	const next = facts.filter((entry) => entry?.id !== id);
 	next.push(item.payload);
 	writeStorageItem(memoryFactsCacheKey, JSON.stringify(next));
+	removeMemoryDelete(item.item_id);
 }
 
 function upsertMemorySummaryCache(item: SyncItem) {
@@ -343,6 +390,49 @@ function upsertMemorySummaryCache(item: SyncItem) {
 	const next = summaries.filter((entry) => entry?.id !== id);
 	next.push(item.payload);
 	writeStorageItem(memorySummariesCacheKey, JSON.stringify(next));
+	removeMemoryDelete(item.item_id);
+}
+
+function removeMemoryFactFromCache(itemId: string) {
+	const id = itemId.replace("memory.fact.", "");
+	const facts = readJsonArray(memoryFactsCacheKey);
+	writeStorageItem(
+		memoryFactsCacheKey,
+		JSON.stringify(facts.filter((entry) => entry?.id !== id))
+	);
+}
+
+function removeMemorySummaryFromCache(itemId: string) {
+	const id = itemId.replace("memory.summary.", "");
+	const summaries = readJsonArray(memorySummariesCacheKey);
+	writeStorageItem(
+		memorySummariesCacheKey,
+		JSON.stringify(summaries.filter((entry) => entry?.id !== id))
+	);
+}
+
+function readMemoryDeletesCache(): CachedMemoryDelete[] {
+	const raw = readStorageItem(memoryDeletesCacheKey);
+	if (!raw) {
+		return [];
+	}
+	try {
+		const parsed = JSON.parse(raw) as CachedMemoryDelete[];
+		return Array.isArray(parsed) ? parsed : [];
+	} catch {
+		return [];
+	}
+}
+
+function upsertMemoryDelete(entry: CachedMemoryDelete) {
+	const deletes = readMemoryDeletesCache().filter((item) => item.item_id !== entry.item_id);
+	deletes.push(entry);
+	writeStorageItem(memoryDeletesCacheKey, JSON.stringify(deletes));
+}
+
+function removeMemoryDelete(itemId: string) {
+	const deletes = readMemoryDeletesCache().filter((item) => item.item_id !== itemId);
+	writeStorageItem(memoryDeletesCacheKey, JSON.stringify(deletes));
 }
 
 function readJsonArray(key: string): Array<Record<string, string>> {
