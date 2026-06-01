@@ -68,6 +68,12 @@ struct SyncChangesResponse {
     next_cursor: u64,
 }
 
+enum PreviewAction {
+    Create,
+    Update,
+    Conflict,
+}
+
 async fn sync_changes(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -87,9 +93,7 @@ async fn sync_changes(
     let items = entities
         .into_iter()
         .map(|entity| {
-            if entity.updated_at > next_cursor {
-                next_cursor = entity.updated_at;
-            }
+            next_cursor = advance_cursor(next_cursor, entity.updated_at);
             SyncItemInput {
                 item_id: entity.item_id,
                 item_type: entity.item_type,
@@ -117,19 +121,22 @@ async fn sync_preview(
     let mut conflicts = 0_u32;
 
     for item in &payload.items {
-        if item.item_id.trim().is_empty() || item.item_type.trim().is_empty() || item.updated_at == 0 {
+        if !is_valid_item(item) {
             conflicts += 1;
             continue;
         }
 
-        match state
+        let action = classify_preview_action(
+            item,
+            state
             .store
             .get_sync_entity_updated_at(session.id, &item.item_id)
-            .await
-        {
-            None => to_create += 1,
-            Some(existing_updated_at) if item.updated_at >= existing_updated_at => to_update += 1,
-            Some(_) => conflicts += 1,
+            .await,
+        );
+        match action {
+            PreviewAction::Create => to_create += 1,
+            PreviewAction::Update => to_update += 1,
+            PreviewAction::Conflict => conflicts += 1,
         }
     }
 
@@ -155,7 +162,7 @@ async fn sync_commit(
         .await;
     let mut merged_count = 0_u32;
     for item in &payload.items {
-        if item.item_id.trim().is_empty() || item.item_type.trim().is_empty() || item.updated_at == 0 {
+        if !is_valid_item(item) {
             continue;
         }
 
@@ -194,4 +201,74 @@ fn session_id_from_headers(headers: &HeaderMap) -> Option<Uuid> {
         .get("x-wfchat-session")
         .and_then(|value| value.to_str().ok())
         .and_then(|value| Uuid::parse_str(value).ok())
+}
+
+fn is_valid_item(item: &SyncItemInput) -> bool {
+    !item.item_id.trim().is_empty() && !item.item_type.trim().is_empty() && item.updated_at > 0
+}
+
+fn classify_preview_action(item: &SyncItemInput, existing_updated_at: Option<u64>) -> PreviewAction {
+    if !is_valid_item(item) {
+        return PreviewAction::Conflict;
+    }
+
+    match existing_updated_at {
+        None => PreviewAction::Create,
+        Some(existing) if item.updated_at >= existing => PreviewAction::Update,
+        Some(_) => PreviewAction::Conflict,
+    }
+}
+
+fn advance_cursor(cursor: u64, updated_at: u64) -> u64 {
+    cursor.max(updated_at)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    fn item(updated_at: u64) -> SyncItemInput {
+        SyncItemInput {
+            item_id: "settings.theme".to_owned(),
+            item_type: "setting".to_owned(),
+            updated_at,
+            deleted_at: None,
+            payload: json!({ "key": "theme", "value": "dark" }),
+        }
+    }
+
+    #[test]
+    fn preview_create_when_no_existing() {
+        let action = classify_preview_action(&item(10), None);
+        assert!(matches!(action, PreviewAction::Create));
+    }
+
+    #[test]
+    fn preview_update_when_newer_or_equal() {
+        let newer = classify_preview_action(&item(20), Some(10));
+        let equal = classify_preview_action(&item(10), Some(10));
+        assert!(matches!(newer, PreviewAction::Update));
+        assert!(matches!(equal, PreviewAction::Update));
+    }
+
+    #[test]
+    fn preview_conflict_when_older_or_invalid() {
+        let older = classify_preview_action(&item(5), Some(10));
+        assert!(matches!(older, PreviewAction::Conflict));
+
+        let mut invalid = item(0);
+        invalid.item_id = "".to_owned();
+        let invalid_action = classify_preview_action(&invalid, None);
+        assert!(matches!(invalid_action, PreviewAction::Conflict));
+    }
+
+    #[test]
+    fn cursor_advances_to_max_timestamp() {
+        let cursor = 100;
+        let cursor = advance_cursor(cursor, 90);
+        let cursor = advance_cursor(cursor, 110);
+        let cursor = advance_cursor(cursor, 105);
+        assert_eq!(cursor, 110);
+    }
 }
