@@ -453,13 +453,13 @@ function buildChatSyncItems(
 	const sessionItems: SyncItem[] = sessions.map((session) => ({
 		item_id: `chat.session.${session.id}`,
 		item_type: "chat_session",
-		updated_at: session.updatedAt,
+		updated_at: Math.floor(session.updatedAt),
 		deleted_at: null,
 		payload: {
 			id: session.id,
 			characterId: session.characterId,
-			createdAt: String(session.createdAt),
-			updatedAt: String(session.updatedAt),
+			createdAt: String(Math.floor(session.createdAt)),
+			updatedAt: String(Math.floor(session.updatedAt)),
 			lastMessage: session.lastMessage
 		}
 	}));
