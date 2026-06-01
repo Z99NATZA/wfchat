@@ -1,4 +1,5 @@
 import Dialog from "@/components/dialog/Dialog";
+import GoogleSignInButton from "@/components/auth/GoogleSignInButton";
 import { useI18n } from "@/i18n";
 
 type AuthProfileDialogProps = {
@@ -8,8 +9,7 @@ type AuthProfileDialogProps = {
 	email?: string;
 	hasPendingGuestSync: boolean;
 	onClose: () => void;
-	onLoginWithGoogle: () => void;
-	onLoginWithEmail: () => void;
+	onLoginWithGoogleIdToken: (idToken: string) => void;
 	onLogout: () => void;
 	onSyncNow: () => void;
 	isSyncing?: boolean;
@@ -23,8 +23,7 @@ function AuthProfileDialog({
 	email,
 	hasPendingGuestSync,
 	onClose,
-	onLoginWithGoogle,
-	onLoginWithEmail,
+	onLoginWithGoogleIdToken,
 	onLogout,
 	onSyncNow,
 	isSyncing = false,
@@ -62,20 +61,7 @@ function AuthProfileDialog({
 
 					{!isAuthenticated ? (
 						<div className="space-y-2">
-							<button
-								type="button"
-								className="w-full rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white transition hover:bg-primary-600"
-								onClick={onLoginWithGoogle}
-							>
-								{t("auth.profile.continueGoogle")}
-							</button>
-							<button
-								type="button"
-								className="w-full rounded-lg border border-app-border bg-app-soft px-4 py-2 text-sm font-medium text-app-text transition hover:border-primary hover:text-primary"
-								onClick={onLoginWithEmail}
-							>
-								{t("auth.profile.continueEmail")}
-							</button>
+							<GoogleSignInButton onCredential={onLoginWithGoogleIdToken} />
 						</div>
 					) : (
 						<div className="space-y-2">

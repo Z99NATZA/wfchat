@@ -1,12 +1,13 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { readStorageItem, writeStorageItem } from "@/services/storageService";
+import { fetchCurrentSession, loginWithGoogle, type AuthSession } from "@/services/authService";
 
 type AuthProvider = "google" | "email";
 
 type AuthUser = {
 	id: string;
 	name: string;
-	email: string;
+	email?: string;
 	provider: AuthProvider;
 };
 
@@ -46,8 +47,24 @@ function persistState(nextState: AuthState) {
 
 export function useAuthSession() {
 	const [state, setState] = useState<AuthState>(() => readInitialAuthState());
+	const [isLoading, setIsLoading] = useState(true);
 
 	const isAuthenticated = Boolean(state.user);
+
+	useEffect(() => {
+		void fetchCurrentSession()
+			.then((session) => {
+				setState((current) => {
+					const nextState = {
+						...current,
+						user: session.kind === "guest" ? null : mapSessionToUser(session, "google")
+					};
+					persistState(nextState);
+					return nextState;
+				});
+			})
+			.finally(() => setIsLoading(false));
+	}, []);
 
 	function login(provider: AuthProvider) {
 		const nextState: AuthState = {
@@ -58,6 +75,16 @@ export function useAuthSession() {
 				email: provider === "google" ? "member@gmail.com" : "member@wfchat.app",
 				provider
 			}
+		};
+		setState(nextState);
+		persistState(nextState);
+	}
+
+	async function loginGoogleWithIdToken(idToken: string) {
+		const session = await loginWithGoogle(idToken);
+		const nextState: AuthState = {
+			...state,
+			user: mapSessionToUser(session, "google")
 		};
 		setState(nextState);
 		persistState(nextState);
@@ -92,10 +119,21 @@ export function useAuthSession() {
 	return {
 		user: state.user,
 		isAuthenticated,
+		isLoading,
 		hasPendingGuestSync: state.hasPendingGuestSync,
 		profileLabel,
 		login,
+		loginGoogleWithIdToken,
 		logout,
 		markGuestSyncDone
+	};
+}
+
+function mapSessionToUser(session: AuthSession, provider: AuthProvider): AuthUser {
+	return {
+		id: session.userId,
+		name: session.name ?? "Member",
+		email: session.email,
+		provider
 	};
 }

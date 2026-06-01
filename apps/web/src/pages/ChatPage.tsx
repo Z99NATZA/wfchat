@@ -196,8 +196,7 @@ function ChatPage({ theme, font, onFontChange, onToggleTheme }: ChatPageProps) {
 				email={auth.user?.email}
 				hasPendingGuestSync={auth.hasPendingGuestSync}
 				onClose={() => setIsProfileOpen(false)}
-				onLoginWithGoogle={() => auth.login("google")}
-				onLoginWithEmail={() => auth.login("email")}
+				onLoginWithGoogleIdToken={auth.loginGoogleWithIdToken}
 				onLogout={auth.logout}
 				onSyncNow={handleSyncNow}
 				isSyncing={isSyncing}

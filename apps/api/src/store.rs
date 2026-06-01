@@ -119,6 +119,31 @@ impl ChatStore {
         session
     }
 
+    pub async fn promote_session_to_registered(
+        &self,
+        session_id: Uuid,
+        user_id: Uuid,
+    ) -> Option<SessionRecord> {
+        let row = sqlx::query(
+            "update auth_sessions
+             set user_id = $1, kind = 'registered'
+             where id = $2
+             returning id, user_id, kind, extract(epoch from created_at)::bigint as created_at",
+        )
+        .bind(user_id)
+        .bind(session_id)
+        .fetch_optional(self.db.as_ref())
+        .await
+        .ok()??;
+
+        Some(SessionRecord {
+            id: row.get("id"),
+            user_id: row.get("user_id"),
+            kind: parse_user_kind(row.get::<String, _>("kind").as_str()),
+            created_at: row.get::<i64, _>("created_at") as u64,
+        })
+    }
+
     pub async fn ensure_session(&self, session_id: Option<Uuid>) -> SessionRecord {
         if let Some(id) = session_id {
             if let Some(session) = self.get_session(id).await {
@@ -159,7 +184,7 @@ impl ChatStore {
         Some(SessionRecord {
             id: row.get("id"),
             user_id: row.get("user_id"),
-            kind: UserKind::Guest,
+            kind: parse_user_kind(row.get::<String, _>("kind").as_str()),
             created_at: row.get::<i64, _>("created_at") as u64,
         })
     }
@@ -832,5 +857,13 @@ fn role_from_db(value: &str) -> Option<AiRole> {
         "user" => Some(AiRole::User),
         "assistant" => Some(AiRole::Assistant),
         _ => None,
+    }
+}
+
+fn parse_user_kind(value: &str) -> UserKind {
+    match value {
+        "registered" => UserKind::Registered,
+        "admin" => UserKind::Admin,
+        _ => UserKind::Guest,
     }
 }

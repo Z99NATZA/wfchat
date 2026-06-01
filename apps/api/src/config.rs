@@ -16,6 +16,7 @@ pub struct Config {
     pub xai_api_key: Option<String>,
     pub xai_base_url: String,
     pub xai_model: String,
+    pub google_client_id: Option<String>,
 }
 
 impl Config {
@@ -38,6 +39,7 @@ impl Config {
             xai_api_key: optional_env_value("XAI_API_KEY"),
             xai_base_url: env_value("XAI_BASE_URL", "https://api.x.ai/v1"),
             xai_model: env_value("XAI_MODEL", "grok-3-mini"),
+            google_client_id: optional_env_value("GOOGLE_CLIENT_ID"),
         };
 
         config.validate()?;
@@ -131,6 +133,7 @@ mod tests {
             xai_api_key: None,
             xai_base_url: "https://api.x.ai/v1".to_owned(),
             xai_model: "grok-3-mini".to_owned(),
+            google_client_id: None,
         }
     }
 
