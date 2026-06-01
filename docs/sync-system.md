@@ -11,6 +11,7 @@
 - มี `in-app auth UI` แบบ mock (Google/Email mock สำหรับ flow)
 - มี sync จริงสำหรับ `settings` (theme/font/locale)
 - มี `sync queue + retry` ฝั่ง frontend
+- มี `cloud -> local pull` ผ่าน `GET /api/sync/changes?cursor=...`
 
 ---
 
@@ -102,6 +103,23 @@ Primary key:
 ---
 
 ## 6) API Contract ที่ใช้อยู่ตอนนี้
+### 6.0 `GET /api/sync/changes?cursor=0&limit=100`
+Response:
+```json
+{
+  "items": [
+    {
+      "item_id": "settings.theme",
+      "item_type": "setting",
+      "updated_at": 1780325400,
+      "deleted_at": null,
+      "payload": { "key": "theme", "value": "dark" }
+    }
+  ],
+  "next_cursor": 1780325400
+}
+```
+
 ### 6.1 `POST /api/sync/preview`
 Request:
 ```json
@@ -183,6 +201,7 @@ Response:
 8. frontend `flush` คิวโดยยิง `preview -> commit`
 9. ถ้าสำเร็จ ระบบเอารายการออกจากคิว
 10. ถ้าคิวว่าง ระบบ mark pending sync = false
+11. หลัง login หรือ online กลับมา ระบบ pull cloud changes ลง local ด้วย cursor
 
 ---
 
@@ -228,7 +247,6 @@ Queue shape:
 ## 11) ขอบเขตที่ยังไม่ทำ (สำคัญ)
 ยังไม่มีของต่อไปนี้:
 - auth จริง (Google OAuth/Email auth production)
-- `GET /sync/changes` สำหรับ cloud -> local
 - conflict resolution ระดับ field แบบละเอียด
 - sync ข้อมูล chat/memory เต็มรูปแบบเป็น delta
 
@@ -236,7 +254,7 @@ Queue shape:
 
 ## 12) แผนลำดับงานถัดไป (แนะนำ)
 1. เพิ่ม `GET /sync/changes` + cursor
-2. ทำ two-way sync v1
+2. ขยายจาก settings ไปสู่ chat/memory delta
 3. ต่อ auth จริง (Google/Email)
 4. เพิ่ม observability metrics และ alert
 

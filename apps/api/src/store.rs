@@ -552,6 +552,41 @@ impl ChatStore {
         value.map(|item| item as u64)
     }
 
+    pub async fn list_sync_entities_since(
+        &self,
+        session_id: Uuid,
+        cursor: u64,
+        limit: u32,
+    ) -> Vec<SyncEntityRecord> {
+        let rows = sqlx::query(
+            "select session_id, item_id, item_type,
+                    extract(epoch from updated_at)::bigint as updated_at,
+                    extract(epoch from deleted_at)::bigint as deleted_at,
+                    payload
+             from sync_entities
+             where session_id = $1 and extract(epoch from updated_at)::bigint > $2
+             order by updated_at asc
+             limit $3",
+        )
+        .bind(session_id)
+        .bind(cursor as i64)
+        .bind(limit as i64)
+        .fetch_all(self.db.as_ref())
+        .await
+        .unwrap_or_default();
+
+        rows.into_iter()
+            .map(|row| SyncEntityRecord {
+                session_id: row.get("session_id"),
+                item_id: row.get("item_id"),
+                item_type: row.get("item_type"),
+                updated_at: row.get::<i64, _>("updated_at") as u64,
+                deleted_at: row.get::<Option<i64>, _>("deleted_at").map(|value| value as u64),
+                payload: row.get("payload"),
+            })
+            .collect()
+    }
+
     pub async fn get_sync_commit(
         &self,
         session_id: Uuid,

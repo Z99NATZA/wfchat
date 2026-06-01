@@ -1,7 +1,7 @@
 use axum::{
-    extract::State,
+    extract::{Query, State},
     http::HeaderMap,
-    routing::post,
+    routing::{get, post},
     Json, Router,
 };
 use serde::{Deserialize, Serialize};
@@ -16,6 +16,7 @@ use crate::{
 
 pub fn router() -> Router<AppState> {
     Router::new()
+        .route("/sync/changes", get(sync_changes))
         .route("/sync/preview", post(sync_preview))
         .route("/sync/commit", post(sync_commit))
 }
@@ -31,7 +32,7 @@ struct SyncCommitRequest {
     items: Vec<SyncItemInput>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 struct SyncItemInput {
     item_id: String,
     item_type: String,
@@ -53,6 +54,53 @@ struct SyncCommitResponse {
     merged_count: u32,
     conflict_count: u32,
     committed_at: u64,
+}
+
+#[derive(Deserialize)]
+struct SyncChangesQuery {
+    cursor: Option<u64>,
+    limit: Option<u32>,
+}
+
+#[derive(Serialize)]
+struct SyncChangesResponse {
+    items: Vec<SyncItemInput>,
+    next_cursor: u64,
+}
+
+async fn sync_changes(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(query): Query<SyncChangesQuery>,
+) -> AppResult<Json<SyncChangesResponse>> {
+    let session = state
+        .store
+        .ensure_session(session_id_from_headers(&headers))
+        .await;
+    let cursor = query.cursor.unwrap_or(0);
+    let limit = query.limit.unwrap_or(100).clamp(1, 500);
+    let entities = state
+        .store
+        .list_sync_entities_since(session.id, cursor, limit)
+        .await;
+    let mut next_cursor = cursor;
+    let items = entities
+        .into_iter()
+        .map(|entity| {
+            if entity.updated_at > next_cursor {
+                next_cursor = entity.updated_at;
+            }
+            SyncItemInput {
+                item_id: entity.item_id,
+                item_type: entity.item_type,
+                updated_at: entity.updated_at,
+                deleted_at: entity.deleted_at,
+                payload: entity.payload,
+            }
+        })
+        .collect();
+
+    Ok(Json(SyncChangesResponse { items, next_cursor }))
 }
 
 async fn sync_preview(

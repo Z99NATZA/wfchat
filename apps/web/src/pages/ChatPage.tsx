@@ -12,11 +12,13 @@ import {
 	enqueueGuestSync,
 	flushGuestSyncQueue,
 	hasPendingSyncQueue,
-	markSyncRetry
+	markSyncRetry,
+	pullSyncChanges
 } from "@/services/syncService";
 import type { AppFont } from "@/types/font";
 import type { Theme } from "@/types/theme";
 import { useEffect, useRef, useState } from "react";
+import { useI18n } from "@/i18n";
 
 type ChatPageProps = {
 	theme: Theme;
@@ -28,6 +30,7 @@ type ChatPageProps = {
 function ChatPage({ theme, font, onFontChange, onToggleTheme }: ChatPageProps) {
 	const chat = useChatSession();
 	const auth = useAuthSession();
+	const { setLocale } = useI18n();
 	const { alert } = useDialog();
 	const [isProfileOpen, setIsProfileOpen] = useState(false);
 	const [isSyncing, setIsSyncing] = useState(false);
@@ -62,6 +65,13 @@ function ChatPage({ theme, font, onFontChange, onToggleTheme }: ChatPageProps) {
 		if (!auth.isAuthenticated) {
 			return;
 		}
+		void pullSyncChanges(setLocale);
+	}, [auth.isAuthenticated, setLocale]);
+
+	useEffect(() => {
+		if (!auth.isAuthenticated) {
+			return;
+		}
 
 		function handleOnline() {
 			void flushGuestSyncQueue()
@@ -73,11 +83,12 @@ function ChatPage({ theme, font, onFontChange, onToggleTheme }: ChatPageProps) {
 				.catch(() => {
 					markSyncRetry();
 				});
+			void pullSyncChanges(setLocale);
 		}
 
 		window.addEventListener("online", handleOnline);
 		return () => window.removeEventListener("online", handleOnline);
-	}, [auth, auth.isAuthenticated]);
+	}, [auth, auth.isAuthenticated, setLocale]);
 
 	async function handleSyncNow() {
 		setIsSyncing(true);

@@ -1,9 +1,14 @@
 import { apiClient } from "@/services/apiClient";
 import { readStorageItem, writeStorageItem } from "@/services/storageService";
 import { readSyncUpdatedAt } from "@/stores/syncStateStore";
+import { applyThemeToDocument, persistTheme } from "@/stores/themeStore";
+import { applyFontToDocument, persistFont } from "@/stores/fontStore";
+import type { AppFont } from "@/types/font";
+import type { Theme } from "@/types/theme";
 
 const sessionStorageKey = "wfchat.sessionId";
 const syncQueueStorageKey = "wfchat-sync-queue";
+const syncCursorStorageKey = "wfchat-sync-cursor";
 const localeStorageKey = "wfchat.locale";
 const themeStorageKey = "wfchat-theme";
 const fontStorageKey = "wfchat-font";
@@ -17,6 +22,11 @@ type SyncPreviewResponse = {
 	to_create: number;
 	to_update: number;
 	conflicts: number;
+};
+
+type SyncChangesResponse = {
+	items: SyncItem[];
+	next_cursor: number;
 };
 
 type SyncCommitResponse = {
@@ -104,6 +114,24 @@ export function hasPendingSyncQueue(): boolean {
 	return readSyncQueue().length > 0;
 }
 
+export async function pullSyncChanges(
+	onLocaleChange?: (locale: "en" | "th") => void
+): Promise<number> {
+	const sessionId = await ensureGuestSession();
+	const cursor = Number(readStorageItem(syncCursorStorageKey) ?? "0");
+	const response = await apiClient.get<SyncChangesResponse>("/api/sync/changes", {
+		params: { cursor, limit: 100 },
+		headers: sessionHeaders(sessionId)
+	});
+
+	for (const item of response.data.items) {
+		applySyncItem(item, onLocaleChange);
+	}
+
+	writeStorageItem(syncCursorStorageKey, String(response.data.next_cursor));
+	return response.data.items.length;
+}
+
 async function ensureGuestSession(): Promise<string> {
 	const existingSessionId = readStorageItem(sessionStorageKey);
 
@@ -159,6 +187,31 @@ function buildSyncItems(): SyncItem[] {
 	}
 
 	return items;
+}
+
+function applySyncItem(item: SyncItem, onLocaleChange?: (locale: "en" | "th") => void) {
+	const key = item.payload?.key;
+	const value = item.payload?.value;
+	if (item.item_type !== "setting" || !key || !value) {
+		return;
+	}
+
+	if (key === "theme" && (value === "light" || value === "dark")) {
+		persistTheme(value as Theme);
+		applyThemeToDocument(value as Theme);
+		return;
+	}
+
+	if (key === "font" && (value === "inter" || value === "itim" || value === "jetbrains-mono")) {
+		persistFont(value as AppFont);
+		applyFontToDocument(value as AppFont);
+		return;
+	}
+
+	if (key === "locale" && (value === "en" || value === "th")) {
+		writeStorageItem(localeStorageKey, value);
+		onLocaleChange?.(value);
+	}
 }
 
 function readSyncQueue(): SyncQueueOperation[] {
