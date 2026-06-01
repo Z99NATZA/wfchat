@@ -17,6 +17,7 @@ pub fn router() -> Router<AppState> {
     Router::new()
         .route("/auth/guest", post(create_guest_session))
         .route("/auth/google", post(login_with_google))
+        .route("/auth/logout", post(logout))
         .route("/auth/me", get(current_user))
 }
 
@@ -126,6 +127,29 @@ async fn login_with_google(
             name: token_info.name,
         }),
     ))
+}
+
+async fn logout(State(state): State<AppState>) -> (HeaderMap, Json<SessionResponse>) {
+    let guest = state.store.create_guest_session().await;
+    let mut headers = HeaderMap::new();
+    let cookie = format!(
+        "wfchat_session={}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000",
+        guest.id
+    );
+    if let Ok(value) = HeaderValue::from_str(&cookie) {
+        headers.insert(SET_COOKIE, value);
+    }
+
+    (
+        headers,
+        Json(SessionResponse {
+            user_id: guest.user_id,
+            session_id: guest.id,
+            kind: user_kind_label(&guest.kind).to_owned(),
+            email: None,
+            name: None,
+        }),
+    )
 }
 
 async fn verify_google_id_token(

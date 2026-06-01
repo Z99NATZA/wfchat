@@ -1,8 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { readStorageItem, writeStorageItem } from "@/services/storageService";
-import { fetchCurrentSession, loginWithGoogle, type AuthSession } from "@/services/authService";
+import {
+	fetchCurrentSession,
+	loginWithGoogle,
+	logoutSession,
+	type AuthSession
+} from "@/services/authService";
 
-type AuthProvider = "google" | "email";
+type AuthProvider = "google";
 
 type AuthUser = {
 	id: string;
@@ -66,20 +71,6 @@ export function useAuthSession() {
 			.finally(() => setIsLoading(false));
 	}, []);
 
-	function login(provider: AuthProvider) {
-		const nextState: AuthState = {
-			...state,
-			user: {
-				id: "wfchat-member-01",
-				name: provider === "google" ? "Google Member" : "Email Member",
-				email: provider === "google" ? "member@gmail.com" : "member@wfchat.app",
-				provider
-			}
-		};
-		setState(nextState);
-		persistState(nextState);
-	}
-
 	async function loginGoogleWithIdToken(idToken: string) {
 		const session = await loginWithGoogle(idToken);
 		const nextState: AuthState = {
@@ -90,10 +81,11 @@ export function useAuthSession() {
 		persistState(nextState);
 	}
 
-	function logout() {
+	async function logout() {
+		const session = await logoutSession();
 		const nextState: AuthState = {
 			user: null,
-			hasPendingGuestSync: true
+			hasPendingGuestSync: session.kind === "guest"
 		};
 		setState(nextState);
 		persistState(nextState);
@@ -122,7 +114,6 @@ export function useAuthSession() {
 		isLoading,
 		hasPendingGuestSync: state.hasPendingGuestSync,
 		profileLabel,
-		login,
 		loginGoogleWithIdToken,
 		logout,
 		markGuestSyncDone

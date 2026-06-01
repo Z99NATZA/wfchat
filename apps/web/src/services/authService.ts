@@ -39,6 +39,12 @@ export async function loginWithGoogle(idToken: string): Promise<AuthSession> {
 	return toAuthSession(response.data);
 }
 
+export async function logoutSession(): Promise<AuthSession> {
+	const response = await apiClient.post<ApiSessionResponse>("/api/auth/logout");
+	writeStorageItem(sessionStorageKey, response.data.session_id);
+	return toAuthSession(response.data);
+}
+
 async function ensureGuestSession(): Promise<string> {
 	const existingSessionId = readStorageItem(sessionStorageKey);
 	if (existingSessionId) {
