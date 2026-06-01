@@ -43,7 +43,7 @@ type SyncCommitResponse = {
 	committed_at: number;
 };
 
-type SyncItem = {
+export type SyncItem = {
 	item_id: string;
 	item_type: string;
 	updated_at: number;
@@ -51,7 +51,7 @@ type SyncItem = {
 	payload: Record<string, string>;
 };
 
-type SyncQueueOperation = {
+export type SyncQueueOperation = {
 	operation_id: string;
 	items: SyncItem[];
 	attempt: number;
@@ -200,9 +200,7 @@ export function markSyncRetry(): void {
 	}
 	const operation = queue[0];
 	operation.attempt += 1;
-	const baseDelay = Math.min(2 ** operation.attempt, maxRetryDelaySeconds);
-	const jitter = Math.floor(Math.random() * 3);
-	operation.next_retry_at = Math.floor(Date.now() / 1000) + baseDelay + jitter;
+	operation.next_retry_at = computeNextRetryAt(operation.attempt, Math.floor(Date.now() / 1000));
 	queue[0] = operation;
 	writeSyncQueue(queue);
 }
@@ -632,14 +630,14 @@ function writeSyncQueue(queue: SyncQueueOperation[]) {
 	writeStorageItem(syncQueueStorageKey, JSON.stringify(queue));
 }
 
-function compactQueue(queue: SyncQueueOperation[]): SyncQueueOperation[] {
+export function compactQueue(queue: SyncQueueOperation[]): SyncQueueOperation[] {
 	return queue.map((operation) => ({
 		...operation,
 		items: compactItems(operation.items)
 	}));
 }
 
-function compactItems(items: SyncItem[]): SyncItem[] {
+export function compactItems(items: SyncItem[]): SyncItem[] {
 	const map = new Map<string, SyncItem>();
 	for (const item of items) {
 		const current = map.get(item.item_id);
@@ -650,9 +648,15 @@ function compactItems(items: SyncItem[]): SyncItem[] {
 	return [...map.values()];
 }
 
-function trimQueue(queue: SyncQueueOperation[]): SyncQueueOperation[] {
+export function trimQueue(queue: SyncQueueOperation[]): SyncQueueOperation[] {
 	if (queue.length <= maxQueueLength) {
 		return queue;
 	}
 	return queue.slice(queue.length - maxQueueLength);
+}
+
+export function computeNextRetryAt(attempt: number, nowSeconds: number): number {
+	const baseDelay = Math.min(2 ** attempt, maxRetryDelaySeconds);
+	const jitter = Math.floor(Math.random() * 3);
+	return nowSeconds + baseDelay + jitter;
 }
