@@ -145,6 +145,7 @@ export function markMemorySummaryDeleted(id: string): void {
 }
 
 export function markChatSessionDeleted(id: string): void {
+	removeChatSessionFromCache(`chat.session.${id}`);
 	upsertMemoryDelete({
 		item_id: `chat.session.${id}`,
 		item_type: "chat_session",
@@ -155,6 +156,7 @@ export function markChatSessionDeleted(id: string): void {
 export function markChatMessagesDeleted(chatId: string, messageIds: string[]): void {
 	const deletedAt = Math.floor(Date.now() / 1000);
 	for (const id of messageIds) {
+		removeChatMessageFromCache(`chat.message.${chatId}.${id}`);
 		upsertMemoryDelete({
 			item_id: `chat.message.${chatId}.${id}`,
 			item_type: "chat_message",
@@ -256,8 +258,14 @@ export function readMemorySummariesCache(): MemorySummary[] {
 }
 
 export function readChatSessionsCache(): ChatSessionSummary[] {
+	const deletedSessionIds = new Set(
+		readMemoryDeletesCache()
+			.filter((item) => item.item_type === "chat_session")
+			.map((item) => item.item_id.replace("chat.session.", ""))
+	);
 	return readJsonArray(chatSessionsCacheKey)
 		.filter((item) => Boolean(item.id && item.characterId))
+		.filter((item) => !deletedSessionIds.has(item.id))
 		.map((item) => ({
 			id: item.id,
 			characterId: item.characterId,
@@ -268,9 +276,15 @@ export function readChatSessionsCache(): ChatSessionSummary[] {
 }
 
 export function readChatMessagesCache(chatId: string): ChatMessage[] {
+	const deletedMessageIds = new Set(
+		readMemoryDeletesCache()
+			.filter((item) => item.item_type === "chat_message")
+			.map((item) => item.item_id.replace(`chat.message.${chatId}.`, ""))
+	);
 	return readJsonArray(chatMessagesCacheKey)
 		.map((item) => item as unknown as CachedChatMessage)
 		.filter((item) => item.chatId === chatId)
+		.filter((item) => !deletedMessageIds.has(item.id))
 		.map((item) => ({
 			id: item.id,
 			author: item.author,

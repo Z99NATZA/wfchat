@@ -558,8 +558,7 @@ export function useChatSession() {
 			return;
 		}
 
-		try {
-			await deleteChat(sessionId);
+		async function applyLocalRemoval() {
 			markChatSessionDeleted(sessionId);
 			const nextSessions = sessions.filter((session) => session.id !== sessionId);
 			setSessions(nextSessions);
@@ -575,7 +574,16 @@ export function useChatSession() {
 			}
 
 			await createNewSession();
-		} catch {
+		}
+
+		try {
+			await deleteChat(sessionId);
+			await applyLocalRemoval();
+		} catch (error) {
+			if (isNotFound(error)) {
+				await applyLocalRemoval();
+				return;
+			}
 			setErrorMessage(t("chat.session.deleteError"));
 		}
 	}
