@@ -17,7 +17,6 @@ type ChatHeaderProps = {
 	onFontChange: (font: AppFont) => void;
 	onOpenSidebar: () => void;
 	onToggleTheme: () => void;
-	profileLabel: string;
 	hasPendingGuestSync: boolean;
 	onOpenProfile: () => void;
 };
@@ -32,7 +31,6 @@ function ChatHeader({
 	onFontChange,
 	onOpenSidebar,
 	onToggleTheme,
-	profileLabel,
 	hasPendingGuestSync,
 	onOpenProfile
 }: ChatHeaderProps) {
@@ -141,11 +139,10 @@ function ChatHeader({
 				</IconButton>
 				<button
 					type="button"
-					className="relative inline-flex h-10 items-center gap-2 rounded-lg border border-app-border bg-app-soft px-3 text-xs font-semibold text-app-text transition hover:border-primary hover:text-primary"
+					className="relative inline-flex h-10 w-10 items-center justify-center rounded-lg border border-app-border bg-app-soft text-xs font-semibold text-app-text transition hover:border-primary hover:text-primary"
 					onClick={onOpenProfile}
 				>
 					<User size={16} aria-hidden="true" />
-					<span className="max-w-24 truncate">{profileLabel}</span>
 					{hasPendingGuestSync && <span className="size-2 rounded-full bg-amber-400" aria-hidden="true" />}
 				</button>
 			</div>
@@ -196,11 +193,10 @@ function ChatHeader({
 							<div className="flex justify-end gap-2 p-1">
 								<button
 									type="button"
-									className="relative inline-flex h-10 items-center gap-2 rounded-lg border border-app-border bg-app-soft px-3 text-xs font-semibold text-app-text transition hover:border-primary hover:text-primary"
+									className="relative inline-flex h-10 w-10 items-center justify-center rounded-lg border border-app-border bg-app-soft text-xs font-semibold text-app-text transition hover:border-primary hover:text-primary"
 									onClick={onOpenProfile}
 								>
 									<User size={16} aria-hidden="true" />
-									<span className="max-w-20 truncate">{profileLabel}</span>
 									{hasPendingGuestSync && (
 										<span className="size-2 rounded-full bg-amber-400" aria-hidden="true" />
 									)}

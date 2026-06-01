@@ -151,7 +151,6 @@ function ChatPage({ theme, font, onFontChange, onToggleTheme }: ChatPageProps) {
 						onFontChange={onFontChange}
 						onOpenSidebar={chat.openSidebar}
 						onToggleTheme={onToggleTheme}
-						profileLabel={auth.profileLabel}
 						hasPendingGuestSync={auth.isAuthenticated && auth.hasPendingGuestSync}
 						onOpenProfile={() => setIsProfileOpen(true)}
 					/>
