@@ -54,6 +54,23 @@ type SyncQueueOperation = {
 	next_retry_at: number;
 };
 
+type CachedMemoryFact = {
+	id: string;
+	characterId: string;
+	content: string;
+	confidence: string;
+	sourceChatId: string;
+	updatedAt: string;
+};
+
+type CachedMemorySummary = {
+	id: string;
+	characterId: string;
+	summary: string;
+	sourceChatId: string;
+	createdAt: string;
+};
+
 export async function enqueueGuestSync(): Promise<void> {
 	const items = buildSyncItems();
 	if (items.length === 0) {
@@ -151,6 +168,34 @@ export async function pullSyncChanges(
 
 	writeStorageItem(syncCursorStorageKey, String(response.data.next_cursor));
 	return response.data.items.length;
+}
+
+export function readMemoryFactsCache(): MemoryFact[] {
+	return readJsonArray(memoryFactsCacheKey)
+		.map((item) => item as unknown as CachedMemoryFact)
+		.filter((item) => Boolean(item.id && item.characterId && item.content))
+		.map((item) => ({
+			id: item.id,
+			characterId: item.characterId,
+			content: item.content,
+			confidence: Number(item.confidence) || 0.7,
+			sourceChatId: item.sourceChatId || null,
+			createdAt: Number(item.updatedAt) || 0,
+			updatedAt: Number(item.updatedAt) || 0
+		}));
+}
+
+export function readMemorySummariesCache(): MemorySummary[] {
+	return readJsonArray(memorySummariesCacheKey)
+		.map((item) => item as unknown as CachedMemorySummary)
+		.filter((item) => Boolean(item.id && item.characterId && item.summary))
+		.map((item) => ({
+			id: item.id,
+			characterId: item.characterId,
+			summary: item.summary,
+			sourceChatId: item.sourceChatId || null,
+			createdAt: Number(item.createdAt) || 0
+		}));
 }
 
 async function ensureGuestSession(): Promise<string> {

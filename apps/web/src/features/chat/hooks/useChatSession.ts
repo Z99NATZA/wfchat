@@ -19,6 +19,7 @@ import {
 	updateMemoryFact,
 	updateMemorySummary
 } from "@/features/chat/services/chatApiService";
+import { readMemoryFactsCache, readMemorySummariesCache } from "@/services/syncService";
 import { useDialog } from "@/components/dialog/DialogProvider";
 import type { ChatMessage, ChatSessionSummary, MemoryFact, MemorySummary } from "@/types/chat";
 import { formatMessageTime } from "@/utils/date";
@@ -162,12 +163,18 @@ export function useChatSession() {
 		listMemoryFacts(selectedPersonaId)
 			.then((facts) => {
 				if (isCurrent) {
-					setMemoryFacts(facts);
+					const cachedFacts = readMemoryFactsCache().filter(
+						(item) => item.characterId === selectedPersonaId
+					);
+					setMemoryFacts(mergeMemoryFacts(facts, cachedFacts));
 				}
 			})
 			.catch(() => {
 				if (isCurrent) {
-					setMemoryFacts([]);
+					const cachedFacts = readMemoryFactsCache().filter(
+						(item) => item.characterId === selectedPersonaId
+					);
+					setMemoryFacts(cachedFacts);
 				}
 			});
 
@@ -185,12 +192,18 @@ export function useChatSession() {
 		listMemorySummaries(selectedPersonaId)
 			.then((summaries) => {
 				if (isCurrent) {
-					setMemorySummaries(summaries);
+					const cachedSummaries = readMemorySummariesCache().filter(
+						(item) => item.characterId === selectedPersonaId
+					);
+					setMemorySummaries(mergeMemorySummaries(summaries, cachedSummaries));
 				}
 			})
 			.catch(() => {
 				if (isCurrent) {
-					setMemorySummaries([]);
+					const cachedSummaries = readMemorySummariesCache().filter(
+						(item) => item.characterId === selectedPersonaId
+					);
+					setMemorySummaries(cachedSummaries);
 				}
 			});
 
@@ -573,4 +586,32 @@ export function useChatSession() {
 		editMemorySummary,
 		removeSession,
 	};
+}
+
+function mergeMemoryFacts(primary: MemoryFact[], secondary: MemoryFact[]): MemoryFact[] {
+	const map = new Map<string, MemoryFact>();
+	for (const item of secondary) {
+		map.set(item.id, item);
+	}
+	for (const item of primary) {
+		const current = map.get(item.id);
+		if (!current || item.updatedAt >= current.updatedAt) {
+			map.set(item.id, item);
+		}
+	}
+	return [...map.values()].sort((a, b) => b.updatedAt - a.updatedAt);
+}
+
+function mergeMemorySummaries(primary: MemorySummary[], secondary: MemorySummary[]): MemorySummary[] {
+	const map = new Map<string, MemorySummary>();
+	for (const item of secondary) {
+		map.set(item.id, item);
+	}
+	for (const item of primary) {
+		const current = map.get(item.id);
+		if (!current || item.createdAt >= current.createdAt) {
+			map.set(item.id, item);
+		}
+	}
+	return [...map.values()].sort((a, b) => b.createdAt - a.createdAt);
 }
