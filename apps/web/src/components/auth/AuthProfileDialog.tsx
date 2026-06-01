@@ -61,6 +61,14 @@ function AuthProfileDialog({
 
 					{!isAuthenticated ? (
 						<div className="space-y-2">
+							<div className="rounded-lg border border-app-border bg-app-soft p-3 text-xs text-muted">
+								<p className="font-semibold text-app-text">{t("auth.profile.beforeLoginTitle")}</p>
+								<ul className="mt-2 list-disc space-y-1 pl-4">
+									<li>{t("auth.profile.beforeLoginItemSync")}</li>
+									<li>{t("auth.profile.beforeLoginItemResume")}</li>
+									<li>{t("auth.profile.beforeLoginItemBackup")}</li>
+								</ul>
+							</div>
 							<GoogleSignInButton onCredential={onLoginWithGoogleIdToken} />
 						</div>
 					) : (

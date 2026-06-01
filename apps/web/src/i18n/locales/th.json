@@ -82,5 +82,9 @@
 	"auth.profile.continueEmail": "เข้าสู่ระบบด้วยอีเมล",
 	"auth.profile.syncNow": "ซิงก์ตอนนี้",
 	"auth.profile.syncing": "กำลังซิงก์...",
-	"auth.profile.logout": "ออกจากระบบ"
+	"auth.profile.logout": "ออกจากระบบ",
+	"auth.profile.beforeLoginTitle": "เข้าสู่ระบบแล้วจะได้",
+	"auth.profile.beforeLoginItemSync": "ซิงก์ข้อมูลล่าสุดขึ้นระบบ",
+	"auth.profile.beforeLoginItemResume": "กลับมาใช้งานต่อได้สะดวกขึ้น",
+	"auth.profile.beforeLoginItemBackup": "ลดความเสี่ยงข้อมูลหายเมื่อเปลี่ยนอุปกรณ์"
 }

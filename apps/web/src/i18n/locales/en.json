@@ -82,5 +82,9 @@
 	"auth.profile.continueEmail": "Continue with Email",
 	"auth.profile.syncNow": "Sync now",
 	"auth.profile.syncing": "Syncing...",
-	"auth.profile.logout": "Log out"
+	"auth.profile.logout": "Log out",
+	"auth.profile.beforeLoginTitle": "Sign in to unlock",
+	"auth.profile.beforeLoginItemSync": "Sync your latest data to the cloud",
+	"auth.profile.beforeLoginItemResume": "Resume your workspace more smoothly",
+	"auth.profile.beforeLoginItemBackup": "Lower risk of data loss when switching devices"
 }
