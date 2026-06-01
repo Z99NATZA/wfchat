@@ -1,6 +1,7 @@
 import { createContext, ReactNode, useContext, useMemo, useState } from "react";
 import en from "@/i18n/locales/en.json";
 import th from "@/i18n/locales/th.json";
+import { touchSyncKey } from "@/stores/syncStateStore";
 
 const LOCALE_STORAGE_KEY = "wfchat.locale";
 
@@ -59,6 +60,7 @@ export function I18nProvider({ children }: I18nProviderProps) {
 		setLocaleState(nextLocale);
 		if (typeof window !== "undefined") {
 			window.localStorage.setItem(LOCALE_STORAGE_KEY, nextLocale);
+			touchSyncKey("settings.locale");
 		}
 	}
 

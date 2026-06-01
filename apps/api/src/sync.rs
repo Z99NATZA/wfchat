@@ -5,11 +5,13 @@ use axum::{
     Json, Router,
 };
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use uuid::Uuid;
 
 use crate::{
     error::{AppError, AppResult},
     state::AppState,
+    store::SyncEntityRecord,
 };
 
 pub fn router() -> Router<AppState> {
@@ -31,8 +33,11 @@ struct SyncCommitRequest {
 
 #[derive(Deserialize)]
 struct SyncItemInput {
+    item_id: String,
     item_type: String,
     updated_at: u64,
+    deleted_at: Option<u64>,
+    payload: Value,
 }
 
 #[derive(Serialize)]
@@ -59,20 +64,31 @@ async fn sync_preview(
         .store
         .ensure_session(session_id_from_headers(&headers))
         .await;
-    let server_entities = state.store.count_sync_entities(session.id).await;
-    let client_items = payload.items.len() as u32;
-    let valid_items = payload
-        .items
-        .iter()
-        .filter(|item| !item.item_type.trim().is_empty() && item.updated_at > 0)
-        .count() as u32;
-    let to_create = client_items.saturating_sub(server_entities);
-    let to_update = server_entities.min(valid_items);
+    let mut to_create = 0_u32;
+    let mut to_update = 0_u32;
+    let mut conflicts = 0_u32;
+
+    for item in &payload.items {
+        if item.item_id.trim().is_empty() || item.item_type.trim().is_empty() || item.updated_at == 0 {
+            conflicts += 1;
+            continue;
+        }
+
+        match state
+            .store
+            .get_sync_entity_updated_at(session.id, &item.item_id)
+            .await
+        {
+            None => to_create += 1,
+            Some(existing_updated_at) if item.updated_at >= existing_updated_at => to_update += 1,
+            Some(_) => conflicts += 1,
+        }
+    }
 
     Ok(Json(SyncPreviewResponse {
         to_create,
         to_update,
-        conflicts: 0,
+        conflicts,
     }))
 }
 
@@ -89,7 +105,28 @@ async fn sync_commit(
         .store
         .ensure_session(session_id_from_headers(&headers))
         .await;
-    let merged_count = payload.items.len() as u32;
+    let mut merged_count = 0_u32;
+    for item in &payload.items {
+        if item.item_id.trim().is_empty() || item.item_type.trim().is_empty() || item.updated_at == 0 {
+            continue;
+        }
+
+        let saved = state
+            .store
+            .upsert_sync_entity(&SyncEntityRecord {
+                session_id: session.id,
+                item_id: item.item_id.clone(),
+                item_type: item.item_type.clone(),
+                updated_at: item.updated_at,
+                deleted_at: item.deleted_at,
+                payload: item.payload.clone(),
+            })
+            .await;
+        if saved {
+            merged_count += 1;
+        }
+    }
+
     let commit = state
         .store
         .save_sync_commit(session.id, session.user_id, &payload.operation_id, merged_count, 0)

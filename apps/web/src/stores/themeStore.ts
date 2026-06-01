@@ -1,4 +1,5 @@
 import { readStorageItem, writeStorageItem } from "@/services/storageService";
+import { touchSyncKey } from "@/stores/syncStateStore";
 import type { Theme } from "@/types/theme";
 
 const THEME_STORAGE_KEY = "wfchat-theme";
@@ -27,6 +28,7 @@ export function resolveInitialTheme(): Theme {
 
 export function persistTheme(theme: Theme): void {
 	writeStorageItem(THEME_STORAGE_KEY, theme);
+	touchSyncKey("settings.theme");
 }
 
 export function applyThemeToDocument(theme: Theme): void {

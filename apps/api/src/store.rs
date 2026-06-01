@@ -2,6 +2,7 @@ use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use sqlx::{PgPool, Row};
 use uuid::Uuid;
 
@@ -77,6 +78,16 @@ pub struct SyncCommitRecord {
     pub merged_count: u32,
     pub conflict_count: u32,
     pub committed_at: u64,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct SyncEntityRecord {
+    pub session_id: Uuid,
+    pub item_id: String,
+    pub item_type: String,
+    pub updated_at: u64,
+    pub deleted_at: Option<u64>,
+    pub payload: Value,
 }
 
 impl ChatStore {
@@ -495,25 +506,50 @@ impl ChatStore {
     }
 
     pub async fn count_sync_entities(&self, session_id: Uuid) -> u32 {
-        let chats_count: i64 = sqlx::query_scalar("select count(*) from chats where owner_session_id = $1")
-            .bind(session_id)
-            .fetch_one(self.db.as_ref())
-            .await
-            .unwrap_or(0);
-        let facts_count: i64 =
-            sqlx::query_scalar("select count(*) from memory_facts where owner_session_id = $1")
+        let entities_count: i64 =
+            sqlx::query_scalar("select count(*) from sync_entities where session_id = $1")
                 .bind(session_id)
                 .fetch_one(self.db.as_ref())
                 .await
                 .unwrap_or(0);
-        let summaries_count: i64 =
-            sqlx::query_scalar("select count(*) from memory_summaries where owner_session_id = $1")
-                .bind(session_id)
-                .fetch_one(self.db.as_ref())
-                .await
-                .unwrap_or(0);
+        entities_count.max(0) as u32
+    }
 
-        (chats_count + facts_count + summaries_count).max(0) as u32
+    pub async fn upsert_sync_entity(&self, entity: &SyncEntityRecord) -> bool {
+        let deleted_at = entity.deleted_at.map(|value| value as i64);
+        sqlx::query(
+            "insert into sync_entities (session_id, item_id, item_type, updated_at, deleted_at, payload)
+             values ($1, $2, $3, to_timestamp($4), to_timestamp($5), $6)
+             on conflict (session_id, item_id)
+             do update set
+               item_type = excluded.item_type,
+               updated_at = excluded.updated_at,
+               deleted_at = excluded.deleted_at,
+               payload = excluded.payload
+             where sync_entities.updated_at <= excluded.updated_at",
+        )
+        .bind(entity.session_id)
+        .bind(&entity.item_id)
+        .bind(&entity.item_type)
+        .bind(entity.updated_at as i64)
+        .bind(deleted_at)
+        .bind(&entity.payload)
+        .execute(self.db.as_ref())
+        .await
+        .is_ok()
+    }
+
+    pub async fn get_sync_entity_updated_at(&self, session_id: Uuid, item_id: &str) -> Option<u64> {
+        let value: Option<i64> = sqlx::query_scalar(
+            "select extract(epoch from updated_at)::bigint from sync_entities where session_id = $1 and item_id = $2",
+        )
+        .bind(session_id)
+        .bind(item_id)
+        .fetch_optional(self.db.as_ref())
+        .await
+        .ok()?;
+
+        value.map(|item| item as u64)
     }
 
     pub async fn get_sync_commit(
@@ -700,6 +736,22 @@ impl ChatStore {
         .execute(self.db.as_ref())
         .await?;
         sqlx::query("create index if not exists idx_sync_commits_session_committed on sync_commits(session_id, committed_at desc)")
+            .execute(self.db.as_ref())
+            .await?;
+        sqlx::query(
+            "create table if not exists sync_entities (
+                session_id uuid not null references auth_sessions(id) on delete cascade,
+                item_id text not null,
+                item_type text not null,
+                updated_at timestamptz not null,
+                deleted_at timestamptz,
+                payload jsonb not null default '{}'::jsonb,
+                primary key (session_id, item_id)
+            )",
+        )
+        .execute(self.db.as_ref())
+        .await?;
+        sqlx::query("create index if not exists idx_sync_entities_session_updated on sync_entities(session_id, updated_at desc)")
             .execute(self.db.as_ref())
             .await?;
         Ok(())

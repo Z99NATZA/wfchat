@@ -1,4 +1,5 @@
 import { readStorageItem, writeStorageItem } from "@/services/storageService";
+import { touchSyncKey } from "@/stores/syncStateStore";
 import { FONT_OPTIONS, type AppFont } from "@/types/font";
 
 const FONT_STORAGE_KEY = "wfchat-font";
@@ -15,6 +16,7 @@ export function resolveInitialFont(): AppFont {
 
 export function persistFont(font: AppFont): void {
 	writeStorageItem(FONT_STORAGE_KEY, font);
+	touchSyncKey("settings.font");
 }
 
 export function applyFontToDocument(font: AppFont): void {
