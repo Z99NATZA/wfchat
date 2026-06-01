@@ -20,6 +20,8 @@ import {
 	updateMemorySummary
 } from "@/features/chat/services/chatApiService";
 import {
+	markChatMessagesDeleted,
+	markChatSessionDeleted,
 	markMemoryFactDeleted,
 	markMemorySummaryDeleted,
 	readChatMessagesCache,
@@ -433,8 +435,12 @@ export function useChatSession() {
 		setErrorMessage(null);
 
 		try {
+			const messageIds = messages.map((message) => message.id);
 			const nextMessages = await clearChatMessages(activeChatId);
 			setMessages(nextMessages);
+			if (messageIds.length > 0) {
+				markChatMessagesDeleted(activeChatId, messageIds);
+			}
 			setSessions((currentSessions) =>
 				currentSessions.map((session) =>
 					session.id === activeChatId
@@ -554,6 +560,7 @@ export function useChatSession() {
 
 		try {
 			await deleteChat(sessionId);
+			markChatSessionDeleted(sessionId);
 			const nextSessions = sessions.filter((session) => session.id !== sessionId);
 			setSessions(nextSessions);
 

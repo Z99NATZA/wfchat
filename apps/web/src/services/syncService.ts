@@ -76,7 +76,7 @@ type CachedMemorySummary = {
 
 type CachedMemoryDelete = {
 	item_id: string;
-	item_type: "memory_fact" | "memory_summary";
+	item_type: "memory_fact" | "memory_summary" | "chat_session" | "chat_message";
 	deleted_at: number;
 };
 
@@ -141,6 +141,25 @@ export function markMemorySummaryDeleted(id: string): void {
 		item_type: "memory_summary",
 		deleted_at: Math.floor(Date.now() / 1000)
 	});
+}
+
+export function markChatSessionDeleted(id: string): void {
+	upsertMemoryDelete({
+		item_id: `chat.session.${id}`,
+		item_type: "chat_session",
+		deleted_at: Math.floor(Date.now() / 1000)
+	});
+}
+
+export function markChatMessagesDeleted(chatId: string, messageIds: string[]): void {
+	const deletedAt = Math.floor(Date.now() / 1000);
+	for (const id of messageIds) {
+		upsertMemoryDelete({
+			item_id: `chat.message.${chatId}.${id}`,
+			item_type: "chat_message",
+			deleted_at: deletedAt
+		});
+	}
 }
 
 export async function flushGuestSyncQueue(): Promise<SyncCommitResponse | null> {
@@ -328,6 +347,14 @@ function applySyncItem(item: SyncItem, onLocaleChange?: (locale: "en" | "th") =>
 			removeMemorySummaryFromCache(item.item_id);
 			return;
 		}
+		if (item.item_type === "chat_session") {
+			removeChatSessionFromCache(item.item_id);
+			return;
+		}
+		if (item.item_type === "chat_message") {
+			removeChatMessageFromCache(item.item_id);
+			return;
+		}
 	}
 
 	if (item.item_type === "memory_fact") {
@@ -489,6 +516,7 @@ function upsertChatSessionCache(item: SyncItem) {
 	const next = sessions.filter((entry) => entry?.id !== id);
 	next.push(item.payload);
 	writeStorageItem(chatSessionsCacheKey, JSON.stringify(next));
+	removeMemoryDelete(item.item_id);
 }
 
 function upsertChatMessageCache(item: SyncItem) {
@@ -504,6 +532,31 @@ function upsertChatMessageCache(item: SyncItem) {
 		updatedAt: String(item.updated_at)
 	});
 	writeStorageItem(chatMessagesCacheKey, JSON.stringify(next));
+	removeMemoryDelete(item.item_id);
+}
+
+function removeChatSessionFromCache(itemId: string) {
+	const id = itemId.replace("chat.session.", "");
+	const sessions = readJsonArray(chatSessionsCacheKey);
+	writeStorageItem(
+		chatSessionsCacheKey,
+		JSON.stringify(sessions.filter((entry) => entry?.id !== id))
+	);
+}
+
+function removeChatMessageFromCache(itemId: string) {
+	const key = itemId.replace("chat.message.", "");
+	const splitAt = key.indexOf(".");
+	if (splitAt <= 0) {
+		return;
+	}
+	const chatId = key.slice(0, splitAt);
+	const messageId = key.slice(splitAt + 1);
+	const messages = readJsonArray(chatMessagesCacheKey);
+	writeStorageItem(
+		chatMessagesCacheKey,
+		JSON.stringify(messages.filter((entry) => !(entry?.chatId === chatId && entry?.id === messageId)))
+	);
 }
 
 function removeMemoryFactFromCache(itemId: string) {
