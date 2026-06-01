@@ -19,6 +19,7 @@ const memoryDeletesCacheKey = "wfchat-memory-deletes-cache";
 const chatSessionsCacheKey = "wfchat-chat-sessions-cache";
 const chatMessagesCacheKey = "wfchat-chat-messages-cache";
 const maxRetryDelaySeconds = 300;
+const maxQueueLength = 20;
 
 type ApiSessionResponse = {
 	session_id: string;
@@ -94,14 +95,14 @@ export async function enqueueGuestSync(): Promise<void> {
 	if (items.length === 0) {
 		return;
 	}
-	const queue = readSyncQueue();
+	const queue = compactQueue(readSyncQueue());
 	queue.push({
 		operation_id: `sync-${Date.now()}-${Math.random().toString(16).slice(2)}`,
-		items,
+		items: compactItems(items),
 		attempt: 0,
 		next_retry_at: 0
 	});
-	writeSyncQueue(queue);
+	writeSyncQueue(trimQueue(queue));
 }
 
 export async function enqueueGuestSyncWithMemory(
@@ -117,14 +118,14 @@ export async function enqueueGuestSyncWithMemory(
 	if (items.length === 0) {
 		return;
 	}
-	const queue = readSyncQueue();
+	const queue = compactQueue(readSyncQueue());
 	queue.push({
 		operation_id: `sync-${Date.now()}-${Math.random().toString(16).slice(2)}`,
-		items,
+		items: compactItems(items),
 		attempt: 0,
 		next_retry_at: 0
 	});
-	writeSyncQueue(queue);
+	writeSyncQueue(trimQueue(queue));
 }
 
 export function markMemoryFactDeleted(id: string): void {
@@ -629,4 +630,29 @@ function readSyncQueue(): SyncQueueOperation[] {
 
 function writeSyncQueue(queue: SyncQueueOperation[]) {
 	writeStorageItem(syncQueueStorageKey, JSON.stringify(queue));
+}
+
+function compactQueue(queue: SyncQueueOperation[]): SyncQueueOperation[] {
+	return queue.map((operation) => ({
+		...operation,
+		items: compactItems(operation.items)
+	}));
+}
+
+function compactItems(items: SyncItem[]): SyncItem[] {
+	const map = new Map<string, SyncItem>();
+	for (const item of items) {
+		const current = map.get(item.item_id);
+		if (!current || item.updated_at >= current.updated_at) {
+			map.set(item.item_id, item);
+		}
+	}
+	return [...map.values()];
+}
+
+function trimQueue(queue: SyncQueueOperation[]): SyncQueueOperation[] {
+	if (queue.length <= maxQueueLength) {
+		return queue;
+	}
+	return queue.slice(queue.length - maxQueueLength);
 }
