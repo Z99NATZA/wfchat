@@ -9,7 +9,7 @@ import { useChatSession } from "@/features/chat/hooks/useChatSession";
 import { useAuthSession } from "@/hooks/useAuthSession";
 import { useDialog } from "@/components/dialog/DialogProvider";
 import {
-	enqueueGuestSync,
+	enqueueGuestSyncWithMemory,
 	flushGuestSyncQueue,
 	hasPendingSyncQueue,
 	markSyncRetry,
@@ -94,7 +94,7 @@ function ChatPage({ theme, font, onFontChange, onToggleTheme }: ChatPageProps) {
 		setIsSyncing(true);
 		setSyncError(null);
 		try {
-			await enqueueGuestSync();
+			await enqueueGuestSyncWithMemory(chat.memoryFacts, chat.memorySummaries);
 			const result = await flushGuestSyncQueue();
 			if (!result) {
 				throw new Error("sync queued");

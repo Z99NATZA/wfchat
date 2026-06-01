@@ -12,6 +12,7 @@
 - มี sync จริงสำหรับ `settings` (theme/font/locale)
 - มี `sync queue + retry` ฝั่ง frontend
 - มี `cloud -> local pull` ผ่าน `GET /api/sync/changes?cursor=...`
+- ตอนกด sync จะส่ง memory delta จาก state ปัจจุบัน (`memory_fact`, `memory_summary`) ด้วย
 
 ---
 
@@ -72,6 +73,7 @@ Local keys ที่เกี่ยวข้อง:
 หมายเหตุ:
 - `updatedAt` ของ sync item จะอ่านจาก key นี้
 - ถ้าไม่มี metadata จะ fallback เป็นเวลา current time ตอน sync
+- memory sync ใช้ timestamp จาก record (`updatedAt`/`createdAt`) ของ memory โดยตรง
 
 ---
 
@@ -198,10 +200,14 @@ Response:
 5. ระบบแสดง pending sync
 6. ผู้ใช้กด `Sync now`
 7. frontend `enqueue` รายการลง `wfchat-sync-queue`
-8. frontend `flush` คิวโดยยิง `preview -> commit`
-9. ถ้าสำเร็จ ระบบเอารายการออกจากคิว
-10. ถ้าคิวว่าง ระบบ mark pending sync = false
-11. หลัง login หรือ online กลับมา ระบบ pull cloud changes ลง local ด้วย cursor
+8. รายการที่ enqueue ตอนนี้มี:
+- settings (`theme/font/locale`)
+- memory facts ของ persona ปัจจุบัน
+- memory summaries ของ persona ปัจจุบัน
+9. frontend `flush` คิวโดยยิง `preview -> commit`
+10. ถ้าสำเร็จ ระบบเอารายการออกจากคิว
+11. ถ้าคิวว่าง ระบบ mark pending sync = false
+12. หลัง login หรือ online กลับมา ระบบ pull cloud changes ลง local ด้วย cursor
 
 ---
 

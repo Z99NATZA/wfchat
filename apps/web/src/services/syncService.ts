@@ -3,6 +3,7 @@ import { readStorageItem, writeStorageItem } from "@/services/storageService";
 import { readSyncUpdatedAt } from "@/stores/syncStateStore";
 import { applyThemeToDocument, persistTheme } from "@/stores/themeStore";
 import { applyFontToDocument, persistFont } from "@/stores/fontStore";
+import type { MemoryFact, MemorySummary } from "@/types/chat";
 import type { AppFont } from "@/types/font";
 import type { Theme } from "@/types/theme";
 
@@ -12,6 +13,8 @@ const syncCursorStorageKey = "wfchat-sync-cursor";
 const localeStorageKey = "wfchat.locale";
 const themeStorageKey = "wfchat-theme";
 const fontStorageKey = "wfchat-font";
+const memoryFactsCacheKey = "wfchat-memory-facts-cache";
+const memorySummariesCacheKey = "wfchat-memory-summaries-cache";
 const maxRetryDelaySeconds = 300;
 
 type ApiSessionResponse = {
@@ -53,6 +56,24 @@ type SyncQueueOperation = {
 
 export async function enqueueGuestSync(): Promise<void> {
 	const items = buildSyncItems();
+	if (items.length === 0) {
+		return;
+	}
+	const queue = readSyncQueue();
+	queue.push({
+		operation_id: `sync-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+		items,
+		attempt: 0,
+		next_retry_at: 0
+	});
+	writeSyncQueue(queue);
+}
+
+export async function enqueueGuestSyncWithMemory(
+	memoryFacts: MemoryFact[],
+	memorySummaries: MemorySummary[]
+): Promise<void> {
+	const items = buildSyncItems().concat(buildMemorySyncItems(memoryFacts, memorySummaries));
 	if (items.length === 0) {
 		return;
 	}
@@ -190,6 +211,16 @@ function buildSyncItems(): SyncItem[] {
 }
 
 function applySyncItem(item: SyncItem, onLocaleChange?: (locale: "en" | "th") => void) {
+	if (item.item_type === "memory_fact") {
+		upsertMemoryFactCache(item);
+		return;
+	}
+
+	if (item.item_type === "memory_summary") {
+		upsertMemorySummaryCache(item);
+		return;
+	}
+
 	const key = item.payload?.key;
 	const value = item.payload?.value;
 	if (item.item_type !== "setting" || !key || !value) {
@@ -211,6 +242,74 @@ function applySyncItem(item: SyncItem, onLocaleChange?: (locale: "en" | "th") =>
 	if (key === "locale" && (value === "en" || value === "th")) {
 		writeStorageItem(localeStorageKey, value);
 		onLocaleChange?.(value);
+	}
+}
+
+function buildMemorySyncItems(memoryFacts: MemoryFact[], memorySummaries: MemorySummary[]): SyncItem[] {
+	const factItems = memoryFacts.map((fact) => ({
+		item_id: `memory.fact.${fact.id}`,
+		item_type: "memory_fact",
+		updated_at: fact.updatedAt,
+		deleted_at: null,
+		payload: {
+			id: fact.id,
+			characterId: fact.characterId,
+			content: fact.content,
+			confidence: String(fact.confidence),
+			sourceChatId: fact.sourceChatId ?? "",
+			updatedAt: String(fact.updatedAt)
+		}
+	}));
+
+	const summaryItems = memorySummaries.map((summary) => ({
+		item_id: `memory.summary.${summary.id}`,
+		item_type: "memory_summary",
+		updated_at: summary.createdAt,
+		deleted_at: null,
+		payload: {
+			id: summary.id,
+			characterId: summary.characterId,
+			summary: summary.summary,
+			sourceChatId: summary.sourceChatId ?? "",
+			createdAt: String(summary.createdAt)
+		}
+	}));
+
+	return [...factItems, ...summaryItems];
+}
+
+function upsertMemoryFactCache(item: SyncItem) {
+	const facts = readJsonArray(memoryFactsCacheKey);
+	const id = item.payload?.id;
+	if (!id) {
+		return;
+	}
+	const next = facts.filter((entry) => entry?.id !== id);
+	next.push(item.payload);
+	writeStorageItem(memoryFactsCacheKey, JSON.stringify(next));
+}
+
+function upsertMemorySummaryCache(item: SyncItem) {
+	const summaries = readJsonArray(memorySummariesCacheKey);
+	const id = item.payload?.id;
+	if (!id) {
+		return;
+	}
+	const next = summaries.filter((entry) => entry?.id !== id);
+	next.push(item.payload);
+	writeStorageItem(memorySummariesCacheKey, JSON.stringify(next));
+}
+
+function readJsonArray(key: string): Array<Record<string, string>> {
+	const raw = readStorageItem(key);
+	if (!raw) {
+		return [];
+	}
+	try {
+		const parsed = JSON.parse(raw) as Array<Record<string, string>>;
+		return Array.isArray(parsed) ? parsed : [];
+	} catch {
+		return [];
 	}
 }
 
