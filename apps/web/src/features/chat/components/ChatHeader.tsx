@@ -17,6 +17,7 @@ type ChatHeaderProps = {
 	onFontChange: (font: AppFont) => void;
 	onOpenSidebar: () => void;
 	onToggleTheme: () => void;
+	isAuthenticated: boolean;
 	hasPendingGuestSync: boolean;
 	onOpenProfile: () => void;
 };
@@ -31,6 +32,7 @@ function ChatHeader({
 	onFontChange,
 	onOpenSidebar,
 	onToggleTheme,
+	isAuthenticated,
 	hasPendingGuestSync,
 	onOpenProfile
 }: ChatHeaderProps) {
@@ -143,7 +145,9 @@ function ChatHeader({
 					onClick={onOpenProfile}
 				>
 					<User size={16} aria-hidden="true" />
-					{hasPendingGuestSync && <span className="size-2 rounded-full bg-amber-400" aria-hidden="true" />}
+					{(!isAuthenticated || hasPendingGuestSync) && (
+						<span className="size-2 rounded-full bg-amber-400" aria-hidden="true" />
+					)}
 				</button>
 			</div>
 			<div className="relative ml-auto flex sm:hidden" ref={mobileMenuRef}>
@@ -197,7 +201,7 @@ function ChatHeader({
 									onClick={onOpenProfile}
 								>
 									<User size={16} aria-hidden="true" />
-									{hasPendingGuestSync && (
+									{(!isAuthenticated || hasPendingGuestSync) && (
 										<span className="size-2 rounded-full bg-amber-400" aria-hidden="true" />
 									)}
 								</button>
