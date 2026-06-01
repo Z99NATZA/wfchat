@@ -13,6 +13,7 @@
 - มี `sync queue + retry` ฝั่ง frontend
 - มี `cloud -> local pull` ผ่าน `GET /api/sync/changes?cursor=...`
 - ตอนกด sync จะส่ง memory delta จาก state ปัจจุบัน (`memory_fact`, `memory_summary`) ด้วย
+- ตอนกด sync จะส่ง chat delta จาก state ปัจจุบัน (`chat_session`, `chat_message` ของห้องที่เปิดอยู่) ด้วย
 
 ---
 
@@ -204,6 +205,8 @@ Response:
 - settings (`theme/font/locale`)
 - memory facts ของ persona ปัจจุบัน
 - memory summaries ของ persona ปัจจุบัน
+- chat sessions ของ persona ปัจจุบัน
+- messages ของห้องที่กำลังเปิดอยู่
 9. frontend `flush` คิวโดยยิง `preview -> commit`
 10. ถ้าสำเร็จ ระบบเอารายการออกจากคิว
 11. ถ้าคิวว่าง ระบบ mark pending sync = false
@@ -247,6 +250,8 @@ Queue shape:
 - `POST /api/sync/preview`
 - `POST /api/sync/commit`
 8. ตรวจ response ว่า `merged_count` > 0
+9. ปิด API ชั่วคราวแล้วรีโหลดหน้า:
+- รายการ chat/memory ที่เคย pull cache ไว้ควรยังแสดงเป็น fallback ได้
 
 ---
 

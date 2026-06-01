@@ -94,7 +94,13 @@ function ChatPage({ theme, font, onFontChange, onToggleTheme }: ChatPageProps) {
 		setIsSyncing(true);
 		setSyncError(null);
 		try {
-			await enqueueGuestSyncWithMemory(chat.memoryFacts, chat.memorySummaries);
+			await enqueueGuestSyncWithMemory(
+				chat.memoryFacts,
+				chat.memorySummaries,
+				chat.sessions,
+				chat.messages,
+				chat.activeChatId
+			);
 			const result = await flushGuestSyncQueue();
 			if (!result) {
 				throw new Error("sync queued");

@@ -22,6 +22,8 @@ import {
 import {
 	markMemoryFactDeleted,
 	markMemorySummaryDeleted,
+	readChatMessagesCache,
+	readChatSessionsCache,
 	readMemoryFactsCache,
 	readMemorySummariesCache
 } from "@/services/syncService";
@@ -145,11 +147,17 @@ export function useChatSession() {
 				if (!isCurrent) {
 					return;
 				}
-				setSessions(nextSessions);
+				const cachedSessions = readChatSessionsCache().filter(
+					(session) => session.characterId === selectedPersonaId
+				);
+				setSessions(mergeChatSessions(nextSessions, cachedSessions));
 			})
 			.catch(() => {
 				if (isCurrent) {
-					setSessions([]);
+					const cachedSessions = readChatSessionsCache().filter(
+						(session) => session.characterId === selectedPersonaId
+					);
+					setSessions(cachedSessions);
 					setErrorMessage(t("chat.session.connectError"));
 				}
 			});
@@ -261,6 +269,12 @@ export function useChatSession() {
 						setMessages(newChat.messages);
 						updateHistoryForChat(newChat.chatId);
 						setRouteChatId(newChat.chatId);
+						return;
+					}
+					const cachedMessages = readChatMessagesCache(routeChatId);
+					if (cachedMessages.length > 0) {
+						setActiveChatId(routeChatId);
+						setMessages(cachedMessages);
 						return;
 					}
 					setErrorMessage(t("chat.session.connectError"));
@@ -593,6 +607,20 @@ export function useChatSession() {
 		editMemorySummary,
 		removeSession,
 	};
+}
+
+function mergeChatSessions(primary: ChatSessionSummary[], secondary: ChatSessionSummary[]): ChatSessionSummary[] {
+	const map = new Map<string, ChatSessionSummary>();
+	for (const item of secondary) {
+		map.set(item.id, item);
+	}
+	for (const item of primary) {
+		const current = map.get(item.id);
+		if (!current || item.updatedAt >= current.updatedAt) {
+			map.set(item.id, item);
+		}
+	}
+	return [...map.values()].sort((a, b) => b.updatedAt - a.updatedAt);
 }
 
 function mergeMemoryFacts(primary: MemoryFact[], secondary: MemoryFact[]): MemoryFact[] {
