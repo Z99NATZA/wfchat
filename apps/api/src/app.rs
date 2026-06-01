@@ -6,7 +6,7 @@ use axum::{
 use serde::Serialize;
 use tower_http::{cors::CorsLayer, trace::TraceLayer};
 
-use crate::{admin, auth, characters, chat, memory, state::AppState};
+use crate::{admin, auth, characters, chat, memory, state::AppState, sync};
 
 pub fn build_router(state: AppState) -> Router {
     let frontend_origin = state
@@ -31,6 +31,7 @@ pub fn build_router(state: AppState) -> Router {
         .merge(characters::router())
         .merge(chat::router())
         .merge(memory::router())
+        .merge(sync::router())
         .nest("/admin", admin::router());
 
     Router::new()

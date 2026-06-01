@@ -12,6 +12,8 @@ type AuthProfileDialogProps = {
 	onLoginWithEmail: () => void;
 	onLogout: () => void;
 	onSyncNow: () => void;
+	isSyncing?: boolean;
+	syncError?: string | null;
 };
 
 function AuthProfileDialog({
@@ -24,7 +26,9 @@ function AuthProfileDialog({
 	onLoginWithGoogle,
 	onLoginWithEmail,
 	onLogout,
-	onSyncNow
+	onSyncNow,
+	isSyncing = false,
+	syncError = null
 }: AuthProfileDialogProps) {
 	const { t } = useI18n();
 
@@ -76,13 +80,17 @@ function AuthProfileDialog({
 					) : (
 						<div className="space-y-2">
 							{hasPendingGuestSync && (
-								<button
-									type="button"
-									className="w-full rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white transition hover:bg-primary-600"
-									onClick={onSyncNow}
-								>
-									{t("auth.profile.syncNow")}
-								</button>
+								<>
+									<button
+										type="button"
+										className="w-full rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white transition hover:bg-primary-600 disabled:cursor-not-allowed disabled:opacity-60"
+										onClick={onSyncNow}
+										disabled={isSyncing}
+									>
+										{isSyncing ? t("auth.profile.syncing") : t("auth.profile.syncNow")}
+									</button>
+									{syncError && <p className="text-xs text-red-500">{syncError}</p>}
+								</>
 							)}
 							<button
 								type="button"

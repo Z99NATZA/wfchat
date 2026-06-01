@@ -81,5 +81,6 @@
 	"auth.profile.continueGoogle": "เข้าสู่ระบบด้วย Google",
 	"auth.profile.continueEmail": "เข้าสู่ระบบด้วยอีเมล",
 	"auth.profile.syncNow": "ซิงก์ตอนนี้",
+	"auth.profile.syncing": "กำลังซิงก์...",
 	"auth.profile.logout": "ออกจากระบบ"
 }

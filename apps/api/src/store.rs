@@ -69,6 +69,16 @@ pub struct MemorySummaryRecord {
     pub created_at: u64,
 }
 
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct SyncCommitRecord {
+    pub operation_id: String,
+    pub session_id: Uuid,
+    pub user_id: Uuid,
+    pub merged_count: u32,
+    pub conflict_count: u32,
+    pub committed_at: u64,
+}
+
 impl ChatStore {
     pub async fn connect(database_url: &str) -> Result<Self, sqlx::Error> {
         let db = PgPool::connect(database_url).await?;
@@ -484,6 +494,90 @@ impl ChatStore {
         })
     }
 
+    pub async fn count_sync_entities(&self, session_id: Uuid) -> u32 {
+        let chats_count: i64 = sqlx::query_scalar("select count(*) from chats where owner_session_id = $1")
+            .bind(session_id)
+            .fetch_one(self.db.as_ref())
+            .await
+            .unwrap_or(0);
+        let facts_count: i64 =
+            sqlx::query_scalar("select count(*) from memory_facts where owner_session_id = $1")
+                .bind(session_id)
+                .fetch_one(self.db.as_ref())
+                .await
+                .unwrap_or(0);
+        let summaries_count: i64 =
+            sqlx::query_scalar("select count(*) from memory_summaries where owner_session_id = $1")
+                .bind(session_id)
+                .fetch_one(self.db.as_ref())
+                .await
+                .unwrap_or(0);
+
+        (chats_count + facts_count + summaries_count).max(0) as u32
+    }
+
+    pub async fn get_sync_commit(
+        &self,
+        session_id: Uuid,
+        operation_id: &str,
+    ) -> Option<SyncCommitRecord> {
+        let row = sqlx::query(
+            "select operation_id, session_id, user_id, merged_count, conflict_count, extract(epoch from committed_at)::bigint as committed_at
+             from sync_commits
+             where session_id = $1 and operation_id = $2",
+        )
+        .bind(session_id)
+        .bind(operation_id)
+        .fetch_optional(self.db.as_ref())
+        .await
+        .ok()??;
+
+        Some(SyncCommitRecord {
+            operation_id: row.get("operation_id"),
+            session_id: row.get("session_id"),
+            user_id: row.get("user_id"),
+            merged_count: row.get::<i32, _>("merged_count") as u32,
+            conflict_count: row.get::<i32, _>("conflict_count") as u32,
+            committed_at: row.get::<i64, _>("committed_at") as u64,
+        })
+    }
+
+    pub async fn save_sync_commit(
+        &self,
+        session_id: Uuid,
+        user_id: Uuid,
+        operation_id: &str,
+        merged_count: u32,
+        conflict_count: u32,
+    ) -> Option<SyncCommitRecord> {
+        if let Some(existing) = self.get_sync_commit(session_id, operation_id).await {
+            return Some(existing);
+        }
+
+        let row = sqlx::query(
+            "insert into sync_commits (operation_id, session_id, user_id, merged_count, conflict_count)
+             values ($1, $2, $3, $4, $5)
+             returning extract(epoch from committed_at)::bigint as committed_at",
+        )
+        .bind(operation_id)
+        .bind(session_id)
+        .bind(user_id)
+        .bind(merged_count as i32)
+        .bind(conflict_count as i32)
+        .fetch_one(self.db.as_ref())
+        .await
+        .ok()?;
+
+        Some(SyncCommitRecord {
+            operation_id: operation_id.to_owned(),
+            session_id,
+            user_id,
+            merged_count,
+            conflict_count,
+            committed_at: row.get::<i64, _>("committed_at") as u64,
+        })
+    }
+
     async fn messages_for_chat(&self, chat_id: Uuid) -> Vec<StoredMessage> {
         let rows = sqlx::query(
             "select id, role, content, extract(epoch from created_at)::bigint as created_at from chat_messages where chat_id = $1 order by sort_order asc",
@@ -590,6 +684,22 @@ impl ChatStore {
             .execute(self.db.as_ref())
             .await?;
         sqlx::query("create index if not exists idx_memory_summaries_owner_character_created on memory_summaries(owner_session_id, character_id, created_at desc)")
+            .execute(self.db.as_ref())
+            .await?;
+        sqlx::query(
+            "create table if not exists sync_commits (
+                operation_id text not null,
+                session_id uuid not null references auth_sessions(id) on delete cascade,
+                user_id uuid not null,
+                merged_count integer not null,
+                conflict_count integer not null,
+                committed_at timestamptz not null default now(),
+                primary key (operation_id, session_id)
+            )",
+        )
+        .execute(self.db.as_ref())
+        .await?;
+        sqlx::query("create index if not exists idx_sync_commits_session_committed on sync_commits(session_id, committed_at desc)")
             .execute(self.db.as_ref())
             .await?;
         Ok(())

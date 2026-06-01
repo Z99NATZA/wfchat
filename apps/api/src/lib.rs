@@ -9,3 +9,4 @@ pub mod error;
 pub mod memory;
 pub mod state;
 pub mod store;
+pub mod sync;

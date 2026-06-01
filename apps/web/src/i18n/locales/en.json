@@ -81,5 +81,6 @@
 	"auth.profile.continueGoogle": "Continue with Google",
 	"auth.profile.continueEmail": "Continue with Email",
 	"auth.profile.syncNow": "Sync now",
+	"auth.profile.syncing": "Syncing...",
 	"auth.profile.logout": "Log out"
 }

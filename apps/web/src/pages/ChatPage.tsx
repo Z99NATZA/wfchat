@@ -7,6 +7,8 @@ import ChatMessageList from "@/features/chat/components/ChatMessageList";
 import ChatSidebar from "@/features/chat/components/ChatSidebar";
 import { useChatSession } from "@/features/chat/hooks/useChatSession";
 import { useAuthSession } from "@/hooks/useAuthSession";
+import { useDialog } from "@/components/dialog/DialogProvider";
+import { runGuestSync } from "@/services/syncService";
 import type { AppFont } from "@/types/font";
 import type { Theme } from "@/types/theme";
 import { useEffect, useRef, useState } from "react";
@@ -21,7 +23,10 @@ type ChatPageProps = {
 function ChatPage({ theme, font, onFontChange, onToggleTheme }: ChatPageProps) {
 	const chat = useChatSession();
 	const auth = useAuthSession();
+	const { alert } = useDialog();
 	const [isProfileOpen, setIsProfileOpen] = useState(false);
+	const [isSyncing, setIsSyncing] = useState(false);
+	const [syncError, setSyncError] = useState<string | null>(null);
 	const wasAuthenticatedRef = useRef(auth.isAuthenticated);
 
 	useEffect(() => {
@@ -31,6 +36,23 @@ function ChatPage({ theme, font, onFontChange, onToggleTheme }: ChatPageProps) {
 
 		wasAuthenticatedRef.current = auth.isAuthenticated;
 	}, [auth.isAuthenticated]);
+
+	async function handleSyncNow() {
+		setIsSyncing(true);
+		setSyncError(null);
+		try {
+			const result = await runGuestSync();
+			auth.markGuestSyncDone();
+			await alert({
+				title: "Sync complete",
+				description: `Merged ${result.merged_count} item(s).`
+			});
+		} catch {
+			setSyncError("Could not sync now. Please try again.");
+		} finally {
+			setIsSyncing(false);
+		}
+	}
 
 	return (
 		<>
@@ -111,7 +133,9 @@ function ChatPage({ theme, font, onFontChange, onToggleTheme }: ChatPageProps) {
 				onLoginWithGoogle={() => auth.login("google")}
 				onLoginWithEmail={() => auth.login("email")}
 				onLogout={auth.logout}
-				onSyncNow={auth.markGuestSyncDone}
+				onSyncNow={handleSyncNow}
+				isSyncing={isSyncing}
+				syncError={syncError}
 			/>
 		</>
 	);
