@@ -10,6 +10,7 @@
 - มี `guest session` จริงที่ backend
 - มี `in-app auth UI` แบบ mock (Google/Email mock สำหรับ flow)
 - มี sync จริงสำหรับ `settings` (theme/font/locale)
+- มี `sync queue + retry` ฝั่ง frontend
 
 ---
 
@@ -56,6 +57,7 @@ Local keys ที่เกี่ยวข้อง:
 - `wfchat-font`
 - `wfchat.locale`
 - `wfchat-sync-meta`
+- `wfchat-sync-queue`
 
 ตัวอย่าง `wfchat-sync-meta`:
 ```json
@@ -177,13 +179,39 @@ Response:
 4. ผู้ใช้เปิด Profile modal แล้ว login (mock)
 5. ระบบแสดง pending sync
 6. ผู้ใช้กด `Sync now`
-7. frontend ยิง `preview`
-8. frontend ยิง `commit`
-9. ถ้าสำเร็จ ระบบ mark pending sync = false
+7. frontend `enqueue` รายการลง `wfchat-sync-queue`
+8. frontend `flush` คิวโดยยิง `preview -> commit`
+9. ถ้าสำเร็จ ระบบเอารายการออกจากคิว
+10. ถ้าคิวว่าง ระบบ mark pending sync = false
 
 ---
 
-## 9) วิธีทดสอบปัจจุบัน
+## 9) Sync Queue + Retry (ใหม่)
+Queue shape:
+```json
+[
+  {
+    "operation_id": "sync-1780327000-abc123",
+    "attempt": 1,
+    "next_retry_at": 1780327008,
+    "items": []
+  }
+]
+```
+
+พฤติกรรม:
+- ทุกครั้งที่กด `Sync now` จะ enqueue ก่อน
+- flush จะส่งเฉพาะรายการคิวตัวแรก
+- ถ้าสำเร็จ: ลบหัวคิว
+- ถ้าล้มเหลว: เพิ่ม `attempt` และคำนวณ `next_retry_at` ด้วย exponential backoff + jitter
+- ระบบจะพยายาม flush อีกครั้งเมื่อ:
+  - ผู้ใช้กด sync ใหม่
+  - เปิดแอปในสถานะ login อยู่
+  - browser กลับมา online
+
+---
+
+## 10) วิธีทดสอบปัจจุบัน
 1. รัน backend และ frontend
 2. เปลี่ยน theme/font/locale อย่างน้อย 1 อย่าง
 3. เปิด DevTools -> Application -> Local Storage
@@ -197,26 +225,24 @@ Response:
 
 ---
 
-## 10) ขอบเขตที่ยังไม่ทำ (สำคัญ)
+## 11) ขอบเขตที่ยังไม่ทำ (สำคัญ)
 ยังไม่มีของต่อไปนี้:
 - auth จริง (Google OAuth/Email auth production)
-- sync queue + retry/backoff
 - `GET /sync/changes` สำหรับ cloud -> local
 - conflict resolution ระดับ field แบบละเอียด
 - sync ข้อมูล chat/memory เต็มรูปแบบเป็น delta
 
 ---
 
-## 11) แผนลำดับงานถัดไป (แนะนำ)
-1. เพิ่ม sync queue + retry ที่ client
-2. เพิ่ม `GET /sync/changes` + cursor
-3. ทำ two-way sync v1
-4. ต่อ auth จริง (Google/Email)
-5. เพิ่ม observability metrics และ alert
+## 12) แผนลำดับงานถัดไป (แนะนำ)
+1. เพิ่ม `GET /sync/changes` + cursor
+2. ทำ two-way sync v1
+3. ต่อ auth จริง (Google/Email)
+4. เพิ่ม observability metrics และ alert
 
 ---
 
-## 12) ไฟล์ที่เกี่ยวข้อง (Reference)
+## 13) ไฟล์ที่เกี่ยวข้อง (Reference)
 Backend:
 - `apps/api/src/sync.rs`
 - `apps/api/src/store.rs`

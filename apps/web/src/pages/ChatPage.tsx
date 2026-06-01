@@ -8,7 +8,12 @@ import ChatSidebar from "@/features/chat/components/ChatSidebar";
 import { useChatSession } from "@/features/chat/hooks/useChatSession";
 import { useAuthSession } from "@/hooks/useAuthSession";
 import { useDialog } from "@/components/dialog/DialogProvider";
-import { runGuestSync } from "@/services/syncService";
+import {
+	enqueueGuestSync,
+	flushGuestSyncQueue,
+	hasPendingSyncQueue,
+	markSyncRetry
+} from "@/services/syncService";
 import type { AppFont } from "@/types/font";
 import type { Theme } from "@/types/theme";
 import { useEffect, useRef, useState } from "react";
@@ -37,17 +42,61 @@ function ChatPage({ theme, font, onFontChange, onToggleTheme }: ChatPageProps) {
 		wasAuthenticatedRef.current = auth.isAuthenticated;
 	}, [auth.isAuthenticated]);
 
+	useEffect(() => {
+		if (!auth.isAuthenticated || !hasPendingSyncQueue()) {
+			return;
+		}
+
+		void flushGuestSyncQueue()
+			.then((result) => {
+				if (result) {
+					auth.markGuestSyncDone();
+				}
+			})
+			.catch(() => {
+				markSyncRetry();
+			});
+	}, [auth, auth.isAuthenticated]);
+
+	useEffect(() => {
+		if (!auth.isAuthenticated) {
+			return;
+		}
+
+		function handleOnline() {
+			void flushGuestSyncQueue()
+				.then((result) => {
+					if (result) {
+						auth.markGuestSyncDone();
+					}
+				})
+				.catch(() => {
+					markSyncRetry();
+				});
+		}
+
+		window.addEventListener("online", handleOnline);
+		return () => window.removeEventListener("online", handleOnline);
+	}, [auth, auth.isAuthenticated]);
+
 	async function handleSyncNow() {
 		setIsSyncing(true);
 		setSyncError(null);
 		try {
-			const result = await runGuestSync();
-			auth.markGuestSyncDone();
+			await enqueueGuestSync();
+			const result = await flushGuestSyncQueue();
+			if (!result) {
+				throw new Error("sync queued");
+			}
+			if (!hasPendingSyncQueue()) {
+				auth.markGuestSyncDone();
+			}
 			await alert({
 				title: "Sync complete",
 				description: `Merged ${result.merged_count} item(s).`
 			});
 		} catch {
+			markSyncRetry();
 			setSyncError("Could not sync now. Please try again.");
 		} finally {
 			setIsSyncing(false);

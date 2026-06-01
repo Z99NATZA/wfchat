@@ -3,9 +3,11 @@ import { readStorageItem, writeStorageItem } from "@/services/storageService";
 import { readSyncUpdatedAt } from "@/stores/syncStateStore";
 
 const sessionStorageKey = "wfchat.sessionId";
+const syncQueueStorageKey = "wfchat-sync-queue";
 const localeStorageKey = "wfchat.locale";
 const themeStorageKey = "wfchat-theme";
 const fontStorageKey = "wfchat-font";
+const maxRetryDelaySeconds = 300;
 
 type ApiSessionResponse = {
 	session_id: string;
@@ -32,24 +34,74 @@ type SyncItem = {
 	payload: Record<string, string>;
 };
 
-export async function runGuestSync(): Promise<SyncCommitResponse> {
-	const sessionId = await ensureGuestSession();
+type SyncQueueOperation = {
+	operation_id: string;
+	items: SyncItem[];
+	attempt: number;
+	next_retry_at: number;
+};
+
+export async function enqueueGuestSync(): Promise<void> {
 	const items = buildSyncItems();
+	if (items.length === 0) {
+		return;
+	}
+	const queue = readSyncQueue();
+	queue.push({
+		operation_id: `sync-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+		items,
+		attempt: 0,
+		next_retry_at: 0
+	});
+	writeSyncQueue(queue);
+}
+
+export async function flushGuestSyncQueue(): Promise<SyncCommitResponse | null> {
+	const queue = readSyncQueue();
+	if (queue.length === 0) {
+		return null;
+	}
+
+	const sessionId = await ensureGuestSession();
+	const now = Math.floor(Date.now() / 1000);
+	const operation = queue[0];
+	if (operation.next_retry_at > now) {
+		return null;
+	}
 
 	await apiClient.post<SyncPreviewResponse>(
 		"/api/sync/preview",
-		{ items },
+		{ items: operation.items },
 		{ headers: sessionHeaders(sessionId) }
 	);
 
-	const operationId = `sync-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 	const commit = await apiClient.post<SyncCommitResponse>(
 		"/api/sync/commit",
-		{ operation_id: operationId, items },
+		{ operation_id: operation.operation_id, items: operation.items },
 		{ headers: sessionHeaders(sessionId) }
 	);
+	queue.shift();
+	writeSyncQueue(queue);
 
 	return commit.data;
+}
+
+export function markSyncRetry(): void {
+	const queue = readSyncQueue();
+	if (queue.length === 0) {
+		return;
+	}
+	const operation = queue[0];
+	operation.attempt += 1;
+	const baseDelay = Math.min(2 ** operation.attempt, maxRetryDelaySeconds);
+	const jitter = Math.floor(Math.random() * 3);
+	operation.next_retry_at = Math.floor(Date.now() / 1000) + baseDelay + jitter;
+	queue[0] = operation;
+	writeSyncQueue(queue);
+}
+
+export function hasPendingSyncQueue(): boolean {
+	return readSyncQueue().length > 0;
 }
 
 async function ensureGuestSession(): Promise<string> {
@@ -107,4 +159,21 @@ function buildSyncItems(): SyncItem[] {
 	}
 
 	return items;
+}
+
+function readSyncQueue(): SyncQueueOperation[] {
+	const raw = readStorageItem(syncQueueStorageKey);
+	if (!raw) {
+		return [];
+	}
+	try {
+		const parsed = JSON.parse(raw) as SyncQueueOperation[];
+		return Array.isArray(parsed) ? parsed : [];
+	} catch {
+		return [];
+	}
+}
+
+function writeSyncQueue(queue: SyncQueueOperation[]) {
+	writeStorageItem(syncQueueStorageKey, JSON.stringify(queue));
 }
