@@ -72,5 +72,14 @@
 	"chat.session.clearError": "Could not clear this chat. Try again.",
 	"chat.session.deleteConfirmTitle": "Delete this chat?",
 	"chat.session.deleteConfirmDesc": "This permanently deletes this chat and all its messages.",
-	"chat.session.deleteError": "Could not delete this chat. Try again."
+	"chat.session.deleteError": "Could not delete this chat. Try again.",
+	"auth.profile.titleGuest": "Guest Profile",
+	"auth.profile.titleMember": "Account Profile",
+	"auth.profile.guestDescription": "You are using guest mode on this device. Sign in to sync across devices.",
+	"auth.profile.memberDescription": "Your account is active on this device.",
+	"auth.profile.guestMode": "Guest mode",
+	"auth.profile.continueGoogle": "Continue with Google",
+	"auth.profile.continueEmail": "Continue with Email",
+	"auth.profile.syncNow": "Sync now",
+	"auth.profile.logout": "Log out"
 }

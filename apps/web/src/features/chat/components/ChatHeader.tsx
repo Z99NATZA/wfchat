@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Bell, ChevronLeft, Ellipsis, Languages, Menu, Moon, Settings, Sun, Trash2, Type } from "lucide-react";
+import { Bell, ChevronLeft, Ellipsis, Languages, Menu, Moon, Settings, Sun, Trash2, Type, User } from "lucide-react";
 import IconButton from "@/components/ui/IconButton";
 import StatusDot from "@/components/ui/StatusDot";
 import { SUPPORTED_LOCALES, useI18n } from "@/i18n";
@@ -17,6 +17,9 @@ type ChatHeaderProps = {
 	onFontChange: (font: AppFont) => void;
 	onOpenSidebar: () => void;
 	onToggleTheme: () => void;
+	profileLabel: string;
+	hasPendingGuestSync: boolean;
+	onOpenProfile: () => void;
 };
 
 function ChatHeader({
@@ -28,7 +31,10 @@ function ChatHeader({
 	onClearChat,
 	onFontChange,
 	onOpenSidebar,
-	onToggleTheme
+	onToggleTheme,
+	profileLabel,
+	hasPendingGuestSync,
+	onOpenProfile
 }: ChatHeaderProps) {
 	const { locale, setLocale, t } = useI18n();
 	const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -133,6 +139,15 @@ function ChatHeader({
 				<IconButton className="hidden opacity-45 grayscale cursor-not-allowed md:flex" aria-label={t("chat.header.settings")} disabled title={t("common.notSupportedYet")}>
 					<Settings size={18} aria-hidden="true" />
 				</IconButton>
+				<button
+					type="button"
+					className="relative inline-flex h-10 items-center gap-2 rounded-lg border border-app-border bg-app-soft px-3 text-xs font-semibold text-app-text transition hover:border-primary hover:text-primary"
+					onClick={onOpenProfile}
+				>
+					<User size={16} aria-hidden="true" />
+					<span className="max-w-24 truncate">{profileLabel}</span>
+					{hasPendingGuestSync && <span className="size-2 rounded-full bg-amber-400" aria-hidden="true" />}
+				</button>
 			</div>
 			<div className="relative ml-auto flex sm:hidden" ref={mobileMenuRef}>
 				<IconButton
@@ -179,6 +194,17 @@ function ChatHeader({
 								</select>
 							</label>
 							<div className="flex justify-end gap-2 p-1">
+								<button
+									type="button"
+									className="relative inline-flex h-10 items-center gap-2 rounded-lg border border-app-border bg-app-soft px-3 text-xs font-semibold text-app-text transition hover:border-primary hover:text-primary"
+									onClick={onOpenProfile}
+								>
+									<User size={16} aria-hidden="true" />
+									<span className="max-w-20 truncate">{profileLabel}</span>
+									{hasPendingGuestSync && (
+										<span className="size-2 rounded-full bg-amber-400" aria-hidden="true" />
+									)}
+								</button>
 								<IconButton onClick={onToggleTheme} aria-label={nextThemeLabel}>
 									{theme === "dark" ? (
 										<Sun size={18} aria-hidden="true" />
