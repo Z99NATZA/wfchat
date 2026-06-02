@@ -13,6 +13,36 @@ This project uses PostgreSQL with schema SQL at `apps/api/db/init.sql`.
   - `kind text not null`
   - `created_at timestamptz not null default now()`
 
+### `auth_identities`
+
+- Purpose: external login identity records. Google data is stored here for auth/account context, not as the editable app profile.
+- Columns:
+  - `user_id uuid not null`
+  - `provider text not null`
+  - `provider_subject text not null`
+  - `email text null`
+  - `provider_name text null`
+  - `provider_avatar_url text null`
+  - `created_at timestamptz not null default now()`
+  - `updated_at timestamptz not null default now()`
+- Primary key:
+  - `(provider, provider_subject)`
+- Indexes:
+  - `idx_auth_identities_user_updated (user_id, updated_at desc)`
+
+### `user_profiles`
+
+- Purpose: editable in-app user profile.
+- Columns:
+  - `user_id uuid primary key`
+  - `display_name text not null`
+  - `avatar_url text null`
+  - `created_at timestamptz not null default now()`
+  - `updated_at timestamptz not null default now()`
+- Notes:
+  - First Google login seeds `display_name` and `avatar_url`.
+  - Later Google logins update identity fields but do not overwrite the editable profile.
+
 ### `chats`
 
 - Purpose: chat sessions per persona/character.
@@ -98,6 +128,8 @@ This project uses PostgreSQL with schema SQL at `apps/api/db/init.sql`.
 ## Relationship Summary
 
 - Guest data is owned by one `auth_session`; registered data is shared by `owner_user_id`.
+- One registered `user_id` has one editable `user_profile`.
+- One registered `user_id` can have one or more external `auth_identities`.
 - One `chat` has many `chat_messages`.
 - One owner + `character_id` has many `memory_facts` and `memory_summaries`.
 - `source_chat_id` on memory tables is optional provenance back to a chat.

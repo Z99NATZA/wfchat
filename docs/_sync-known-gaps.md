@@ -19,8 +19,8 @@
 3. Cursor/pull ยังไม่มี checkpoint/recovery แบบเข้ม  
    มี cursor แล้ว แต่ยังไม่มีกลไก recover ขั้นสูงเมื่อ apply ล้มเหลวบางส่วน
 
-4. Auth profile persistence ยังไม่ครบ  
-   หลัง reload อาจไม่ได้ `name/email` ถ้าไม่ persist profile ใน backend
+4. Auth/profile UI ยังไม่ครบ
+   backend มี identity/profile persistence แล้ว แต่ frontend ยังต้องต่อ UI สำหรับแก้ `display_name/avatar_url`
 
 5. Test coverage ยังไม่ครบ e2e  
    มี unit tests หลักแล้ว แต่ยังไม่ครบเส้นทาง integration/e2e ของ sync ทั้งก้อน

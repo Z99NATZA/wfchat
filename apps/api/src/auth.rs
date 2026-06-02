@@ -1,7 +1,7 @@
 use axum::{
     extract::State,
     http::{header::SET_COOKIE, HeaderMap, HeaderValue},
-    routing::{get, post},
+    routing::{get, patch, post},
     Json, Router,
 };
 use serde::{Deserialize, Serialize};
@@ -19,6 +19,7 @@ pub fn router() -> Router<AppState> {
         .route("/auth/google", post(login_with_google))
         .route("/auth/logout", post(logout))
         .route("/auth/me", get(current_user))
+        .route("/auth/profile", patch(update_profile))
 }
 
 #[derive(Serialize)]
@@ -28,6 +29,13 @@ struct SessionResponse {
     kind: String,
     email: Option<String>,
     name: Option<String>,
+    profile: Option<UserProfileResponse>,
+}
+
+#[derive(Serialize)]
+struct UserProfileResponse {
+    display_name: String,
+    avatar_url: Option<String>,
 }
 
 async fn create_guest_session(State(state): State<AppState>) -> (HeaderMap, Json<SessionResponse>) {
@@ -50,11 +58,15 @@ async fn create_guest_session(State(state): State<AppState>) -> (HeaderMap, Json
             kind: user_kind_label(&session.kind).to_owned(),
             email: None,
             name: None,
+            profile: None,
         }),
     )
 }
 
-async fn current_user(State(state): State<AppState>, headers: HeaderMap) -> Json<SessionResponse> {
+async fn current_user(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> AppResult<Json<SessionResponse>> {
     let session = state
         .store
         .ensure_session(session_id_from_headers(&headers))
@@ -66,13 +78,7 @@ async fn current_user(State(state): State<AppState>, headers: HeaderMap) -> Json
             .await;
     }
 
-    Json(SessionResponse {
-        user_id: session.user_id,
-        session_id: session.id,
-        kind: user_kind_label(&session.kind).to_owned(),
-        email: None,
-        name: None,
-    })
+    Ok(Json(session_response(&state, &session).await))
 }
 
 #[derive(Deserialize)]
@@ -86,6 +92,7 @@ struct GoogleTokenInfoResponse {
     sub: String,
     email: Option<String>,
     name: Option<String>,
+    picture: Option<String>,
 }
 
 async fn login_with_google(
@@ -117,6 +124,21 @@ async fn login_with_google(
         .store
         .migrate_session_data_to_user(promoted.id, promoted.user_id)
         .await;
+    state
+        .store
+        .upsert_auth_identity(
+            promoted.user_id,
+            "google",
+            &token_info.sub,
+            token_info.email,
+            token_info.name.clone(),
+            token_info.picture.clone(),
+        )
+        .await;
+    state
+        .store
+        .ensure_user_profile(promoted.user_id, token_info.name, token_info.picture)
+        .await;
 
     let mut response_headers = HeaderMap::new();
     let cookie = format!(
@@ -129,13 +151,7 @@ async fn login_with_google(
 
     Ok((
         response_headers,
-        Json(SessionResponse {
-            user_id: promoted.user_id,
-            session_id: promoted.id,
-            kind: user_kind_label(&promoted.kind).to_owned(),
-            email: token_info.email,
-            name: token_info.name,
-        }),
+        Json(session_response(&state, &promoted).await),
     ))
 }
 
@@ -158,8 +174,51 @@ async fn logout(State(state): State<AppState>) -> (HeaderMap, Json<SessionRespon
             kind: user_kind_label(&guest.kind).to_owned(),
             email: None,
             name: None,
+            profile: None,
         }),
     )
+}
+
+#[derive(Deserialize)]
+struct UpdateProfileRequest {
+    display_name: Option<String>,
+    avatar_url: Option<String>,
+}
+
+async fn update_profile(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(payload): Json<UpdateProfileRequest>,
+) -> AppResult<Json<SessionResponse>> {
+    let session = state
+        .store
+        .ensure_session(session_id_from_headers(&headers))
+        .await;
+    if matches!(&session.kind, UserKind::Guest) {
+        return Err(AppError::Forbidden);
+    }
+
+    if payload
+        .display_name
+        .as_deref()
+        .is_some_and(|value| value.trim().is_empty())
+    {
+        return Err(AppError::BadRequest(
+            "display_name must not be empty".to_owned(),
+        ));
+    }
+
+    state
+        .store
+        .ensure_user_profile(session.user_id, None, None)
+        .await;
+    state
+        .store
+        .update_user_profile(session.user_id, payload.display_name, payload.avatar_url)
+        .await
+        .ok_or_else(|| AppError::BadRequest("could not update profile".to_owned()))?;
+
+    Ok(Json(session_response(&state, &session).await))
 }
 
 async fn verify_google_id_token(
@@ -201,5 +260,51 @@ fn user_kind_label(kind: &UserKind) -> &'static str {
         UserKind::Guest => "guest",
         UserKind::Registered => "registered",
         UserKind::Admin => "admin",
+    }
+}
+
+async fn session_response(
+    state: &AppState,
+    session: &crate::store::SessionRecord,
+) -> SessionResponse {
+    if matches!(&session.kind, UserKind::Guest) {
+        return SessionResponse {
+            user_id: session.user_id,
+            session_id: session.id,
+            kind: user_kind_label(&session.kind).to_owned(),
+            email: None,
+            name: None,
+            profile: None,
+        };
+    }
+
+    let identity = state.store.get_auth_identity(session.user_id).await;
+    let profile = state
+        .store
+        .ensure_user_profile(
+            session.user_id,
+            identity
+                .as_ref()
+                .and_then(|record| record.provider_name.clone()),
+            identity
+                .as_ref()
+                .and_then(|record| record.provider_avatar_url.clone()),
+        )
+        .await;
+    let profile_response = profile.map(|record| UserProfileResponse {
+        display_name: record.display_name,
+        avatar_url: record.avatar_url,
+    });
+    let name = profile_response
+        .as_ref()
+        .map(|profile| profile.display_name.clone());
+
+    SessionResponse {
+        user_id: session.user_id,
+        session_id: session.id,
+        kind: user_kind_label(&session.kind).to_owned(),
+        email: identity.and_then(|record| record.email),
+        name,
+        profile: profile_response,
     }
 }

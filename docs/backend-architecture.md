@@ -46,7 +46,7 @@ This clears message history for the current chat while keeping the chat id and g
 
 `error.rs` maps application errors into HTTP responses.
 
-`auth.rs` owns guest sessions, Google login, logout, and `GET /api/auth/me`.
+`auth.rs` owns guest sessions, Google login, logout, `GET /api/auth/me`, and editable account profile updates.
 
 `chat.rs` owns chat routes and the main chat flow.
 
@@ -85,6 +85,15 @@ admin      can manage AI profiles, provider settings, and models
 ```
 
 Auth uses an HTTP-only session cookie plus the `X-WFChat-Session` header for API ownership resolution. Frontend code should not store API keys or admin secrets.
+
+Google identity and editable app profile are separate:
+
+```text
+auth_identities stores provider data such as Google email/name/avatar
+user_profiles stores editable display_name/avatar_url used by the app UI
+```
+
+On first Google login, the backend seeds `user_profiles` from Google. Later logins update `auth_identities` but do not overwrite custom profile fields.
 
 ## AI Profiles
 

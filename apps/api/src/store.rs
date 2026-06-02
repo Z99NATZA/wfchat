@@ -48,6 +48,23 @@ pub enum UserKind {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct AuthIdentityRecord {
+    pub user_id: Uuid,
+    pub provider: String,
+    pub provider_subject: String,
+    pub email: Option<String>,
+    pub provider_name: Option<String>,
+    pub provider_avatar_url: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct UserProfileRecord {
+    pub user_id: Uuid,
+    pub display_name: String,
+    pub avatar_url: Option<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct ChatRecord {
     pub id: Uuid,
     pub owner_session_id: Uuid,
@@ -239,6 +256,140 @@ impl ChatStore {
             user_id: row.get("user_id"),
             kind: parse_user_kind(row.get::<String, _>("kind").as_str()),
             created_at: row.get::<i64, _>("created_at") as u64,
+        })
+    }
+
+    pub async fn upsert_auth_identity(
+        &self,
+        user_id: Uuid,
+        provider: &str,
+        provider_subject: &str,
+        email: Option<String>,
+        provider_name: Option<String>,
+        provider_avatar_url: Option<String>,
+    ) -> Option<AuthIdentityRecord> {
+        let row = sqlx::query(
+            "insert into auth_identities (user_id, provider, provider_subject, email, provider_name, provider_avatar_url, updated_at)
+             values ($1, $2, $3, $4, $5, $6, now())
+             on conflict (provider, provider_subject)
+             do update set
+               user_id = excluded.user_id,
+               email = excluded.email,
+               provider_name = excluded.provider_name,
+               provider_avatar_url = excluded.provider_avatar_url,
+               updated_at = now()
+             returning user_id, provider, provider_subject, email, provider_name, provider_avatar_url",
+        )
+        .bind(user_id)
+        .bind(provider)
+        .bind(provider_subject)
+        .bind(email)
+        .bind(provider_name)
+        .bind(provider_avatar_url)
+        .fetch_optional(self.db.as_ref())
+        .await
+        .ok()??;
+
+        Some(AuthIdentityRecord {
+            user_id: row.get("user_id"),
+            provider: row.get("provider"),
+            provider_subject: row.get("provider_subject"),
+            email: row.get("email"),
+            provider_name: row.get("provider_name"),
+            provider_avatar_url: row.get("provider_avatar_url"),
+        })
+    }
+
+    pub async fn get_auth_identity(&self, user_id: Uuid) -> Option<AuthIdentityRecord> {
+        let row = sqlx::query(
+            "select user_id, provider, provider_subject, email, provider_name, provider_avatar_url
+             from auth_identities
+             where user_id = $1
+             order by updated_at desc
+             limit 1",
+        )
+        .bind(user_id)
+        .fetch_optional(self.db.as_ref())
+        .await
+        .ok()??;
+
+        Some(AuthIdentityRecord {
+            user_id: row.get("user_id"),
+            provider: row.get("provider"),
+            provider_subject: row.get("provider_subject"),
+            email: row.get("email"),
+            provider_name: row.get("provider_name"),
+            provider_avatar_url: row.get("provider_avatar_url"),
+        })
+    }
+
+    pub async fn ensure_user_profile(
+        &self,
+        user_id: Uuid,
+        display_name: Option<String>,
+        avatar_url: Option<String>,
+    ) -> Option<UserProfileRecord> {
+        let seed_display_name =
+            non_empty_string(display_name).unwrap_or_else(|| "Member".to_owned());
+        let seed_avatar_url = non_empty_string(avatar_url);
+        let _ = sqlx::query(
+            "insert into user_profiles (user_id, display_name, avatar_url, created_at, updated_at)
+             values ($1, $2, $3, now(), now())
+             on conflict (user_id) do nothing",
+        )
+        .bind(user_id)
+        .bind(seed_display_name)
+        .bind(seed_avatar_url)
+        .execute(self.db.as_ref())
+        .await;
+
+        self.get_user_profile(user_id).await
+    }
+
+    pub async fn get_user_profile(&self, user_id: Uuid) -> Option<UserProfileRecord> {
+        let row = sqlx::query(
+            "select user_id, display_name, avatar_url from user_profiles where user_id = $1",
+        )
+        .bind(user_id)
+        .fetch_optional(self.db.as_ref())
+        .await
+        .ok()??;
+
+        Some(UserProfileRecord {
+            user_id: row.get("user_id"),
+            display_name: row.get("display_name"),
+            avatar_url: row.get("avatar_url"),
+        })
+    }
+
+    pub async fn update_user_profile(
+        &self,
+        user_id: Uuid,
+        display_name: Option<String>,
+        avatar_url: Option<String>,
+    ) -> Option<UserProfileRecord> {
+        let current = self.get_user_profile(user_id).await?;
+        let next_display_name = non_empty_string(display_name).unwrap_or(current.display_name);
+        let next_avatar_url = avatar_url
+            .map(|value| value.trim().to_owned())
+            .and_then(|value| if value.is_empty() { None } else { Some(value) });
+        let row = sqlx::query(
+            "update user_profiles
+             set display_name = $1, avatar_url = $2, updated_at = now()
+             where user_id = $3
+             returning user_id, display_name, avatar_url",
+        )
+        .bind(next_display_name)
+        .bind(next_avatar_url.or(current.avatar_url))
+        .bind(user_id)
+        .fetch_optional(self.db.as_ref())
+        .await
+        .ok()??;
+
+        Some(UserProfileRecord {
+            user_id: row.get("user_id"),
+            display_name: row.get("display_name"),
+            avatar_url: row.get("avatar_url"),
         })
     }
 
@@ -886,6 +1037,37 @@ impl ChatStore {
         )
         .execute(self.db.as_ref())
         .await?;
+        sqlx::query(
+            "create table if not exists auth_identities (
+                user_id uuid not null,
+                provider text not null,
+                provider_subject text not null,
+                email text,
+                provider_name text,
+                provider_avatar_url text,
+                created_at timestamptz not null default now(),
+                updated_at timestamptz not null default now(),
+                primary key (provider, provider_subject)
+            )",
+        )
+        .execute(self.db.as_ref())
+        .await?;
+        sqlx::query(
+            "create index if not exists idx_auth_identities_user_updated on auth_identities(user_id, updated_at desc)",
+        )
+        .execute(self.db.as_ref())
+        .await?;
+        sqlx::query(
+            "create table if not exists user_profiles (
+                user_id uuid primary key,
+                display_name text not null,
+                avatar_url text,
+                created_at timestamptz not null default now(),
+                updated_at timestamptz not null default now()
+            )",
+        )
+        .execute(self.db.as_ref())
+        .await?;
 
         sqlx::query(
             "create table if not exists chats (
@@ -1120,6 +1302,12 @@ fn parse_user_kind(value: &str) -> UserKind {
     }
 }
 
+fn non_empty_string(value: Option<String>) -> Option<String> {
+    value
+        .map(|item| item.trim().to_owned())
+        .filter(|item| !item.is_empty())
+}
+
 #[cfg(test)]
 mod integration_tests {
     use super::*;
@@ -1134,6 +1322,19 @@ mod integration_tests {
         for session_id in session_ids {
             let _ = sqlx::query("delete from auth_sessions where id = $1")
                 .bind(session_id)
+                .execute(store.db.as_ref())
+                .await;
+        }
+    }
+
+    async fn cleanup_users(store: &ChatStore, user_ids: &[Uuid]) {
+        for user_id in user_ids {
+            let _ = sqlx::query("delete from user_profiles where user_id = $1")
+                .bind(user_id)
+                .execute(store.db.as_ref())
+                .await;
+            let _ = sqlx::query("delete from auth_identities where user_id = $1")
+                .bind(user_id)
                 .execute(store.db.as_ref())
                 .await;
         }
@@ -1228,5 +1429,74 @@ mod integration_tests {
         assert_eq!(pulled[0].payload["value"], "light");
 
         cleanup_sessions(&store, &[first_session.id, second_session.id]).await;
+    }
+
+    #[tokio::test]
+    async fn user_profile_is_seeded_once_and_then_editable() {
+        let Some(store) = test_store().await else {
+            return;
+        };
+        let user_id = Uuid::new_v4();
+        let session = store.create_guest_session().await;
+        let session = store
+            .promote_session_to_registered(session.id, user_id)
+            .await
+            .expect("session should promote");
+
+        store
+            .upsert_auth_identity(
+                user_id,
+                "google",
+                "google-subject",
+                Some("first@example.com".to_owned()),
+                Some("Google Name".to_owned()),
+                Some("https://example.com/google.png".to_owned()),
+            )
+            .await
+            .expect("identity should save");
+        let profile = store
+            .ensure_user_profile(
+                user_id,
+                Some("Google Name".to_owned()),
+                Some("https://example.com/google.png".to_owned()),
+            )
+            .await
+            .expect("profile should seed");
+        assert_eq!(profile.display_name, "Google Name");
+        assert_eq!(
+            profile.avatar_url.as_deref(),
+            Some("https://example.com/google.png")
+        );
+
+        let updated = store
+            .update_user_profile(
+                user_id,
+                Some("Custom Name".to_owned()),
+                Some("https://example.com/custom.png".to_owned()),
+            )
+            .await
+            .expect("profile should update");
+        assert_eq!(updated.display_name, "Custom Name");
+        assert_eq!(
+            updated.avatar_url.as_deref(),
+            Some("https://example.com/custom.png")
+        );
+
+        let profile = store
+            .ensure_user_profile(
+                user_id,
+                Some("New Google Name".to_owned()),
+                Some("https://example.com/new-google.png".to_owned()),
+            )
+            .await
+            .expect("profile should remain custom");
+        assert_eq!(profile.display_name, "Custom Name");
+        assert_eq!(
+            profile.avatar_url.as_deref(),
+            Some("https://example.com/custom.png")
+        );
+
+        cleanup_sessions(&store, &[session.id]).await;
+        cleanup_users(&store, &[user_id]).await;
     }
 }

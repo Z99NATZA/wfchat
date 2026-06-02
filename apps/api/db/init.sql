@@ -5,6 +5,28 @@ create table if not exists auth_sessions (
     created_at timestamptz not null default now()
 );
 
+create table if not exists auth_identities (
+    user_id uuid not null,
+    provider text not null,
+    provider_subject text not null,
+    email text,
+    provider_name text,
+    provider_avatar_url text,
+    created_at timestamptz not null default now(),
+    updated_at timestamptz not null default now(),
+    primary key (provider, provider_subject)
+);
+
+create index if not exists idx_auth_identities_user_updated on auth_identities(user_id, updated_at desc);
+
+create table if not exists user_profiles (
+    user_id uuid primary key,
+    display_name text not null,
+    avatar_url text,
+    created_at timestamptz not null default now(),
+    updated_at timestamptz not null default now()
+);
+
 create table if not exists chats (
     id uuid primary key,
     owner_session_id uuid not null references auth_sessions(id) on delete cascade,
