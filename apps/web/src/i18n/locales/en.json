@@ -74,7 +74,7 @@
 	"chat.session.deleteConfirmDesc": "This permanently deletes this chat and all its messages.",
 	"chat.session.deleteError": "Could not delete this chat. Try again.",
 	"auth.profile.titleGuest": "Sign in",
-	"auth.profile.titleMember": "Account Profile",
+	"auth.profile.titleMember": "Profile",
 	"auth.profile.guestDescription": "You are not signed in yet.",
 	"auth.profile.memberDescription": "Your account is active on this device.",
 	"auth.profile.guestMode": "Not signed in",

@@ -74,7 +74,7 @@
 	"chat.session.deleteConfirmDesc": "การกระทำนี้จะลบแชตนี้และข้อความทั้งหมดอย่างถาวร",
 	"chat.session.deleteError": "ไม่สามารถลบแชตนี้ได้ กรุณาลองใหม่",
 	"auth.profile.titleGuest": "เข้าสู่ระบบ",
-	"auth.profile.titleMember": "โปรไฟล์บัญชี",
+	"auth.profile.titleMember": "โปรไฟล์",
 	"auth.profile.guestDescription": "คุณยังไม่ได้เข้าสู่ระบบ",
 	"auth.profile.memberDescription": "บัญชีของคุณใช้งานอยู่บนอุปกรณ์นี้",
 	"auth.profile.guestMode": "ยังไม่เข้าสู่ระบบ",

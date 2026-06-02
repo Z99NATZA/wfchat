@@ -97,17 +97,10 @@ function AuthProfileDialog({
 			<aside className="absolute inset-x-0 bottom-0 flex max-h-[92dvh] flex-col rounded-t-3xl border border-app-border bg-app-panel shadow-2xl sm:inset-y-0 sm:left-auto sm:right-0 sm:h-full sm:max-h-none sm:w-[420px] sm:rounded-none sm:border-y-0 sm:border-r-0">
 				<header className="flex items-start justify-between gap-4 border-b border-app-border px-5 py-4">
 					<div>
-						<p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">
-							{isAuthenticated ? t("auth.profile.accountSection") : t("auth.profile.titleGuest")}
-						</p>
-						<h2 className="mt-1 text-xl font-semibold text-app-text">
+						<h2 className="text-xl font-semibold text-app-text">
 							{isAuthenticated ? t("auth.profile.titleMember") : t("auth.profile.titleGuest")}
 						</h2>
-						<p className="mt-1 text-sm text-muted">
-							{isAuthenticated
-								? t("auth.profile.memberDescription")
-								: t("auth.profile.guestDescription")}
-						</p>
+						{!isAuthenticated && <p className="mt-1 text-sm text-muted">{t("auth.profile.guestDescription")}</p>}
 					</div>
 					<button
 						type="button"
