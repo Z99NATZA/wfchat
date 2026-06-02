@@ -9,6 +9,11 @@ services:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d wfchat"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
     restart: unless-stopped
 
   api:
@@ -25,7 +30,10 @@ services:
     ports:
       - "8080:8080"
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
+      db-init:
+        condition: service_completed_successfully
     restart: unless-stopped
 
   db-init:
@@ -35,8 +43,9 @@ services:
     volumes:
       - ./apps/api/db/init.sql:/sql/init.sql:ro
     depends_on:
-      - postgres
-    command: ["sh", "-c", "psql \"$DATABASE_URL\" -v ON_ERROR_STOP=1 -f /sql/init.sql"]
+      postgres:
+        condition: service_healthy
+    command: ["sh", "-c", "psql \"$$DATABASE_URL\" -v ON_ERROR_STOP=1 -f /sql/init.sql"]
     restart: "no"
 
   web:
