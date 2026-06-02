@@ -272,6 +272,7 @@ export function readChatSessionsCache(): ChatSessionSummary[] {
 	);
 	return readJsonArray(chatSessionsCacheKey)
 		.filter((item) => Boolean(item.id && item.characterId))
+		.filter((item) => String(item.lastMessage || "").trim().length > 0)
 		.filter((item) => !deletedSessionIds.has(item.id))
 		.map((item) => ({
 			id: item.id,
@@ -471,19 +472,21 @@ function buildChatSyncItems(
 	messages: ChatMessage[],
 	activeChatId: string | null
 ): SyncItem[] {
-	const sessionItems: SyncItem[] = sessions.map((session) => ({
-		item_id: `chat.session.${session.id}`,
-		item_type: "chat_session",
-		updated_at: toSyncTimestamp(session.updatedAt),
-		deleted_at: null,
-		payload: {
-			id: session.id,
-			characterId: session.characterId,
-			createdAt: String(toSyncTimestamp(session.createdAt)),
-			updatedAt: String(toSyncTimestamp(session.updatedAt)),
-			lastMessage: session.lastMessage
-		}
-	}));
+	const sessionItems: SyncItem[] = sessions
+		.filter((session) => session.lastMessage.trim().length > 0)
+		.map((session) => ({
+			item_id: `chat.session.${session.id}`,
+			item_type: "chat_session",
+			updated_at: toSyncTimestamp(session.updatedAt),
+			deleted_at: null,
+			payload: {
+				id: session.id,
+				characterId: session.characterId,
+				createdAt: String(toSyncTimestamp(session.createdAt)),
+				updatedAt: String(toSyncTimestamp(session.updatedAt)),
+				lastMessage: session.lastMessage
+			}
+		}));
 	if (!activeChatId) {
 		return sessionItems;
 	}

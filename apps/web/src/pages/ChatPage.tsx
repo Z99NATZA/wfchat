@@ -195,7 +195,7 @@ function ChatPage({ theme, font, onFontChange, onToggleTheme }: ChatPageProps) {
 					draft={chat.draft}
 					font={font}
 					companionName={chat.activePersona.name}
-					isDisabled={!chat.activeChatId}
+					isDisabled={false}
 					isSending={chat.isSending}
 					onDraftChange={chat.setDraft}
 					onSend={chat.sendMessage}

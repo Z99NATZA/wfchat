@@ -47,6 +47,10 @@ function updateHistoryForChat(chatId: string) {
 	window.history.pushState(null, "", `${CHAT_PATH_PREFIX}${chatId}`);
 }
 
+function updateHistoryForDraft() {
+	window.history.pushState(null, "", "/");
+}
+
 export function useChatSession() {
 	const { confirm } = useDialog();
 	const { t } = useI18n();
@@ -77,13 +81,14 @@ export function useChatSession() {
 		return personas.find((persona) => persona.id === selectedPersonaId) ?? firstPersona;
 	}, [personas, selectedPersonaId]);
 	const filteredSessions = useMemo(() => {
+		const visibleSessions = sessions.filter((session) => session.lastMessage.trim().length > 0);
 		const query = debouncedChatSearchQuery.trim().toLowerCase();
 		if (!query) {
-			return sessions;
+			return visibleSessions;
 		}
 
-		return sessions.filter((session) => {
-			const haystack = (session.lastMessage || "new chat").toLowerCase();
+		return visibleSessions.filter((session) => {
+			const haystack = session.lastMessage.toLowerCase();
 			return haystack.includes(query);
 		});
 	}, [debouncedChatSearchQuery, sessions]);
@@ -264,14 +269,11 @@ export function useChatSession() {
 						return;
 					}
 					if (isNotFound(error)) {
-						const newChat = await createPersonaChat(selectedPersonaId);
-						if (!isCurrent) {
-							return;
-						}
-						setActiveChatId(newChat.chatId);
-						setMessages(newChat.messages);
-						updateHistoryForChat(newChat.chatId);
-						setRouteChatId(newChat.chatId);
+						setActiveChatId(null);
+						setMessages([]);
+						setDraft("");
+						updateHistoryForDraft();
+						setRouteChatId(null);
 						return;
 					}
 					const cachedMessages = readChatMessagesCache(routeChatId);
@@ -286,35 +288,9 @@ export function useChatSession() {
 			}
 
 			if (isRootPath(window.location.pathname)) {
-				setIsCreatingSession(true);
-				try {
-					const newChat = await createPersonaChat(selectedPersonaId);
-					if (!isCurrent) {
-						return;
-					}
-					setActiveChatId(newChat.chatId);
-					setMessages(newChat.messages);
-					updateHistoryForChat(newChat.chatId);
-					setRouteChatId(newChat.chatId);
-					setSessions((currentSessions) => [
-						{
-							id: newChat.chatId,
-							characterId: selectedPersonaId,
-							createdAt: Date.now() / 1000,
-							updatedAt: Date.now() / 1000,
-							lastMessage: ""
-						},
-						...currentSessions
-					]);
-				} catch {
-					if (isCurrent) {
-						setErrorMessage(t("chat.session.connectError"));
-					}
-				} finally {
-					if (isCurrent) {
-						setIsCreatingSession(false);
-					}
-				}
+				setActiveChatId(null);
+				setMessages([]);
+				setDraft("");
 			}
 		}
 
@@ -337,29 +313,13 @@ export function useChatSession() {
 		if (!selectedPersonaId || isCreatingSession) {
 			return;
 		}
-		setIsCreatingSession(true);
 		setErrorMessage(null);
-		try {
-			const chat = await createPersonaChat(selectedPersonaId);
-			setActiveChatId(chat.chatId);
-			setMessages(chat.messages);
-			setSessions((currentSessions) => [
-				{
-					id: chat.chatId,
-					characterId: selectedPersonaId,
-					createdAt: Date.now() / 1000,
-					updatedAt: Date.now() / 1000,
-					lastMessage: ""
-				},
-				...currentSessions
-			]);
-			updateHistoryForChat(chat.chatId);
-			setRouteChatId(chat.chatId);
-		} catch {
-			setErrorMessage(t("chat.session.connectError"));
-		} finally {
-			setIsCreatingSession(false);
-		}
+		setActiveChatId(null);
+		setMessages([]);
+		setDraft("");
+		updateHistoryForDraft();
+		setRouteChatId(null);
+		setIsSidebarOpen(false);
 	}
 
 	async function selectSession(sessionId: string) {
@@ -383,7 +343,7 @@ export function useChatSession() {
 	async function sendMessage() {
 		const trimmedDraft = draft.trim();
 
-		if (!trimmedDraft || isSending || !activeChatId) {
+		if (!trimmedDraft || isSending || !selectedPersonaId) {
 			return;
 		}
 
@@ -399,22 +359,33 @@ export function useChatSession() {
 		setDraft("");
 		setIsSending(true);
 		setErrorMessage(null);
+		let createdChatId: string | null = null;
 
 		try {
-			const nextMessages = await sendChatMessage(activeChatId, trimmedDraft);
+			const chatId = activeChatId ?? (await createPersonaChat(selectedPersonaId)).chatId;
+			if (!activeChatId) {
+				createdChatId = chatId;
+				setActiveChatId(chatId);
+				updateHistoryForChat(chatId);
+				setRouteChatId(chatId);
+			}
+			const nextMessages = await sendChatMessage(chatId, trimmedDraft);
 			setMessages(nextMessages);
 			setSessions((currentSessions) =>
-				currentSessions.map((session) =>
-					session.id === activeChatId
-						? {
-								...session,
-								lastMessage: nextMessages.at(-1)?.text ?? trimmedDraft,
-								updatedAt: Math.floor(Date.now() / 1000)
-							}
-						: session
+				upsertSentSession(
+					currentSessions,
+					chatId,
+					selectedPersonaId,
+					nextMessages.at(-1)?.text ?? trimmedDraft
 				)
 			);
 		} catch {
+			if (createdChatId) {
+				void deleteChat(createdChatId);
+				setActiveChatId(null);
+				updateHistoryForDraft();
+				setRouteChatId(null);
+			}
 			setMessages((currentMessages) => currentMessages.filter((message) => message.id !== optimisticMessage.id));
 			setErrorMessage(t("chat.session.aiNoResponse"));
 		} finally {
@@ -575,10 +546,14 @@ export function useChatSession() {
 			const fallbackSession = nextSessions[0];
 			if (fallbackSession) {
 				await selectSession(fallbackSession.id);
-				return;
-			}
+			return;
+		}
 
-			await createNewSession();
+			setActiveChatId(null);
+			setMessages([]);
+			setDraft("");
+			updateHistoryForDraft();
+			setRouteChatId(null);
 		}
 
 		try {
@@ -642,6 +617,24 @@ function mergeChatSessions(primary: ChatSessionSummary[], secondary: ChatSession
 		}
 	}
 	return [...map.values()].sort((a, b) => b.updatedAt - a.updatedAt);
+}
+
+function upsertSentSession(
+	sessions: ChatSessionSummary[],
+	chatId: string,
+	characterId: string,
+	lastMessage: string
+): ChatSessionSummary[] {
+	const now = Math.floor(Date.now() / 1000);
+	const existing = sessions.find((session) => session.id === chatId);
+	const nextSession: ChatSessionSummary = {
+		id: chatId,
+		characterId,
+		createdAt: existing?.createdAt ?? now,
+		updatedAt: now,
+		lastMessage
+	};
+	return [nextSession, ...sessions.filter((session) => session.id !== chatId)];
 }
 
 function mergeMemoryFacts(primary: MemoryFact[], secondary: MemoryFact[]): MemoryFact[] {
