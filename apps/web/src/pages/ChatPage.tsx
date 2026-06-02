@@ -30,7 +30,7 @@ type ChatPageProps = {
 function ChatPage({ theme, font, onFontChange, onToggleTheme }: ChatPageProps) {
 	const chat = useChatSession();
 	const auth = useAuthSession();
-	const { setLocale } = useI18n();
+	const { setLocale, t } = useI18n();
 	const { alert } = useDialog();
 	const refreshRemoteState = chat.refreshRemoteState;
 	const [isProfileOpen, setIsProfileOpen] = useState(false);
@@ -110,8 +110,8 @@ function ChatPage({ theme, font, onFontChange, onToggleTheme }: ChatPageProps) {
 				await pullSyncChanges(setLocale);
 				refreshRemoteState();
 				await alert({
-					title: "Sync complete",
-					description: "Merged 0 item(s)."
+					title: t("auth.profile.syncCompleteTitle"),
+					description: t("auth.profile.syncCompleteDescription")
 				});
 				return;
 			}
@@ -121,12 +121,12 @@ function ChatPage({ theme, font, onFontChange, onToggleTheme }: ChatPageProps) {
 			await pullSyncChanges(setLocale);
 			refreshRemoteState();
 			await alert({
-				title: "Sync complete",
-				description: `Merged ${result.merged_count} item(s).`
+				title: t("auth.profile.syncCompleteTitle"),
+				description: t("auth.profile.syncCompleteDescription")
 			});
 		} catch {
 			markSyncRetry();
-			setSyncError("Could not sync now. Please try again.");
+			setSyncError(t("auth.profile.syncError"));
 		} finally {
 			setIsSyncing(false);
 		}
