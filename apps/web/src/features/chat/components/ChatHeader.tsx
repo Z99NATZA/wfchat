@@ -19,6 +19,7 @@ type ChatHeaderProps = {
 	onToggleTheme: () => void;
 	isAuthenticated: boolean;
 	hasPendingGuestSync: boolean;
+	userAvatarUrl?: string;
 	onOpenProfile: () => void;
 };
 
@@ -34,6 +35,7 @@ function ChatHeader({
 	onToggleTheme,
 	isAuthenticated,
 	hasPendingGuestSync,
+	userAvatarUrl,
 	onOpenProfile
 }: ChatHeaderProps) {
 	const { locale, setLocale, t } = useI18n();
@@ -139,16 +141,11 @@ function ChatHeader({
 				<IconButton className="hidden opacity-45 grayscale cursor-not-allowed md:flex" aria-label={t("chat.header.settings")} disabled title={t("common.notSupportedYet")}>
 					<Settings size={18} aria-hidden="true" />
 				</IconButton>
-				<button
-					type="button"
-					className="relative inline-flex h-10 w-10 items-center justify-center rounded-lg border border-app-border bg-app-soft text-xs font-semibold text-app-text transition hover:border-primary hover:text-primary"
-					onClick={onOpenProfile}
-				>
-					<User size={16} aria-hidden="true" />
-					{(!isAuthenticated || hasPendingGuestSync) && (
-						<span className="size-2 rounded-full bg-amber-400" aria-hidden="true" />
-					)}
-				</button>
+				<ProfileButton
+					avatarUrl={userAvatarUrl}
+					hasAttentionBadge={!isAuthenticated || hasPendingGuestSync}
+					onOpenProfile={onOpenProfile}
+				/>
 			</div>
 			<div className="relative ml-auto flex sm:hidden" ref={mobileMenuRef}>
 				<IconButton
@@ -195,16 +192,11 @@ function ChatHeader({
 								</select>
 							</label>
 							<div className="flex justify-end gap-2 p-1">
-								<button
-									type="button"
-									className="relative inline-flex h-10 w-10 items-center justify-center rounded-lg border border-app-border bg-app-soft text-xs font-semibold text-app-text transition hover:border-primary hover:text-primary"
-									onClick={onOpenProfile}
-								>
-									<User size={16} aria-hidden="true" />
-									{(!isAuthenticated || hasPendingGuestSync) && (
-										<span className="size-2 rounded-full bg-amber-400" aria-hidden="true" />
-									)}
-								</button>
+								<ProfileButton
+									avatarUrl={userAvatarUrl}
+									hasAttentionBadge={!isAuthenticated || hasPendingGuestSync}
+									onOpenProfile={onOpenProfile}
+								/>
 								<IconButton onClick={onToggleTheme} aria-label={nextThemeLabel}>
 									{theme === "dark" ? (
 										<Sun size={18} aria-hidden="true" />
@@ -228,6 +220,34 @@ function ChatHeader({
 			</div>
 			</div>
 		</header>
+	);
+}
+
+type ProfileButtonProps = {
+	avatarUrl?: string;
+	hasAttentionBadge: boolean;
+	onOpenProfile: () => void;
+};
+
+function ProfileButton({ avatarUrl, hasAttentionBadge, onOpenProfile }: ProfileButtonProps) {
+	return (
+		<button
+			type="button"
+			className="relative inline-flex h-10 w-10 items-center justify-center overflow-hidden rounded-lg border border-app-border bg-app-soft text-xs font-semibold text-app-text transition hover:border-primary hover:text-primary"
+			onClick={onOpenProfile}
+		>
+			{avatarUrl ? (
+				<img src={avatarUrl} alt="" className="h-full w-full object-cover" aria-hidden="true" />
+			) : (
+				<User size={16} aria-hidden="true" />
+			)}
+			{hasAttentionBadge && (
+				<span
+					className="absolute right-1 top-1 size-2 rounded-full bg-amber-400 ring-2 ring-app-soft"
+					aria-hidden="true"
+				/>
+			)}
+		</button>
 	);
 }
 
