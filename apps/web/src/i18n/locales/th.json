@@ -89,5 +89,20 @@
 	"auth.profile.beforeLoginTitle": "เข้าสู่ระบบแล้วจะได้",
 	"auth.profile.beforeLoginItemSync": "ซิงก์ข้อมูลล่าสุดขึ้นระบบ",
 	"auth.profile.beforeLoginItemResume": "กลับมาใช้งานต่อได้สะดวกขึ้น",
-	"auth.profile.beforeLoginItemBackup": "ลดความเสี่ยงข้อมูลหายเมื่อเปลี่ยนอุปกรณ์"
+	"auth.profile.beforeLoginItemBackup": "ลดความเสี่ยงข้อมูลหายเมื่อเปลี่ยนอุปกรณ์",
+	"auth.profile.close": "ปิดโปรไฟล์",
+	"auth.profile.avatarAlt": "รูปโปรไฟล์",
+	"auth.profile.profileSection": "ข้อมูลโปรไฟล์",
+	"auth.profile.displayName": "ชื่อที่แสดง",
+	"auth.profile.displayNamePlaceholder": "เช่น Nnn",
+	"auth.profile.avatarUrl": "ลิงก์รูปโปรไฟล์",
+	"auth.profile.avatarUrlPlaceholder": "https://example.com/avatar.png",
+	"auth.profile.saveProfile": "บันทึกโปรไฟล์",
+	"auth.profile.savingProfile": "กำลังบันทึก...",
+	"auth.profile.profileSaved": "บันทึกโปรไฟล์แล้ว",
+	"auth.profile.profileSaveError": "ไม่สามารถบันทึกโปรไฟล์ได้ กรุณาลองใหม่",
+	"auth.profile.syncSection": "ข้อมูลของคุณ",
+	"auth.profile.syncReady": "แชตและการตั้งค่าจะอัปเดตตามบัญชีนี้",
+	"auth.profile.accountSection": "บัญชี",
+	"auth.profile.emailLabel": "อีเมล"
 }

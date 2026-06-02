@@ -215,11 +215,13 @@ function ChatPage({ theme, font, onFontChange, onToggleTheme }: ChatPageProps) {
 				isAuthenticated={auth.isAuthenticated}
 				profileLabel={auth.profileLabel}
 				email={auth.user?.email}
+				avatarUrl={auth.user?.avatarUrl}
 				hasPendingGuestSync={auth.hasPendingGuestSync}
 				onClose={() => setIsProfileOpen(false)}
 				onLoginWithGoogleIdToken={auth.loginGoogleWithIdToken}
 				onLogout={handleLogout}
 				onSyncNow={handleSyncNow}
+				onUpdateProfile={auth.updateProfile}
 				isSyncing={isSyncing}
 				syncError={syncError}
 			/>

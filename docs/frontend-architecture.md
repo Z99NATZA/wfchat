@@ -29,6 +29,8 @@ The clear chat button in the header is supported. It calls `DELETE /api/chats/:c
 
 Chat layout and scroll contract (single-scroll message timeline, sticky header/composer): `docs/chat-layout-scroll.md`.
 
+Auth/profile UI lives in `apps/web/src/components/auth/AuthProfileDialog.tsx`. It renders as a desktop right drawer and mobile bottom sheet, uses Google sign-in for login, and lets signed-in users edit `display_name` and `avatar_url` through `PATCH /api/auth/profile`.
+
 ## Rules
 
 - Keep chat UI focused on chats, characters, and messages.

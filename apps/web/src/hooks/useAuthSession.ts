@@ -4,6 +4,7 @@ import {
 	fetchCurrentSession,
 	loginWithGoogle,
 	logoutSession,
+	updateProfile,
 	type AuthSession
 } from "@/services/authService";
 
@@ -13,6 +14,7 @@ type AuthUser = {
 	id: string;
 	name: string;
 	email?: string;
+	avatarUrl?: string;
 	provider: AuthProvider;
 };
 
@@ -91,6 +93,16 @@ export function useAuthSession() {
 		persistState(nextState);
 	}
 
+	async function updateUserProfile(displayName: string, avatarUrl: string) {
+		const session = await updateProfile(displayName, avatarUrl);
+		const nextState: AuthState = {
+			...state,
+			user: mapSessionToUser(session, "google")
+		};
+		setState(nextState);
+		persistState(nextState);
+	}
+
 	function markGuestSyncDone() {
 		const nextState: AuthState = {
 			...state,
@@ -116,6 +128,7 @@ export function useAuthSession() {
 		profileLabel,
 		loginGoogleWithIdToken,
 		logout,
+		updateProfile: updateUserProfile,
 		markGuestSyncDone
 	};
 }
@@ -125,6 +138,7 @@ function mapSessionToUser(session: AuthSession, provider: AuthProvider): AuthUse
 		id: session.userId,
 		name: session.name ?? "Member",
 		email: session.email,
+		avatarUrl: session.profile?.avatarUrl,
 		provider
 	};
 }

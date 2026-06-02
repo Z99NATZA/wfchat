@@ -89,5 +89,20 @@
 	"auth.profile.beforeLoginTitle": "Sign in to unlock",
 	"auth.profile.beforeLoginItemSync": "Sync your latest data to the cloud",
 	"auth.profile.beforeLoginItemResume": "Resume your workspace more smoothly",
-	"auth.profile.beforeLoginItemBackup": "Lower risk of data loss when switching devices"
+	"auth.profile.beforeLoginItemBackup": "Lower risk of data loss when switching devices",
+	"auth.profile.close": "Close profile",
+	"auth.profile.avatarAlt": "Profile avatar",
+	"auth.profile.profileSection": "Profile details",
+	"auth.profile.displayName": "Display name",
+	"auth.profile.displayNamePlaceholder": "e.g. Nnn",
+	"auth.profile.avatarUrl": "Avatar URL",
+	"auth.profile.avatarUrlPlaceholder": "https://example.com/avatar.png",
+	"auth.profile.saveProfile": "Save profile",
+	"auth.profile.savingProfile": "Saving...",
+	"auth.profile.profileSaved": "Profile saved",
+	"auth.profile.profileSaveError": "Could not save profile. Please try again.",
+	"auth.profile.syncSection": "Your data",
+	"auth.profile.syncReady": "Chats and settings stay updated with this account.",
+	"auth.profile.accountSection": "Account",
+	"auth.profile.emailLabel": "Email"
 }

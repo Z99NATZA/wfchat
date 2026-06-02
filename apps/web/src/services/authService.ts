@@ -9,6 +9,12 @@ type ApiSessionResponse = {
 	kind: "guest" | "registered" | "admin";
 	email?: string | null;
 	name?: string | null;
+	profile?: ApiProfileResponse | null;
+};
+
+type ApiProfileResponse = {
+	display_name: string;
+	avatar_url?: string | null;
 };
 
 export type AuthSession = {
@@ -17,6 +23,12 @@ export type AuthSession = {
 	kind: "guest" | "registered" | "admin";
 	email?: string;
 	name?: string;
+	profile?: AuthProfile;
+};
+
+export type AuthProfile = {
+	displayName: string;
+	avatarUrl?: string;
 };
 
 export async function fetchCurrentSession(): Promise<AuthSession> {
@@ -45,6 +57,20 @@ export async function logoutSession(): Promise<AuthSession> {
 	return toAuthSession(response.data);
 }
 
+export async function updateProfile(displayName: string, avatarUrl: string): Promise<AuthSession> {
+	const sessionId = await ensureGuestSession();
+	const response = await apiClient.patch<ApiSessionResponse>(
+		"/api/auth/profile",
+		{
+			display_name: displayName,
+			avatar_url: avatarUrl || null
+		},
+		{ headers: sessionHeaders(sessionId) }
+	);
+	writeStorageItem(sessionStorageKey, response.data.session_id);
+	return toAuthSession(response.data);
+}
+
 async function ensureGuestSession(): Promise<string> {
 	const existingSessionId = readStorageItem(sessionStorageKey);
 	if (existingSessionId) {
@@ -60,11 +86,19 @@ function sessionHeaders(sessionId: string) {
 }
 
 function toAuthSession(value: ApiSessionResponse): AuthSession {
+	const profile = value.profile
+		? {
+				displayName: value.profile.display_name,
+				avatarUrl: value.profile.avatar_url ?? undefined
+			}
+		: undefined;
+
 	return {
 		userId: value.user_id,
 		sessionId: value.session_id,
 		kind: value.kind,
 		email: value.email ?? undefined,
-		name: value.name ?? undefined
+		name: profile?.displayName ?? value.name ?? undefined,
+		profile
 	};
 }
