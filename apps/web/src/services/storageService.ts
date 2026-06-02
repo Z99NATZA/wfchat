@@ -21,3 +21,15 @@ export function writeStorageItem(key: string, value: string): void {
 		// Local storage can be unavailable in private or locked-down contexts.
 	}
 }
+
+export function removeStorageItem(key: string): void {
+	if (typeof window === "undefined") {
+		return;
+	}
+
+	try {
+		window.localStorage.removeItem(key);
+	} catch {
+		// Local storage can be unavailable in private or locked-down contexts.
+	}
+}

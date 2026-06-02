@@ -1,5 +1,5 @@
 import { apiClient } from "@/services/apiClient";
-import { readStorageItem, writeStorageItem } from "@/services/storageService";
+import { readStorageItem, removeStorageItem, writeStorageItem } from "@/services/storageService";
 import { readSyncUpdatedAt } from "@/stores/syncStateStore";
 import { applyThemeToDocument, persistTheme } from "@/stores/themeStore";
 import { applyFontToDocument, persistFont } from "@/stores/fontStore";
@@ -216,6 +216,16 @@ export function markSyncRetry(): void {
 
 export function hasPendingSyncQueue(): boolean {
 	return readSyncQueue().length > 0;
+}
+
+export function clearLocalSyncState(): void {
+	removeStorageItem(syncQueueStorageKey);
+	removeStorageItem(syncCursorStorageKey);
+	removeStorageItem(memoryFactsCacheKey);
+	removeStorageItem(memorySummariesCacheKey);
+	removeStorageItem(memoryDeletesCacheKey);
+	removeStorageItem(chatSessionsCacheKey);
+	removeStorageItem(chatMessagesCacheKey);
 }
 
 export async function pullSyncChanges(

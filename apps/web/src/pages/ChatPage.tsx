@@ -9,6 +9,7 @@ import { useChatSession } from "@/features/chat/hooks/useChatSession";
 import { useAuthSession } from "@/hooks/useAuthSession";
 import { useDialog } from "@/components/dialog/DialogProvider";
 import {
+	clearLocalSyncState,
 	enqueueGuestSyncWithMemory,
 	flushGuestSyncQueue,
 	hasPendingSyncQueue,
@@ -132,6 +133,14 @@ function ChatPage({ theme, font, onFontChange, onToggleTheme }: ChatPageProps) {
 		}
 	}
 
+	async function handleLogout() {
+		await auth.logout();
+		clearLocalSyncState();
+		chat.resetToDraft();
+		setSyncError(null);
+		setIsProfileOpen(false);
+	}
+
 	return (
 		<>
 			<AppLayout
@@ -209,7 +218,7 @@ function ChatPage({ theme, font, onFontChange, onToggleTheme }: ChatPageProps) {
 				hasPendingGuestSync={auth.hasPendingGuestSync}
 				onClose={() => setIsProfileOpen(false)}
 				onLoginWithGoogleIdToken={auth.loginGoogleWithIdToken}
-				onLogout={auth.logout}
+				onLogout={handleLogout}
 				onSyncNow={handleSyncNow}
 				isSyncing={isSyncing}
 				syncError={syncError}

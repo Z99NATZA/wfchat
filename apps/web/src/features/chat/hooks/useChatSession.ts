@@ -304,6 +304,18 @@ export function useChatSession() {
 		setRefreshVersion((version) => version + 1);
 	}, []);
 
+	const resetToDraft = useCallback(() => {
+		setActiveChatId(null);
+		setMessages([]);
+		setDraft("");
+		setSessions([]);
+		setMemoryFacts([]);
+		setMemorySummaries([]);
+		setErrorMessage(null);
+		updateHistoryForDraft();
+		setRouteChatId(null);
+	}, []);
+
 	function selectPersona(personaId: string) {
 		setSelectedPersonaId(personaId);
 		setIsSidebarOpen(false);
@@ -587,6 +599,7 @@ export function useChatSession() {
 		messages,
 		openSidebar: () => setIsSidebarOpen(true),
 		refreshRemoteState,
+		resetToDraft,
 		personas,
 		chatSearchQuery,
 		selectPersona,
