@@ -1119,3 +1119,114 @@ fn parse_user_kind(value: &str) -> UserKind {
         _ => UserKind::Guest,
     }
 }
+
+#[cfg(test)]
+mod integration_tests {
+    use super::*;
+    use serde_json::json;
+
+    async fn test_store() -> Option<ChatStore> {
+        let database_url = std::env::var("WFCHAT_TEST_DATABASE_URL").ok()?;
+        ChatStore::connect(&database_url).await.ok()
+    }
+
+    async fn cleanup_sessions(store: &ChatStore, session_ids: &[Uuid]) {
+        for session_id in session_ids {
+            let _ = sqlx::query("delete from auth_sessions where id = $1")
+                .bind(session_id)
+                .execute(store.db.as_ref())
+                .await;
+        }
+    }
+
+    #[tokio::test]
+    async fn registered_owner_reads_chats_across_sessions() {
+        let Some(store) = test_store().await else {
+            return;
+        };
+        let user_id = Uuid::new_v4();
+        let first_session = store.create_guest_session().await;
+        let first_session = store
+            .promote_session_to_registered(first_session.id, user_id)
+            .await
+            .expect("first session should promote");
+        store
+            .migrate_session_data_to_user(first_session.id, first_session.user_id)
+            .await;
+        let first_owner = OwnerScope::from_session(&first_session);
+        let chat = store
+            .create_chat(first_owner, "aiko".to_owned(), "aiko_default".to_owned())
+            .await;
+
+        let second_session = store.create_guest_session().await;
+        let second_session = store
+            .promote_session_to_registered(second_session.id, user_id)
+            .await
+            .expect("second session should promote");
+        let second_owner = OwnerScope::from_session(&second_session);
+
+        let chats = store.list_chats(second_owner).await;
+        assert!(chats.iter().any(|item| item.id == chat.id));
+
+        cleanup_sessions(&store, &[first_session.id, second_session.id]).await;
+    }
+
+    #[tokio::test]
+    async fn registered_owner_sync_entities_across_sessions() {
+        let Some(store) = test_store().await else {
+            return;
+        };
+        let user_id = Uuid::new_v4();
+        let first_session = store.create_guest_session().await;
+        let first_session = store
+            .promote_session_to_registered(first_session.id, user_id)
+            .await
+            .expect("first session should promote");
+        let first_owner = OwnerScope::from_session(&first_session);
+
+        let second_session = store.create_guest_session().await;
+        let second_session = store
+            .promote_session_to_registered(second_session.id, user_id)
+            .await
+            .expect("second session should promote");
+        let second_owner = OwnerScope::from_session(&second_session);
+
+        let saved = store
+            .upsert_sync_entity(&SyncEntityRecord {
+                session_id: first_session.id,
+                owner_user_id: first_owner.user_id,
+                item_id: "settings.theme".to_owned(),
+                item_type: "setting".to_owned(),
+                updated_at: 10,
+                deleted_at: None,
+                payload: json!({ "key": "theme", "value": "dark" }),
+            })
+            .await;
+        assert!(saved);
+
+        let pulled = store.list_sync_entities_since(second_owner, 0, 100).await;
+        assert_eq!(pulled.len(), 1);
+        assert_eq!(pulled[0].item_id, "settings.theme");
+        assert_eq!(pulled[0].payload["value"], "dark");
+
+        let updated = store
+            .upsert_sync_entity(&SyncEntityRecord {
+                session_id: second_session.id,
+                owner_user_id: second_owner.user_id,
+                item_id: "settings.theme".to_owned(),
+                item_type: "setting".to_owned(),
+                updated_at: 12,
+                deleted_at: None,
+                payload: json!({ "key": "theme", "value": "light" }),
+            })
+            .await;
+        assert!(updated);
+
+        let pulled = store.list_sync_entities_since(first_owner, 0, 100).await;
+        assert_eq!(pulled.len(), 1);
+        assert_eq!(pulled[0].updated_at, 12);
+        assert_eq!(pulled[0].payload["value"], "light");
+
+        cleanup_sessions(&store, &[first_session.id, second_session.id]).await;
+    }
+}
