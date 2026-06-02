@@ -2,6 +2,7 @@ import { copyFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
 
 const envPairs = [
+  { example: ".env.example", target: ".env" },
   { example: "apps/api/.env.example", target: "apps/api/.env" },
   { example: "apps/web/.env.example", target: "apps/web/.env" },
 ];
