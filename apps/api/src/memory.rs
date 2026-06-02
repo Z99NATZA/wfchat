@@ -10,13 +10,19 @@ use uuid::Uuid;
 use crate::{
     error::{AppError, AppResult},
     state::AppState,
-    store::{MemoryFactRecord, MemorySummaryRecord},
+    store::{MemoryFactRecord, MemorySummaryRecord, OwnerScope},
 };
 
 pub fn router() -> Router<AppState> {
     Router::new()
-        .route("/personas/{persona_id}/memory/facts", get(list_memory_facts).post(create_memory_fact))
-        .route("/memory/facts/{fact_id}", patch(update_memory_fact).delete(delete_memory_fact))
+        .route(
+            "/personas/{persona_id}/memory/facts",
+            get(list_memory_facts).post(create_memory_fact),
+        )
+        .route(
+            "/memory/facts/{fact_id}",
+            patch(update_memory_fact).delete(delete_memory_fact),
+        )
         .route(
             "/personas/{persona_id}/memory/summaries",
             get(list_memory_summaries).post(create_memory_summary),
@@ -80,7 +86,8 @@ async fn list_memory_facts(
         .store
         .ensure_session(session_id_from_headers(&headers))
         .await;
-    let facts = state.store.list_memory_facts(session.id, &persona_id).await;
+    let owner = OwnerScope::from_session(&session);
+    let facts = state.store.list_memory_facts(owner, &persona_id).await;
     Json(facts.into_iter().map(memory_fact_response).collect())
 }
 
@@ -92,17 +99,20 @@ async fn create_memory_fact(
 ) -> AppResult<Json<MemoryFactResponse>> {
     let content = payload.content.trim();
     if content.is_empty() {
-        return Err(AppError::BadRequest("memory fact content is empty".to_owned()));
+        return Err(AppError::BadRequest(
+            "memory fact content is empty".to_owned(),
+        ));
     }
     let confidence = payload.confidence.unwrap_or(0.7).clamp(0.0, 1.0);
     let session = state
         .store
         .ensure_session(session_id_from_headers(&headers))
         .await;
+    let owner = OwnerScope::from_session(&session);
     let fact = state
         .store
         .create_memory_fact(
-            session.id,
+            owner,
             persona_id,
             content.to_owned(),
             confidence,
@@ -123,7 +133,8 @@ async fn delete_memory_fact(
         .store
         .ensure_session(session_id_from_headers(&headers))
         .await;
-    if !state.store.delete_memory_fact(session.id, fact_id).await {
+    let owner = OwnerScope::from_session(&session);
+    if !state.store.delete_memory_fact(owner, fact_id).await {
         return Err(AppError::NotFound);
     }
     Ok(Json(serde_json::json!({ "ok": true })))
@@ -137,16 +148,19 @@ async fn update_memory_fact(
 ) -> AppResult<Json<MemoryFactResponse>> {
     let content = payload.content.trim();
     if content.is_empty() {
-        return Err(AppError::BadRequest("memory fact content is empty".to_owned()));
+        return Err(AppError::BadRequest(
+            "memory fact content is empty".to_owned(),
+        ));
     }
     let session = state
         .store
         .ensure_session(session_id_from_headers(&headers))
         .await;
+    let owner = OwnerScope::from_session(&session);
     let updated = state
         .store
         .update_memory_fact(
-            session.id,
+            owner,
             fact_id,
             content.to_owned(),
             payload.confidence.unwrap_or(0.7).clamp(0.0, 1.0),
@@ -165,7 +179,8 @@ async fn list_memory_summaries(
         .store
         .ensure_session(session_id_from_headers(&headers))
         .await;
-    let summaries = state.store.list_memory_summaries(session.id, &persona_id).await;
+    let owner = OwnerScope::from_session(&session);
+    let summaries = state.store.list_memory_summaries(owner, &persona_id).await;
     Json(summaries.into_iter().map(memory_summary_response).collect())
 }
 
@@ -183,9 +198,15 @@ async fn create_memory_summary(
         .store
         .ensure_session(session_id_from_headers(&headers))
         .await;
+    let owner = OwnerScope::from_session(&session);
     let created = state
         .store
-        .create_memory_summary(session.id, persona_id, summary.to_owned(), payload.source_chat_id)
+        .create_memory_summary(
+            owner,
+            persona_id,
+            summary.to_owned(),
+            payload.source_chat_id,
+        )
         .await
         .ok_or_else(|| AppError::BadRequest("could not create memory summary".to_owned()))?;
     Ok(Json(memory_summary_response(created)))
@@ -200,7 +221,8 @@ async fn delete_memory_summary(
         .store
         .ensure_session(session_id_from_headers(&headers))
         .await;
-    if !state.store.delete_memory_summary(session.id, summary_id).await {
+    let owner = OwnerScope::from_session(&session);
+    if !state.store.delete_memory_summary(owner, summary_id).await {
         return Err(AppError::NotFound);
     }
     Ok(Json(serde_json::json!({ "ok": true })))
@@ -220,9 +242,10 @@ async fn update_memory_summary(
         .store
         .ensure_session(session_id_from_headers(&headers))
         .await;
+    let owner = OwnerScope::from_session(&session);
     let updated = state
         .store
-        .update_memory_summary(session.id, summary_id, summary.to_owned())
+        .update_memory_summary(owner, summary_id, summary.to_owned())
         .await
         .ok_or(AppError::NotFound)?;
     Ok(Json(memory_summary_response(updated)))

@@ -19,6 +19,7 @@ This project uses PostgreSQL with schema SQL at `apps/api/db/init.sql`.
 - Columns:
   - `id uuid primary key`
   - `owner_session_id uuid not null` -> `auth_sessions(id)` (`on delete cascade`)
+  - `owner_user_id uuid null` for registered account ownership
   - `character_id text not null`
   - `ai_profile_id text not null`
   - `created_at timestamptz not null default now()`
@@ -26,6 +27,8 @@ This project uses PostgreSQL with schema SQL at `apps/api/db/init.sql`.
 - Indexes:
   - `idx_chats_owner_updated (owner_session_id, updated_at desc)`
   - `idx_chats_owner_character_updated (owner_session_id, character_id, updated_at desc)`
+  - `idx_chats_owner_user_updated (owner_user_id, updated_at desc)`
+  - `idx_chats_owner_user_character_updated (owner_user_id, character_id, updated_at desc)`
 
 ### `chat_messages`
 
@@ -47,6 +50,7 @@ This project uses PostgreSQL with schema SQL at `apps/api/db/init.sql`.
 - Columns:
   - `id uuid primary key`
   - `owner_session_id uuid not null` -> `auth_sessions(id)` (`on delete cascade`)
+  - `owner_user_id uuid null` for registered account ownership
   - `character_id text not null`
   - `content text not null`
   - `confidence double precision not null default 0.5`
@@ -55,6 +59,7 @@ This project uses PostgreSQL with schema SQL at `apps/api/db/init.sql`.
   - `updated_at timestamptz not null default now()`
 - Indexes:
   - `idx_memory_facts_owner_character_updated (owner_session_id, character_id, updated_at desc)`
+  - `idx_memory_facts_owner_user_character_updated (owner_user_id, character_id, updated_at desc)`
 
 ### `memory_summaries`
 
@@ -62,16 +67,37 @@ This project uses PostgreSQL with schema SQL at `apps/api/db/init.sql`.
 - Columns:
   - `id uuid primary key`
   - `owner_session_id uuid not null` -> `auth_sessions(id)` (`on delete cascade`)
+  - `owner_user_id uuid null` for registered account ownership
   - `character_id text not null`
   - `summary text not null`
   - `source_chat_id uuid null` -> `chats(id)` (`on delete set null`)
   - `created_at timestamptz not null default now()`
 - Indexes:
   - `idx_memory_summaries_owner_character_created (owner_session_id, character_id, created_at desc)`
+  - `idx_memory_summaries_owner_user_character_created (owner_user_id, character_id, created_at desc)`
+
+### `sync_entities`
+
+- Purpose: latest sync item state for settings, chat cache, and memory cache.
+- Ownership:
+  - guest rows use `session_id`
+  - registered rows also set `owner_user_id` so multiple browser sessions share the same account data
+- Primary key:
+  - `(session_id, item_id)`
+- Indexes:
+  - `idx_sync_entities_session_updated (session_id, updated_at desc)`
+  - `idx_sync_entities_owner_user_updated (owner_user_id, updated_at desc)`
+  - `idx_sync_entities_owner_user_item (owner_user_id, item_id)`
+
+### `sync_commits`
+
+- Purpose: commit history and idempotency for sync operations.
+- Primary key:
+  - `(operation_id, session_id)`
 
 ## Relationship Summary
 
-- One `auth_session` owns many `chats`.
+- Guest data is owned by one `auth_session`; registered data is shared by `owner_user_id`.
 - One `chat` has many `chat_messages`.
-- One `auth_session` + `character_id` has many `memory_facts` and `memory_summaries`.
+- One owner + `character_id` has many `memory_facts` and `memory_summaries`.
 - `source_chat_id` on memory tables is optional provenance back to a chat.

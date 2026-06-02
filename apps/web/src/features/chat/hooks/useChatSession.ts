@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { CHAT_PERSONAS } from "@/features/chat/data/chatFixtures";
 import { useI18n } from "@/i18n";
 import {
@@ -67,6 +67,7 @@ export function useChatSession() {
 	const [isSavingMemoryFact, setIsSavingMemoryFact] = useState(false);
 	const [isSavingMemorySummary, setIsSavingMemorySummary] = useState(false);
 	const [errorMessage, setErrorMessage] = useState<string | null>(null);
+	const [refreshVersion, setRefreshVersion] = useState(0);
 	const [routeChatId, setRouteChatId] = useState<string | null>(() =>
 		typeof window === "undefined" ? null : parseChatIdFromPath(window.location.pathname)
 	);
@@ -167,7 +168,7 @@ export function useChatSession() {
 		return () => {
 			isCurrent = false;
 		};
-	}, [selectedPersonaId, t]);
+	}, [refreshVersion, selectedPersonaId, t]);
 
 	useEffect(() => {
 		let isCurrent = true;
@@ -196,7 +197,7 @@ export function useChatSession() {
 		return () => {
 			isCurrent = false;
 		};
-	}, [selectedPersonaId]);
+	}, [refreshVersion, selectedPersonaId]);
 
 	useEffect(() => {
 		let isCurrent = true;
@@ -225,7 +226,7 @@ export function useChatSession() {
 		return () => {
 			isCurrent = false;
 		};
-	}, [selectedPersonaId]);
+	}, [refreshVersion, selectedPersonaId]);
 
 	useEffect(() => {
 		let isCurrent = true;
@@ -321,7 +322,11 @@ export function useChatSession() {
 		return () => {
 			isCurrent = false;
 		};
-	}, [routeChatId, selectedPersonaId, t]);
+	}, [refreshVersion, routeChatId, selectedPersonaId, t]);
+
+	const refreshRemoteState = useCallback(() => {
+		setRefreshVersion((version) => version + 1);
+	}, []);
 
 	function selectPersona(personaId: string) {
 		setSelectedPersonaId(personaId);
@@ -606,6 +611,7 @@ export function useChatSession() {
 		memorySummaries,
 		messages,
 		openSidebar: () => setIsSidebarOpen(true),
+		refreshRemoteState,
 		personas,
 		chatSearchQuery,
 		selectPersona,

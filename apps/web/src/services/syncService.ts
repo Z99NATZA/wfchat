@@ -165,7 +165,13 @@ export function markChatMessagesDeleted(chatId: string, messageIds: string[]): v
 	}
 }
 
-export async function flushGuestSyncQueue(): Promise<SyncCommitResponse | null> {
+type FlushGuestSyncQueueOptions = {
+	force?: boolean;
+};
+
+export async function flushGuestSyncQueue(
+	options: FlushGuestSyncQueueOptions = {}
+): Promise<SyncCommitResponse | null> {
 	const queue = readSyncQueue();
 	if (queue.length === 0) {
 		return null;
@@ -174,19 +180,20 @@ export async function flushGuestSyncQueue(): Promise<SyncCommitResponse | null> 
 	const sessionId = await ensureGuestSession();
 	const now = Math.floor(Date.now() / 1000);
 	const operation = queue[0];
-	if (operation.next_retry_at > now) {
+	if (!options.force && operation.next_retry_at > now) {
 		return null;
 	}
+	const items = compactItems(operation.items);
 
 	await apiClient.post<SyncPreviewResponse>(
 		"/api/sync/preview",
-		{ items: operation.items },
+		{ items },
 		{ headers: sessionHeaders(sessionId) }
 	);
 
 	const commit = await apiClient.post<SyncCommitResponse>(
 		"/api/sync/commit",
-		{ operation_id: operation.operation_id, items: operation.items },
+		{ operation_id: operation.operation_id, items },
 		{ headers: sessionHeaders(sessionId) }
 	);
 	queue.shift();
@@ -422,7 +429,7 @@ function buildMemorySyncItems(
 	const factItems = memoryFacts.map((fact) => ({
 		item_id: `memory.fact.${fact.id}`,
 		item_type: "memory_fact",
-		updated_at: fact.updatedAt,
+		updated_at: toSyncTimestamp(fact.updatedAt),
 		deleted_at: null,
 		payload: {
 			id: fact.id,
@@ -437,7 +444,7 @@ function buildMemorySyncItems(
 	const summaryItems = memorySummaries.map((summary) => ({
 		item_id: `memory.summary.${summary.id}`,
 		item_type: "memory_summary",
-		updated_at: summary.createdAt,
+		updated_at: toSyncTimestamp(summary.createdAt),
 		deleted_at: null,
 		payload: {
 			id: summary.id,
@@ -451,8 +458,8 @@ function buildMemorySyncItems(
 	const deleteItems = deletes.map((item) => ({
 		item_id: item.item_id,
 		item_type: item.item_type,
-		updated_at: item.deleted_at,
-		deleted_at: item.deleted_at,
+		updated_at: toSyncTimestamp(item.deleted_at),
+		deleted_at: toSyncTimestamp(item.deleted_at),
 		payload: {}
 	}));
 
@@ -467,13 +474,13 @@ function buildChatSyncItems(
 	const sessionItems: SyncItem[] = sessions.map((session) => ({
 		item_id: `chat.session.${session.id}`,
 		item_type: "chat_session",
-		updated_at: Math.floor(session.updatedAt),
+		updated_at: toSyncTimestamp(session.updatedAt),
 		deleted_at: null,
 		payload: {
 			id: session.id,
 			characterId: session.characterId,
-			createdAt: String(Math.floor(session.createdAt)),
-			updatedAt: String(Math.floor(session.updatedAt)),
+			createdAt: String(toSyncTimestamp(session.createdAt)),
+			updatedAt: String(toSyncTimestamp(session.updatedAt)),
 			lastMessage: session.lastMessage
 		}
 	}));
@@ -654,9 +661,10 @@ export function compactQueue(queue: SyncQueueOperation[]): SyncQueueOperation[] 
 export function compactItems(items: SyncItem[]): SyncItem[] {
 	const map = new Map<string, SyncItem>();
 	for (const item of items) {
+		const normalizedItem = normalizeSyncItem(item);
 		const current = map.get(item.item_id);
-		if (!current || item.updated_at >= current.updated_at) {
-			map.set(item.item_id, item);
+		if (!current || normalizedItem.updated_at >= current.updated_at) {
+			map.set(item.item_id, normalizedItem);
 		}
 	}
 	return [...map.values()];
@@ -673,4 +681,19 @@ export function computeNextRetryAt(attempt: number, nowSeconds: number): number 
 	const baseDelay = Math.min(2 ** attempt, maxRetryDelaySeconds);
 	const jitter = Math.floor(Math.random() * 3);
 	return nowSeconds + baseDelay + jitter;
+}
+
+function normalizeSyncItem(item: SyncItem): SyncItem {
+	return {
+		...item,
+		updated_at: toSyncTimestamp(item.updated_at),
+		deleted_at: item.deleted_at == null ? item.deleted_at : toSyncTimestamp(item.deleted_at)
+	};
+}
+
+function toSyncTimestamp(value: number): number {
+	if (!Number.isFinite(value) || value <= 0) {
+		return Math.floor(Date.now() / 1000);
+	}
+	return Math.floor(value);
 }

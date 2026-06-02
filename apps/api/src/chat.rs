@@ -13,13 +13,16 @@ use crate::{
     characters,
     error::{AppError, AppResult},
     state::AppState,
-    store::{ChatRecord, StoredMessage},
+    store::{ChatRecord, OwnerScope, StoredMessage},
 };
 
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/chat-ui/config", get(get_chat_ui_config))
-        .route("/personas/{persona_id}/chats", get(list_chats_for_persona).post(create_chat_for_persona))
+        .route(
+            "/personas/{persona_id}/chats",
+            get(list_chats_for_persona).post(create_chat_for_persona),
+        )
         .route("/chats/{chat_id}", get(get_chat).delete(delete_chat))
         .route(
             "/chats/{chat_id}/messages",
@@ -73,9 +76,10 @@ async fn list_chats_for_persona(
         .store
         .ensure_session(session_id_from_headers(&headers))
         .await;
+    let owner = OwnerScope::from_session(&session);
     let chats = state
         .store
-        .list_chats(session.id)
+        .list_chats(owner)
         .await
         .into_iter()
         .filter(|chat| chat.character_id == persona_id)
@@ -105,12 +109,13 @@ async fn create_chat_for_persona(
         .store
         .ensure_session(session_id_from_headers(&headers))
         .await;
+    let owner = OwnerScope::from_session(&session);
     let character = characters::character_by_id(&persona_id)
         .ok_or_else(|| AppError::BadRequest(format!("unknown character: {persona_id}")))?;
     let chat = state
         .store
         .create_chat(
-            session.id,
+            owner,
             character.id.to_owned(),
             character.ai_profile_id.to_owned(),
         )
@@ -128,9 +133,10 @@ async fn get_chat(
         .store
         .ensure_session(session_id_from_headers(&headers))
         .await;
+    let owner = OwnerScope::from_session(&session);
     let chat = state
         .store
-        .get_chat(session.id, chat_id)
+        .get_chat(owner, chat_id)
         .await
         .ok_or(AppError::NotFound)?;
 
@@ -153,9 +159,10 @@ async fn send_message(
         .store
         .ensure_session(session_id_from_headers(&headers))
         .await;
+    let owner = OwnerScope::from_session(&session);
     let chat = state
         .store
-        .get_chat(session.id, chat_id)
+        .get_chat(owner, chat_id)
         .await
         .ok_or(AppError::NotFound)?;
 
@@ -164,10 +171,13 @@ async fn send_message(
         .iter()
         .map(StoredMessage::to_ai_message)
         .collect::<Vec<_>>();
-    let memory_facts = state.store.list_memory_facts(session.id, &chat.character_id).await;
+    let memory_facts = state
+        .store
+        .list_memory_facts(owner, &chat.character_id)
+        .await;
     let memory_summaries = state
         .store
-        .list_memory_summaries(session.id, &chat.character_id)
+        .list_memory_summaries(owner, &chat.character_id)
         .await;
     let memory_context = build_memory_context(&memory_facts, &memory_summaries);
     if let Some(memory_note) = memory_context {
@@ -190,7 +200,7 @@ async fn send_message(
     let updated_chat = state
         .store
         .append_chat_messages(
-            session.id,
+            owner,
             chat_id,
             user_message.clone(),
             assistant_message.clone(),
@@ -219,9 +229,10 @@ async fn clear_messages(
         .store
         .ensure_session(session_id_from_headers(&headers))
         .await;
+    let owner = OwnerScope::from_session(&session);
     let chat = state
         .store
-        .clear_chat_messages(session.id, chat_id)
+        .clear_chat_messages(owner, chat_id)
         .await
         .ok_or(AppError::NotFound)?;
 
@@ -237,8 +248,9 @@ async fn delete_chat(
         .store
         .ensure_session(session_id_from_headers(&headers))
         .await;
+    let owner = OwnerScope::from_session(&session);
 
-    if !state.store.delete_chat(session.id, chat_id).await {
+    if !state.store.delete_chat(owner, chat_id).await {
         return Err(AppError::NotFound);
     }
 
@@ -295,7 +307,10 @@ fn build_memory_context(
     if !facts.is_empty() {
         lines.push("Facts:".to_owned());
         for fact in facts.iter().take(15) {
-            lines.push(format!("- {} (confidence {:.2})", fact.content, fact.confidence));
+            lines.push(format!(
+                "- {} (confidence {:.2})",
+                fact.content, fact.confidence
+            ));
         }
     }
 

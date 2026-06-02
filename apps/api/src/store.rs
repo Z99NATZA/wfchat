@@ -21,6 +21,24 @@ pub struct SessionRecord {
     pub created_at: u64,
 }
 
+#[derive(Clone, Copy, Debug)]
+pub struct OwnerScope {
+    pub session_id: Uuid,
+    pub user_id: Option<Uuid>,
+}
+
+impl OwnerScope {
+    pub fn from_session(session: &SessionRecord) -> Self {
+        Self {
+            session_id: session.id,
+            user_id: match &session.kind {
+                UserKind::Guest => None,
+                UserKind::Registered | UserKind::Admin => Some(session.user_id),
+            },
+        }
+    }
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum UserKind {
@@ -83,6 +101,7 @@ pub struct SyncCommitRecord {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct SyncEntityRecord {
     pub session_id: Uuid,
+    pub owner_user_id: Option<Uuid>,
     pub item_id: String,
     pub item_type: String,
     pub updated_at: u64,
@@ -144,6 +163,40 @@ impl ChatStore {
         })
     }
 
+    pub async fn migrate_session_data_to_user(&self, session_id: Uuid, user_id: Uuid) {
+        let _ = sqlx::query(
+            "update chats set owner_user_id = $1 where owner_session_id = $2 and owner_user_id is null",
+        )
+        .bind(user_id)
+        .bind(session_id)
+        .execute(self.db.as_ref())
+        .await;
+
+        let _ = sqlx::query(
+            "update memory_facts set owner_user_id = $1 where owner_session_id = $2 and owner_user_id is null",
+        )
+        .bind(user_id)
+        .bind(session_id)
+        .execute(self.db.as_ref())
+        .await;
+
+        let _ = sqlx::query(
+            "update memory_summaries set owner_user_id = $1 where owner_session_id = $2 and owner_user_id is null",
+        )
+        .bind(user_id)
+        .bind(session_id)
+        .execute(self.db.as_ref())
+        .await;
+
+        let _ = sqlx::query(
+            "update sync_entities set owner_user_id = $1 where session_id = $2 and owner_user_id is null",
+        )
+        .bind(user_id)
+        .bind(session_id)
+        .execute(self.db.as_ref())
+        .await;
+    }
+
     pub async fn ensure_session(&self, session_id: Option<Uuid>) -> SessionRecord {
         if let Some(id) = session_id {
             if let Some(session) = self.get_session(id).await {
@@ -189,11 +242,15 @@ impl ChatStore {
         })
     }
 
-    pub async fn list_chats(&self, session_id: Uuid) -> Vec<ChatRecord> {
+    pub async fn list_chats(&self, owner: OwnerScope) -> Vec<ChatRecord> {
         let rows = sqlx::query(
-            "select id, owner_session_id, character_id, ai_profile_id, extract(epoch from created_at)::bigint as created_at, extract(epoch from updated_at)::bigint as updated_at from chats where owner_session_id = $1 order by updated_at desc",
+            "select id, owner_session_id, character_id, ai_profile_id, extract(epoch from created_at)::bigint as created_at, extract(epoch from updated_at)::bigint as updated_at
+             from chats
+             where (($2::uuid is not null and owner_user_id = $2) or ($2::uuid is null and owner_session_id = $1))
+             order by updated_at desc",
         )
-        .bind(session_id)
+        .bind(owner.session_id)
+        .bind(owner.user_id)
         .fetch_all(self.db.as_ref())
         .await
         .unwrap_or_default();
@@ -216,17 +273,18 @@ impl ChatStore {
 
     pub async fn create_chat(
         &self,
-        session_id: Uuid,
+        owner: OwnerScope,
         character_id: String,
         ai_profile_id: String,
     ) -> ChatRecord {
         let id = Uuid::new_v4();
         let now = now_unix_seconds() as i64;
         let _ = sqlx::query(
-            "insert into chats (id, owner_session_id, character_id, ai_profile_id, created_at, updated_at) values ($1, $2, $3, $4, to_timestamp($5), to_timestamp($5))",
+            "insert into chats (id, owner_session_id, owner_user_id, character_id, ai_profile_id, created_at, updated_at) values ($1, $2, $3, $4, $5, to_timestamp($6), to_timestamp($6))",
         )
         .bind(id)
-        .bind(session_id)
+        .bind(owner.session_id)
+        .bind(owner.user_id)
         .bind(&character_id)
         .bind(&ai_profile_id)
         .bind(now)
@@ -235,7 +293,7 @@ impl ChatStore {
 
         ChatRecord {
             id,
-            owner_session_id: session_id,
+            owner_session_id: owner.session_id,
             character_id,
             ai_profile_id,
             messages: Vec::new(),
@@ -244,12 +302,15 @@ impl ChatStore {
         }
     }
 
-    pub async fn get_chat(&self, session_id: Uuid, chat_id: Uuid) -> Option<ChatRecord> {
+    pub async fn get_chat(&self, owner: OwnerScope, chat_id: Uuid) -> Option<ChatRecord> {
         let row = sqlx::query(
-            "select id, owner_session_id, character_id, ai_profile_id, extract(epoch from created_at)::bigint as created_at, extract(epoch from updated_at)::bigint as updated_at from chats where id = $1 and owner_session_id = $2",
+            "select id, owner_session_id, character_id, ai_profile_id, extract(epoch from created_at)::bigint as created_at, extract(epoch from updated_at)::bigint as updated_at
+             from chats
+             where id = $1 and (($3::uuid is not null and owner_user_id = $3) or ($3::uuid is null and owner_session_id = $2))",
         )
         .bind(chat_id)
-        .bind(session_id)
+        .bind(owner.session_id)
+        .bind(owner.user_id)
         .fetch_optional(self.db.as_ref())
         .await
         .ok()??;
@@ -267,14 +328,17 @@ impl ChatStore {
 
     pub async fn append_chat_messages(
         &self,
-        session_id: Uuid,
+        owner: OwnerScope,
         chat_id: Uuid,
         user_message: StoredMessage,
         assistant_message: StoredMessage,
     ) -> Option<ChatRecord> {
-        let owner_exists = sqlx::query("select id from chats where id = $1 and owner_session_id = $2")
+        let owner_exists = sqlx::query(
+            "select id from chats where id = $1 and (($3::uuid is not null and owner_user_id = $3) or ($3::uuid is null and owner_session_id = $2))",
+        )
             .bind(chat_id)
-            .bind(session_id)
+            .bind(owner.session_id)
+            .bind(owner.user_id)
             .fetch_optional(self.db.as_ref())
             .await
             .ok()?
@@ -303,13 +367,20 @@ impl ChatStore {
             .execute(self.db.as_ref())
             .await;
 
-        self.get_chat(session_id, chat_id).await
+        self.get_chat(owner, chat_id).await
     }
 
-    pub async fn clear_chat_messages(&self, session_id: Uuid, chat_id: Uuid) -> Option<ChatRecord> {
-        let owner_exists = sqlx::query("select id from chats where id = $1 and owner_session_id = $2")
+    pub async fn clear_chat_messages(
+        &self,
+        owner: OwnerScope,
+        chat_id: Uuid,
+    ) -> Option<ChatRecord> {
+        let owner_exists = sqlx::query(
+            "select id from chats where id = $1 and (($3::uuid is not null and owner_user_id = $3) or ($3::uuid is null and owner_session_id = $2))",
+        )
             .bind(chat_id)
-            .bind(session_id)
+            .bind(owner.session_id)
+            .bind(owner.user_id)
             .fetch_optional(self.db.as_ref())
             .await
             .ok()?
@@ -327,25 +398,36 @@ impl ChatStore {
             .execute(self.db.as_ref())
             .await;
 
-        self.get_chat(session_id, chat_id).await
+        self.get_chat(owner, chat_id).await
     }
 
-    pub async fn delete_chat(&self, session_id: Uuid, chat_id: Uuid) -> bool {
-        sqlx::query("delete from chats where id = $1 and owner_session_id = $2")
+    pub async fn delete_chat(&self, owner: OwnerScope, chat_id: Uuid) -> bool {
+        sqlx::query(
+            "delete from chats where id = $1 and (($3::uuid is not null and owner_user_id = $3) or ($3::uuid is null and owner_session_id = $2))",
+        )
             .bind(chat_id)
-            .bind(session_id)
+            .bind(owner.session_id)
+            .bind(owner.user_id)
             .execute(self.db.as_ref())
             .await
             .map(|result| result.rows_affected() > 0)
             .unwrap_or(false)
     }
 
-    pub async fn list_memory_facts(&self, session_id: Uuid, character_id: &str) -> Vec<MemoryFactRecord> {
+    pub async fn list_memory_facts(
+        &self,
+        owner: OwnerScope,
+        character_id: &str,
+    ) -> Vec<MemoryFactRecord> {
         let rows = sqlx::query(
-            "select id, owner_session_id, character_id, content, confidence, source_chat_id, extract(epoch from created_at)::bigint as created_at, extract(epoch from updated_at)::bigint as updated_at from memory_facts where owner_session_id = $1 and character_id = $2 order by updated_at desc",
+            "select id, owner_session_id, character_id, content, confidence, source_chat_id, extract(epoch from created_at)::bigint as created_at, extract(epoch from updated_at)::bigint as updated_at
+             from memory_facts
+             where (($3::uuid is not null and owner_user_id = $3) or ($3::uuid is null and owner_session_id = $1)) and character_id = $2
+             order by updated_at desc",
         )
-        .bind(session_id)
+        .bind(owner.session_id)
         .bind(character_id)
+        .bind(owner.user_id)
         .fetch_all(self.db.as_ref())
         .await
         .unwrap_or_default();
@@ -366,7 +448,7 @@ impl ChatStore {
 
     pub async fn create_memory_fact(
         &self,
-        session_id: Uuid,
+        owner: OwnerScope,
         character_id: String,
         content: String,
         confidence: f32,
@@ -374,10 +456,11 @@ impl ChatStore {
     ) -> Option<MemoryFactRecord> {
         let id = Uuid::new_v4();
         let row = sqlx::query(
-            "insert into memory_facts (id, owner_session_id, character_id, content, confidence, source_chat_id) values ($1, $2, $3, $4, $5, $6) returning extract(epoch from created_at)::bigint as created_at, extract(epoch from updated_at)::bigint as updated_at",
+            "insert into memory_facts (id, owner_session_id, owner_user_id, character_id, content, confidence, source_chat_id) values ($1, $2, $3, $4, $5, $6, $7) returning extract(epoch from created_at)::bigint as created_at, extract(epoch from updated_at)::bigint as updated_at",
         )
         .bind(id)
-        .bind(session_id)
+        .bind(owner.session_id)
+        .bind(owner.user_id)
         .bind(&character_id)
         .bind(&content)
         .bind(confidence as f64)
@@ -388,7 +471,7 @@ impl ChatStore {
 
         Some(MemoryFactRecord {
             id,
-            owner_session_id: session_id,
+            owner_session_id: owner.session_id,
             character_id,
             content,
             confidence,
@@ -398,10 +481,13 @@ impl ChatStore {
         })
     }
 
-    pub async fn delete_memory_fact(&self, session_id: Uuid, fact_id: Uuid) -> bool {
-        sqlx::query("delete from memory_facts where id = $1 and owner_session_id = $2")
+    pub async fn delete_memory_fact(&self, owner: OwnerScope, fact_id: Uuid) -> bool {
+        sqlx::query(
+            "delete from memory_facts where id = $1 and (($3::uuid is not null and owner_user_id = $3) or ($3::uuid is null and owner_session_id = $2))",
+        )
             .bind(fact_id)
-            .bind(session_id)
+            .bind(owner.session_id)
+            .bind(owner.user_id)
             .execute(self.db.as_ref())
             .await
             .map(|result| result.rows_affected() > 0)
@@ -410,18 +496,22 @@ impl ChatStore {
 
     pub async fn update_memory_fact(
         &self,
-        session_id: Uuid,
+        owner: OwnerScope,
         fact_id: Uuid,
         content: String,
         confidence: f32,
     ) -> Option<MemoryFactRecord> {
         let row = sqlx::query(
-            "update memory_facts set content = $1, confidence = $2, updated_at = now() where id = $3 and owner_session_id = $4 returning id, owner_session_id, character_id, content, confidence, source_chat_id, extract(epoch from created_at)::bigint as created_at, extract(epoch from updated_at)::bigint as updated_at",
+            "update memory_facts
+             set content = $1, confidence = $2, updated_at = now()
+             where id = $3 and (($5::uuid is not null and owner_user_id = $5) or ($5::uuid is null and owner_session_id = $4))
+             returning id, owner_session_id, character_id, content, confidence, source_chat_id, extract(epoch from created_at)::bigint as created_at, extract(epoch from updated_at)::bigint as updated_at",
         )
         .bind(&content)
         .bind(confidence as f64)
         .bind(fact_id)
-        .bind(session_id)
+        .bind(owner.session_id)
+        .bind(owner.user_id)
         .fetch_optional(self.db.as_ref())
         .await
         .ok()??;
@@ -440,14 +530,18 @@ impl ChatStore {
 
     pub async fn list_memory_summaries(
         &self,
-        session_id: Uuid,
+        owner: OwnerScope,
         character_id: &str,
     ) -> Vec<MemorySummaryRecord> {
         let rows = sqlx::query(
-            "select id, owner_session_id, character_id, summary, source_chat_id, extract(epoch from created_at)::bigint as created_at from memory_summaries where owner_session_id = $1 and character_id = $2 order by created_at desc",
+            "select id, owner_session_id, character_id, summary, source_chat_id, extract(epoch from created_at)::bigint as created_at
+             from memory_summaries
+             where (($3::uuid is not null and owner_user_id = $3) or ($3::uuid is null and owner_session_id = $1)) and character_id = $2
+             order by created_at desc",
         )
-        .bind(session_id)
+        .bind(owner.session_id)
         .bind(character_id)
+        .bind(owner.user_id)
         .fetch_all(self.db.as_ref())
         .await
         .unwrap_or_default();
@@ -466,17 +560,18 @@ impl ChatStore {
 
     pub async fn create_memory_summary(
         &self,
-        session_id: Uuid,
+        owner: OwnerScope,
         character_id: String,
         summary: String,
         source_chat_id: Option<Uuid>,
     ) -> Option<MemorySummaryRecord> {
         let id = Uuid::new_v4();
         let row = sqlx::query(
-            "insert into memory_summaries (id, owner_session_id, character_id, summary, source_chat_id) values ($1, $2, $3, $4, $5) returning extract(epoch from created_at)::bigint as created_at",
+            "insert into memory_summaries (id, owner_session_id, owner_user_id, character_id, summary, source_chat_id) values ($1, $2, $3, $4, $5, $6) returning extract(epoch from created_at)::bigint as created_at",
         )
         .bind(id)
-        .bind(session_id)
+        .bind(owner.session_id)
+        .bind(owner.user_id)
         .bind(&character_id)
         .bind(&summary)
         .bind(source_chat_id)
@@ -486,7 +581,7 @@ impl ChatStore {
 
         Some(MemorySummaryRecord {
             id,
-            owner_session_id: session_id,
+            owner_session_id: owner.session_id,
             character_id,
             summary,
             source_chat_id,
@@ -494,10 +589,13 @@ impl ChatStore {
         })
     }
 
-    pub async fn delete_memory_summary(&self, session_id: Uuid, summary_id: Uuid) -> bool {
-        sqlx::query("delete from memory_summaries where id = $1 and owner_session_id = $2")
+    pub async fn delete_memory_summary(&self, owner: OwnerScope, summary_id: Uuid) -> bool {
+        sqlx::query(
+            "delete from memory_summaries where id = $1 and (($3::uuid is not null and owner_user_id = $3) or ($3::uuid is null and owner_session_id = $2))",
+        )
             .bind(summary_id)
-            .bind(session_id)
+            .bind(owner.session_id)
+            .bind(owner.user_id)
             .execute(self.db.as_ref())
             .await
             .map(|result| result.rows_affected() > 0)
@@ -506,16 +604,20 @@ impl ChatStore {
 
     pub async fn update_memory_summary(
         &self,
-        session_id: Uuid,
+        owner: OwnerScope,
         summary_id: Uuid,
         summary: String,
     ) -> Option<MemorySummaryRecord> {
         let row = sqlx::query(
-            "update memory_summaries set summary = $1 where id = $2 and owner_session_id = $3 returning id, owner_session_id, character_id, summary, source_chat_id, extract(epoch from created_at)::bigint as created_at",
+            "update memory_summaries
+             set summary = $1
+             where id = $2 and (($4::uuid is not null and owner_user_id = $4) or ($4::uuid is null and owner_session_id = $3))
+             returning id, owner_session_id, character_id, summary, source_chat_id, extract(epoch from created_at)::bigint as created_at",
         )
         .bind(&summary)
         .bind(summary_id)
-        .bind(session_id)
+        .bind(owner.session_id)
+        .bind(owner.user_id)
         .fetch_optional(self.db.as_ref())
         .await
         .ok()??;
@@ -530,23 +632,78 @@ impl ChatStore {
         })
     }
 
-    pub async fn count_sync_entities(&self, session_id: Uuid) -> u32 {
-        let entities_count: i64 =
-            sqlx::query_scalar("select count(*) from sync_entities where session_id = $1")
-                .bind(session_id)
-                .fetch_one(self.db.as_ref())
-                .await
-                .unwrap_or(0);
+    pub async fn count_sync_entities(&self, owner: OwnerScope) -> u32 {
+        let entities_count: i64 = sqlx::query_scalar(
+            "select count(*) from sync_entities where (($2::uuid is not null and owner_user_id = $2) or ($2::uuid is null and session_id = $1))",
+        )
+        .bind(owner.session_id)
+        .bind(owner.user_id)
+        .fetch_one(self.db.as_ref())
+        .await
+        .unwrap_or(0);
         entities_count.max(0) as u32
     }
 
     pub async fn upsert_sync_entity(&self, entity: &SyncEntityRecord) -> bool {
         let deleted_at = entity.deleted_at.map(|value| value as i64);
+        if let Some(owner_user_id) = entity.owner_user_id {
+            let updated = sqlx::query(
+                "update sync_entities
+                 set item_type = $3,
+                     updated_at = to_timestamp($4),
+                     deleted_at = to_timestamp($5),
+                     payload = $6
+                 where owner_user_id = $1 and item_id = $2 and updated_at <= to_timestamp($4)",
+            )
+            .bind(owner_user_id)
+            .bind(&entity.item_id)
+            .bind(&entity.item_type)
+            .bind(entity.updated_at as i64)
+            .bind(deleted_at)
+            .bind(&entity.payload)
+            .execute(self.db.as_ref())
+            .await
+            .map(|result| result.rows_affected() > 0)
+            .unwrap_or(false);
+            if updated {
+                return true;
+            }
+
+            let exists = sqlx::query_scalar::<_, i64>(
+                "select count(*) from sync_entities where owner_user_id = $1 and item_id = $2",
+            )
+            .bind(owner_user_id)
+            .bind(&entity.item_id)
+            .fetch_one(self.db.as_ref())
+            .await
+            .map(|count| count > 0)
+            .unwrap_or(false);
+            if exists {
+                return false;
+            }
+
+            return sqlx::query(
+                "insert into sync_entities (session_id, owner_user_id, item_id, item_type, updated_at, deleted_at, payload)
+                 values ($1, $2, $3, $4, to_timestamp($5), to_timestamp($6), $7)",
+            )
+            .bind(entity.session_id)
+            .bind(owner_user_id)
+            .bind(&entity.item_id)
+            .bind(&entity.item_type)
+            .bind(entity.updated_at as i64)
+            .bind(deleted_at)
+            .bind(&entity.payload)
+            .execute(self.db.as_ref())
+            .await
+            .is_ok();
+        }
+
         sqlx::query(
-            "insert into sync_entities (session_id, item_id, item_type, updated_at, deleted_at, payload)
-             values ($1, $2, $3, to_timestamp($4), to_timestamp($5), $6)
+            "insert into sync_entities (session_id, owner_user_id, item_id, item_type, updated_at, deleted_at, payload)
+             values ($1, null, $2, $3, to_timestamp($4), to_timestamp($5), $6)
              on conflict (session_id, item_id)
              do update set
+               owner_user_id = excluded.owner_user_id,
                item_type = excluded.item_type,
                updated_at = excluded.updated_at,
                deleted_at = excluded.deleted_at,
@@ -564,13 +721,20 @@ impl ChatStore {
         .is_ok()
     }
 
-    pub async fn get_sync_entity_updated_at(&self, session_id: Uuid, item_id: &str) -> Option<u64> {
+    pub async fn get_sync_entity_updated_at(
+        &self,
+        owner: OwnerScope,
+        item_id: &str,
+    ) -> Option<u64> {
         let value: Option<i64> = sqlx::query_scalar(
-            "select extract(epoch from updated_at)::bigint from sync_entities where session_id = $1 and item_id = $2",
+            "select max(extract(epoch from updated_at)::bigint)
+             from sync_entities
+             where (($3::uuid is not null and owner_user_id = $3) or ($3::uuid is null and session_id = $1)) and item_id = $2",
         )
-        .bind(session_id)
+        .bind(owner.session_id)
         .bind(item_id)
-        .fetch_optional(self.db.as_ref())
+        .bind(owner.user_id)
+        .fetch_one(self.db.as_ref())
         .await
         .ok()?;
 
@@ -579,23 +743,29 @@ impl ChatStore {
 
     pub async fn list_sync_entities_since(
         &self,
-        session_id: Uuid,
+        owner: OwnerScope,
         cursor: u64,
         limit: u32,
     ) -> Vec<SyncEntityRecord> {
         let rows = sqlx::query(
-            "select session_id, item_id, item_type,
+            "select session_id, owner_user_id, item_id, item_type,
                     extract(epoch from updated_at)::bigint as updated_at,
                     extract(epoch from deleted_at)::bigint as deleted_at,
                     payload
-             from sync_entities
-             where session_id = $1 and extract(epoch from updated_at)::bigint > $2
+             from (
+                 select distinct on (item_id) session_id, owner_user_id, item_id, item_type, updated_at, deleted_at, payload
+                 from sync_entities
+                 where (($4::uuid is not null and owner_user_id = $4) or ($4::uuid is null and session_id = $1))
+                   and extract(epoch from updated_at)::bigint > $2
+                 order by item_id, updated_at desc
+             ) latest
              order by updated_at asc
              limit $3",
         )
-        .bind(session_id)
+        .bind(owner.session_id)
         .bind(cursor as i64)
         .bind(limit as i64)
+        .bind(owner.user_id)
         .fetch_all(self.db.as_ref())
         .await
         .unwrap_or_default();
@@ -603,10 +773,13 @@ impl ChatStore {
         rows.into_iter()
             .map(|row| SyncEntityRecord {
                 session_id: row.get("session_id"),
+                owner_user_id: row.get("owner_user_id"),
                 item_id: row.get("item_id"),
                 item_type: row.get("item_type"),
                 updated_at: row.get::<i64, _>("updated_at") as u64,
-                deleted_at: row.get::<Option<i64>, _>("deleted_at").map(|value| value as u64),
+                deleted_at: row
+                    .get::<Option<i64>, _>("deleted_at")
+                    .map(|value| value as u64),
                 payload: row.get("payload"),
             })
             .collect()
@@ -718,6 +891,7 @@ impl ChatStore {
             "create table if not exists chats (
                 id uuid primary key,
                 owner_session_id uuid not null references auth_sessions(id) on delete cascade,
+                owner_user_id uuid,
                 character_id text not null,
                 ai_profile_id text not null,
                 created_at timestamptz not null default now(),
@@ -726,6 +900,9 @@ impl ChatStore {
         )
         .execute(self.db.as_ref())
         .await?;
+        sqlx::query("alter table chats add column if not exists owner_user_id uuid")
+            .execute(self.db.as_ref())
+            .await?;
 
         sqlx::query(
             "create table if not exists chat_messages (
@@ -749,6 +926,12 @@ impl ChatStore {
         sqlx::query("create index if not exists idx_chats_owner_character_updated on chats(owner_session_id, character_id, updated_at desc)")
             .execute(self.db.as_ref())
             .await?;
+        sqlx::query("create index if not exists idx_chats_owner_user_updated on chats(owner_user_id, updated_at desc)")
+            .execute(self.db.as_ref())
+            .await?;
+        sqlx::query("create index if not exists idx_chats_owner_user_character_updated on chats(owner_user_id, character_id, updated_at desc)")
+            .execute(self.db.as_ref())
+            .await?;
         sqlx::query("create index if not exists idx_messages_chat_created on chat_messages(chat_id, created_at asc)")
             .execute(self.db.as_ref())
             .await?;
@@ -759,6 +942,7 @@ impl ChatStore {
             "create table if not exists memory_facts (
                 id uuid primary key,
                 owner_session_id uuid not null references auth_sessions(id) on delete cascade,
+                owner_user_id uuid,
                 character_id text not null,
                 content text not null,
                 confidence double precision not null default 0.5,
@@ -773,6 +957,7 @@ impl ChatStore {
             "create table if not exists memory_summaries (
                 id uuid primary key,
                 owner_session_id uuid not null references auth_sessions(id) on delete cascade,
+                owner_user_id uuid,
                 character_id text not null,
                 summary text not null,
                 source_chat_id uuid references chats(id) on delete set null,
@@ -781,10 +966,22 @@ impl ChatStore {
         )
         .execute(self.db.as_ref())
         .await?;
+        sqlx::query("alter table memory_facts add column if not exists owner_user_id uuid")
+            .execute(self.db.as_ref())
+            .await?;
+        sqlx::query("alter table memory_summaries add column if not exists owner_user_id uuid")
+            .execute(self.db.as_ref())
+            .await?;
         sqlx::query("create index if not exists idx_memory_facts_owner_character_updated on memory_facts(owner_session_id, character_id, updated_at desc)")
             .execute(self.db.as_ref())
             .await?;
         sqlx::query("create index if not exists idx_memory_summaries_owner_character_created on memory_summaries(owner_session_id, character_id, created_at desc)")
+            .execute(self.db.as_ref())
+            .await?;
+        sqlx::query("create index if not exists idx_memory_facts_owner_user_character_updated on memory_facts(owner_user_id, character_id, updated_at desc)")
+            .execute(self.db.as_ref())
+            .await?;
+        sqlx::query("create index if not exists idx_memory_summaries_owner_user_character_created on memory_summaries(owner_user_id, character_id, created_at desc)")
             .execute(self.db.as_ref())
             .await?;
         sqlx::query(
@@ -806,6 +1003,7 @@ impl ChatStore {
         sqlx::query(
             "create table if not exists sync_entities (
                 session_id uuid not null references auth_sessions(id) on delete cascade,
+                owner_user_id uuid,
                 item_id text not null,
                 item_type text not null,
                 updated_at timestamptz not null,
@@ -816,9 +1014,58 @@ impl ChatStore {
         )
         .execute(self.db.as_ref())
         .await?;
+        sqlx::query("alter table sync_entities add column if not exists owner_user_id uuid")
+            .execute(self.db.as_ref())
+            .await?;
         sqlx::query("create index if not exists idx_sync_entities_session_updated on sync_entities(session_id, updated_at desc)")
             .execute(self.db.as_ref())
             .await?;
+        sqlx::query("create index if not exists idx_sync_entities_owner_user_updated on sync_entities(owner_user_id, updated_at desc)")
+            .execute(self.db.as_ref())
+            .await?;
+        sqlx::query("create index if not exists idx_sync_entities_owner_user_item on sync_entities(owner_user_id, item_id)")
+            .execute(self.db.as_ref())
+            .await?;
+        sqlx::query(
+            "update chats
+             set owner_user_id = auth_sessions.user_id
+             from auth_sessions
+             where chats.owner_session_id = auth_sessions.id
+               and auth_sessions.kind <> 'guest'
+               and chats.owner_user_id is null",
+        )
+        .execute(self.db.as_ref())
+        .await?;
+        sqlx::query(
+            "update memory_facts
+             set owner_user_id = auth_sessions.user_id
+             from auth_sessions
+             where memory_facts.owner_session_id = auth_sessions.id
+               and auth_sessions.kind <> 'guest'
+               and memory_facts.owner_user_id is null",
+        )
+        .execute(self.db.as_ref())
+        .await?;
+        sqlx::query(
+            "update memory_summaries
+             set owner_user_id = auth_sessions.user_id
+             from auth_sessions
+             where memory_summaries.owner_session_id = auth_sessions.id
+               and auth_sessions.kind <> 'guest'
+               and memory_summaries.owner_user_id is null",
+        )
+        .execute(self.db.as_ref())
+        .await?;
+        sqlx::query(
+            "update sync_entities
+             set owner_user_id = auth_sessions.user_id
+             from auth_sessions
+             where sync_entities.session_id = auth_sessions.id
+               and auth_sessions.kind <> 'guest'
+               and sync_entities.owner_user_id is null",
+        )
+        .execute(self.db.as_ref())
+        .await?;
         Ok(())
     }
 }

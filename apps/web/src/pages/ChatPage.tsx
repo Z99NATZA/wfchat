@@ -32,6 +32,7 @@ function ChatPage({ theme, font, onFontChange, onToggleTheme }: ChatPageProps) {
 	const auth = useAuthSession();
 	const { setLocale } = useI18n();
 	const { alert } = useDialog();
+	const refreshRemoteState = chat.refreshRemoteState;
 	const [isProfileOpen, setIsProfileOpen] = useState(false);
 	const [isSyncing, setIsSyncing] = useState(false);
 	const [syncError, setSyncError] = useState<string | null>(null);
@@ -51,22 +52,24 @@ function ChatPage({ theme, font, onFontChange, onToggleTheme }: ChatPageProps) {
 		}
 
 		void flushGuestSyncQueue()
-			.then((result) => {
+			.then(async (result) => {
 				if (result) {
 					auth.markGuestSyncDone();
+					await pullSyncChanges(setLocale);
+					refreshRemoteState();
 				}
 			})
 			.catch(() => {
 				markSyncRetry();
 			});
-	}, [auth, auth.isAuthenticated]);
+	}, [auth, auth.isAuthenticated, refreshRemoteState, setLocale]);
 
 	useEffect(() => {
 		if (!auth.isAuthenticated) {
 			return;
 		}
-		void pullSyncChanges(setLocale);
-	}, [auth.isAuthenticated, setLocale]);
+		void pullSyncChanges(setLocale).then(() => refreshRemoteState());
+	}, [auth.isAuthenticated, refreshRemoteState, setLocale]);
 
 	useEffect(() => {
 		if (!auth.isAuthenticated) {
@@ -83,12 +86,12 @@ function ChatPage({ theme, font, onFontChange, onToggleTheme }: ChatPageProps) {
 				.catch(() => {
 					markSyncRetry();
 				});
-			void pullSyncChanges(setLocale);
+			void pullSyncChanges(setLocale).then(() => refreshRemoteState());
 		}
 
 		window.addEventListener("online", handleOnline);
 		return () => window.removeEventListener("online", handleOnline);
-	}, [auth, auth.isAuthenticated, setLocale]);
+	}, [auth, auth.isAuthenticated, refreshRemoteState, setLocale]);
 
 	async function handleSyncNow() {
 		setIsSyncing(true);
@@ -101,13 +104,22 @@ function ChatPage({ theme, font, onFontChange, onToggleTheme }: ChatPageProps) {
 				chat.messages,
 				chat.activeChatId
 			);
-			const result = await flushGuestSyncQueue();
+			const result = await flushGuestSyncQueue({ force: true });
 			if (!result) {
-				throw new Error("sync queued");
+				auth.markGuestSyncDone();
+				await pullSyncChanges(setLocale);
+				refreshRemoteState();
+				await alert({
+					title: "Sync complete",
+					description: "Merged 0 item(s)."
+				});
+				return;
 			}
 			if (!hasPendingSyncQueue()) {
 				auth.markGuestSyncDone();
 			}
+			await pullSyncChanges(setLocale);
+			refreshRemoteState();
 			await alert({
 				title: "Sync complete",
 				description: `Merged ${result.merged_count} item(s).`

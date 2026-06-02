@@ -46,7 +46,7 @@ This clears message history for the current chat while keeping the chat id and g
 
 `error.rs` maps application errors into HTTP responses.
 
-`auth.rs` is the future home for guest sessions, login, logout, and `GET /api/auth/me`.
+`auth.rs` owns guest sessions, Google login, logout, and `GET /api/auth/me`.
 
 `chat.rs` owns chat routes and the main chat flow.
 
@@ -80,11 +80,11 @@ The current local implementation uses a JSON file store at `DATA_PATH`. Later, a
 
 ```text
 guest      can chat without login on the same browser/device
-registered can chat and sync across devices
+registered can chat and sync across browsers/devices through account-scoped ownership
 admin      can manage AI profiles, provider settings, and models
 ```
 
-The first real auth implementation should use an HTTP-only session cookie. Frontend code should not store API keys or admin secrets.
+Auth uses an HTTP-only session cookie plus the `X-WFChat-Session` header for API ownership resolution. Frontend code should not store API keys or admin secrets.
 
 ## AI Profiles
 

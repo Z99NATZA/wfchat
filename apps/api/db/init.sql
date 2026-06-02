@@ -8,6 +8,7 @@ create table if not exists auth_sessions (
 create table if not exists chats (
     id uuid primary key,
     owner_session_id uuid not null references auth_sessions(id) on delete cascade,
+    owner_user_id uuid,
     character_id text not null,
     ai_profile_id text not null,
     created_at timestamptz not null default now(),
@@ -27,12 +28,15 @@ alter table chat_messages add column if not exists sort_order bigserial;
 
 create index if not exists idx_chats_owner_updated on chats(owner_session_id, updated_at desc);
 create index if not exists idx_chats_owner_character_updated on chats(owner_session_id, character_id, updated_at desc);
+create index if not exists idx_chats_owner_user_updated on chats(owner_user_id, updated_at desc);
+create index if not exists idx_chats_owner_user_character_updated on chats(owner_user_id, character_id, updated_at desc);
 create index if not exists idx_messages_chat_created on chat_messages(chat_id, created_at asc);
 create index if not exists idx_messages_chat_sort on chat_messages(chat_id, sort_order asc);
 
 create table if not exists memory_facts (
     id uuid primary key,
     owner_session_id uuid not null references auth_sessions(id) on delete cascade,
+    owner_user_id uuid,
     character_id text not null,
     content text not null,
     confidence double precision not null default 0.5,
@@ -44,6 +48,7 @@ create table if not exists memory_facts (
 create table if not exists memory_summaries (
     id uuid primary key,
     owner_session_id uuid not null references auth_sessions(id) on delete cascade,
+    owner_user_id uuid,
     character_id text not null,
     summary text not null,
     source_chat_id uuid references chats(id) on delete set null,
@@ -52,3 +57,31 @@ create table if not exists memory_summaries (
 
 create index if not exists idx_memory_facts_owner_character_updated on memory_facts(owner_session_id, character_id, updated_at desc);
 create index if not exists idx_memory_summaries_owner_character_created on memory_summaries(owner_session_id, character_id, created_at desc);
+create index if not exists idx_memory_facts_owner_user_character_updated on memory_facts(owner_user_id, character_id, updated_at desc);
+create index if not exists idx_memory_summaries_owner_user_character_created on memory_summaries(owner_user_id, character_id, created_at desc);
+
+create table if not exists sync_commits (
+    operation_id text not null,
+    session_id uuid not null references auth_sessions(id) on delete cascade,
+    user_id uuid not null,
+    merged_count integer not null,
+    conflict_count integer not null,
+    committed_at timestamptz not null default now(),
+    primary key (operation_id, session_id)
+);
+
+create table if not exists sync_entities (
+    session_id uuid not null references auth_sessions(id) on delete cascade,
+    owner_user_id uuid,
+    item_id text not null,
+    item_type text not null,
+    updated_at timestamptz not null,
+    deleted_at timestamptz,
+    payload jsonb not null default '{}'::jsonb,
+    primary key (session_id, item_id)
+);
+
+create index if not exists idx_sync_commits_session_committed on sync_commits(session_id, committed_at desc);
+create index if not exists idx_sync_entities_session_updated on sync_entities(session_id, updated_at desc);
+create index if not exists idx_sync_entities_owner_user_updated on sync_entities(owner_user_id, updated_at desc);
+create index if not exists idx_sync_entities_owner_user_item on sync_entities(owner_user_id, item_id);

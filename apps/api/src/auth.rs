@@ -59,6 +59,12 @@ async fn current_user(State(state): State<AppState>, headers: HeaderMap) -> Json
         .store
         .ensure_session(session_id_from_headers(&headers))
         .await;
+    if !matches!(&session.kind, UserKind::Guest) {
+        state
+            .store
+            .migrate_session_data_to_user(session.id, session.user_id)
+            .await;
+    }
 
     Json(SessionResponse {
         user_id: session.user_id,
@@ -107,6 +113,10 @@ async fn login_with_google(
         .promote_session_to_registered(session.id, promoted_user_id)
         .await
         .ok_or_else(|| AppError::BadRequest("could not promote session".to_owned()))?;
+    state
+        .store
+        .migrate_session_data_to_user(promoted.id, promoted.user_id)
+        .await;
 
     let mut response_headers = HeaderMap::new();
     let cookie = format!(

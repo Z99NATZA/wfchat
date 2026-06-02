@@ -39,6 +39,22 @@ describe("syncService queue helpers", () => {
 		expect(result[0].items[0].updated_at).toBe(3);
 	});
 
+	it("normalizes sync timestamps to integers", () => {
+		const items: SyncItem[] = [
+			{
+				item_id: "chat.session.a",
+				item_type: "chat_session",
+				updated_at: 1780339701.549,
+				deleted_at: 1780339702.75,
+				payload: { id: "a" }
+			}
+		];
+
+		const result = compactItems(items);
+		expect(result[0].updated_at).toBe(1780339701);
+		expect(result[0].deleted_at).toBe(1780339702);
+	});
+
 	it("caps queue length to 20", () => {
 		const queue: SyncQueueOperation[] = Array.from({ length: 30 }, (_, index) => ({
 			operation_id: `op-${index}`,

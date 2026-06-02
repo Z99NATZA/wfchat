@@ -8,10 +8,11 @@
 
 สถานะตอนนี้:
 - มี `guest session` จริงที่ backend
-- มี `in-app auth UI` แบบ mock (Google/Email mock สำหรับ flow)
+- มี `in-app auth UI` พร้อม Google login จริง
 - มี sync จริงสำหรับ `settings` (theme/font/locale)
 - มี `sync queue + retry` ฝั่ง frontend
 - มี `cloud -> local pull` ผ่าน `GET /api/sync/changes?cursor=...`
+- หลัง login Google ข้อมูลของ registered user จะ scope ด้วย `user_id` เดียวกันข้าม browser
 - ตอนกด sync จะส่ง memory delta จาก state ปัจจุบัน (`memory_fact`, `memory_summary`) ด้วย
 - ตอนกด sync จะส่ง chat delta จาก state ปัจจุบัน (`chat_session`, `chat_message` ของห้องที่เปิดอยู่) ด้วย
 
@@ -25,6 +26,10 @@
 `Session`:
 - ตัวระบุผู้ใช้ชั่วคราวในระบบ backend (`session_id`)
 - frontend ส่งผ่าน header `X-WFChat-Session`
+
+`Account Owner`:
+- ผู้ใช้ที่ login แล้ว
+- backend ใช้ `user_id` จาก Google `sub` เป็น owner หลักสำหรับ chat/memory/sync ข้าม browser
 
 `Sync Item`:
 - หน่วยข้อมูลที่ส่ง sync
@@ -46,6 +51,7 @@
 
 ฝั่ง Backend:
 - รับ session จาก header
+- ถ้า session เป็น `registered` จะ resolve owner เป็น `user_id`; ถ้าเป็น guest จะใช้ `session_id`
 - คำนวณ preview โดยเทียบ `item_id` และ `updated_at` กับข้อมูลที่มี
 - commit แบบ upsert ลงตาราง `sync_entities`
 - บันทึกประวัติ commit ลง `sync_commits` ด้วย `operation_id`
@@ -82,6 +88,7 @@ Local keys ที่เกี่ยวข้อง:
 ### 5.1 ตาราง `sync_entities`
 เก็บ state ล่าสุดของ item ต่อ session
 - `session_id` (uuid)
+- `owner_user_id` (uuid, nullable)
 - `item_id` (text) เช่น `settings.theme`
 - `item_type` (text) เช่น `setting`
 - `updated_at` (timestamptz)
@@ -90,6 +97,10 @@ Local keys ที่เกี่ยวข้อง:
 
 Primary key:
 - `(session_id, item_id)`
+
+หมายเหตุ:
+- guest sync อ่าน/เขียนด้วย `session_id`
+- registered sync อ่าน/เขียนด้วย `owner_user_id` เพื่อให้ Chrome/Edge ที่ login account เดียวกันเห็นข้อมูลเดียวกัน
 
 ### 5.2 ตาราง `sync_commits`
 เก็บประวัติการ commit ต่อ operation
@@ -184,7 +195,8 @@ Response:
 - ถ้า `incoming.updated_at < existing.updated_at` => `conflict`
 
 `Commit`:
-- upsert ตาม `(session_id, item_id)`
+- guest upsert ตาม `(session_id, item_id)`
+- registered upsert ตาม `owner_user_id + item_id`
 - update เฉพาะกรณี `existing.updated_at <= incoming.updated_at`
 
 ผลลัพธ์:
@@ -197,20 +209,21 @@ Response:
 1. ผู้ใช้เปิดเว็บแบบ guest
 2. ผู้ใช้เปลี่ยน theme/font/locale
 3. ฝั่ง frontend persist ค่าจริง + touch `wfchat-sync-meta`
-4. ผู้ใช้เปิด Profile modal แล้ว login (mock)
-5. ระบบแสดง pending sync
-6. ผู้ใช้กด `Sync now`
-7. frontend `enqueue` รายการลง `wfchat-sync-queue`
-8. รายการที่ enqueue ตอนนี้มี:
+4. ผู้ใช้เปิด Profile modal แล้ว login ด้วย Google
+5. backend migrate guest data ของ session ปัจจุบันไปอยู่ใต้ account owner (`owner_user_id`)
+6. ระบบแสดง pending sync
+7. ผู้ใช้กด `Sync now`
+8. frontend `enqueue` รายการลง `wfchat-sync-queue`
+9. รายการที่ enqueue ตอนนี้มี:
 - settings (`theme/font/locale`)
 - memory facts ของ persona ปัจจุบัน
 - memory summaries ของ persona ปัจจุบัน
 - chat sessions ของ persona ปัจจุบัน
 - messages ของห้องที่กำลังเปิดอยู่
-9. frontend `flush` คิวโดยยิง `preview -> commit`
-10. ถ้าสำเร็จ ระบบเอารายการออกจากคิว
-11. ถ้าคิวว่าง ระบบ mark pending sync = false
-12. หลัง login หรือ online กลับมา ระบบ pull cloud changes ลง local ด้วย cursor
+10. frontend `flush` คิวโดยยิง `preview -> commit`
+11. ถ้าสำเร็จ ระบบเอารายการออกจากคิว
+12. ถ้าคิวว่าง ระบบ mark pending sync = false
+13. หลัง login หรือ online กลับมา ระบบ pull cloud changes ลง local ด้วย cursor แล้ว reload chat/memory state
 
 ---
 
@@ -244,7 +257,7 @@ Queue shape:
 2. เปลี่ยน theme/font/locale อย่างน้อย 1 อย่าง
 3. เปิด DevTools -> Application -> Local Storage
 4. ตรวจว่ามี `wfchat-sync-meta` และค่าถูกอัปเดต
-5. login จาก Profile (mock)
+5. login จาก Profile ด้วย Google
 6. กด `Sync now`
 7. ดู Network ต้องมี:
 - `POST /api/sync/preview`
@@ -257,16 +270,15 @@ Queue shape:
 
 ## 11) ขอบเขตที่ยังไม่ทำ (สำคัญ)
 ยังไม่มีของต่อไปนี้:
-- auth จริง (Google OAuth/Email auth production)
 - conflict resolution ระดับ field แบบละเอียด
 - sync ข้อมูล chat/memory เต็มรูปแบบเป็น delta
 
 ---
 
 ## 12) แผนลำดับงานถัดไป (แนะนำ)
-1. เพิ่ม `GET /sync/changes` + cursor
-2. ขยายจาก settings ไปสู่ chat/memory delta
-3. ต่อ auth จริง (Google/Email)
+1. เพิ่ม integration/e2e tests สำหรับ account-scoped sync ข้าม browser
+2. ทำ conflict resolution ให้ละเอียดขึ้นเมื่อมีการแก้พร้อมกันหลาย device
+3. เพิ่ม provider login อื่นนอกจาก Google ถ้าต้องรองรับ
 4. เพิ่ม observability metrics และ alert
 
 ---

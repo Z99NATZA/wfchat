@@ -11,7 +11,7 @@ use uuid::Uuid;
 use crate::{
     error::{AppError, AppResult},
     state::AppState,
-    store::SyncEntityRecord,
+    store::{OwnerScope, SyncEntityRecord},
 };
 
 pub fn router() -> Router<AppState> {
@@ -83,11 +83,12 @@ async fn sync_changes(
         .store
         .ensure_session(session_id_from_headers(&headers))
         .await;
+    let owner = OwnerScope::from_session(&session);
     let cursor = query.cursor.unwrap_or(0);
     let limit = query.limit.unwrap_or(100).clamp(1, 500);
     let entities = state
         .store
-        .list_sync_entities_since(session.id, cursor, limit)
+        .list_sync_entities_since(owner, cursor, limit)
         .await;
     let mut next_cursor = cursor;
     let items = entities
@@ -116,6 +117,7 @@ async fn sync_preview(
         .store
         .ensure_session(session_id_from_headers(&headers))
         .await;
+    let owner = OwnerScope::from_session(&session);
     let mut to_create = 0_u32;
     let mut to_update = 0_u32;
     let mut conflicts = 0_u32;
@@ -129,9 +131,9 @@ async fn sync_preview(
         let action = classify_preview_action(
             item,
             state
-            .store
-            .get_sync_entity_updated_at(session.id, &item.item_id)
-            .await,
+                .store
+                .get_sync_entity_updated_at(owner, &item.item_id)
+                .await,
         );
         match action {
             PreviewAction::Create => to_create += 1,
@@ -160,6 +162,7 @@ async fn sync_commit(
         .store
         .ensure_session(session_id_from_headers(&headers))
         .await;
+    let owner = OwnerScope::from_session(&session);
     let mut merged_count = 0_u32;
     for item in &payload.items {
         if !is_valid_item(item) {
@@ -170,6 +173,7 @@ async fn sync_commit(
             .store
             .upsert_sync_entity(&SyncEntityRecord {
                 session_id: session.id,
+                owner_user_id: owner.user_id,
                 item_id: item.item_id.clone(),
                 item_type: item.item_type.clone(),
                 updated_at: item.updated_at,
@@ -184,7 +188,13 @@ async fn sync_commit(
 
     let commit = state
         .store
-        .save_sync_commit(session.id, session.user_id, &payload.operation_id, merged_count, 0)
+        .save_sync_commit(
+            session.id,
+            session.user_id,
+            &payload.operation_id,
+            merged_count,
+            0,
+        )
         .await
         .ok_or_else(|| AppError::BadRequest("could not save sync commit".to_owned()))?;
 
@@ -207,7 +217,10 @@ fn is_valid_item(item: &SyncItemInput) -> bool {
     !item.item_id.trim().is_empty() && !item.item_type.trim().is_empty() && item.updated_at > 0
 }
 
-fn classify_preview_action(item: &SyncItemInput, existing_updated_at: Option<u64>) -> PreviewAction {
+fn classify_preview_action(
+    item: &SyncItemInput,
+    existing_updated_at: Option<u64>,
+) -> PreviewAction {
     if !is_valid_item(item) {
         return PreviewAction::Conflict;
     }
