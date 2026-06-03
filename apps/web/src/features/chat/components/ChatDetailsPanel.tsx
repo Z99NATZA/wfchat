@@ -138,7 +138,7 @@ function ChatDetailsPanel({
 					<h3 className="text-sm font-semibold">{t("chat.details.conversation")}</h3>
 					<div className="mt-3 space-y-2">
 						<div className="flex items-center gap-3 rounded-lg border border-app-border bg-app-soft p-3">
-							<div className="flex size-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
+							<div className="flex size-9 items-center justify-center rounded-lg bg-sky-500/10 text-sky-600 dark:bg-sky-300/15 dark:text-sky-200">
 								<Languages size={18} aria-hidden="true" />
 							</div>
 							<div>
@@ -149,7 +149,7 @@ function ChatDetailsPanel({
 							</div>
 						</div>
 						<div className="flex items-center gap-3 rounded-lg border border-app-border bg-app-soft p-3">
-							<div className="flex size-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
+							<div className="flex size-9 items-center justify-center rounded-lg bg-sky-500/10 text-sky-600 dark:bg-sky-300/15 dark:text-sky-200">
 								<Sparkles size={18} aria-hidden="true" />
 							</div>
 							<div>
