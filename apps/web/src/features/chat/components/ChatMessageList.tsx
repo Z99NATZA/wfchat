@@ -227,11 +227,13 @@ function ChatMessageList({
 									<div
 										className={cn(
 											"max-w-[min(36rem,82vw)] rounded-lg px-4 py-3 shadow-soft",
-											isUser ? "bg-primary text-white" : "border border-app-border bg-app-panel text-app-text"
+											isUser
+												? "bg-primary text-white dark:border dark:border-app-border dark:bg-primary dark:text-app-text"
+												: "border border-app-border bg-app-panel text-app-text"
 										)}
 									>
 										<p className="text-sm leading-6">{message.text}</p>
-										<p className={cn("mt-2 text-[11px]", isUser ? "text-white/75" : "text-muted")}>
+										<p className={cn("mt-2 text-[11px]", isUser ? "text-white/75 dark:text-muted" : "text-muted")}>
 											{message.time}
 										</p>
 									</div>
