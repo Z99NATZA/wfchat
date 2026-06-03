@@ -142,7 +142,7 @@ function ChatMessageList({
 				onScroll={handleScroll}
 				className="chat-scroll h-full space-y-5 overflow-y-auto px-4 py-6 lg:px-8"
 			>
-				<div className="mx-auto flex max-w-3xl items-center gap-3 rounded-lg border border-primary/20 bg-primary/8 p-3 text-sm text-app-text">
+				<div className="mx-auto flex max-w-3xl items-center gap-3 rounded-lg border border-primary/20 bg-primary/8 p-3 text-sm text-app-text dark:border-app-border dark:bg-app-soft">
 					<div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary text-white">
 						<Wand2 size={17} aria-hidden="true" />
 					</div>

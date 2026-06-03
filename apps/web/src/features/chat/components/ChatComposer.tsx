@@ -105,7 +105,7 @@ function ChatComposer({
 					</IconButton>
 					<button
 						type="submit"
-						className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-primary text-white shadow-soft transition hover:bg-primary-600 focus:outline-none focus:ring-4 focus:ring-primary/25 disabled:cursor-not-allowed disabled:opacity-60"
+						className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-sky-600 text-white shadow-soft transition hover:bg-sky-500 focus:outline-none focus:ring-4 focus:ring-sky-500/25 disabled:cursor-not-allowed disabled:bg-app-border disabled:text-muted disabled:opacity-60 disabled:shadow-none dark:bg-sky-300 dark:text-[#1b2028] dark:hover:bg-sky-200 dark:focus:ring-sky-300/30"
 						aria-label={isSending ? t("chat.composer.waitingForResponse") : t("chat.composer.sendMessage")}
 						disabled={isDisabled || isSending || !draft.trim()}
 						title={
