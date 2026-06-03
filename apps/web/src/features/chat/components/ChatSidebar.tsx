@@ -61,12 +61,21 @@ function ChatSidebar({
 	}, [activeSessionMenuId]);
 
 	return (
-		<aside
-			className={cn(
-				"fixed inset-y-0 left-0 z-40 w-[18.5rem] border-r border-app-border bg-app-panel transition-transform duration-300 lg:static lg:translate-x-0",
-				isOpen ? "translate-x-0" : "-translate-x-full"
+		<>
+			{isOpen && (
+				<button
+					type="button"
+					className="fixed inset-0 z-30 bg-black/30 backdrop-blur-[1px] lg:hidden"
+					aria-label={t("chat.sidebar.closeSidebar")}
+					onClick={onCloseSidebar}
+				/>
 			)}
-		>
+			<aside
+				className={cn(
+					"fixed inset-y-0 left-0 z-40 w-[18.5rem] border-r border-app-border bg-app-panel transition-transform duration-300 lg:static lg:translate-x-0",
+					isOpen ? "translate-x-0" : "-translate-x-full"
+				)}
+			>
 			<div className="flex h-full flex-col">
 				<div className="flex h-16 items-center justify-between border-b border-app-border px-5">
 					<div className="flex items-center gap-3">
@@ -230,7 +239,8 @@ function ChatSidebar({
 					</div>
 				</div>
 			</div>
-		</aside>
+			</aside>
+		</>
 	);
 }
 
