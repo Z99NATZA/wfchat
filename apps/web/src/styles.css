@@ -11,6 +11,11 @@
 	--color-app-soft: var(--app-soft);
 	--color-app-text: var(--app-text);
 	--color-app-border: var(--app-border);
+	--color-action: var(--action-bg);
+	--color-action-hover: var(--action-bg-hover);
+	--color-action-border: var(--action-border);
+	--color-action-text: var(--action-text);
+	--color-action-ring: var(--action-ring);
 	--color-muted: var(--muted);
 	--shadow-soft: 0 14px 36px -26px rgb(15 23 42 / 0.55);
 }
@@ -24,6 +29,11 @@
 		--app-soft: #f0f4fb;
 		--app-text: #111827;
 		--app-border: #dce3ef;
+		--action-bg: #4070f4;
+		--action-bg-hover: #2f5fdd;
+		--action-border: #4070f4;
+		--action-text: #ffffff;
+		--action-ring: #4070f4;
 		--muted: #69758a;
 		--app-font-family: Inter, "Noto Sans Thai", ui-sans-serif, system-ui, -apple-system,
 			BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -37,6 +47,11 @@
 		--app-soft: #2f343e;
 		--app-text: #f2f5f8;
 		--app-border: #4a5260;
+		--action-bg: #282c33;
+		--action-bg-hover: #2f343e;
+		--action-border: #5d6675;
+		--action-text: #f2f5f8;
+		--action-ring: #6c7687;
 		--muted: #b8c0ca;
 	}
 
