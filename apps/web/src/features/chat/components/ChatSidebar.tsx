@@ -217,9 +217,9 @@ function ChatSidebar({
 				</div>
 
 				<div className="border-t border-app-border p-4">
-					<div className="rounded-lg bg-app-soft p-3 opacity-55 grayscale" title={t("common.notSupportedYet")}>
+					<div className="rounded-lg bg-app-soft p-3 opacity-70" title={t("common.notSupportedYet")}>
 						<div className="flex items-center gap-3">
-							<div className="flex size-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
+							<div className="flex size-9 items-center justify-center rounded-lg bg-sky-500/10 text-sky-600 dark:bg-sky-300/15 dark:text-sky-200">
 								<Sparkles size={18} aria-hidden="true" />
 							</div>
 							<div className="min-w-0">
