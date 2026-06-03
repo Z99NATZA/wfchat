@@ -116,7 +116,7 @@ function AuthProfileDialog({
 					<section className="rounded-2xl border border-app-border bg-app-soft p-4">
 						<div className="flex items-center justify-between gap-3">
 							<div className="flex min-w-0 items-center gap-3">
-								<div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-primary/10 text-lg font-semibold text-primary">
+								<div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-sky-500/10 text-lg font-semibold text-sky-600 dark:bg-sky-300/15 dark:text-sky-200">
 									{avatarUrlDraft ? (
 										<img
 											src={avatarUrlDraft}
