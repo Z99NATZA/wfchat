@@ -199,7 +199,7 @@ function AuthProfileDialog({
 
 							<section className="rounded-2xl border border-app-border bg-app-panel p-4">
 								<div className="flex items-start gap-3">
-									<div className="rounded-xl bg-primary/10 p-2 text-primary">
+									<div className="rounded-xl bg-sky-500/10 p-2 text-sky-600 dark:bg-sky-300/15 dark:text-sky-200">
 										<RefreshCw size={18} aria-hidden="true" />
 									</div>
 									<div className="min-w-0 flex-1">
