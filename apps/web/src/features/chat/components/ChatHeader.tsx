@@ -23,6 +23,11 @@ type ChatHeaderProps = {
 	onOpenProfile: () => void;
 };
 
+const themeButtonClassName =
+	"hover:border-action-border hover:bg-action hover:text-action-text focus:ring-action-ring/25";
+const dangerButtonClassName =
+	"border-red-400/25 bg-red-500/10 text-red-500 hover:border-red-400/50 hover:bg-red-500/15 hover:text-red-500 focus:ring-red-500/15";
+
 function ChatHeader({
 	persona,
 	theme,
@@ -127,10 +132,11 @@ function ChatHeader({
 						))}
 					</select>
 				</label>
-				<IconButton onClick={onToggleTheme} aria-label={nextThemeLabel}>
+				<IconButton className={themeButtonClassName} onClick={onToggleTheme} aria-label={nextThemeLabel}>
 					{theme === "dark" ? <Sun size={18} aria-hidden="true" /> : <Moon size={18} aria-hidden="true" />}
 				</IconButton>
 				<IconButton
+					className={dangerButtonClassName}
 					aria-label={t("chat.header.clearChat")}
 					disabled={!canClearChat || isClearing}
 					title={canClearChat ? t("chat.header.clearChat") : t("chat.header.noMessagesToClear")}
@@ -197,7 +203,7 @@ function ChatHeader({
 									hasAttentionBadge={!isAuthenticated || hasPendingGuestSync}
 									onOpenProfile={onOpenProfile}
 								/>
-								<IconButton onClick={onToggleTheme} aria-label={nextThemeLabel}>
+								<IconButton className={themeButtonClassName} onClick={onToggleTheme} aria-label={nextThemeLabel}>
 									{theme === "dark" ? (
 										<Sun size={18} aria-hidden="true" />
 									) : (
@@ -205,7 +211,7 @@ function ChatHeader({
 									)}
 								</IconButton>
 								<IconButton
-									className="border-red-300/40 bg-red-500/10 text-red-500 hover:border-red-300/70 hover:text-red-400"
+									className={dangerButtonClassName}
 									aria-label={t("chat.header.clearChat")}
 									disabled={!canClearChat || isClearing}
 									title={canClearChat ? t("chat.header.clearChat") : t("chat.header.noMessagesToClear")}
