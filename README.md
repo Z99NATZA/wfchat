@@ -6,52 +6,157 @@ Frontend: ReactJS + TypeScript
 
 Backend: Rust + Axum
 
+Database: PostgreSQL
+
 ## Install
+
+Run once after clone:
 
 ```bash
 npm install
 npm run init
 ```
 
-## Run Frontend
+`npm run init` creates local env files when they do not exist:
 
-```bash
-npm run dev:web
+- `.env` from `.env.example`
+- `apps/api/.env` from `apps/api/.env.example`
+- `apps/web/.env` from `apps/web/.env.example`
+
+## Run With Docker
+
+Docker runs PostgreSQL, API, DB init, and Web from `docker-compose.yml`.
+
+### 1. Prepare root env
+
+Edit `.env`:
+
+```env
+VITE_GOOGLE_CLIENT_ID=your-google-client-id
 ```
 
-Frontend: `http://localhost:5173`
+Docker uses this root value as the web build arg.
 
-## Run Backend
+### 2. Prepare API env
 
-Start PostgreSQL first:
+Edit `apps/api/.env`:
 
-```bash
-docker run --name wfchat-postgres -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=wfchat -p 5432:5432 -d postgres:16-alpine
+```env
+OPENAI_API_KEY=your-openai-api-key
+GOOGLE_CLIENT_ID=your-google-client-id
+AI_PROVIDER=openai
+AI_MODEL=gpt-4.1-mini
+OPENAI_MODEL=gpt-4.1-mini
 ```
 
-Then set `DATABASE_URL` in `apps/api/.env` (copy from `apps/api/.env.example`) and run:
+For Docker, `DATABASE_URL`, `APP_HOST`, `APP_PORT`, and `FRONTEND_ORIGIN` are supplied by `docker-compose.yml`.
+
+### 3. Start all services
 
 ```bash
-npm run dev:api
+docker compose up --build
 ```
 
-Backend API: `http://localhost:8080`
+URLs:
 
-## Database Schema (Single SQL)
+- Web: `http://localhost:5173`
+- API: `http://localhost:8080`
+- PostgreSQL: `localhost:5432`
 
-Schema file: `apps/api/db/init.sql`
+### 4. Stop services
 
-Manual apply (to any PostgreSQL):
+```bash
+docker compose down
+```
+
+To remove the PostgreSQL volume too:
+
+```bash
+docker compose down -v
+```
+
+## Run Locally
+
+Local mode runs the same system directly on your machine and requires a local PostgreSQL server.
+
+### 1. Prepare API env
+
+Edit `apps/api/.env`:
+
+```env
+APP_HOST=0.0.0.0
+APP_PORT=8080
+FRONTEND_ORIGIN=http://localhost:5173
+DATABASE_URL=postgres://postgres:postgres@localhost:5432/wfchat
+GOOGLE_CLIENT_ID=your-google-client-id
+
+AI_PROVIDER=openai
+AI_MODEL=gpt-4.1-mini
+OPENAI_API_KEY=your-openai-api-key
+OPENAI_MODEL=gpt-4.1-mini
+OPENAI_BASE_URL=https://api.openai.com/v1
+```
+
+### 2. Prepare Web env
+
+Edit `apps/web/.env`:
+
+```env
+VITE_API_BASE_URL=http://localhost:8080
+VITE_GOOGLE_CLIENT_ID=your-google-client-id
+```
+
+### 3. Start local PostgreSQL
+
+Create the database once if it does not exist:
+
+```bash
+psql "postgres://postgres:postgres@localhost:5432/postgres" -c "CREATE DATABASE wfchat"
+```
+
+Apply the schema:
 
 ```bash
 psql "postgres://postgres:postgres@localhost:5432/wfchat" -v ON_ERROR_STOP=1 -f apps/api/db/init.sql
 ```
 
-Docker apply (from this repo):
+If your PostgreSQL user, password, host, or port differs, update `DATABASE_URL` in `apps/api/.env` and the `psql` commands accordingly.
+
+### 4. Start API
+
+In one terminal:
+
+```bash
+npm run dev:api
+```
+
+API: `http://localhost:8080`
+
+### 5. Start Web
+
+In another terminal:
+
+```bash
+npm run dev:web
+```
+
+Web: `http://localhost:5173`
+
+## Database Schema
+
+Schema file: `apps/api/db/init.sql`
+
+Docker apply only:
 
 ```bash
 docker compose up -d postgres
 docker compose run --rm db-init
+```
+
+Manual apply:
+
+```bash
+psql "postgres://postgres:postgres@localhost:5432/wfchat" -v ON_ERROR_STOP=1 -f apps/api/db/init.sql
 ```
 
 ## Build And Check
@@ -60,14 +165,4 @@ docker compose run --rm db-init
 npm run build
 ```
 
-## Docker
-
-```bash
-docker compose up --build
-```
-
-Docker frontend: `http://localhost:5173`
-
-Docker backend API: `http://localhost:8080`
-
-More runtime and environment details: `docs/docker.md`
+More Docker details: `docs/docker.md`
