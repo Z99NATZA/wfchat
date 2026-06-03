@@ -29,6 +29,10 @@ Dark theme primary:
 
 ```css
 --brand-primary: #282c33;
+--brand-primary-hover: #2f343e;
+--app-bg: #282c33;
+--app-panel: #3b414d;
+--app-soft: #2f343e;
 ```
 
 ## Dark Mode

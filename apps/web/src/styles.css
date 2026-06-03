@@ -31,13 +31,13 @@
 
 	.dark {
 		--brand-primary: #282c33;
-		--brand-primary-hover: #343a43;
-		--app-bg: #0d1119;
-		--app-panel: #121826;
-		--app-soft: #182132;
-		--app-text: #edf3ff;
-		--app-border: #263247;
-		--muted: #9da9ba;
+		--brand-primary-hover: #2f343e;
+		--app-bg: #282c33;
+		--app-panel: #3b414d;
+		--app-soft: #2f343e;
+		--app-text: #f2f5f8;
+		--app-border: #4a5260;
+		--muted: #b8c0ca;
 	}
 
 	* {
