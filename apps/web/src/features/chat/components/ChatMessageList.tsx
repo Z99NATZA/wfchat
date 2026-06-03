@@ -5,6 +5,7 @@ import { useDialog } from "@/components/dialog/DialogProvider";
 import { useI18n } from "@/i18n";
 import type { ChatMessage } from "@/types/chat";
 import { cn } from "@/utils/classNames";
+import { formatLocalDateKey, formatMessageDateLabel } from "@/utils/date";
 
 type ChatMessageListProps = {
 	messages: ChatMessage[];
@@ -35,6 +36,21 @@ function ChatMessageList({
 		() => messages.filter((message) => !(message.author === "user" && hiddenUserMessageIds.has(message.id))),
 		[messages, hiddenUserMessageIds]
 	);
+	const messageGroups = useMemo(() => {
+		return visibleMessages.map((message, index) => {
+			const createdAt = message.createdAt > 0 ? message.createdAt : Math.floor(Date.now() / 1000);
+			const messageDate = new Date(createdAt * 1000);
+			const dateKey = formatLocalDateKey(messageDate);
+			const nextMessage = visibleMessages[index + 1];
+			const nextCreatedAt = nextMessage?.createdAt && nextMessage.createdAt > 0 ? nextMessage.createdAt : null;
+			const nextDateKey = nextCreatedAt ? formatLocalDateKey(new Date(nextCreatedAt * 1000)) : null;
+			const dateLabel =
+				dateKey === nextDateKey
+					? null
+					: formatMessageDateLabel(messageDate, t("common.today"), t("common.yesterday"));
+			return { dateLabel, message };
+		});
+	}, [t, visibleMessages]);
 
 	function handleScroll(event: UIEvent<HTMLDivElement>) {
 		const { scrollTop, scrollHeight, clientHeight } = event.currentTarget;
@@ -158,68 +174,76 @@ function ChatMessageList({
 							</p>
 						</div>
 					)}
-					{visibleMessages.map((message) => {
+					{messageGroups.map(({ dateLabel, message }) => {
 						const isUser = message.author === "user";
 						const isMenuOpen = activeMessageMenuId === message.id;
 
 						return (
-							<article
-								key={message.id}
-								className={cn("group flex items-end gap-2", isUser ? "justify-end" : "justify-start")}
-							>
-								{!isUser && (
-									<img
-										className="size-9 shrink-0 rounded-lg object-cover"
-										src={companionAvatarUrl}
-										alt=""
-									/>
-								)}
-								{isUser && (
-									<div className="relative w-8 shrink-0 self-end" ref={isMenuOpen ? menuContainerRef : null}>
-										<button
-											type="button"
-											onClick={() =>
-												setActiveMessageMenuId((currentId) =>
-													currentId === message.id ? null : message.id
-												)
-											}
-											className={cn(
-												"ml-auto flex size-7 items-center justify-center rounded-md text-muted transition focus:outline-none focus:ring-2 focus:ring-primary/35",
-												isMenuOpen
-													? "bg-app-soft text-app-text"
-													: "opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100 hover:bg-app-soft hover:text-app-text"
+							<div key={message.id} className="space-y-4">
+								<article
+									className={cn("group flex items-end gap-2", isUser ? "justify-end" : "justify-start")}
+								>
+									{!isUser && (
+										<img
+											className="size-9 shrink-0 rounded-lg object-cover"
+											src={companionAvatarUrl}
+											alt=""
+										/>
+									)}
+									{isUser && (
+										<div className="relative w-8 shrink-0 self-end" ref={isMenuOpen ? menuContainerRef : null}>
+											<button
+												type="button"
+												onClick={() =>
+													setActiveMessageMenuId((currentId) =>
+														currentId === message.id ? null : message.id
+													)
+												}
+												className={cn(
+													"ml-auto flex size-7 items-center justify-center rounded-md text-muted transition focus:outline-none focus:ring-2 focus:ring-primary/35",
+													isMenuOpen
+														? "bg-app-soft text-app-text"
+														: "opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100 hover:bg-app-soft hover:text-app-text"
+												)}
+												aria-label={t("chat.messageList.openMessageActions")}
+												aria-expanded={isMenuOpen}
+											>
+												<Ellipsis size={14} aria-hidden="true" />
+											</button>
+											{isMenuOpen && (
+												<div className="absolute bottom-8 left-0 z-20 min-w-44 rounded-lg border border-app-border bg-app-panel p-1 text-app-text shadow-soft">
+													<button
+														type="button"
+														onClick={() => hideUserMessage(message.id)}
+														className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition hover:bg-app-soft"
+													>
+														<EyeOff size={15} aria-hidden="true" />
+														{t("chat.messageList.hideMessage")}
+													</button>
+												</div>
 											)}
-											aria-label={t("chat.messageList.openMessageActions")}
-											aria-expanded={isMenuOpen}
-										>
-											<Ellipsis size={14} aria-hidden="true" />
-										</button>
-										{isMenuOpen && (
-											<div className="absolute bottom-8 left-0 z-20 min-w-44 rounded-lg border border-app-border bg-app-panel p-1 text-app-text shadow-soft">
-												<button
-													type="button"
-													onClick={() => hideUserMessage(message.id)}
-													className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition hover:bg-app-soft"
-												>
-													<EyeOff size={15} aria-hidden="true" />
-													{t("chat.messageList.hideMessage")}
-												</button>
-											</div>
+										</div>
+									)}
+									<div
+										className={cn(
+											"max-w-[min(36rem,82vw)] rounded-lg px-4 py-3 shadow-soft",
+											isUser ? "bg-primary text-white" : "border border-app-border bg-app-panel text-app-text"
 										)}
+									>
+										<p className="text-sm leading-6">{message.text}</p>
+										<p className={cn("mt-2 text-[11px]", isUser ? "text-white/75" : "text-muted")}>
+											{message.time}
+										</p>
+									</div>
+								</article>
+								{dateLabel && (
+									<div className="flex justify-center">
+										<span className="rounded-full border border-app-border bg-app-soft px-3 py-1 text-xs font-medium text-muted shadow-soft">
+											{dateLabel}
+										</span>
 									</div>
 								)}
-								<div
-									className={cn(
-										"max-w-[min(36rem,82vw)] rounded-lg px-4 py-3 shadow-soft",
-										isUser ? "bg-primary text-white" : "border border-app-border bg-app-panel text-app-text"
-									)}
-								>
-									<p className="text-sm leading-6">{message.text}</p>
-									<p className={cn("mt-2 text-[11px]", isUser ? "text-white/75" : "text-muted")}>
-										{message.time}
-									</p>
-								</div>
-							</article>
+							</div>
 						);
 					})}
 					{isSending && (

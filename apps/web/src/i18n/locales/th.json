@@ -4,6 +4,8 @@
 	"common.confirm": "ยืนยัน",
 	"common.done": "เสร็จสิ้น",
 	"common.ok": "ตกลง",
+	"common.today": "วันนี้",
+	"common.yesterday": "เมื่อวาน",
 	"chat.header.openSidebar": "เปิดแถบด้านข้าง",
 	"chat.header.back": "ย้อนกลับ",
 	"chat.header.notifications": "การแจ้งเตือน",

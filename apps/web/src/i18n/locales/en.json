@@ -4,6 +4,8 @@
 	"common.confirm": "Confirm",
 	"common.done": "Done",
 	"common.ok": "OK",
+	"common.today": "Today",
+	"common.yesterday": "Yesterday",
 	"chat.header.openSidebar": "Open sidebar",
 	"chat.header.back": "Back",
 	"chat.header.notifications": "Notifications",

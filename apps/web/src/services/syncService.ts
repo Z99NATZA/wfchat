@@ -86,6 +86,7 @@ type CachedChatMessage = {
 	chatId: string;
 	author: "user" | "companion";
 	text: string;
+	createdAt?: string;
 	time: string;
 	updatedAt: string;
 };
@@ -307,8 +308,10 @@ export function readChatMessagesCache(chatId: string): ChatMessage[] {
 			id: item.id,
 			author: item.author,
 			text: item.text,
+			createdAt: Number(item.createdAt) || Number(item.updatedAt) || 0,
 			time: item.time
-		}));
+		}))
+		.sort((a, b) => a.createdAt - b.createdAt);
 }
 
 async function ensureGuestSession(): Promise<string> {
@@ -510,6 +513,7 @@ function buildChatSyncItems(
 			chatId: activeChatId,
 			author: message.author,
 			text: message.text,
+			createdAt: String(toSyncTimestamp(message.createdAt)),
 			time: message.time
 		}
 	}));

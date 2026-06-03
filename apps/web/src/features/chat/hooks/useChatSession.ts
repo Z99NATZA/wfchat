@@ -359,11 +359,13 @@ export function useChatSession() {
 			return;
 		}
 
-		const timestamp = formatMessageTime(new Date());
+		const createdAt = Math.floor(Date.now() / 1000);
+		const timestamp = formatMessageTime(new Date(createdAt * 1000));
 		const optimisticMessage: ChatMessage = {
 			id: `local-${Date.now()}`,
 			author: "user",
 			text: trimmedDraft,
+			createdAt,
 			time: timestamp
 		};
 

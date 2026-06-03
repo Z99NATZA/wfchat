@@ -250,6 +250,7 @@ function toChatMessage(message: ApiMessage): ChatMessage {
 		id: message.id,
 		author: message.role === "user" ? "user" : "companion",
 		text: message.content,
+		createdAt: message.created_at,
 		time: formatMessageTime(new Date(message.created_at * 1000))
 	};
 }

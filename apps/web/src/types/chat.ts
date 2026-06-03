@@ -17,6 +17,7 @@ export type ChatMessage = {
 	id: string;
 	author: ChatMessageAuthor;
 	text: string;
+	createdAt: number;
 	time: string;
 };
 
