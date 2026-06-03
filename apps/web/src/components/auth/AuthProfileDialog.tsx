@@ -114,24 +114,36 @@ function AuthProfileDialog({
 
 				<div className="flex-1 space-y-4 overflow-y-auto px-5 py-4">
 					<section className="rounded-2xl border border-app-border bg-app-soft p-4">
-						<div className="flex items-center gap-3">
-							<div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-primary/10 text-lg font-semibold text-primary">
-								{avatarUrlDraft ? (
-									<img
-										src={avatarUrlDraft}
-										alt={t("auth.profile.avatarAlt")}
-										className="h-full w-full object-cover"
-									/>
-								) : (
-									initials || <User size={24} aria-hidden="true" />
-								)}
+						<div className="flex items-center justify-between gap-3">
+							<div className="flex min-w-0 items-center gap-3">
+								<div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-primary/10 text-lg font-semibold text-primary">
+									{avatarUrlDraft ? (
+										<img
+											src={avatarUrlDraft}
+											alt={t("auth.profile.avatarAlt")}
+											className="h-full w-full object-cover"
+										/>
+									) : (
+										initials || <User size={24} aria-hidden="true" />
+									)}
+								</div>
+								<div className="min-w-0">
+									<p className="truncate text-base font-semibold text-app-text">{profileLabel}</p>
+									<p className="mt-1 truncate text-sm text-muted">
+										{isAuthenticated ? email : t("auth.profile.guestMode")}
+									</p>
+								</div>
 							</div>
-							<div className="min-w-0">
-								<p className="truncate text-base font-semibold text-app-text">{profileLabel}</p>
-								<p className="mt-1 truncate text-sm text-muted">
-									{isAuthenticated ? email : t("auth.profile.guestMode")}
-								</p>
-							</div>
+							{isAuthenticated && (
+								<button
+									type="button"
+									className="inline-flex h-10 shrink-0 items-center gap-2 rounded-xl border border-red-400/25 bg-red-500/10 px-3 text-sm font-semibold text-red-500 transition hover:border-red-400/50 hover:bg-red-500/15 focus:outline-none focus:ring-4 focus:ring-red-500/15"
+									onClick={onLogout}
+								>
+									<LogOut size={16} aria-hidden="true" />
+									{t("auth.profile.logout")}
+								</button>
+							)}
 						</div>
 					</section>
 
@@ -235,14 +247,6 @@ function AuthProfileDialog({
 										<p className="truncate text-app-text">{email}</p>
 									</div>
 								</div>
-								<button
-									type="button"
-									className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl border border-app-border bg-app-soft px-4 py-3 text-sm font-semibold text-app-text transition hover:border-red-400 hover:text-red-500"
-									onClick={onLogout}
-								>
-									<LogOut size={16} aria-hidden="true" />
-									{t("auth.profile.logout")}
-								</button>
 							</section>
 						</>
 					)}
