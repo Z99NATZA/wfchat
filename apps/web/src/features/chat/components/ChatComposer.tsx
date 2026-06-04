@@ -78,10 +78,10 @@ function ChatComposer({
 	}
 
 	return (
-		<div className="sticky bottom-0 z-20 border-t border-app-border bg-app-panel/95 px-4 py-4 backdrop-blur lg:px-8">
+		<div className="sticky bottom-0 z-20 border-t border-app-border bg-app-panel/62 px-4 py-4 lg:px-8">
 			<div className="mx-auto max-w-3xl">
 				<form
-					className="flex items-end gap-2 rounded-lg border border-app-border bg-app-soft p-2 shadow-soft focus-within:border-primary focus-within:ring-4 focus-within:ring-primary/15"
+					className="flex items-end gap-2 rounded-lg border border-app-border bg-app-soft/82 p-2 shadow-soft focus-within:border-primary focus-within:ring-4 focus-within:ring-primary/15"
 					onSubmit={handleSubmit}
 				>
 					<IconButton className="shrink-0 opacity-45 grayscale cursor-not-allowed" aria-label={t("chat.composer.attachFile")} disabled title={t("common.notSupportedYet")}>

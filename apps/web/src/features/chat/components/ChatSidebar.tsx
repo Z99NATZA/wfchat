@@ -65,14 +65,14 @@ function ChatSidebar({
 			{isOpen && (
 				<button
 					type="button"
-					className="fixed inset-0 z-30 bg-black/30 backdrop-blur-[1px] lg:hidden"
+					className="fixed inset-0 z-30 bg-black/30 lg:hidden"
 					aria-label={t("chat.sidebar.closeSidebar")}
 					onClick={onCloseSidebar}
 				/>
 			)}
 			<aside
 				className={cn(
-					"fixed inset-y-0 left-0 z-40 w-[18.5rem] border-r border-app-border bg-app-panel backdrop-blur-xl transition-transform duration-300 lg:static lg:translate-x-0",
+					"fixed inset-y-0 left-0 z-40 w-[18.5rem] border-r border-app-border bg-app-panel/62 transition-transform duration-300 lg:static lg:translate-x-0",
 					isOpen ? "translate-x-0" : "-translate-x-full"
 				)}
 			>
@@ -201,7 +201,7 @@ function ChatSidebar({
 									<Ellipsis size={14} aria-hidden="true" />
 								</button>
 								{isMenuOpen && (
-									<div className="absolute right-1.5 top-9 z-20 min-w-36 rounded-lg border border-app-border bg-app-panel p-1 shadow-soft">
+					<div className="absolute right-1.5 top-9 z-20 min-w-36 rounded-lg border border-app-border bg-app-panel/82 p-1 shadow-soft">
 										<button
 											type="button"
 											onClick={async () => {

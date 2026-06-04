@@ -46,11 +46,11 @@ function AppSettingsDialog({
 		<div className="fixed inset-0 z-50">
 			<button
 				type="button"
-				className="absolute inset-0 bg-black/35 backdrop-blur-[2px]"
+				className="absolute inset-0 bg-black/35"
 				aria-label={t("settings.close")}
 				onClick={onClose}
 			/>
-			<aside className="absolute inset-x-0 bottom-0 flex max-h-[92dvh] flex-col rounded-t-3xl border border-app-border bg-app-panel shadow-2xl backdrop-blur-xl sm:inset-y-0 sm:left-auto sm:right-0 sm:h-full sm:max-h-none sm:w-[420px] sm:rounded-none sm:border-y-0 sm:border-r-0">
+			<aside className="absolute inset-x-0 bottom-0 flex max-h-[92dvh] flex-col rounded-t-3xl border border-app-border bg-app-panel/62 shadow-2xl sm:inset-y-0 sm:left-auto sm:right-0 sm:h-full sm:max-h-none sm:w-[420px] sm:rounded-none sm:border-y-0 sm:border-r-0">
 				<header className="flex items-start justify-between gap-4 border-b border-app-border px-5 py-4">
 					<div>
 						<h2 className="text-xl font-semibold text-app-text">{t("settings.title")}</h2>
@@ -71,7 +71,7 @@ function AppSettingsDialog({
 							<h3 className="text-sm font-semibold text-app-text">{t("settings.background.title")}</h3>
 						</div>
 
-						<div className="overflow-hidden rounded-xl border border-app-border bg-app-soft">
+						<div className="overflow-hidden rounded-xl border border-app-border bg-app-soft/82">
 							{trimmedDraftUrl ? (
 								<img
 									src={trimmedDraftUrl}
@@ -92,7 +92,7 @@ function AppSettingsDialog({
 								</span>
 								<input
 									type="url"
-									className="mt-1 w-full rounded-xl border border-app-border bg-app-soft px-3 py-3 text-sm text-app-text outline-none transition placeholder:text-muted/70 focus:border-primary"
+									className="mt-1 w-full rounded-xl border border-app-border bg-app-soft/82 px-3 py-3 text-sm text-app-text outline-none transition placeholder:text-muted/70 focus:border-primary"
 									value={draftUrl}
 									placeholder={t("settings.background.imageUrlPlaceholder")}
 									onChange={(event) => setDraftUrl(event.target.value)}

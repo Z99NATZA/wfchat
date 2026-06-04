@@ -167,7 +167,7 @@ function ChatMessageList({
 
 				<div className="mx-auto flex max-w-3xl flex-col gap-4">
 					{visibleMessages.length === 0 && !isSending && (
-						<div className="rounded-lg border border-dashed border-app-border bg-app-panel px-5 py-8 text-center">
+						<div className="rounded-lg border border-dashed border-app-border bg-app-panel/92 px-5 py-8 text-center">
 							<p className="text-sm font-semibold text-app-text">{t("chat.messageList.emptyTitle", { name: companionName })}</p>
 							<p className="mt-2 text-sm text-muted">
 								{t("chat.messageList.emptyDesc")}
@@ -211,7 +211,7 @@ function ChatMessageList({
 												<Ellipsis size={14} aria-hidden="true" />
 											</button>
 											{isMenuOpen && (
-												<div className="absolute bottom-8 left-0 z-20 min-w-44 rounded-lg border border-app-border bg-app-panel p-1 text-app-text shadow-soft">
+												<div className="absolute bottom-8 left-0 z-20 min-w-44 rounded-lg border border-app-border bg-app-panel/92 p-1 text-app-text shadow-soft">
 													<button
 														type="button"
 														onClick={() => hideUserMessage(message.id)}
@@ -229,7 +229,7 @@ function ChatMessageList({
 											"max-w-[min(36rem,82vw)] rounded-lg px-4 py-3 shadow-soft",
 											isUser
 												? "bg-primary text-white dark:border dark:border-app-border dark:bg-primary dark:text-app-text"
-												: "border border-app-border bg-app-panel text-app-text"
+												: "border border-app-border bg-app-panel/92 text-app-text"
 										)}
 									>
 										<p className="text-sm leading-6">{message.text}</p>
@@ -251,8 +251,8 @@ function ChatMessageList({
 					{isSending && (
 						<article className="flex items-end gap-3 justify-start">
 							<img className="size-9 shrink-0 rounded-lg object-cover" src={companionAvatarUrl} alt="" />
-							<div className="max-w-[min(36rem,82vw)] rounded-lg border border-app-border bg-app-panel px-4 py-3 text-app-text shadow-soft">
-								<p className="text-sm leading-6 text-muted">{t("chat.messageList.thinking", { name: companionName })}</p>
+							<div className="max-w-[min(36rem,82vw)] rounded-lg border border-app-border bg-app-panel/92 px-4 py-3 text-app-text shadow-soft">
+								<p className="text-sm leading-6 text-app-text">{t("chat.messageList.thinking", { name: companionName })}</p>
 							</div>
 						</article>
 					)}
@@ -269,7 +269,7 @@ function ChatMessageList({
 					<button
 						type="button"
 						onClick={scrollToLatest}
-						className="pointer-events-auto inline-flex items-center gap-2 rounded-full border border-app-border bg-app-panel/95 px-4 py-2 text-sm font-medium text-app-text shadow-soft backdrop-blur transition hover:border-primary hover:text-primary"
+						className="pointer-events-auto inline-flex items-center gap-2 rounded-full border border-app-border bg-app-panel/92 px-4 py-2 text-sm font-medium text-app-text shadow-soft transition hover:border-primary hover:text-primary"
 					>
 						<ArrowDown size={16} aria-hidden="true" />
 						{t("chat.messageList.jumpToLatest")}

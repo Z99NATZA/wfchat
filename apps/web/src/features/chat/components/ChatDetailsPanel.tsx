@@ -97,7 +97,7 @@ function ChatDetailsPanel({
 	}
 
 	return (
-		<aside className="hidden min-h-0 border-l border-app-border bg-app-panel backdrop-blur-xl xl:flex xl:flex-col">
+		<aside className="hidden min-h-0 border-l border-app-border bg-app-panel/62 xl:flex xl:flex-col">
 			<div className="border-b border-app-border p-5">
 				<div className="relative overflow-hidden rounded-lg bg-app-soft">
 					<img
@@ -221,7 +221,7 @@ function ChatDetailsPanel({
 									<Ellipsis size={14} aria-hidden="true" />
 								</button>
 								{openFactMenuId === fact.id && (
-									<div className="absolute right-2 top-10 z-10 min-w-32 rounded-md border border-app-border bg-app-panel p-1 shadow-soft">
+									<div className="absolute right-2 top-10 z-10 min-w-32 rounded-md border border-app-border bg-app-panel/82 p-1 shadow-soft">
 										<button
 											type="button"
 											onClick={() => {
@@ -320,7 +320,7 @@ function ChatDetailsPanel({
 									<Ellipsis size={14} aria-hidden="true" />
 								</button>
 								{openSummaryMenuId === summary.id && (
-									<div className="absolute right-2 top-10 z-10 min-w-32 rounded-md border border-app-border bg-app-panel p-1 shadow-soft">
+									<div className="absolute right-2 top-10 z-10 min-w-32 rounded-md border border-app-border bg-app-panel/82 p-1 shadow-soft">
 										<button
 											type="button"
 											onClick={() => {

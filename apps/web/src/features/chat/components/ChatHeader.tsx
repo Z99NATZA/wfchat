@@ -71,7 +71,7 @@ function ChatHeader({
 	}, [isMobileMenuOpen]);
 
 	return (
-		<header className="sticky top-0 z-20 border-b border-app-border bg-app-panel/95 px-3 py-2 backdrop-blur sm:px-4 sm:py-0 lg:px-6">
+	<header className="sticky top-0 z-20 border-b border-app-border bg-app-panel/62 px-3 py-2 sm:px-4 sm:py-0 lg:px-6">
 			<div className="flex min-h-12 items-center justify-between gap-2 sm:h-16 sm:gap-3">
 				<div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
 				<IconButton className="lg:hidden" onClick={onOpenSidebar} aria-label={t("chat.header.openSidebar")}>
@@ -163,7 +163,7 @@ function ChatHeader({
 					<Ellipsis size={18} aria-hidden="true" />
 				</IconButton>
 				{isMobileMenuOpen && (
-					<div className="absolute right-0 top-11 z-30 w-64 rounded-lg border border-app-border bg-app-panel p-2 shadow-soft">
+					<div className="absolute right-0 top-11 z-30 w-64 rounded-lg border border-app-border bg-app-panel/82 p-2 shadow-soft">
 						<div className="space-y-2">
 							<label className="flex h-10 items-center rounded-lg border border-app-border bg-app-soft pl-2 pr-1 text-xs font-semibold text-app-text">
 								<Languages size={18} aria-hidden="true" />

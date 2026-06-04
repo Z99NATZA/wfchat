@@ -11,9 +11,8 @@ type AppLayoutProps = {
 function AppLayout({ sidebar, header, children, details, backgroundImageUrl }: AppLayoutProps) {
 	const backgroundImageStyle = backgroundImageUrl
 		? {
-				backgroundImage:
-					`linear-gradient(var(--app-bg-image-overlay), var(--app-bg-image-overlay)), ` +
-					`url(${JSON.stringify(backgroundImageUrl)})`
+				backgroundImage: `url(${JSON.stringify(backgroundImageUrl)})`,
+				opacity: 0.1
 			}
 		: undefined;
 
