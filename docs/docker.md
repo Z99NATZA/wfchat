@@ -21,12 +21,10 @@ Create local env files once after clone:
 npm run init
 ```
 
-This creates:
+This creates missing env files and adds newly introduced keys to existing env files without overwriting current values:
 
 - `apps/api/.env` from `apps/api/.env.example`
 - `apps/web/.env` from `apps/web/.env.example`
-
-If a target `.env` already exists, the init script leaves it unchanged.
 
 ## API Startup Validation
 

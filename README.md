@@ -17,7 +17,7 @@ npm install
 npm run init
 ```
 
-`npm run init` creates local env files when they do not exist:
+`npm run init` creates local env files when they do not exist and adds newly introduced keys to existing local env files without overwriting current values:
 
 - `.env` from `.env.example`
 - `apps/api/.env` from `apps/api/.env.example`
