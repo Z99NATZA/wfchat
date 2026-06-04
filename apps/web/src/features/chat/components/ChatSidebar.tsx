@@ -151,7 +151,7 @@ function ChatSidebar({
 						type="button"
 						onClick={onCreateSession}
 						disabled={isCreatingSession}
-						className="inline-flex h-8 items-center gap-1 rounded-lg border border-app-border bg-app-soft px-2 text-xs font-semibold text-app-text transition hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-60"
+						className="inline-flex h-8 items-center gap-1 rounded-lg bg-primary px-2 text-xs font-semibold text-white transition hover:bg-primary-600 disabled:cursor-not-allowed disabled:opacity-60"
 					>
 						<Plus size={14} aria-hidden="true" />
 						{t("chat.sidebar.newChat")}
