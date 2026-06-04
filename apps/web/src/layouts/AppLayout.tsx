@@ -12,7 +12,7 @@ function AppLayout({ sidebar, header, children, details, backgroundImageUrl }: A
 	const backgroundImageStyle = backgroundImageUrl
 		? {
 				backgroundImage: `url(${JSON.stringify(backgroundImageUrl)})`,
-				opacity: 0.1
+				opacity: "var(--app-bg-image-opacity)"
 			}
 		: undefined;
 
