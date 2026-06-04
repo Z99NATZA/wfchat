@@ -101,7 +101,7 @@ function AppSettingsDialog({
 							<div className="grid grid-cols-2 gap-2">
 								<button
 									type="button"
-									className="rounded-xl border border-app-border bg-app-soft px-4 py-3 text-sm font-semibold text-app-text transition hover:border-primary hover:text-primary"
+									className="rounded-xl border border-red-400/25 bg-red-500/10 px-4 py-3 text-sm font-semibold text-red-500 transition hover:border-red-400/50 hover:bg-red-500/15 focus:outline-none focus:ring-4 focus:ring-red-500/15"
 									onClick={handleClear}
 								>
 									{t("settings.background.clear")}
