@@ -104,7 +104,7 @@ function AuthProfileDialog({
 					</div>
 					<button
 						type="button"
-						className="rounded-full border border-app-border bg-app-soft p-2 text-muted transition hover:border-primary hover:text-primary"
+						className="rounded-full bg-primary p-2 text-white transition hover:bg-primary-600 focus:outline-none focus:ring-4 focus:ring-primary/15"
 						aria-label={t("auth.profile.close")}
 						onClick={onClose}
 					>
