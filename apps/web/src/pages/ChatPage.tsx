@@ -1,5 +1,6 @@
 import AppLayout from "@/layouts/AppLayout";
 import AuthProfileDialog from "@/components/auth/AuthProfileDialog";
+import AppSettingsDialog from "@/components/settings/AppSettingsDialog";
 import ChatComposer from "@/features/chat/components/ChatComposer";
 import ChatDetailsPanel from "@/features/chat/components/ChatDetailsPanel";
 import ChatHeader from "@/features/chat/components/ChatHeader";
@@ -20,6 +21,7 @@ import type { AppFont } from "@/types/font";
 import type { Theme } from "@/types/theme";
 import { useEffect, useRef, useState } from "react";
 import { useI18n } from "@/i18n";
+import { persistBackgroundImageUrl, readBackgroundImageUrl } from "@/stores/backgroundStore";
 
 type ChatPageProps = {
 	theme: Theme;
@@ -35,8 +37,10 @@ function ChatPage({ theme, font, onFontChange, onToggleTheme }: ChatPageProps) {
 	const { alert } = useDialog();
 	const refreshRemoteState = chat.refreshRemoteState;
 	const [isProfileOpen, setIsProfileOpen] = useState(false);
+	const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 	const [isSyncing, setIsSyncing] = useState(false);
 	const [syncError, setSyncError] = useState<string | null>(null);
+	const [backgroundImageUrl, setBackgroundImageUrl] = useState(readBackgroundImageUrl);
 	const wasAuthenticatedRef = useRef(auth.isAuthenticated);
 
 	useEffect(() => {
@@ -141,9 +145,15 @@ function ChatPage({ theme, font, onFontChange, onToggleTheme }: ChatPageProps) {
 		setIsProfileOpen(false);
 	}
 
+	function handleUpdateBackgroundImageUrl(url: string) {
+		persistBackgroundImageUrl(url);
+		setBackgroundImageUrl(url.trim());
+	}
+
 	return (
 		<>
 			<AppLayout
+				backgroundImageUrl={backgroundImageUrl}
 				sidebar={
 					<ChatSidebar
 						personas={chat.personas}
@@ -176,6 +186,7 @@ function ChatPage({ theme, font, onFontChange, onToggleTheme }: ChatPageProps) {
 						hasPendingGuestSync={auth.isAuthenticated && auth.hasPendingGuestSync}
 						userAvatarUrl={auth.user?.avatarUrl}
 						onOpenProfile={() => setIsProfileOpen(true)}
+						onOpenSettings={() => setIsSettingsOpen(true)}
 					/>
 				}
 				details={
@@ -225,6 +236,12 @@ function ChatPage({ theme, font, onFontChange, onToggleTheme }: ChatPageProps) {
 				onUpdateProfile={auth.updateProfile}
 				isSyncing={isSyncing}
 				syncError={syncError}
+			/>
+			<AppSettingsDialog
+				isOpen={isSettingsOpen}
+				backgroundImageUrl={backgroundImageUrl}
+				onClose={() => setIsSettingsOpen(false)}
+				onUpdateBackgroundImageUrl={handleUpdateBackgroundImageUrl}
 			/>
 		</>
 	);

@@ -97,7 +97,7 @@ function ChatDetailsPanel({
 	}
 
 	return (
-		<aside className="hidden min-h-0 border-l border-app-border bg-app-panel xl:flex xl:flex-col">
+		<aside className="hidden min-h-0 border-l border-app-border bg-app-panel backdrop-blur-xl xl:flex xl:flex-col">
 			<div className="border-b border-app-border p-5">
 				<div className="relative overflow-hidden rounded-lg bg-app-soft">
 					<img

@@ -105,7 +105,7 @@ function Dialog({
 				aria-modal="true"
 				aria-labelledby="wfchat-dialog-title"
 				aria-describedby={description ? "wfchat-dialog-description" : undefined}
-				className="relative w-full max-w-md overflow-hidden rounded-xl border border-app-border bg-app-panel text-app-text shadow-soft"
+				className="relative w-full max-w-md overflow-hidden rounded-xl border border-app-border bg-app-panel text-app-text shadow-soft backdrop-blur-xl"
 				style={{
 					transform: `translate(${offset.x}px, ${offset.y}px)`
 				}}

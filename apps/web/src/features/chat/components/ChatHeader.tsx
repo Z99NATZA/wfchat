@@ -21,6 +21,7 @@ type ChatHeaderProps = {
 	hasPendingGuestSync: boolean;
 	userAvatarUrl?: string;
 	onOpenProfile: () => void;
+	onOpenSettings: () => void;
 };
 
 const themeButtonClassName =
@@ -41,7 +42,8 @@ function ChatHeader({
 	isAuthenticated,
 	hasPendingGuestSync,
 	userAvatarUrl,
-	onOpenProfile
+	onOpenProfile,
+	onOpenSettings
 }: ChatHeaderProps) {
 	const { locale, setLocale, t } = useI18n();
 	const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -144,7 +146,7 @@ function ChatHeader({
 				>
 					<Trash2 size={18} aria-hidden="true" />
 				</IconButton>
-				<IconButton className="hidden opacity-45 grayscale cursor-not-allowed md:flex" aria-label={t("chat.header.settings")} disabled title={t("common.notSupportedYet")}>
+				<IconButton className="hidden md:flex" aria-label={t("chat.header.settings")} onClick={onOpenSettings}>
 					<Settings size={18} aria-hidden="true" />
 				</IconButton>
 				<ProfileButton
@@ -203,6 +205,15 @@ function ChatHeader({
 									hasAttentionBadge={!isAuthenticated || hasPendingGuestSync}
 									onOpenProfile={onOpenProfile}
 								/>
+								<IconButton
+									aria-label={t("chat.header.settings")}
+									onClick={() => {
+										setIsMobileMenuOpen(false);
+										onOpenSettings();
+									}}
+								>
+									<Settings size={18} aria-hidden="true" />
+								</IconButton>
 								<IconButton className={themeButtonClassName} onClick={onToggleTheme} aria-label={nextThemeLabel}>
 									{theme === "dark" ? (
 										<Sun size={18} aria-hidden="true" />

@@ -72,7 +72,7 @@ function ChatSidebar({
 			)}
 			<aside
 				className={cn(
-					"fixed inset-y-0 left-0 z-40 w-[18.5rem] border-r border-app-border bg-app-panel transition-transform duration-300 lg:static lg:translate-x-0",
+					"fixed inset-y-0 left-0 z-40 w-[18.5rem] border-r border-app-border bg-app-panel backdrop-blur-xl transition-transform duration-300 lg:static lg:translate-x-0",
 					isOpen ? "translate-x-0" : "-translate-x-full"
 				)}
 			>

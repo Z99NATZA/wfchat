@@ -5,12 +5,28 @@ type AppLayoutProps = {
 	header: ReactNode;
 	children: ReactNode;
 	details?: ReactNode;
+	backgroundImageUrl?: string;
 };
 
-function AppLayout({ sidebar, header, children, details }: AppLayoutProps) {
+function AppLayout({ sidebar, header, children, details, backgroundImageUrl }: AppLayoutProps) {
+	const backgroundImageStyle = backgroundImageUrl
+		? {
+				backgroundImage:
+					`linear-gradient(var(--app-bg-image-overlay), var(--app-bg-image-overlay)), ` +
+					`url(${JSON.stringify(backgroundImageUrl)})`
+			}
+		: undefined;
+
 	return (
-		<main className="h-screen overflow-hidden bg-app-bg text-app-text antialiased transition-colors">
-			<div className="flex h-full overflow-hidden">
+		<main className="relative h-screen overflow-hidden bg-app-bg text-app-text antialiased transition-colors">
+			{backgroundImageStyle && (
+				<div
+					className="absolute inset-0 bg-cover bg-center bg-no-repeat"
+					style={backgroundImageStyle}
+					aria-hidden="true"
+				/>
+			)}
+			<div className="relative flex h-full overflow-hidden">
 				{sidebar}
 
 				<section className="flex min-w-0 flex-1 flex-col">

@@ -94,7 +94,7 @@ function AuthProfileDialog({
 				aria-label={t("auth.profile.close")}
 				onClick={onClose}
 			/>
-			<aside className="absolute inset-x-0 bottom-0 flex max-h-[92dvh] flex-col rounded-t-3xl border border-app-border bg-app-panel shadow-2xl sm:inset-y-0 sm:left-auto sm:right-0 sm:h-full sm:max-h-none sm:w-[420px] sm:rounded-none sm:border-y-0 sm:border-r-0">
+			<aside className="absolute inset-x-0 bottom-0 flex max-h-[92dvh] flex-col rounded-t-3xl border border-app-border bg-app-panel shadow-2xl backdrop-blur-xl sm:inset-y-0 sm:left-auto sm:right-0 sm:h-full sm:max-h-none sm:w-[420px] sm:rounded-none sm:border-y-0 sm:border-r-0">
 				<header className="flex items-start justify-between gap-4 border-b border-app-border px-5 py-4">
 					<div>
 						<h2 className="text-xl font-semibold text-app-text">
