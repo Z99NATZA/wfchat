@@ -32,7 +32,7 @@ function ConfirmDialog({
 				<>
 					<button
 						type="button"
-						className="rounded-lg border border-app-border bg-app-soft px-4 py-2 text-sm font-medium text-app-text transition hover:border-primary hover:text-primary"
+						className="rounded-lg border border-dialog-border bg-dialog-soft px-4 py-2 text-sm font-medium text-app-text transition hover:border-primary hover:text-primary"
 						onClick={onCancel}
 					>
 						{cancelLabel ?? t("common.cancel")}

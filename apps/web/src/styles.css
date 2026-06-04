@@ -11,6 +11,9 @@
 	--color-app-soft: var(--app-soft);
 	--color-app-text: var(--app-text);
 	--color-app-border: var(--app-border);
+	--color-dialog-panel: var(--dialog-panel);
+	--color-dialog-soft: var(--dialog-soft);
+	--color-dialog-border: var(--dialog-border);
 	--color-action: var(--action-bg);
 	--color-action-hover: var(--action-bg-hover);
 	--color-action-border: var(--action-border);
@@ -29,6 +32,9 @@
 		--app-soft: rgb(240 244 251 / 0.66);
 		--app-text: #111827;
 		--app-border: rgb(220 227 239 / 0.52);
+		--dialog-panel: #ffffff;
+		--dialog-soft: #f0f4fb;
+		--dialog-border: #dce3ef;
 		--app-bg-image-opacity: 0.18;
 		--action-bg: #4070f4;
 		--action-bg-hover: #2f5fdd;
@@ -48,6 +54,9 @@
 		--app-soft: rgb(47 52 62 / 0.72);
 		--app-text: #f2f5f8;
 		--app-border: rgb(116 126 143 / 0.38);
+		--dialog-panel: #3b414d;
+		--dialog-soft: #2f343e;
+		--dialog-border: #4a5260;
 		--app-bg-image-opacity: 0.1;
 		--action-bg: #282c33;
 		--action-bg-hover: #2f343e;

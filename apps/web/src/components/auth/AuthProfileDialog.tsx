@@ -94,8 +94,8 @@ function AuthProfileDialog({
 				aria-label={t("auth.profile.close")}
 				onClick={onClose}
 			/>
-			<aside className="absolute inset-x-0 bottom-0 flex max-h-[92dvh] flex-col rounded-t-3xl border border-app-border bg-app-panel/62 shadow-2xl sm:inset-y-0 sm:left-auto sm:right-0 sm:h-full sm:max-h-none sm:w-[420px] sm:rounded-none sm:border-y-0 sm:border-r-0">
-				<header className="flex items-start justify-between gap-4 border-b border-app-border px-5 py-4">
+			<aside className="absolute inset-x-0 bottom-0 flex max-h-[92dvh] flex-col rounded-t-3xl border border-dialog-border bg-dialog-panel shadow-2xl sm:inset-y-0 sm:left-auto sm:right-0 sm:h-full sm:max-h-none sm:w-[420px] sm:rounded-none sm:border-y-0 sm:border-r-0">
+				<header className="flex items-start justify-between gap-4 border-b border-dialog-border px-5 py-4">
 					<div>
 						<h2 className="text-xl font-semibold text-app-text">
 							{isAuthenticated ? t("auth.profile.titleMember") : t("auth.profile.titleGuest")}
@@ -113,7 +113,7 @@ function AuthProfileDialog({
 				</header>
 
 				<div className="flex-1 space-y-4 overflow-y-auto px-5 py-4">
-					<section className="rounded-2xl border border-app-border bg-app-soft/82 p-4">
+					<section className="rounded-2xl border border-dialog-border bg-dialog-soft p-4">
 						<div className="flex items-center justify-between gap-3">
 							<div className="flex min-w-0 items-center gap-3">
 								<div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-sky-500/10 text-lg font-semibold text-sky-600 dark:bg-sky-300/15 dark:text-sky-200">
@@ -149,7 +149,7 @@ function AuthProfileDialog({
 
 					{!isAuthenticated ? (
 						<section className="space-y-3">
-							<div className="rounded-2xl border border-app-border bg-app-soft/82 p-4 text-sm text-muted">
+							<div className="rounded-2xl border border-dialog-border bg-dialog-soft p-4 text-sm text-muted">
 								<p className="font-semibold text-app-text">{t("auth.profile.beforeLoginTitle")}</p>
 								<ul className="mt-3 list-disc space-y-2 pl-5">
 									<li>{t("auth.profile.beforeLoginItemSync")}</li>
@@ -161,7 +161,7 @@ function AuthProfileDialog({
 						</section>
 					) : (
 						<>
-							<section className="rounded-2xl border border-app-border bg-app-panel/82 p-4">
+							<section className="rounded-2xl border border-dialog-border bg-dialog-panel p-4">
 								<h3 className="text-sm font-semibold text-app-text">
 									{t("auth.profile.profileSection")}
 								</h3>
@@ -172,7 +172,7 @@ function AuthProfileDialog({
 										</span>
 										<input
 											type="text"
-											className="mt-1 w-full rounded-xl border border-app-border bg-app-soft px-3 py-3 text-sm text-app-text outline-none transition placeholder:text-muted/70 focus:border-primary"
+											className="mt-1 w-full rounded-xl border border-dialog-border bg-dialog-soft px-3 py-3 text-sm text-app-text outline-none transition placeholder:text-muted/70 focus:border-primary"
 											value={displayNameDraft}
 											placeholder={t("auth.profile.displayNamePlaceholder")}
 											onChange={(event) => setDisplayNameDraft(event.target.value)}
@@ -184,7 +184,7 @@ function AuthProfileDialog({
 										</span>
 										<input
 											type="url"
-											className="mt-1 w-full rounded-xl border border-app-border bg-app-soft px-3 py-3 text-sm text-app-text outline-none transition placeholder:text-muted/70 focus:border-primary"
+											className="mt-1 w-full rounded-xl border border-dialog-border bg-dialog-soft px-3 py-3 text-sm text-app-text outline-none transition placeholder:text-muted/70 focus:border-primary"
 											value={avatarUrlDraft}
 											placeholder={t("auth.profile.avatarUrlPlaceholder")}
 											onChange={(event) => setAvatarUrlDraft(event.target.value)}
@@ -209,7 +209,7 @@ function AuthProfileDialog({
 								</form>
 							</section>
 
-							<section className="rounded-2xl border border-app-border bg-app-panel/82 p-4">
+							<section className="rounded-2xl border border-dialog-border bg-dialog-panel p-4">
 								<div className="flex items-start gap-3">
 									<div className="rounded-xl bg-sky-500/10 p-2 text-sky-600 dark:bg-sky-300/15 dark:text-sky-200">
 										<RefreshCw size={18} aria-hidden="true" />
@@ -236,11 +236,11 @@ function AuthProfileDialog({
 								)}
 							</section>
 
-							<section className="rounded-2xl border border-app-border bg-app-panel/82 p-4">
+							<section className="rounded-2xl border border-dialog-border bg-dialog-panel p-4">
 								<h3 className="text-sm font-semibold text-app-text">
 									{t("auth.profile.accountSection")}
 								</h3>
-								<div className="mt-3 flex items-center gap-3 rounded-xl bg-app-soft/82 px-3 py-3 text-sm text-muted">
+								<div className="mt-3 flex items-center gap-3 rounded-xl bg-dialog-soft px-3 py-3 text-sm text-muted">
 									<Mail size={16} aria-hidden="true" />
 									<div className="min-w-0">
 										<p className="text-xs">{t("auth.profile.emailLabel")}</p>

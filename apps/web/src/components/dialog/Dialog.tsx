@@ -105,7 +105,7 @@ function Dialog({
 				aria-modal="true"
 				aria-labelledby="wfchat-dialog-title"
 				aria-describedby={description ? "wfchat-dialog-description" : undefined}
-				className="relative w-full max-w-md overflow-hidden rounded-xl border border-app-border bg-app-panel/62 text-app-text shadow-soft"
+				className="relative w-full max-w-md overflow-hidden rounded-xl border border-dialog-border bg-dialog-panel text-app-text shadow-soft"
 				style={{
 					transform: `translate(${offset.x}px, ${offset.y}px)`
 				}}
@@ -113,8 +113,8 @@ function Dialog({
 				<div
 					className={
 						isDraggable
-							? "cursor-move select-none border-b border-app-border bg-app-soft/82 px-5 py-3"
-							: "border-b border-app-border bg-app-soft/82 px-5 py-3"
+							? "cursor-move select-none border-b border-dialog-border bg-dialog-soft px-5 py-3"
+							: "border-b border-dialog-border bg-dialog-soft px-5 py-3"
 					}
 					onPointerDown={handleDragStart}
 					onPointerMove={handleDragMove}
