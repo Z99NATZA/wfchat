@@ -37,6 +37,8 @@ Chat feature components live in `apps/web/src/features/chat/components`.
 
 Keep components focused on rendering and UI events. Move non-trivial state logic into hooks and move domain decisions into services.
 
+Before adding visual surfaces, read `docs/theme.md`. The app has separate color systems for translucent app chrome (`app-*`) and solid modal dialogs (`dialog-*`), and new components should use the correct layer instead of raw colors.
+
 Prefer props that describe intent:
 
 ```tsx

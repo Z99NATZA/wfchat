@@ -1,41 +1,42 @@
-# Theme
+# Theme And Color Guidelines
 
-The theme system is CSS-variable driven and Tailwind CSS v4 friendly.
+This project uses semantic CSS variables exposed through Tailwind CSS v4. New UI should use the semantic tokens in `apps/web/src/styles.css` instead of hard-coded color values.
+
+The current design supports a full-screen user background image. Because of that, the app has two different surface systems:
+
+- `app-*`: translucent app chrome and chat surfaces that may reveal the background image.
+- `dialog-*`: solid modal surfaces that should not reveal the background image.
 
 ## Source Files
 
-- `apps/web/src/styles.css`: Tailwind import, CSS variables, theme tokens, shared component classes.
+- `apps/web/src/styles.css`: Tailwind import, color tokens, shared component classes, and theme values.
+- `apps/web/src/layouts/AppLayout.tsx`: full-screen app shell and background image layer.
+- `apps/web/src/stores/backgroundStore.ts`: persisted background image URL.
 - `apps/web/src/hooks/useTheme.ts`: React-facing theme API.
-- `apps/web/src/stores/themeStore.ts`: persistence and document class application.
+- `apps/web/src/stores/themeStore.ts`: theme persistence and document class application.
 
-## Theme Tokens
+## Theme Model
 
-Tailwind color utilities point to CSS variables:
+Tailwind utilities map to CSS variables:
 
 ```css
 @theme {
-	--color-primary: var(--brand-primary);
-	--color-app-bg: var(--app-bg);
+	--color-app-panel: var(--app-panel);
+	--color-dialog-panel: var(--dialog-panel);
 }
 ```
 
-Light theme primary:
+Light theme values live in `:root`. Dark theme overrides live in `.dark`.
 
 ```css
---brand-primary: #4070f4;
+:root {
+	--app-panel: rgb(255 255 255 / 0.82);
+}
+
+.dark {
+	--app-panel: rgb(59 65 77 / 0.88);
+}
 ```
-
-Dark theme primary:
-
-```css
---brand-primary: #282c33;
---brand-primary-hover: #2f343e;
---app-bg: #282c33;
---app-panel: #3b414d;
---app-soft: #2f343e;
-```
-
-## Dark Mode
 
 Dark mode uses a class selector:
 
@@ -43,8 +44,314 @@ Dark mode uses a class selector:
 @custom-variant dark (&:where(.dark, .dark *));
 ```
 
-The active theme is applied to `document.documentElement`. This keeps Tailwind classes stable while allowing theme values to change through CSS variables.
+The active theme is applied to `document.documentElement`, so components should keep Tailwind class names stable and let CSS variables change the actual colors.
 
-## Adding Tokens
+## Token Reference
 
-Add tokens only when they represent a repeated design decision. Prefer semantic names such as `app-panel` or `muted` instead of one-off color names.
+Use these tokens by intent, not by visual similarity.
+
+| Token | Tailwind class | Purpose |
+| --- | --- | --- |
+| `--app-bg` | `bg-app-bg` | Base app background behind all UI. |
+| `--app-panel` | `bg-app-panel` | Main app chrome surface. Translucent by design. |
+| `--app-soft` | `bg-app-soft` | Nested app controls, fields, chips, secondary panels. Translucent by design. |
+| `--app-text` | `text-app-text` | Primary readable text. |
+| `--app-border` | `border-app-border` | App chrome and surface borders. |
+| `--dialog-panel` | `bg-dialog-panel` | Modal/drawer/dialog shell. Solid by design. |
+| `--dialog-soft` | `bg-dialog-soft` | Nested controls inside modals/drawers/dialogs. Solid by design. |
+| `--dialog-border` | `border-dialog-border` | Modal/drawer/dialog borders. |
+| `--brand-primary` | `bg-primary`, `text-primary`, `border-primary` | Brand and primary action color. |
+| `--brand-primary-hover` | `bg-primary-600` | Primary action hover background. |
+| `--action-*` | `bg-action`, `text-action-text`, `border-action-border` | High-contrast action button token set. |
+| `--muted` | `text-muted` | Secondary text, metadata, less prominent icons. |
+| `--app-bg-image-opacity` | inline style var | Full-screen background image opacity. |
+
+## Current Values
+
+Light mode:
+
+```css
+--app-bg: #f6f8fc;
+--app-panel: rgb(255 255 255 / 0.82);
+--app-soft: rgb(240 244 251 / 0.66);
+--app-border: rgb(220 227 239 / 0.52);
+--dialog-panel: #ffffff;
+--dialog-soft: #f0f4fb;
+--dialog-border: #dce3ef;
+--app-bg-image-opacity: 0.18;
+```
+
+Dark mode:
+
+```css
+--app-bg: #282c33;
+--app-panel: rgb(59 65 77 / 0.88);
+--app-soft: rgb(47 52 62 / 0.72);
+--app-border: rgb(116 126 143 / 0.38);
+--dialog-panel: #3b414d;
+--dialog-soft: #2f343e;
+--dialog-border: #4a5260;
+--app-bg-image-opacity: 0.1;
+```
+
+## Background Image Rules
+
+The user background image is rendered by `AppLayout` as a separate absolute layer behind the UI.
+
+It should remain subtle. The intended behavior is close to VS Code wallpaper extensions:
+
+- Dark mode uses lower background visibility because dark UI needs stronger separation.
+- Light mode uses slightly higher background visibility because light surfaces wash out the image more.
+- Components should not rely on blur for readability.
+- Components should use surface opacity and borders to create hierarchy.
+
+Do not add `backdrop-blur` for normal app surfaces unless the design is intentionally changed again. Blur was removed because it made the visual model harder to tune.
+
+## Surface Hierarchy
+
+Use this hierarchy when adding components.
+
+### Level 0: Base App Area
+
+Use no extra surface when content can sit directly in the chat content area.
+
+Examples:
+
+- Message timeline spacing containers.
+- Empty layout wrappers.
+- Non-interactive page layout areas.
+
+Recommended classes:
+
+```tsx
+<div className="min-h-0 flex-1">
+	{children}
+</div>
+```
+
+### Level 1: Main App Shell
+
+Use this for large persistent UI regions that should let the background image show through.
+
+Examples:
+
+- Sidebar shell.
+- Header shell.
+- Bottom composer shell.
+- Right details panel shell.
+
+Recommended classes:
+
+```tsx
+<aside className="border-r border-app-border bg-app-panel/62">
+	...
+</aside>
+```
+
+`bg-app-panel/62` is the preferred large-shell opacity. It keeps the background visible while preserving UI shape.
+
+### Level 2: Nested App Components
+
+Use this for controls and contained UI inside main shell regions. These must stay more readable than the shell.
+
+Examples:
+
+- Search fields.
+- Select controls.
+- Icon buttons.
+- Memory cards.
+- Sidebar menu popovers.
+- Composer input body.
+
+Recommended classes:
+
+```tsx
+<div className="rounded-lg border border-app-border bg-app-soft">
+	...
+</div>
+```
+
+For nested elements inside very translucent shells, prefer a stronger local opacity:
+
+```tsx
+<form className="rounded-lg border border-app-border bg-app-soft/82">
+	...
+</form>
+```
+
+### Level 3: Chat Content Cards
+
+Chat bubbles and floating chat controls need stronger readability because they sit directly over the content area.
+
+Examples:
+
+- AI message bubble.
+- Thinking bubble.
+- Empty-state card inside message list.
+- Jump-to-latest button.
+
+Recommended classes:
+
+```tsx
+<div className="rounded-lg border border-app-border bg-app-panel/92 text-app-text shadow-soft">
+	...
+</div>
+```
+
+User bubbles use primary color and should stay distinct:
+
+```tsx
+<div className="rounded-lg bg-primary text-white">
+	...
+</div>
+```
+
+### Level 4: Modal And Drawer Dialogs
+
+Dialogs should not use translucent app surfaces. They should be solid and visually independent from the background image and app chrome behind them.
+
+Examples:
+
+- Profile drawer.
+- Settings drawer.
+- Confirm dialog.
+- Alert dialog.
+- Custom dialogs opened through `useDialog()`.
+
+Use `dialog-*` tokens:
+
+```tsx
+<aside className="border border-dialog-border bg-dialog-panel">
+	<section className="border border-dialog-border bg-dialog-soft">
+		...
+	</section>
+</aside>
+```
+
+Do not use `bg-app-panel/62`, `bg-app-panel/82`, or `bg-app-soft/82` inside modal/dialog shells unless the component is intentionally part of the page chrome rather than a modal.
+
+## Practical Recipes
+
+### Persistent Sidebar
+
+```tsx
+<aside className="border-r border-app-border bg-app-panel/62">
+	<div className="border-b border-app-border">...</div>
+	<input className="border border-app-border bg-app-soft text-app-text" />
+</aside>
+```
+
+### Header Toolbar Control
+
+```tsx
+<label className="inline-flex items-center rounded-lg border border-app-border bg-app-soft text-app-text">
+	<select className="bg-transparent text-app-text outline-none" />
+</label>
+```
+
+### Floating App Menu
+
+```tsx
+<div className="rounded-lg border border-app-border bg-app-panel/82 shadow-soft">
+	<button className="hover:bg-app-soft">...</button>
+</div>
+```
+
+### Dialog Form
+
+```tsx
+<aside className="border border-dialog-border bg-dialog-panel">
+	<input className="border border-dialog-border bg-dialog-soft text-app-text" />
+</aside>
+```
+
+### Secondary Action Button
+
+For ordinary secondary actions in app chrome:
+
+```tsx
+<button className="border border-app-border bg-app-soft text-app-text hover:border-primary hover:text-primary">
+	Cancel
+</button>
+```
+
+For ordinary secondary actions in dialogs:
+
+```tsx
+<button className="border border-dialog-border bg-dialog-soft text-app-text hover:border-primary hover:text-primary">
+	Cancel
+</button>
+```
+
+### Destructive Action Button
+
+Use the existing red pattern:
+
+```tsx
+<button className="border border-red-400/25 bg-red-500/10 text-red-500 hover:border-red-400/50 hover:bg-red-500/15">
+	Delete
+</button>
+```
+
+## Do And Do Not
+
+Do:
+
+- Use semantic classes such as `bg-app-panel`, `bg-dialog-panel`, `text-muted`, and `border-app-border`.
+- Use `app-*` tokens for persistent app chrome and chat surfaces.
+- Use `dialog-*` tokens for modal dialogs and drawers.
+- Keep chat bubbles and inputs more opaque than the main shell.
+- Check both light and dark mode after changing any token.
+- Prefer `bg-app-panel/62` for large app shells.
+- Prefer `bg-app-panel/82` or `bg-app-soft/82` for app popovers and nested components that need stronger readability.
+- Prefer `bg-app-panel/92` for chat bubbles and floating message controls.
+
+Do not:
+
+- Hard-code raw hex or `rgb(...)` values in components.
+- Use `bg-white`, `bg-slate-*`, or `bg-zinc-*` for app surfaces.
+- Use translucent `app-*` tokens inside modal dialogs.
+- Use `dialog-*` tokens for persistent chat layout.
+- Add blur as a readability fix without first adjusting surface opacity.
+- Make text itself transparent to create visual softness.
+- Use one opacity value everywhere. Shells, nested controls, chat cards, and dialogs have different jobs.
+
+## Adding A New Component
+
+Use this decision flow:
+
+1. Is it a modal, drawer, alert, confirm, or settings/profile surface?
+   Use `bg-dialog-panel`, `bg-dialog-soft`, and `border-dialog-border`.
+
+2. Is it a large persistent app region?
+   Use `bg-app-panel/62` plus `border-app-border`.
+
+3. Is it a small nested control or card inside app chrome?
+   Use `bg-app-soft`, or `bg-app-soft/82` when it needs stronger readability.
+
+4. Is it a chat bubble or floating control over message content?
+   Use `bg-app-panel/92` plus `border-app-border`.
+
+5. Is it a primary command?
+   Use `bg-primary text-white hover:bg-primary-600`, unless it is the send/action button pattern that already uses `action-*`.
+
+6. Is it destructive?
+   Use the red danger pattern.
+
+## When To Add Tokens
+
+Add a new token only when it represents a repeated semantic role. Good token candidates:
+
+- A new repeated warning surface.
+- A new success surface.
+- A new separate layer type with different opacity behavior.
+
+Avoid new tokens for one-off component styling. Use existing semantic tokens first.
+
+When adding a token:
+
+1. Add it to `@theme`.
+2. Add light value under `:root`.
+3. Add dark value under `.dark`.
+4. Document the intended use in this file.
+5. Replace raw component classes with the new semantic utility.
