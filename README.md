@@ -166,3 +166,7 @@ npm run build
 ```
 
 More Docker details: `docs/docker.md`
+
+## License
+
+MIT. See [LICENSE](LICENSE).
