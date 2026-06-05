@@ -17,8 +17,9 @@ The frontend should not import backend code, read backend files, or know provide
 ```text
 apps/web/src/main.tsx
   -> apps/web/src/app/App.tsx
-    -> apps/web/src/pages/ChatPage.tsx
-      -> apps/web/src/features/chat
+    -> apps/web/src/layouts/AppLayout.tsx
+      -> apps/web/src/pages/ChatPage.tsx
+      -> apps/web/src/pages/Model3DPage.tsx
 ```
 
 The chat UI uses `apps/web/src/features/chat/services/chatApiService.ts` to create a guest session, create/load a chat, and send messages through the Rust backend.
@@ -28,6 +29,8 @@ The current supported chat companion is Aiko only. If a browser has no stored se
 The clear chat button in the header is supported. It calls `DELETE /api/chats/:chat_id/messages` after a browser confirmation and leaves the current chat/session intact.
 
 Chat layout and scroll contract (single-scroll message timeline, sticky header/composer): `docs/chat-layout-scroll.md`.
+
+App-level page navigation uses the left activity bar described in `docs/app-navigation.md`. It currently switches between the chat workspace and a mock 3D model workspace without adding a router library.
 
 Auth/profile UI lives in `apps/web/src/components/auth/AuthProfileDialog.tsx`. It renders as a desktop right drawer and mobile bottom sheet, uses Google sign-in for login, and lets signed-in users edit `display_name` and `avatar_url` through `PATCH /api/auth/profile`.
 

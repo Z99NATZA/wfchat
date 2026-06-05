@@ -23,10 +23,13 @@ WFChat frontend code is organized around a small feature-first architecture in `
 ## Runtime Flow
 
 1. `apps/web/src/main.tsx` mounts React and imports global styles.
-2. `apps/web/src/app/App.tsx` initializes app-level theme state.
-3. `apps/web/src/pages/ChatPage.tsx` composes the chat screen.
-4. `apps/web/src/features/chat/hooks/useChatSession.ts` owns the chat screen state and calls the backend chat API.
-5. Feature components render the chat sidebar, header, messages, composer, and details panel.
+2. `apps/web/src/app/App.tsx` initializes app-level theme/font state and selects the active app page.
+3. `apps/web/src/layouts/AppLayout.tsx` renders the shared activity bar, page sidebar, header, content, and optional details area.
+4. `apps/web/src/pages/ChatPage.tsx` composes the chat screen.
+5. `apps/web/src/features/chat/hooks/useChatSession.ts` owns the chat screen state and calls the backend chat API.
+6. Feature components render the chat sidebar, header, messages, composer, and details panel.
+
+App-level navigation is documented in `docs/app-navigation.md`.
 
 ## Feature Boundaries
 

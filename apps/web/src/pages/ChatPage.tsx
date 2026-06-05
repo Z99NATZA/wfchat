@@ -20,18 +20,19 @@ import {
 } from "@/services/syncService";
 import type { AppFont } from "@/types/font";
 import type { Theme } from "@/types/theme";
-import { useEffect, useRef, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { useI18n } from "@/i18n";
 import { persistBackgroundImageUrl, readBackgroundImageUrl } from "@/stores/backgroundStore";
 
 type ChatPageProps = {
+	activityBar: ReactNode;
 	theme: Theme;
 	font: AppFont;
 	onFontChange: (font: AppFont) => void;
 	onToggleTheme: () => void;
 };
 
-function ChatPage({ theme, font, onFontChange, onToggleTheme }: ChatPageProps) {
+function ChatPage({ activityBar, theme, font, onFontChange, onToggleTheme }: ChatPageProps) {
 	const chat = useChatSession();
 	const auth = useAuthSession();
 	const { setLocale, t } = useI18n();
@@ -174,6 +175,7 @@ function ChatPage({ theme, font, onFontChange, onToggleTheme }: ChatPageProps) {
 	return (
 		<>
 			<AppLayout
+				activityBar={activityBar}
 				backgroundImageUrl={backgroundImageUrl}
 				sidebar={
 					<ChatSidebar

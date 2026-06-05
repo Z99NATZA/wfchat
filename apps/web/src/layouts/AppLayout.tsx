@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 
 type AppLayoutProps = {
+	activityBar?: ReactNode;
 	sidebar: ReactNode;
 	header: ReactNode;
 	children: ReactNode;
@@ -8,7 +9,14 @@ type AppLayoutProps = {
 	backgroundImageUrl?: string;
 };
 
-function AppLayout({ sidebar, header, children, details, backgroundImageUrl }: AppLayoutProps) {
+function AppLayout({
+	activityBar,
+	sidebar,
+	header,
+	children,
+	details,
+	backgroundImageUrl
+}: AppLayoutProps) {
 	const backgroundImageStyle = backgroundImageUrl
 		? {
 				backgroundImage: `url(${JSON.stringify(backgroundImageUrl)})`,
@@ -26,6 +34,7 @@ function AppLayout({ sidebar, header, children, details, backgroundImageUrl }: A
 				/>
 			)}
 			<div className="relative flex h-full overflow-hidden">
+				{activityBar}
 				{sidebar}
 
 				<section className="flex min-w-0 flex-1 flex-col">

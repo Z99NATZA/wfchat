@@ -42,7 +42,11 @@ docs/
 
 `apps/web/src/pages` contains route-level screens. A page composes layouts, features, and app-level dependencies.
 
+`apps/web/src/layouts` contains reusable page shells such as `AppLayout`, including the activity bar/sidebar/content slot contract.
+
 `apps/web/src/features` contains domain-specific frontend code. Each feature can have its own `components`, `data`, `hooks`, and `services`.
+
+`apps/web/src/components/navigation` contains app-level navigation UI such as the activity bar.
 
 `apps/web/src/services` contains infrastructure-facing helpers such as storage, axios clients, or transport wrappers.
 

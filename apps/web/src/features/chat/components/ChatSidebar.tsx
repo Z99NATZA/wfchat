@@ -65,14 +65,14 @@ function ChatSidebar({
 			{isOpen && (
 				<button
 					type="button"
-					className="fixed inset-0 z-30 bg-black/30 lg:hidden"
+					className="fixed inset-y-0 left-14 right-0 z-30 bg-black/30 lg:hidden"
 					aria-label={t("chat.sidebar.closeSidebar")}
 					onClick={onCloseSidebar}
 				/>
 			)}
 			<aside
 				className={cn(
-					"fixed inset-y-0 left-0 z-40 w-[18.5rem] border-r border-app-border bg-app-panel/62 transition-transform duration-300 lg:static lg:translate-x-0",
+					"fixed inset-y-0 left-14 z-40 w-[18.5rem] border-r border-app-border bg-app-panel/62 transition-transform duration-300 lg:static lg:translate-x-0",
 					isOpen ? "translate-x-0" : "-translate-x-full"
 				)}
 			>
