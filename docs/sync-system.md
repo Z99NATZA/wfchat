@@ -9,7 +9,7 @@
 สถานะตอนนี้:
 - มี `guest session` จริงที่ backend
 - มี `in-app auth UI` พร้อม Google login จริง
-- มี sync จริงสำหรับ `settings` (theme/font/locale)
+- มี sync จริงสำหรับ `settings` (theme/font/locale/backgroundImageUrl)
 - มี `sync queue + retry` ฝั่ง frontend
 - มี `cloud -> local pull` ผ่าน `GET /api/sync/changes?cursor=...`
 - หลัง login Google ข้อมูลของ registered user จะ scope ด้วย `user_id` เดียวกันข้าม browser
@@ -45,7 +45,7 @@
 
 ## 3) สถาปัตยกรรมภาพรวม
 ฝั่ง Frontend:
-- เก็บค่าจริงใน local storage (`wfchat-theme`, `wfchat-font`, `wfchat.locale`)
+- เก็บค่าจริงใน local storage (`wfchat-theme`, `wfchat-font`, `wfchat.locale`, `wfchat.backgroundImageUrl`)
 - เก็บ metadata เวลาแก้ไขของแต่ละ key ใน `wfchat-sync-meta`
 - เมื่อกด `Sync now` จะยิง `preview -> commit`
 
@@ -65,6 +65,7 @@ Local keys ที่เกี่ยวข้อง:
 - `wfchat-theme`
 - `wfchat-font`
 - `wfchat.locale`
+- `wfchat.backgroundImageUrl`
 - `wfchat-sync-meta`
 - `wfchat-sync-queue`
 
@@ -73,7 +74,8 @@ Local keys ที่เกี่ยวข้อง:
 {
   "settings.theme": 1780325400,
   "settings.font": 1780325410,
-  "settings.locale": 1780325420
+  "settings.locale": 1780325420,
+  "settings.backgroundImageUrl": 1780325430
 }
 ```
 
@@ -215,7 +217,7 @@ Response:
 7. ผู้ใช้กด `Sync now`
 8. frontend `enqueue` รายการลง `wfchat-sync-queue`
 9. รายการที่ enqueue ตอนนี้มี:
-- settings (`theme/font/locale`)
+- settings (`theme/font/locale/backgroundImageUrl`)
 - memory facts ของ persona ปัจจุบัน
 - memory summaries ของ persona ปัจจุบัน
 - chat sessions ของ persona ปัจจุบัน

@@ -3,6 +3,11 @@ import { readStorageItem, removeStorageItem, writeStorageItem } from "@/services
 import { readSyncUpdatedAt } from "@/stores/syncStateStore";
 import { applyThemeToDocument, persistTheme } from "@/stores/themeStore";
 import { applyFontToDocument, persistFont } from "@/stores/fontStore";
+import {
+	BACKGROUND_IMAGE_URL_STORAGE_KEY,
+	BACKGROUND_IMAGE_URL_SYNC_KEY,
+	persistBackgroundImageUrl
+} from "@/stores/backgroundStore";
 import type { ChatMessage, ChatSessionSummary, MemoryFact, MemorySummary } from "@/types/chat";
 import type { AppFont } from "@/types/font";
 import type { Theme } from "@/types/theme";
@@ -13,6 +18,7 @@ const syncCursorStorageKey = "wfchat-sync-cursor";
 const localeStorageKey = "wfchat.locale";
 const themeStorageKey = "wfchat-theme";
 const fontStorageKey = "wfchat-font";
+const backgroundImageUrlStorageKey = BACKGROUND_IMAGE_URL_STORAGE_KEY;
 const memoryFactsCacheKey = "wfchat-memory-facts-cache";
 const memorySummariesCacheKey = "wfchat-memory-summaries-cache";
 const memoryDeletesCacheKey = "wfchat-memory-deletes-cache";
@@ -230,7 +236,8 @@ export function clearLocalSyncState(): void {
 }
 
 export async function pullSyncChanges(
-	onLocaleChange?: (locale: "en" | "th") => void
+	onLocaleChange?: (locale: "en" | "th") => void,
+	onBackgroundImageUrlChange?: (url: string) => void
 ): Promise<number> {
 	const sessionId = await ensureGuestSession();
 	const cursor = Number(readStorageItem(syncCursorStorageKey) ?? "0");
@@ -240,7 +247,7 @@ export async function pullSyncChanges(
 	});
 
 	for (const item of response.data.items) {
-		applySyncItem(item, onLocaleChange);
+		applySyncItem(item, onLocaleChange, onBackgroundImageUrlChange);
 	}
 
 	writeStorageItem(syncCursorStorageKey, String(response.data.next_cursor));
@@ -338,6 +345,8 @@ function buildSyncItems(): SyncItem[] {
 	const locale = readStorageItem(localeStorageKey);
 	const theme = readStorageItem(themeStorageKey);
 	const font = readStorageItem(fontStorageKey);
+	const backgroundImageUrl = readStorageItem(backgroundImageUrlStorageKey);
+	const backgroundImageUpdatedAt = readSyncUpdatedAt(BACKGROUND_IMAGE_URL_SYNC_KEY);
 	const items: SyncItem[] = [];
 
 	if (theme) {
@@ -367,11 +376,24 @@ function buildSyncItems(): SyncItem[] {
 			payload: { key: "locale", value: locale }
 		});
 	}
+	if (backgroundImageUrl !== null || backgroundImageUpdatedAt !== null) {
+		items.push({
+			item_id: BACKGROUND_IMAGE_URL_SYNC_KEY,
+			item_type: "setting",
+			updated_at: backgroundImageUpdatedAt ?? now,
+			deleted_at: null,
+			payload: { key: "backgroundImageUrl", value: backgroundImageUrl ?? "" }
+		});
+	}
 
 	return items;
 }
 
-function applySyncItem(item: SyncItem, onLocaleChange?: (locale: "en" | "th") => void) {
+function applySyncItem(
+	item: SyncItem,
+	onLocaleChange?: (locale: "en" | "th") => void,
+	onBackgroundImageUrlChange?: (url: string) => void
+) {
 	if (item.deleted_at && item.deleted_at > 0) {
 		if (item.item_type === "memory_fact") {
 			removeMemoryFactFromCache(item.item_id);
@@ -413,7 +435,7 @@ function applySyncItem(item: SyncItem, onLocaleChange?: (locale: "en" | "th") =>
 
 	const key = item.payload?.key;
 	const value = item.payload?.value;
-	if (item.item_type !== "setting" || !key || !value) {
+	if (item.item_type !== "setting" || !key || typeof value !== "string") {
 		return;
 	}
 
@@ -432,6 +454,12 @@ function applySyncItem(item: SyncItem, onLocaleChange?: (locale: "en" | "th") =>
 	if (key === "locale" && (value === "en" || value === "th")) {
 		writeStorageItem(localeStorageKey, value);
 		onLocaleChange?.(value);
+		return;
+	}
+
+	if (key === "backgroundImageUrl") {
+		persistBackgroundImageUrl(value);
+		onBackgroundImageUrlChange?.(value.trim());
 	}
 }
 

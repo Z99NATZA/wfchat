@@ -11,6 +11,7 @@ import { useAuthSession } from "@/hooks/useAuthSession";
 import { useDialog } from "@/components/dialog/DialogProvider";
 import {
 	clearLocalSyncState,
+	enqueueGuestSync,
 	enqueueGuestSyncWithMemory,
 	flushGuestSyncQueue,
 	hasPendingSyncQueue,
@@ -60,7 +61,7 @@ function ChatPage({ theme, font, onFontChange, onToggleTheme }: ChatPageProps) {
 			.then(async (result) => {
 				if (result) {
 					auth.markGuestSyncDone();
-					await pullSyncChanges(setLocale);
+					await pullSyncChanges(setLocale, setBackgroundImageUrl);
 					refreshRemoteState();
 				}
 			})
@@ -73,7 +74,7 @@ function ChatPage({ theme, font, onFontChange, onToggleTheme }: ChatPageProps) {
 		if (!auth.isAuthenticated) {
 			return;
 		}
-		void pullSyncChanges(setLocale).then(() => refreshRemoteState());
+		void pullSyncChanges(setLocale, setBackgroundImageUrl).then(() => refreshRemoteState());
 	}, [auth.isAuthenticated, refreshRemoteState, setLocale]);
 
 	useEffect(() => {
@@ -91,7 +92,7 @@ function ChatPage({ theme, font, onFontChange, onToggleTheme }: ChatPageProps) {
 				.catch(() => {
 					markSyncRetry();
 				});
-			void pullSyncChanges(setLocale).then(() => refreshRemoteState());
+			void pullSyncChanges(setLocale, setBackgroundImageUrl).then(() => refreshRemoteState());
 		}
 
 		window.addEventListener("online", handleOnline);
@@ -112,7 +113,7 @@ function ChatPage({ theme, font, onFontChange, onToggleTheme }: ChatPageProps) {
 			const result = await flushGuestSyncQueue({ force: true });
 			if (!result) {
 				auth.markGuestSyncDone();
-				await pullSyncChanges(setLocale);
+				await pullSyncChanges(setLocale, setBackgroundImageUrl);
 				refreshRemoteState();
 				await alert({
 					title: t("auth.profile.syncCompleteTitle"),
@@ -123,7 +124,7 @@ function ChatPage({ theme, font, onFontChange, onToggleTheme }: ChatPageProps) {
 			if (!hasPendingSyncQueue()) {
 				auth.markGuestSyncDone();
 			}
-			await pullSyncChanges(setLocale);
+			await pullSyncChanges(setLocale, setBackgroundImageUrl);
 			refreshRemoteState();
 			await alert({
 				title: t("auth.profile.syncCompleteTitle"),
@@ -148,6 +149,26 @@ function ChatPage({ theme, font, onFontChange, onToggleTheme }: ChatPageProps) {
 	function handleUpdateBackgroundImageUrl(url: string) {
 		persistBackgroundImageUrl(url);
 		setBackgroundImageUrl(url.trim());
+		if (auth.isAuthenticated) {
+			void syncBackgroundImageSetting();
+		}
+	}
+
+	async function syncBackgroundImageSetting() {
+		try {
+			await enqueueGuestSync();
+			while (hasPendingSyncQueue()) {
+				const result = await flushGuestSyncQueue({ force: true });
+				if (!result) {
+					break;
+				}
+			}
+			if (!hasPendingSyncQueue()) {
+				auth.markGuestSyncDone();
+			}
+		} catch {
+			markSyncRetry();
+		}
 	}
 
 	return (
