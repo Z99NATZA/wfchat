@@ -342,9 +342,13 @@ function ToolButton({ icon: Icon, label, active = false }: ToolButtonProps) {
 		<button
 			type="button"
 			className={cn(
-				"flex h-10 items-center justify-center rounded-lg border text-muted transition hover:border-primary hover:text-primary",
-				darkAppControlHoverClassName,
-				active ? "border-primary/30 bg-primary/10 text-app-text" : "border-app-border bg-app-soft"
+				"flex h-10 items-center justify-center rounded-lg border text-muted transition",
+				active
+					? "border-primary bg-app-soft text-primary dark:border-action-border dark:bg-action-hover dark:text-app-text"
+					: cn(
+							"border-app-border bg-app-soft/30 hover:border-primary/30 hover:bg-primary/10 hover:text-app-text",
+							darkAppControlHoverClassName
+						)
 			)}
 			aria-label={label}
 			title={label}
