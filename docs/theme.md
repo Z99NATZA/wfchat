@@ -152,7 +152,7 @@ Recommended classes:
 </aside>
 ```
 
-`bg-app-panel/62` is the preferred large-shell opacity for normal layout chrome. Use `app-surface-panel` only when the surface must prevent underlying components from showing through, such as an activity rail above a sliding sidebar. Use `mobile-app-surface-panel lg:bg-app-panel/62` for a sidebar that overlays chat content on mobile but becomes normal layout chrome on desktop.
+`bg-app-panel/62` is the preferred large-shell opacity for normal layout chrome. Use `app-surface-panel` only when the surface must prevent underlying components from showing through, such as an activity rail above a sliding sidebar. Use `mobile-app-surface-panel` for mobile sidebars and dropdown menus that overlay chat content.
 
 ### Level 2: Nested App Components
 
