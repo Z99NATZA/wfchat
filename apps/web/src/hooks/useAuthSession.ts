@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { readStorageItem, writeStorageItem } from "@/services/storageService";
 import {
 	fetchCurrentSession,
@@ -73,17 +73,19 @@ export function useAuthSession() {
 			.finally(() => setIsLoading(false));
 	}, []);
 
-	async function loginGoogleWithIdToken(idToken: string) {
+	const loginGoogleWithIdToken = useCallback(async (idToken: string) => {
 		const session = await loginWithGoogle(idToken);
-		const nextState: AuthState = {
-			...state,
-			user: mapSessionToUser(session, "google")
-		};
-		setState(nextState);
-		persistState(nextState);
-	}
+		setState((current) => {
+			const nextState: AuthState = {
+				...current,
+				user: mapSessionToUser(session, "google")
+			};
+			persistState(nextState);
+			return nextState;
+		});
+	}, []);
 
-	async function logout() {
+	const logout = useCallback(async () => {
 		const session = await logoutSession();
 		const nextState: AuthState = {
 			user: null,
@@ -91,26 +93,30 @@ export function useAuthSession() {
 		};
 		setState(nextState);
 		persistState(nextState);
-	}
+	}, []);
 
-	async function updateUserProfile(displayName: string, avatarUrl: string) {
+	const updateUserProfile = useCallback(async (displayName: string, avatarUrl: string) => {
 		const session = await updateProfile(displayName, avatarUrl);
-		const nextState: AuthState = {
-			...state,
-			user: mapSessionToUser(session, "google")
-		};
-		setState(nextState);
-		persistState(nextState);
-	}
+		setState((current) => {
+			const nextState: AuthState = {
+				...current,
+				user: mapSessionToUser(session, "google")
+			};
+			persistState(nextState);
+			return nextState;
+		});
+	}, []);
 
-	function markGuestSyncDone() {
-		const nextState: AuthState = {
-			...state,
-			hasPendingGuestSync: false
-		};
-		setState(nextState);
-		persistState(nextState);
-	}
+	const markGuestSyncDone = useCallback(() => {
+		setState((current) => {
+			const nextState: AuthState = {
+				...current,
+				hasPendingGuestSync: false
+			};
+			persistState(nextState);
+			return nextState;
+		});
+	}, []);
 
 	const profileLabel = useMemo(() => {
 		if (!state.user) {
@@ -132,6 +138,8 @@ export function useAuthSession() {
 		markGuestSyncDone
 	};
 }
+
+export type AuthSessionController = ReturnType<typeof useAuthSession>;
 
 function mapSessionToUser(session: AuthSession, provider: AuthProvider): AuthUser {
 	return {

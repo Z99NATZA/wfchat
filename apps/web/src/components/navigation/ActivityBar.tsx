@@ -1,13 +1,13 @@
-import { Box, MessageCircle, type LucideIcon } from "lucide-react";
+import { MessageCircle, type LucideIcon, UserRound } from "lucide-react";
 import { NavLink } from "react-router-dom";
 import { useI18n } from "@/i18n";
 import { cn } from "@/utils/classNames";
 
-export type AppPageId = "chat" | "model3d";
+export type AppPageId = "chat" | "avatar";
 
 const navItems: Array<{ id: AppPageId; labelKey: string; icon: LucideIcon; path: string }> = [
 	{ id: "chat", labelKey: "navigation.chat", icon: MessageCircle, path: "/chat" },
-	{ id: "model3d", labelKey: "navigation.model3d", icon: Box, path: "/model3d" }
+	{ id: "avatar", labelKey: "navigation.avatar", icon: UserRound, path: "/avatar" }
 ];
 
 function ActivityBar() {

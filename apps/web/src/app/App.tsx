@@ -1,36 +1,265 @@
-import ChatPage from "@/pages/ChatPage";
-import Model3DPage from "@/pages/Model3DPage";
+import { useCallback, useEffect, useRef, useState } from "react";
+import AuthProfileDialog from "@/components/auth/AuthProfileDialog";
 import ActivityBar from "@/components/navigation/ActivityBar";
 import DialogProvider from "@/components/dialog/DialogProvider";
-import { useTheme } from "@/hooks/useTheme";
-import { useFont } from "@/hooks/useFont";
+import AppSettingsDialog from "@/components/settings/AppSettingsDialog";
+import { useAppSettings } from "@/app/AppSettingsProvider";
+import { useAuthSession } from "@/hooks/useAuthSession";
+import { useDialog } from "@/components/dialog/DialogProvider";
+import { useI18n } from "@/i18n";
+import AvatarPage from "@/pages/AvatarPage";
+import ChatPage, { type ChatSyncSnapshot } from "@/pages/ChatPage";
+import {
+	clearLocalSyncState,
+	enqueueGuestSync,
+	enqueueGuestSyncWithMemory,
+	flushGuestSyncQueue,
+	hasPendingSyncQueue,
+	markSyncRetry,
+	pullSyncChanges
+} from "@/services/syncService";
 import { Navigate, Route, Routes } from "react-router-dom";
 
 function App() {
-	const { theme, toggleTheme } = useTheme();
-	const { font, setFont } = useFont();
+	const settings = useAppSettings();
+	const auth = useAuthSession();
+	const { setLocale, t } = useI18n();
+	const { alert } = useDialog();
+	const [isProfileOpen, setIsProfileOpen] = useState(false);
+	const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+	const [isSyncing, setIsSyncing] = useState(false);
+	const [syncError, setSyncError] = useState<string | null>(null);
+	const chatSyncSnapshotRef = useRef<ChatSyncSnapshot | null>(null);
+	const wasAuthenticatedRef = useRef(auth.isAuthenticated);
 	const activityBar = <ActivityBar />;
+	const refreshMountedChat = useCallback(() => {
+		chatSyncSnapshotRef.current?.refreshRemoteState();
+	}, []);
+	const handleChatSyncSnapshotChange = useCallback((snapshot: ChatSyncSnapshot | null) => {
+		chatSyncSnapshotRef.current = snapshot;
+	}, []);
+
+	useEffect(() => {
+		if (!wasAuthenticatedRef.current && auth.isAuthenticated) {
+			setIsProfileOpen(true);
+		}
+
+		wasAuthenticatedRef.current = auth.isAuthenticated;
+	}, [auth.isAuthenticated]);
+
+	useEffect(() => {
+		if (!auth.isAuthenticated || !hasPendingSyncQueue()) {
+			return;
+		}
+
+		void flushGuestSyncQueue()
+			.then(async (result) => {
+				if (result) {
+					auth.markGuestSyncDone();
+					await pullSyncChanges(setLocale, settings.applyPulledBackgroundImageUrl);
+					refreshMountedChat();
+				}
+			})
+			.catch(() => {
+				markSyncRetry();
+			});
+	}, [
+		auth.isAuthenticated,
+		auth.markGuestSyncDone,
+		refreshMountedChat,
+		setLocale,
+		settings.applyPulledBackgroundImageUrl
+	]);
+
+	useEffect(() => {
+		if (!auth.isAuthenticated) {
+			return;
+		}
+		void pullSyncChanges(setLocale, settings.applyPulledBackgroundImageUrl).then(() => refreshMountedChat());
+	}, [auth.isAuthenticated, refreshMountedChat, setLocale, settings.applyPulledBackgroundImageUrl]);
+
+	useEffect(() => {
+		if (!auth.isAuthenticated) {
+			return;
+		}
+
+		function handleOnline() {
+			void flushGuestSyncQueue()
+				.then((result) => {
+					if (result) {
+						auth.markGuestSyncDone();
+					}
+				})
+				.catch(() => {
+					markSyncRetry();
+				});
+			void pullSyncChanges(setLocale, settings.applyPulledBackgroundImageUrl).then(() => refreshMountedChat());
+		}
+
+		window.addEventListener("online", handleOnline);
+		return () => window.removeEventListener("online", handleOnline);
+	}, [
+		auth.isAuthenticated,
+		auth.markGuestSyncDone,
+		refreshMountedChat,
+		setLocale,
+		settings.applyPulledBackgroundImageUrl
+	]);
+
+	async function handleSyncNow() {
+		const chatSnapshot = chatSyncSnapshotRef.current;
+		setIsSyncing(true);
+		setSyncError(null);
+
+		try {
+			if (chatSnapshot) {
+				await enqueueGuestSyncWithMemory(
+					chatSnapshot.memoryFacts,
+					chatSnapshot.memorySummaries,
+					chatSnapshot.sessions,
+					chatSnapshot.messages,
+					chatSnapshot.activeChatId
+				);
+			} else {
+				await enqueueGuestSync();
+			}
+
+			const result = await flushGuestSyncQueue({ force: true });
+			if (!result) {
+				auth.markGuestSyncDone();
+				await pullSyncChanges(setLocale, settings.applyPulledBackgroundImageUrl);
+				refreshMountedChat();
+				await alert({
+					title: t("auth.profile.syncCompleteTitle"),
+					description: t("auth.profile.syncCompleteDescription")
+				});
+				return;
+			}
+			if (!hasPendingSyncQueue()) {
+				auth.markGuestSyncDone();
+			}
+			await pullSyncChanges(setLocale, settings.applyPulledBackgroundImageUrl);
+			refreshMountedChat();
+			await alert({
+				title: t("auth.profile.syncCompleteTitle"),
+				description: t("auth.profile.syncCompleteDescription")
+			});
+		} catch {
+			markSyncRetry();
+			setSyncError(t("auth.profile.syncError"));
+		} finally {
+			setIsSyncing(false);
+		}
+	}
+
+	async function handleLogout() {
+		await auth.logout();
+		clearLocalSyncState();
+		chatSyncSnapshotRef.current?.resetToDraft();
+		setSyncError(null);
+		setIsProfileOpen(false);
+	}
+
+	function handleUpdateBackgroundImageUrl(url: string) {
+		settings.setBackgroundImageUrl(url);
+		if (auth.isAuthenticated) {
+			void syncAppSettings();
+		}
+	}
+
+	async function syncAppSettings() {
+		try {
+			await enqueueGuestSync();
+			while (hasPendingSyncQueue()) {
+				const result = await flushGuestSyncQueue({ force: true });
+				if (!result) {
+					break;
+				}
+			}
+			if (!hasPendingSyncQueue()) {
+				auth.markGuestSyncDone();
+			}
+		} catch {
+			markSyncRetry();
+		}
+	}
+
 	const chatPage = (
 		<ChatPage
 			activityBar={activityBar}
-			theme={theme}
-			font={font}
-			onFontChange={setFont}
-			onToggleTheme={toggleTheme}
+			theme={settings.theme}
+			font={settings.font}
+			backgroundImageUrl={settings.backgroundImageUrl}
+			auth={auth}
+			onFontChange={settings.setFont}
+			onOpenProfile={() => setIsProfileOpen(true)}
+			onOpenSettings={() => setIsSettingsOpen(true)}
+			onToggleTheme={settings.toggleTheme}
+			onChatSyncSnapshotChange={handleChatSyncSnapshotChange}
 		/>
 	);
+	const headerControls = {
+		theme: settings.theme,
+		font: settings.font,
+		isAuthenticated: auth.isAuthenticated,
+		hasPendingGuestSync: auth.isAuthenticated && auth.hasPendingGuestSync,
+		userAvatarUrl: auth.user?.avatarUrl,
+		onFontChange: settings.setFont,
+		onOpenProfile: () => setIsProfileOpen(true),
+		onOpenSettings: () => setIsSettingsOpen(true),
+		onToggleTheme: settings.toggleTheme
+	};
 
 	return (
-		<DialogProvider>
+		<>
 			<Routes>
 				<Route path="/" element={<Navigate to="/chat" replace />} />
 				<Route path="/chat" element={chatPage} />
 				<Route path="/chat/:chatId" element={chatPage} />
-				<Route path="/model3d" element={<Model3DPage activityBar={activityBar} />} />
+				<Route
+					path="/avatar"
+					element={
+						<AvatarPage
+							activityBar={activityBar}
+							backgroundImageUrl={settings.backgroundImageUrl}
+							headerControls={headerControls}
+						/>
+					}
+				/>
+				<Route path="/model3d" element={<Navigate to="/avatar" replace />} />
 				<Route path="*" element={<Navigate to="/chat" replace />} />
 			</Routes>
+			<AuthProfileDialog
+				isOpen={isProfileOpen}
+				isAuthenticated={auth.isAuthenticated}
+				profileLabel={auth.profileLabel}
+				email={auth.user?.email}
+				avatarUrl={auth.user?.avatarUrl}
+				hasPendingGuestSync={auth.hasPendingGuestSync}
+				onClose={() => setIsProfileOpen(false)}
+				onLoginWithGoogleIdToken={auth.loginGoogleWithIdToken}
+				onLogout={handleLogout}
+				onSyncNow={handleSyncNow}
+				onUpdateProfile={auth.updateProfile}
+				isSyncing={isSyncing}
+				syncError={syncError}
+			/>
+			<AppSettingsDialog
+				isOpen={isSettingsOpen}
+				backgroundImageUrl={settings.backgroundImageUrl}
+				onClose={() => setIsSettingsOpen(false)}
+				onUpdateBackgroundImageUrl={handleUpdateBackgroundImageUrl}
+			/>
+		</>
+	);
+}
+
+function AppWithDialogs() {
+	return (
+		<DialogProvider>
+			<App />
 		</DialogProvider>
 	);
 }
 
-export default App;
+export default AppWithDialogs;

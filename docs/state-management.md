@@ -16,15 +16,27 @@ It owns:
 
 The hook imports chat fixtures and the companion reply service. UI components receive explicit props and do not reach into the hook directly.
 
-## Theme State
+## App Settings State
 
-Theme state is app-level state.
+Theme, font, locale, background image, auth/profile state, and sync orchestration are app-level state.
 
+- `apps/web/src/app/AppSettingsProvider.tsx` exposes persisted app settings to the app tree.
 - `apps/web/src/hooks/useTheme.ts` exposes React state and actions.
 - `apps/web/src/stores/themeStore.ts` resolves, persists, and applies the theme.
+- `apps/web/src/stores/fontStore.ts` resolves, persists, and applies the font.
+- `apps/web/src/stores/backgroundStore.ts` resolves and persists the background image URL.
 - `apps/web/src/services/storageService.ts` wraps browser local storage access.
 
-This split keeps browser persistence separate from React rendering.
+This split keeps browser persistence separate from React rendering, and keeps app settings from being owned by one page such as chat.
+
+## Feature State
+
+Feature state stays inside the feature boundary:
+
+- Chat sessions, messages, personas, draft text, and chat memory stay in `features/chat`.
+- Avatar workspace selections, pose/expression state, and inspector values should stay in the avatar page/feature.
+
+Feature state should not be moved into app-level state unless multiple unrelated pages genuinely need to read or update it.
 
 ## When To Add A Store Library
 

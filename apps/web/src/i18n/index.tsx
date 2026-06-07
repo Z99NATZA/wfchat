@@ -1,6 +1,7 @@
 import { createContext, ReactNode, useContext, useMemo, useState } from "react";
 import en from "@/i18n/locales/en.json";
 import th from "@/i18n/locales/th.json";
+import { readStorageItem, writeStorageItem } from "@/services/storageService";
 import { touchSyncKey } from "@/stores/syncStateStore";
 
 const LOCALE_STORAGE_KEY = "wfchat.locale";
@@ -26,11 +27,7 @@ type I18nContextValue = {
 const I18nContext = createContext<I18nContextValue | null>(null);
 
 function getStoredLocale(): Locale {
-	if (typeof window === "undefined") {
-		return "en";
-	}
-
-	const savedLocale = window.localStorage.getItem(LOCALE_STORAGE_KEY);
+	const savedLocale = readStorageItem(LOCALE_STORAGE_KEY);
 	return savedLocale === "th" || savedLocale === "en" ? savedLocale : "en";
 }
 
@@ -58,10 +55,8 @@ export function I18nProvider({ children }: I18nProviderProps) {
 
 	function setLocale(nextLocale: Locale) {
 		setLocaleState(nextLocale);
-		if (typeof window !== "undefined") {
-			window.localStorage.setItem(LOCALE_STORAGE_KEY, nextLocale);
-			touchSyncKey("settings.locale");
-		}
+		writeStorageItem(LOCALE_STORAGE_KEY, nextLocale);
+		touchSyncKey("settings.locale");
 	}
 
 	const value = useMemo<I18nContextValue>(

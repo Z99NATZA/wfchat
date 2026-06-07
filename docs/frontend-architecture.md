@@ -19,7 +19,7 @@ apps/web/src/main.tsx
   -> apps/web/src/app/App.tsx
     -> apps/web/src/layouts/AppLayout.tsx
       -> apps/web/src/pages/ChatPage.tsx
-      -> apps/web/src/pages/Model3DPage.tsx
+      -> apps/web/src/pages/AvatarPage.tsx
 ```
 
 The chat UI uses `apps/web/src/features/chat/services/chatApiService.ts` to create a guest session, create/load a chat, and send messages through the Rust backend.
@@ -30,9 +30,11 @@ The clear chat button in the header is supported. It calls `DELETE /api/chats/:c
 
 Chat layout and scroll contract (single-scroll message timeline, sticky header/composer): `docs/chat-layout-scroll.md`.
 
-App-level page navigation uses the left activity bar described in `docs/app-navigation.md`. It currently switches between the chat workspace and a mock 3D model workspace without adding a router library.
+App-level page navigation uses the left activity bar and route map described in `docs/app-navigation.md`. The app currently supports the chat workspace and a mock avatar workspace for future 2D/VTuber-style tooling.
 
 Auth/profile UI lives in `apps/web/src/components/auth/AuthProfileDialog.tsx`. It renders as a desktop right drawer and mobile bottom sheet, uses Google sign-in for login, and lets signed-in users edit `display_name` and `avatar_url` through `PATCH /api/auth/profile`.
+
+App-level persisted settings live behind `apps/web/src/app/AppSettingsProvider.tsx`. Pages receive settings and callbacks from the app boundary instead of owning persisted app settings directly.
 
 ## Rules
 

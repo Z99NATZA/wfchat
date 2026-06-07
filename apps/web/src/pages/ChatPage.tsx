@@ -1,180 +1,78 @@
 import AppLayout from "@/layouts/AppLayout";
-import AuthProfileDialog from "@/components/auth/AuthProfileDialog";
-import AppSettingsDialog from "@/components/settings/AppSettingsDialog";
 import ChatComposer from "@/features/chat/components/ChatComposer";
 import ChatDetailsPanel from "@/features/chat/components/ChatDetailsPanel";
 import ChatHeader from "@/features/chat/components/ChatHeader";
 import ChatMessageList from "@/features/chat/components/ChatMessageList";
 import ChatSidebar from "@/features/chat/components/ChatSidebar";
 import { useChatSession } from "@/features/chat/hooks/useChatSession";
-import { useAuthSession } from "@/hooks/useAuthSession";
-import { useDialog } from "@/components/dialog/DialogProvider";
-import {
-	clearLocalSyncState,
-	enqueueGuestSync,
-	enqueueGuestSyncWithMemory,
-	flushGuestSyncQueue,
-	hasPendingSyncQueue,
-	markSyncRetry,
-	pullSyncChanges
-} from "@/services/syncService";
+import type { AuthSessionController } from "@/hooks/useAuthSession";
 import type { AppFont } from "@/types/font";
 import type { Theme } from "@/types/theme";
-import { type ReactNode, useEffect, useRef, useState } from "react";
-import { useI18n } from "@/i18n";
-import { persistBackgroundImageUrl, readBackgroundImageUrl } from "@/stores/backgroundStore";
+import type { ChatMessage, ChatSessionSummary, MemoryFact, MemorySummary } from "@/types/chat";
+import { type ReactNode, useEffect } from "react";
+
+export type ChatSyncSnapshot = {
+	activeChatId: string | null;
+	messages: ChatMessage[];
+	sessions: ChatSessionSummary[];
+	memoryFacts: MemoryFact[];
+	memorySummaries: MemorySummary[];
+	refreshRemoteState: () => void;
+	resetToDraft: () => void;
+};
 
 type ChatPageProps = {
 	activityBar: ReactNode;
 	theme: Theme;
 	font: AppFont;
+	backgroundImageUrl: string;
+	auth: AuthSessionController;
 	onFontChange: (font: AppFont) => void;
+	onOpenProfile: () => void;
+	onOpenSettings: () => void;
 	onToggleTheme: () => void;
+	onChatSyncSnapshotChange: (snapshot: ChatSyncSnapshot | null) => void;
 };
 
-function ChatPage({ activityBar, theme, font, onFontChange, onToggleTheme }: ChatPageProps) {
+function ChatPage({
+	activityBar,
+	theme,
+	font,
+	backgroundImageUrl,
+	auth,
+	onFontChange,
+	onOpenProfile,
+	onOpenSettings,
+	onToggleTheme,
+	onChatSyncSnapshotChange
+}: ChatPageProps) {
 	const chat = useChatSession();
-	const auth = useAuthSession();
-	const { setLocale, t } = useI18n();
-	const { alert } = useDialog();
-	const refreshRemoteState = chat.refreshRemoteState;
-	const [isProfileOpen, setIsProfileOpen] = useState(false);
-	const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-	const [isSyncing, setIsSyncing] = useState(false);
-	const [syncError, setSyncError] = useState<string | null>(null);
-	const [backgroundImageUrl, setBackgroundImageUrl] = useState(readBackgroundImageUrl);
-	const wasAuthenticatedRef = useRef(auth.isAuthenticated);
 
 	useEffect(() => {
-		if (!wasAuthenticatedRef.current && auth.isAuthenticated) {
-			setIsProfileOpen(true);
-		}
+		onChatSyncSnapshotChange({
+			activeChatId: chat.activeChatId,
+			messages: chat.messages,
+			sessions: chat.sessions,
+			memoryFacts: chat.memoryFacts,
+			memorySummaries: chat.memorySummaries,
+			refreshRemoteState: chat.refreshRemoteState,
+			resetToDraft: chat.resetToDraft
+		});
 
-		wasAuthenticatedRef.current = auth.isAuthenticated;
-	}, [auth.isAuthenticated]);
-
-	useEffect(() => {
-		if (!auth.isAuthenticated || !hasPendingSyncQueue()) {
-			return;
-		}
-
-		void flushGuestSyncQueue()
-			.then(async (result) => {
-				if (result) {
-					auth.markGuestSyncDone();
-					await pullSyncChanges(setLocale, setBackgroundImageUrl);
-					refreshRemoteState();
-				}
-			})
-			.catch(() => {
-				markSyncRetry();
-			});
-	}, [auth, auth.isAuthenticated, refreshRemoteState, setLocale]);
-
-	useEffect(() => {
-		if (!auth.isAuthenticated) {
-			return;
-		}
-		void pullSyncChanges(setLocale, setBackgroundImageUrl).then(() => refreshRemoteState());
-	}, [auth.isAuthenticated, refreshRemoteState, setLocale]);
-
-	useEffect(() => {
-		if (!auth.isAuthenticated) {
-			return;
-		}
-
-		function handleOnline() {
-			void flushGuestSyncQueue()
-				.then((result) => {
-					if (result) {
-						auth.markGuestSyncDone();
-					}
-				})
-				.catch(() => {
-					markSyncRetry();
-				});
-			void pullSyncChanges(setLocale, setBackgroundImageUrl).then(() => refreshRemoteState());
-		}
-
-		window.addEventListener("online", handleOnline);
-		return () => window.removeEventListener("online", handleOnline);
-	}, [auth, auth.isAuthenticated, refreshRemoteState, setLocale]);
-
-	async function handleSyncNow() {
-		setIsSyncing(true);
-		setSyncError(null);
-		try {
-			await enqueueGuestSyncWithMemory(
-				chat.memoryFacts,
-				chat.memorySummaries,
-				chat.sessions,
-				chat.messages,
-				chat.activeChatId
-			);
-			const result = await flushGuestSyncQueue({ force: true });
-			if (!result) {
-				auth.markGuestSyncDone();
-				await pullSyncChanges(setLocale, setBackgroundImageUrl);
-				refreshRemoteState();
-				await alert({
-					title: t("auth.profile.syncCompleteTitle"),
-					description: t("auth.profile.syncCompleteDescription")
-				});
-				return;
-			}
-			if (!hasPendingSyncQueue()) {
-				auth.markGuestSyncDone();
-			}
-			await pullSyncChanges(setLocale, setBackgroundImageUrl);
-			refreshRemoteState();
-			await alert({
-				title: t("auth.profile.syncCompleteTitle"),
-				description: t("auth.profile.syncCompleteDescription")
-			});
-		} catch {
-			markSyncRetry();
-			setSyncError(t("auth.profile.syncError"));
-		} finally {
-			setIsSyncing(false);
-		}
-	}
-
-	async function handleLogout() {
-		await auth.logout();
-		clearLocalSyncState();
-		chat.resetToDraft();
-		setSyncError(null);
-		setIsProfileOpen(false);
-	}
-
-	function handleUpdateBackgroundImageUrl(url: string) {
-		persistBackgroundImageUrl(url);
-		setBackgroundImageUrl(url.trim());
-		if (auth.isAuthenticated) {
-			void syncBackgroundImageSetting();
-		}
-	}
-
-	async function syncBackgroundImageSetting() {
-		try {
-			await enqueueGuestSync();
-			while (hasPendingSyncQueue()) {
-				const result = await flushGuestSyncQueue({ force: true });
-				if (!result) {
-					break;
-				}
-			}
-			if (!hasPendingSyncQueue()) {
-				auth.markGuestSyncDone();
-			}
-		} catch {
-			markSyncRetry();
-		}
-	}
+		return () => onChatSyncSnapshotChange(null);
+	}, [
+		chat.activeChatId,
+		chat.messages,
+		chat.sessions,
+		chat.memoryFacts,
+		chat.memorySummaries,
+		chat.refreshRemoteState,
+		chat.resetToDraft,
+		onChatSyncSnapshotChange
+	]);
 
 	return (
-		<>
-			<AppLayout
+		<AppLayout
 				activityBar={activityBar}
 				backgroundImageUrl={backgroundImageUrl}
 				sidebar={
@@ -208,8 +106,8 @@ function ChatPage({ activityBar, theme, font, onFontChange, onToggleTheme }: Cha
 						isAuthenticated={auth.isAuthenticated}
 						hasPendingGuestSync={auth.isAuthenticated && auth.hasPendingGuestSync}
 						userAvatarUrl={auth.user?.avatarUrl}
-						onOpenProfile={() => setIsProfileOpen(true)}
-						onOpenSettings={() => setIsSettingsOpen(true)}
+						onOpenProfile={onOpenProfile}
+						onOpenSettings={onOpenSettings}
 					/>
 				}
 				details={
@@ -245,28 +143,6 @@ function ChatPage({ activityBar, theme, font, onFontChange, onToggleTheme }: Cha
 					onSend={chat.sendMessage}
 				/>
 			</AppLayout>
-			<AuthProfileDialog
-				isOpen={isProfileOpen}
-				isAuthenticated={auth.isAuthenticated}
-				profileLabel={auth.profileLabel}
-				email={auth.user?.email}
-				avatarUrl={auth.user?.avatarUrl}
-				hasPendingGuestSync={auth.hasPendingGuestSync}
-				onClose={() => setIsProfileOpen(false)}
-				onLoginWithGoogleIdToken={auth.loginGoogleWithIdToken}
-				onLogout={handleLogout}
-				onSyncNow={handleSyncNow}
-				onUpdateProfile={auth.updateProfile}
-				isSyncing={isSyncing}
-				syncError={syncError}
-			/>
-			<AppSettingsDialog
-				isOpen={isSettingsOpen}
-				backgroundImageUrl={backgroundImageUrl}
-				onClose={() => setIsSettingsOpen(false)}
-				onUpdateBackgroundImageUrl={handleUpdateBackgroundImageUrl}
-			/>
-		</>
 	);
 }
 
