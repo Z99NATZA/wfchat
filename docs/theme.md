@@ -65,6 +65,7 @@ Use these tokens by intent, not by visual similarity.
 | `--action-*` | `bg-action`, `text-action-text`, `border-action-border` | High-contrast action button token set. |
 | `--muted` | `text-muted` | Secondary text, metadata, less prominent icons. |
 | `--app-bg-image-opacity` | inline style var | Full-screen background image opacity. |
+| `--wfchat-bg-image` | inline style var | Shared background image used by local app surfaces. |
 
 ## Current Values
 
@@ -103,7 +104,10 @@ It should remain subtle. The intended behavior is close to VS Code wallpaper ext
 - Dark mode uses lower background visibility because dark UI needs stronger separation.
 - Light mode uses slightly higher background visibility because light surfaces wash out the image more.
 - Components should not rely on blur for readability.
-- Components should use surface opacity and borders to create hierarchy.
+- Dialogs, modals, drawers, fixed rails, and surfaces that have sliding panels behind or content behind them may use `app-surface-panel` or `app-surface-soft`.
+- Use `mobile-app-surface-panel` when the no-bleed behavior is needed only below the `lg` breakpoint.
+- `AppLayout` calculates the viewport-cover wallpaper size and syncs each app surface's background position from its viewport rectangle. This makes every surface show the same wallpaper coordinates while its opaque local base prevents sibling components from bleeding through.
+- Normal layout chrome, absolute controls, message bubbles, and ordinary cards should use the regular translucent `bg-app-*` tokens. They do not need per-frame background position syncing.
 
 Do not add `backdrop-blur` for normal app surfaces unless the design is intentionally changed again. Blur was removed because it made the visual model harder to tune.
 
@@ -131,7 +135,7 @@ Recommended classes:
 
 ### Level 1: Main App Shell
 
-Use this for large persistent UI regions that should let the background image show through.
+Use this for large persistent UI regions that should let the background image show through without special no-bleed behavior.
 
 Examples:
 
@@ -148,7 +152,7 @@ Recommended classes:
 </aside>
 ```
 
-`bg-app-panel/62` is the preferred large-shell opacity. It keeps the background visible while preserving UI shape.
+`bg-app-panel/62` is the preferred large-shell opacity for normal layout chrome. Use `app-surface-panel` only when the surface must prevent underlying components from showing through, such as an activity rail above a sliding sidebar. Use `mobile-app-surface-panel lg:bg-app-panel/62` for a sidebar that overlays chat content on mobile but becomes normal layout chrome on desktop.
 
 ### Level 2: Nested App Components
 
@@ -160,7 +164,6 @@ Examples:
 - Select controls.
 - Icon buttons.
 - Memory cards.
-- Sidebar menu popovers.
 - Composer input body.
 
 Recommended classes:
@@ -299,12 +302,14 @@ Do:
 
 - Use semantic classes such as `bg-app-panel`, `bg-dialog-panel`, `text-muted`, and `border-app-border`.
 - Use `app-*` tokens for persistent app chrome and chat surfaces.
+- Use `app-surface-panel`, `app-surface-soft`, or their `mobile-*` variants only for rails, drawers, modal-like shells, or similar surfaces that must not reveal components behind them.
 - Use `dialog-*` tokens for modal dialogs and drawers.
 - Keep chat bubbles and inputs more opaque than the main shell.
 - Check both light and dark mode after changing any token.
-- Prefer `bg-app-panel/62` for large app shells.
-- Prefer `bg-app-panel/82` or `bg-app-soft/82` for app popovers and nested components that need stronger readability.
+- Prefer `bg-app-panel/62` for ordinary large app shells.
+- Prefer `bg-app-panel/82` for app popovers and menus.
 - Prefer `bg-app-panel/92` for chat bubbles and floating message controls.
+- Prefer `bg-app-soft` or `bg-app-soft/82` for nested controls inside those surfaces.
 
 Do not:
 
@@ -313,6 +318,7 @@ Do not:
 - Use translucent `app-*` tokens inside modal dialogs.
 - Use `dialog-*` tokens for persistent chat layout.
 - Add blur as a readability fix without first adjusting surface opacity.
+- Use synced surfaces for high-count repeated items such as message bubbles.
 - Make text itself transparent to create visual softness.
 - Use one opacity value everywhere. Shells, nested controls, chat cards, and dialogs have different jobs.
 
@@ -324,7 +330,7 @@ Use this decision flow:
    Use `bg-dialog-panel`, `bg-dialog-soft`, and `border-dialog-border`.
 
 2. Is it a large persistent app region?
-   Use `bg-app-panel/62` plus `border-app-border`.
+   Use `bg-app-panel/62` plus `border-app-border`. If another layer moves behind it, use `app-surface-panel`.
 
 3. Is it a small nested control or card inside app chrome?
    Use `bg-app-soft`, or `bg-app-soft/82` when it needs stronger readability.

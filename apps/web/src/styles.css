@@ -35,6 +35,11 @@
 		--dialog-panel: #ffffff;
 		--dialog-soft: #f0f4fb;
 		--dialog-border: #dce3ef;
+		--wfchat-bg-image: none;
+		--wfchat-bg-render-size: cover;
+		--wfchat-bg-root-position: center;
+		--wfchat-surface-bg-position: center;
+		--wfchat-surface-bg-opacity: 0;
 		--app-bg-image-opacity: 0.18;
 		--action-bg: #4070f4;
 		--action-bg-hover: #2f5fdd;
@@ -119,6 +124,75 @@
 }
 
 @layer components {
+	.app-surface-panel,
+	.app-surface-soft,
+	.mobile-app-surface-panel,
+	.mobile-app-surface-soft {
+		isolation: isolate;
+		position: relative;
+		background-color: var(--app-bg);
+	}
+
+	.app-surface-panel::before,
+	.app-surface-soft::before,
+	.mobile-app-surface-panel::before,
+	.mobile-app-surface-soft::before,
+	.app-surface-panel::after,
+	.app-surface-soft::after,
+	.mobile-app-surface-panel::after,
+	.mobile-app-surface-soft::after {
+		content: "";
+		position: absolute;
+		inset: 0;
+		z-index: -1;
+		border-radius: inherit;
+		pointer-events: none;
+	}
+
+	.app-surface-panel::before,
+	.app-surface-soft::before,
+	.mobile-app-surface-panel::before,
+	.mobile-app-surface-soft::before {
+		z-index: -2;
+		background-color: var(--app-bg);
+		background-image: var(--wfchat-bg-image);
+		background-position: var(--wfchat-surface-bg-position);
+		background-repeat: no-repeat;
+		background-size: var(--wfchat-bg-render-size);
+		opacity: var(--wfchat-surface-bg-opacity);
+	}
+
+	.app-surface-panel::after {
+		background-color: var(--app-panel);
+	}
+
+	.app-surface-soft::after {
+		background-color: var(--app-soft);
+	}
+
+	.mobile-app-surface-panel::after {
+		background-color: var(--app-panel);
+	}
+
+	.mobile-app-surface-soft::after {
+		background-color: var(--app-soft);
+	}
+
+	@media (min-width: 64rem) {
+		.mobile-app-surface-panel,
+		.mobile-app-surface-soft {
+			isolation: auto;
+			background-color: transparent;
+		}
+
+		.mobile-app-surface-panel::before,
+		.mobile-app-surface-soft::before,
+		.mobile-app-surface-panel::after,
+		.mobile-app-surface-soft::after {
+			content: none;
+		}
+	}
+
 	.icon-button {
 		@apply flex size-10 items-center justify-center rounded-lg border border-app-border bg-app-soft text-muted transition hover:border-primary hover:text-primary focus:outline-none focus:ring-4 focus:ring-primary/15;
 	}

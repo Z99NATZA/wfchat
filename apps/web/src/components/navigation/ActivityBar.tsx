@@ -15,7 +15,7 @@ function ActivityBar() {
 
 	return (
 		<nav
-			className="relative z-50 flex h-full w-14 shrink-0 flex-col items-center border-r border-app-border bg-app-panel/82 pb-3"
+			className="app-surface-panel relative z-50 flex h-full w-14 shrink-0 flex-col items-center border-r border-app-border pb-3"
 			aria-label={t("navigation.primary")}
 		>
 			<div className="mt-3 flex w-full flex-1 flex-col items-center gap-1">
