@@ -11,7 +11,14 @@ ActivityBar -> page sidebar -> page header/content/details
 - `chat`: the main chat workspace.
 - `model3d`: a mock 3D model workspace used as a placeholder for future model tooling.
 
-`apps/web/src/app/App.tsx` owns the current `activePage` state. The project does not use a router library yet; chat deep links such as `/chat/:id` are still handled inside the chat feature.
+`apps/web/src/app/App.tsx` owns the top-level route map through `react-router-dom`:
+
+- `/` redirects to `/chat`.
+- `/chat` opens the chat workspace without an active chat.
+- `/chat/:chatId` opens the chat workspace and lets the chat feature load the active chat.
+- `/model3d` opens the model workspace.
+
+The activity bar uses route links instead of page state, so the URL is the source of truth for reload, back, and forward navigation.
 
 ## Layout Contract
 
@@ -23,7 +30,7 @@ ActivityBar -> page sidebar -> page header/content/details
 - `children`: primary page content.
 - `details`: optional right-side inspector/details area.
 
-Keep page-specific state inside the page or feature boundary. The activity bar should only select app pages and should not own chat, model, or inspector state.
+Keep page-specific state inside the page or feature boundary. The activity bar should only link to app routes and should not own chat, model, or inspector state.
 
 ## Styling
 

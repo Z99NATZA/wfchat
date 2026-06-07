@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { CHAT_PERSONAS } from "@/features/chat/data/chatFixtures";
 import { useI18n } from "@/i18n";
 import {
@@ -34,26 +35,26 @@ import type { ChatMessage, ChatSessionSummary, MemoryFact, MemorySummary } from 
 import { formatMessageTime } from "@/utils/date";
 
 const CHAT_PATH_PREFIX = "/chat/";
+const CHAT_DRAFT_PATH = "/chat";
 
 function parseChatIdFromPath(pathname: string): string | null {
-	return pathname.startsWith(CHAT_PATH_PREFIX) ? pathname.slice(CHAT_PATH_PREFIX.length) : null;
+	if (!pathname.startsWith(CHAT_PATH_PREFIX)) {
+		return null;
+	}
+
+	const chatId = pathname.slice(CHAT_PATH_PREFIX.length).trim();
+	return chatId.length > 0 ? chatId : null;
 }
 
-function isRootPath(pathname: string): boolean {
-	return pathname === "/" || pathname === "";
-}
-
-function updateHistoryForChat(chatId: string) {
-	window.history.pushState(null, "", `${CHAT_PATH_PREFIX}${chatId}`);
-}
-
-function updateHistoryForDraft() {
-	window.history.pushState(null, "", "/");
+function isDraftChatPath(pathname: string): boolean {
+	return pathname === CHAT_DRAFT_PATH || pathname === `${CHAT_DRAFT_PATH}/`;
 }
 
 export function useChatSession() {
 	const { confirm } = useDialog();
 	const { t } = useI18n();
+	const location = useLocation();
+	const navigate = useNavigate();
 	const [personas, setPersonas] = useState(CHAT_PERSONAS);
 	const [selectedPersonaId, setSelectedPersonaId] = useState(CHAT_PERSONAS[0]?.id ?? "");
 	const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -73,7 +74,7 @@ export function useChatSession() {
 	const [errorMessage, setErrorMessage] = useState<string | null>(null);
 	const [refreshVersion, setRefreshVersion] = useState(0);
 	const [routeChatId, setRouteChatId] = useState<string | null>(() =>
-		typeof window === "undefined" ? null : parseChatIdFromPath(window.location.pathname)
+		parseChatIdFromPath(location.pathname)
 	);
 
 	const activePersona = useMemo(() => {
@@ -102,12 +103,21 @@ export function useChatSession() {
 	}, [chatSearchQuery]);
 
 	useEffect(() => {
-		function onPopState() {
-			setRouteChatId(parseChatIdFromPath(window.location.pathname));
-		}
-		window.addEventListener("popstate", onPopState);
-		return () => window.removeEventListener("popstate", onPopState);
-	}, []);
+		setRouteChatId(parseChatIdFromPath(location.pathname));
+	}, [location.pathname]);
+
+	const navigateToChat = useCallback(
+		(chatId: string) => {
+			navigate(`${CHAT_PATH_PREFIX}${chatId}`);
+			setRouteChatId(chatId);
+		},
+		[navigate]
+	);
+
+	const navigateToDraft = useCallback(() => {
+		navigate(CHAT_DRAFT_PATH);
+		setRouteChatId(null);
+	}, [navigate]);
 
 	useEffect(() => {
 		let isCurrent = true;
@@ -272,8 +282,7 @@ export function useChatSession() {
 						setActiveChatId(null);
 						setMessages([]);
 						setDraft("");
-						updateHistoryForDraft();
-						setRouteChatId(null);
+						navigateToDraft();
 						return;
 					}
 					const cachedMessages = readChatMessagesCache(routeChatId);
@@ -287,7 +296,7 @@ export function useChatSession() {
 				return;
 			}
 
-			if (isRootPath(window.location.pathname)) {
+			if (isDraftChatPath(location.pathname)) {
 				setActiveChatId(null);
 				setMessages([]);
 				setDraft("");
@@ -298,7 +307,7 @@ export function useChatSession() {
 		return () => {
 			isCurrent = false;
 		};
-	}, [refreshVersion, routeChatId, selectedPersonaId, t]);
+	}, [location.pathname, navigateToDraft, refreshVersion, routeChatId, selectedPersonaId, t]);
 
 	const refreshRemoteState = useCallback(() => {
 		setRefreshVersion((version) => version + 1);
@@ -312,9 +321,8 @@ export function useChatSession() {
 		setMemoryFacts([]);
 		setMemorySummaries([]);
 		setErrorMessage(null);
-		updateHistoryForDraft();
-		setRouteChatId(null);
-	}, []);
+		navigateToDraft();
+	}, [navigateToDraft]);
 
 	function selectPersona(personaId: string) {
 		setSelectedPersonaId(personaId);
@@ -329,8 +337,7 @@ export function useChatSession() {
 		setActiveChatId(null);
 		setMessages([]);
 		setDraft("");
-		updateHistoryForDraft();
-		setRouteChatId(null);
+		navigateToDraft();
 		setIsSidebarOpen(false);
 	}
 
@@ -344,8 +351,7 @@ export function useChatSession() {
 			const chat = await getChat(sessionId);
 			setActiveChatId(chat.chatId);
 			setMessages(chat.messages);
-			updateHistoryForChat(chat.chatId);
-			setRouteChatId(chat.chatId);
+			navigateToChat(chat.chatId);
 			setIsSidebarOpen(false);
 		} catch {
 			setErrorMessage(t("chat.session.connectError"));
@@ -380,8 +386,7 @@ export function useChatSession() {
 			if (!activeChatId) {
 				createdChatId = chatId;
 				setActiveChatId(chatId);
-				updateHistoryForChat(chatId);
-				setRouteChatId(chatId);
+				navigateToChat(chatId);
 			}
 			const nextMessages = await sendChatMessage(chatId, trimmedDraft);
 			setMessages(nextMessages);
@@ -397,8 +402,7 @@ export function useChatSession() {
 			if (createdChatId) {
 				void deleteChat(createdChatId);
 				setActiveChatId(null);
-				updateHistoryForDraft();
-				setRouteChatId(null);
+				navigateToDraft();
 			}
 			setMessages((currentMessages) => currentMessages.filter((message) => message.id !== optimisticMessage.id));
 			setErrorMessage(t("chat.session.aiNoResponse"));
@@ -566,8 +570,7 @@ export function useChatSession() {
 			setActiveChatId(null);
 			setMessages([]);
 			setDraft("");
-			updateHistoryForDraft();
-			setRouteChatId(null);
+			navigateToDraft();
 		}
 
 		try {
