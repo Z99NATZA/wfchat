@@ -13,7 +13,10 @@ ai_profile_id: aiko_default
 
 Legacy note: older local chat data may contain `default_waifu`. The backend treats this as an Aiko profile alias and migrates Aiko chats to `aiko_default` when the JSON store is loaded.
 
-Frontend metadata lives in `apps/web/src/features/chat/data/chatFixtures.ts`.
+Frontend chat metadata lives in `apps/web/src/features/chat/data/chatFixtures.ts`.
+
+Frontend PNGTuber metadata lives in `apps/web/src/features/avatar/data/aikoPngTuber.ts`.
+The current Aiko expression assets live in `apps/web/public/images/aiko-pngtuber/`.
 
 Backend character identity and prompt live in `apps/api/src/characters.rs`.
 

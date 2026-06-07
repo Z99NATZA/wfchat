@@ -46,6 +46,8 @@ docs/
 
 `apps/web/src/features` contains domain-specific frontend code. Each feature can have its own `components`, `data`, `hooks`, and `services`.
 
+`apps/web/src/features/avatar` contains avatar-specific metadata such as the Aiko PNGTuber expression set.
+
 `apps/web/src/components/navigation` contains app-level navigation UI such as the activity bar.
 
 `apps/web/src/services` contains infrastructure-facing helpers such as storage, axios clients, or transport wrappers.

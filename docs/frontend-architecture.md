@@ -30,7 +30,9 @@ The clear chat button in the header is supported. It calls `DELETE /api/chats/:c
 
 Chat layout and scroll contract (single-scroll message timeline, sticky header/composer): `docs/chat-layout-scroll.md`.
 
-App-level page navigation uses the left activity bar and route map described in `docs/app-navigation.md`. The app currently supports the chat workspace and a mock avatar workspace for future 2D/VTuber-style tooling.
+The avatar workspace renders Aiko with a lightweight PNGTuber asset set before Live2D rigging. Runtime notes and the future chat-state bridge are documented in `docs/avatar-pngtuber.md`.
+
+App-level page navigation uses the left activity bar and route map described in `docs/app-navigation.md`. The app currently supports the chat workspace and a PNGTuber avatar workspace for future 2D/VTuber-style tooling.
 
 Auth/profile UI lives in `apps/web/src/components/auth/AuthProfileDialog.tsx`. It renders as a desktop right drawer and mobile bottom sheet, uses Google sign-in for login, and lets signed-in users edit `display_name` and `avatar_url` through `PATCH /api/auth/profile`.
 

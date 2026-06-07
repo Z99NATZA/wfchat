@@ -212,6 +212,15 @@
 	.status-dot {
 		@apply size-2 rounded-full bg-emerald-400 ring-4 ring-emerald-400/15;
 	}
+
+	.pngtuber-avatar {
+		animation: pngtuber-breathe 4.8s ease-in-out infinite;
+		transform-origin: 50% 92%;
+	}
+
+	.pngtuber-avatar--talking {
+		animation: pngtuber-talk 520ms ease-in-out infinite;
+	}
 }
 
 @layer utilities {
@@ -222,5 +231,27 @@
 	.chat-scroll {
 		scrollbar-width: thin;
 		scrollbar-color: color-mix(in srgb, var(--brand-primary) 45%, transparent) transparent;
+	}
+}
+
+@keyframes pngtuber-breathe {
+	0%,
+	100% {
+		transform: translateY(0) scale(1);
+	}
+
+	50% {
+		transform: translateY(-0.45rem) scale(1.012);
+	}
+}
+
+@keyframes pngtuber-talk {
+	0%,
+	100% {
+		transform: translateY(0) scale(1);
+	}
+
+	45% {
+		transform: translateY(-0.35rem) scale(1.018);
 	}
 }
