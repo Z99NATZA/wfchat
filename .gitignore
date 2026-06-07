@@ -8,3 +8,4 @@ apps/api/data
 !.env.example
 npm-debug.log*
 Dockerfile.*
+.VSCodeCounter/
