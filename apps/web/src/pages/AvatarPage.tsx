@@ -141,9 +141,9 @@ function AvatarPage({ activityBar, backgroundImageUrl, headerControls }: AvatarP
 								className={cn(
 									"rounded-lg border px-3 py-2 text-xs font-semibold shadow-soft transition",
 									emotion.id === activeEmotionId
-										? "border-primary/35 bg-primary/10 text-app-text"
+										? "border-app-border bg-app-panel/92 text-muted hover:border-app-border"
 										: cn(
-												"border-app-border bg-app-panel/92 text-muted hover:border-primary hover:text-primary",
+												"border-transparent text-muted hover:border-app-border hover:bg-app-soft",
 												darkAppControlHoverClassName
 											)
 								)}
