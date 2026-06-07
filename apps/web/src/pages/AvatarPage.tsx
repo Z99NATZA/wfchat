@@ -42,6 +42,9 @@ const avatarAssets = [
 	{ nameKey: "avatar.assets.aiStateBridge", statusKey: "avatar.assets.markerOnly", active: false }
 ];
 
+const darkAppControlHoverClassName =
+	"dark:hover:border-action-border dark:hover:bg-action-hover dark:hover:text-app-text dark:focus-visible:ring-action-ring/25";
+
 function AvatarPage({ activityBar, backgroundImageUrl, headerControls }: AvatarPageProps) {
 	const { t } = useI18n();
 	const [activeEmotionId, setActiveEmotionId] = useState<AikoEmotionId>(DEFAULT_AIKO_EMOTION_ID);
@@ -80,6 +83,7 @@ function AvatarPage({ activityBar, backgroundImageUrl, headerControls }: AvatarP
 							type="button"
 							className={cn(
 								"flex size-8 items-center justify-center rounded-lg border text-muted transition hover:border-primary hover:text-primary",
+								darkAppControlHoverClassName,
 								isTalking ? "border-primary/35 bg-primary/10 text-app-text" : "border-app-border bg-app-soft"
 							)}
 							aria-label={isTalking ? t("avatar.controls.stopTalking") : t("avatar.controls.startTalking")}
@@ -90,7 +94,10 @@ function AvatarPage({ activityBar, backgroundImageUrl, headerControls }: AvatarP
 						</button>
 						<button
 							type="button"
-							className="flex size-8 items-center justify-center rounded-lg border border-app-border bg-app-soft text-muted transition hover:border-primary hover:text-primary"
+							className={cn(
+								"flex size-8 items-center justify-center rounded-lg border border-app-border bg-app-soft text-muted transition hover:border-primary hover:text-primary",
+								darkAppControlHoverClassName
+							)}
 							aria-label={t("avatar.viewport.expressionTool")}
 							title={t("avatar.viewport.expressionTool")}
 							onClick={handleCycleExpression}
@@ -135,7 +142,10 @@ function AvatarPage({ activityBar, backgroundImageUrl, headerControls }: AvatarP
 									"rounded-lg border px-3 py-2 text-xs font-semibold shadow-soft transition",
 									emotion.id === activeEmotionId
 										? "border-primary/35 bg-primary/10 text-app-text"
-										: "border-app-border bg-app-panel/92 text-muted hover:border-primary hover:text-primary"
+										: cn(
+												"border-app-border bg-app-panel/92 text-muted hover:border-primary hover:text-primary",
+												darkAppControlHoverClassName
+											)
 								)}
 								onClick={() => setActiveEmotionId(emotion.id)}
 							>
@@ -188,7 +198,10 @@ function AvatarSidebar({ activeEmotionId, onEmotionChange }: AvatarSidebarProps)
 								"flex w-full items-center gap-3 rounded-lg border p-3 text-left transition",
 								asset.active
 									? "border-primary/30 bg-primary/10"
-									: "border-transparent hover:border-app-border hover:bg-app-soft"
+									: cn(
+											"border-transparent hover:border-app-border hover:bg-app-soft",
+											darkAppControlHoverClassName
+										)
 							)}
 						>
 							<span className="flex size-10 shrink-0 items-center justify-center rounded-lg border border-app-border bg-app-soft text-muted">
@@ -213,7 +226,10 @@ function AvatarSidebar({ activeEmotionId, onEmotionChange }: AvatarSidebarProps)
 								"flex w-full items-center gap-3 rounded-lg border p-3 text-left transition",
 								emotion.id === activeEmotionId
 									? "border-primary/30 bg-primary/10"
-									: "border-transparent hover:border-app-border hover:bg-app-soft"
+									: cn(
+											"border-transparent hover:border-app-border hover:bg-app-soft",
+											darkAppControlHoverClassName
+										)
 							)}
 							onClick={() => onEmotionChange(emotion.id)}
 						>
@@ -327,6 +343,7 @@ function ToolButton({ icon: Icon, label, active = false }: ToolButtonProps) {
 			type="button"
 			className={cn(
 				"flex h-10 items-center justify-center rounded-lg border text-muted transition hover:border-primary hover:text-primary",
+				darkAppControlHoverClassName,
 				active ? "border-primary/30 bg-primary/10 text-app-text" : "border-app-border bg-app-soft"
 			)}
 			aria-label={label}

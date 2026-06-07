@@ -254,6 +254,24 @@ Do not use `bg-app-panel/62`, `bg-app-panel/82`, or `bg-app-soft/82` inside moda
 </label>
 ```
 
+For header and app-toolbar controls that use `hover:border-primary` or `hover:text-primary`, add dark-mode hover overrides. In dark mode `primary` is intentionally close to the app shell color, so using it as hover text can make icons disappear.
+
+Recommended app-control hover pattern:
+
+```tsx
+<button className="border border-app-border bg-app-soft text-muted hover:border-primary hover:text-primary dark:hover:border-action-border dark:hover:bg-action-hover dark:hover:text-app-text">
+	...
+</button>
+```
+
+For select-like toolbar fields, keep the text stable and only make the border/ring readable:
+
+```tsx
+<label className="border border-app-border bg-app-soft text-app-text hover:border-primary focus-within:border-primary dark:hover:border-action-border dark:focus-within:border-action-border dark:focus-within:ring-action-ring/25">
+	<select className="bg-transparent text-app-text outline-none" />
+</label>
+```
+
 ### Floating App Menu
 
 ```tsx
@@ -275,7 +293,7 @@ Do not use `bg-app-panel/62`, `bg-app-panel/82`, or `bg-app-soft/82` inside moda
 For ordinary secondary actions in app chrome:
 
 ```tsx
-<button className="border border-app-border bg-app-soft text-app-text hover:border-primary hover:text-primary">
+<button className="border border-app-border bg-app-soft text-app-text hover:border-primary hover:text-primary dark:hover:border-action-border dark:hover:bg-action-hover dark:hover:text-app-text">
 	Cancel
 </button>
 ```

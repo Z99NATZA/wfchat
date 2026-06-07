@@ -24,6 +24,10 @@ type AppHeaderDesktopControlsProps = AppHeaderControlProps & {
 
 const themeButtonClassName =
 	"hover:border-action-border hover:bg-action hover:text-action-text focus:ring-action-ring/25";
+const headerFieldClassName =
+	"dark:hover:border-action-border dark:focus-within:border-action-border dark:focus-within:ring-action-ring/25";
+const headerIconHoverClassName =
+	"dark:hover:border-action-border dark:hover:bg-action-hover dark:hover:text-app-text dark:focus-visible:ring-action-ring/25";
 
 export function AppHeaderDesktopControls({
 	theme,
@@ -45,7 +49,7 @@ export function AppHeaderDesktopControls({
 	return (
 		<>
 			{leadingActions}
-			<label className="relative inline-flex h-9 w-[5.5rem] shrink-0 items-center rounded-lg border border-app-border bg-app-soft pl-2 pr-1 text-xs font-semibold text-app-text transition hover:border-primary focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/35 sm:h-10 sm:w-[6.25rem]">
+			<label className={`relative inline-flex h-9 w-[5.5rem] shrink-0 items-center rounded-lg border border-app-border bg-app-soft pl-2 pr-1 text-xs font-semibold text-app-text transition hover:border-primary focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/35 sm:h-10 sm:w-[6.25rem] ${headerFieldClassName}`}>
 				<Globe size={18} aria-hidden="true" />
 				<select
 					value={locale}
@@ -61,7 +65,7 @@ export function AppHeaderDesktopControls({
 					))}
 				</select>
 			</label>
-			<label className="relative inline-flex h-9 w-28 shrink-0 items-center rounded-lg border border-app-border bg-app-soft pl-2 pr-1 text-xs font-semibold text-app-text transition hover:border-primary focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/35 sm:h-10 sm:w-40">
+			<label className={`relative inline-flex h-9 w-28 shrink-0 items-center rounded-lg border border-app-border bg-app-soft pl-2 pr-1 text-xs font-semibold text-app-text transition hover:border-primary focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/35 sm:h-10 sm:w-40 ${headerFieldClassName}`}>
 				<Type size={18} aria-hidden="true" />
 				<select
 					value={font}
@@ -175,7 +179,7 @@ function ProfileButton({ avatarUrl, hasAttentionBadge, onOpenProfile }: ProfileB
 	return (
 		<button
 			type="button"
-			className="relative inline-flex h-10 w-10 items-center justify-center overflow-hidden rounded-lg border border-app-border bg-app-soft text-xs font-semibold text-app-text transition hover:border-primary hover:text-primary"
+			className={`relative inline-flex h-10 w-10 items-center justify-center overflow-hidden rounded-lg border border-app-border bg-app-soft text-xs font-semibold text-app-text transition hover:border-primary hover:text-primary ${headerIconHoverClassName}`}
 			onClick={onOpenProfile}
 		>
 			{avatarUrl ? (
