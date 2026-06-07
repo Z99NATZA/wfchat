@@ -4,17 +4,18 @@ import {
 	AppHeaderMobileControls,
 	type AppHeaderControlProps
 } from "@/components/header/AppHeaderControls";
+import IconButton from "@/components/ui/IconButton";
 import AppLayout from "@/layouts/AppLayout";
 import type { ReactNode } from "react";
 import {
-	Brush,
+	Bell,
 	CircleDot,
 	Eye,
-	Lightbulb,
 	type LucideIcon,
 	Move,
 	ScanFace,
 	Sparkles,
+	Trash2,
 	UserRound
 } from "lucide-react";
 import { useI18n } from "@/i18n";
@@ -168,15 +169,25 @@ type AvatarHeaderProps = {
 
 function AvatarHeader({ controls }: AvatarHeaderProps) {
 	const { t } = useI18n();
-	const lightingAction = (
-		<button
-			type="button"
-			className="flex size-10 items-center justify-center rounded-lg border border-app-border bg-app-soft text-muted transition hover:border-primary hover:text-primary"
-			aria-label={t("avatar.header.lighting")}
-			title={t("avatar.header.lighting")}
+	const notificationPlaceholder = (
+		<IconButton
+			className="hidden cursor-not-allowed opacity-45 grayscale md:flex"
+			aria-label={t("chat.header.notifications")}
+			disabled
+			title={t("common.notSupportedYet")}
 		>
-			<Lightbulb size={18} aria-hidden="true" />
-		</button>
+			<Bell size={18} aria-hidden="true" />
+		</IconButton>
+	);
+	const deletePlaceholder = (
+		<IconButton
+			className="cursor-not-allowed border-red-400/25 bg-red-500/10 text-red-500 opacity-45 grayscale"
+			aria-label={t("avatar.header.deleteDisabled")}
+			disabled
+			title={t("avatar.header.deleteDisabled")}
+		>
+			<Trash2 size={18} aria-hidden="true" />
+		</IconButton>
 	);
 
 	return (
@@ -192,20 +203,11 @@ function AvatarHeader({ controls }: AvatarHeaderProps) {
 			desktopActions={
 				<AppHeaderDesktopControls
 					{...controls}
-					leadingActions={lightingAction}
-					trailingActions={
-						<button
-							type="button"
-							className="flex size-10 items-center justify-center rounded-lg border border-app-border bg-app-soft text-muted transition hover:border-primary hover:text-primary"
-							aria-label={t("avatar.header.layers")}
-							title={t("avatar.header.layers")}
-						>
-							<Brush size={18} aria-hidden="true" />
-						</button>
-					}
+					leadingActions={notificationPlaceholder}
+					trailingActions={deletePlaceholder}
 				/>
 			}
-			mobileMenuContent={<AppHeaderMobileControls {...controls} actions={lightingAction} />}
+			mobileMenuContent={<AppHeaderMobileControls {...controls} actions={deletePlaceholder} />}
 		/>
 	);
 }

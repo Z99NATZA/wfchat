@@ -31,7 +31,13 @@ The activity bar uses route links instead of page state, so the URL is the sourc
 - `children`: primary page content.
 - `details`: optional right-side inspector/details area.
 
-Keep page-specific state inside the page or feature boundary. The activity bar should only link to app routes and should not own chat, model, or inspector state.
+Keep page-specific state inside the page or feature boundary. The activity bar should only link to app routes and should not own chat, avatar, or inspector state.
+
+## Header Contract
+
+App pages should keep shared header action positions stable where practical. Some users remember controls by spatial position, so pages can render disabled placeholder actions to mark the same station even when that page does not support the action yet.
+
+The avatar page intentionally renders the delete/trash action disabled in the same position as chat clear/delete. It is a positional marker only and must not mutate avatar or chat data.
 
 ## Styling
 
