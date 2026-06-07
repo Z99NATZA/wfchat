@@ -236,6 +236,7 @@ function App() {
 				email={auth.user?.email}
 				avatarUrl={auth.user?.avatarUrl}
 				hasPendingGuestSync={auth.hasPendingGuestSync}
+				backgroundImageUrl={settings.backgroundImageUrl}
 				onClose={() => setIsProfileOpen(false)}
 				onLoginWithGoogleIdToken={auth.loginGoogleWithIdToken}
 				onLogout={handleLogout}

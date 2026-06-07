@@ -163,7 +163,7 @@ function useSurfaceBackgroundSync(
 		function updateSurfacePositions() {
 			rootElement
 				.querySelectorAll<HTMLElement>(
-					".app-surface-panel, .app-surface-soft, .mobile-app-surface-panel, .mobile-app-surface-soft"
+					".app-surface-panel, .app-surface-soft, .app-surface-shell, .mobile-app-surface-panel, .mobile-app-surface-soft"
 				)
 				.forEach((surfaceElement) => {
 					const rect = surfaceElement.getBoundingClientRect();

@@ -106,6 +106,8 @@ It should remain subtle. The intended behavior is close to VS Code wallpaper ext
 - Components should not rely on blur for readability.
 - Dialogs, modals, drawers, fixed rails, and surfaces that have sliding panels behind or content behind them may use `app-surface-panel` or `app-surface-soft`.
 - Use `mobile-app-surface-panel` when the no-bleed behavior is needed only below the `lg` breakpoint.
+- Use `app-surface-shell` for a dialog or drawer shell that should show the wallpaper at the same lighter shell opacity as ordinary app sidebars.
+- Dialog/drawer surfaces outside `AppLayout`, such as profile drawers, must receive the current background image URL and set the `--wfchat-bg-*` variables locally before using a synced surface class.
 - `AppLayout` calculates the viewport-cover wallpaper size and syncs each app surface's background position from its viewport rectangle. This makes every surface show the same wallpaper coordinates while its opaque local base prevents sibling components from bleeding through.
 - Normal layout chrome, absolute controls, message bubbles, and ordinary cards should use the regular translucent `bg-app-*` tokens. They do not need per-frame background position syncing.
 

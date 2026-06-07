@@ -1,7 +1,15 @@
 import GoogleSignInButton from "@/components/auth/GoogleSignInButton";
 import { useI18n } from "@/i18n";
 import { CheckCircle2, LogOut, Mail, RefreshCw, User, X } from "lucide-react";
-import { type FormEvent, useEffect, useMemo, useState } from "react";
+import {
+	type CSSProperties,
+	type FormEvent,
+	useEffect,
+	useLayoutEffect,
+	useMemo,
+	useRef,
+	useState
+} from "react";
 
 type AuthProfileDialogProps = {
 	isOpen: boolean;
@@ -10,6 +18,7 @@ type AuthProfileDialogProps = {
 	email?: string;
 	avatarUrl?: string;
 	hasPendingGuestSync: boolean;
+	backgroundImageUrl: string;
 	onClose: () => void;
 	onLoginWithGoogleIdToken: (idToken: string) => void;
 	onLogout: () => void;
@@ -26,6 +35,7 @@ function AuthProfileDialog({
 	email,
 	avatarUrl,
 	hasPendingGuestSync,
+	backgroundImageUrl,
 	onClose,
 	onLoginWithGoogleIdToken,
 	onLogout,
@@ -40,6 +50,7 @@ function AuthProfileDialog({
 	const [isSavingProfile, setIsSavingProfile] = useState(false);
 	const [profileMessage, setProfileMessage] = useState<string | null>(null);
 	const [profileError, setProfileError] = useState<string | null>(null);
+	const profileSurface = useDialogBackgroundSurface(backgroundImageUrl, isOpen);
 
 	useEffect(() => {
 		if (!isOpen) {
@@ -94,7 +105,11 @@ function AuthProfileDialog({
 				aria-label={t("auth.profile.close")}
 				onClick={onClose}
 			/>
-			<aside className="absolute inset-x-0 bottom-0 flex max-h-[92dvh] flex-col rounded-t-3xl border border-dialog-border bg-dialog-panel shadow-2xl sm:inset-y-0 sm:left-auto sm:right-0 sm:h-full sm:max-h-none sm:w-[420px] sm:rounded-none sm:border-y-0 sm:border-r-0">
+			<aside
+				ref={profileSurface.ref}
+				className="app-surface-shell absolute inset-x-0 bottom-0 flex max-h-[92dvh] flex-col rounded-t-3xl border border-dialog-border shadow-2xl sm:inset-y-0 sm:left-auto sm:right-0 sm:h-full sm:max-h-none sm:w-[420px] sm:rounded-none sm:border-y-0 sm:border-r-0"
+				style={profileSurface.style}
+			>
 				<header className="flex items-start justify-between gap-4 border-b border-dialog-border px-5 py-4">
 					<div>
 						<h2 className="text-xl font-semibold text-app-text">
@@ -254,6 +269,125 @@ function AuthProfileDialog({
 			</aside>
 		</div>
 	);
+}
+
+type BackgroundMetrics = {
+	renderWidth: number;
+	renderHeight: number;
+	originX: number;
+	originY: number;
+};
+
+function useDialogBackgroundSurface(backgroundImageUrl: string, isOpen: boolean) {
+	const surfaceRef = useRef<HTMLElement>(null);
+	const [metrics, setMetrics] = useState<BackgroundMetrics | null>(null);
+
+	useEffect(() => {
+		if (!isOpen || !backgroundImageUrl || typeof window === "undefined") {
+			setMetrics(null);
+			return;
+		}
+
+		let isCancelled = false;
+		const image = new Image();
+
+		function updateMetrics() {
+			if (isCancelled || image.naturalWidth <= 0 || image.naturalHeight <= 0) {
+				return;
+			}
+
+			setMetrics(calculateCoverMetrics(image.naturalWidth, image.naturalHeight));
+		}
+
+		image.onload = updateMetrics;
+		image.onerror = () => {
+			if (!isCancelled) {
+				setMetrics(null);
+			}
+		};
+		image.src = backgroundImageUrl;
+		window.addEventListener("resize", updateMetrics);
+
+		return () => {
+			isCancelled = true;
+			window.removeEventListener("resize", updateMetrics);
+		};
+	}, [backgroundImageUrl, isOpen]);
+
+	useLayoutEffect(() => {
+		const surfaceElement = surfaceRef.current;
+
+		if (!isOpen || !surfaceElement || !backgroundImageUrl || !metrics || typeof window === "undefined") {
+			return;
+		}
+
+		const syncedSurfaceElement = surfaceElement;
+		const syncedMetrics = metrics;
+		let animationFrameId = 0;
+
+		function updateSurfacePosition() {
+			animationFrameId = 0;
+
+			const rect = syncedSurfaceElement.getBoundingClientRect();
+			syncedSurfaceElement.style.setProperty(
+				"--wfchat-surface-bg-position",
+				`${syncedMetrics.originX - rect.left}px ${syncedMetrics.originY - rect.top}px`
+			);
+			syncedSurfaceElement.style.setProperty("--wfchat-surface-bg-opacity", "var(--app-bg-image-opacity)");
+		}
+
+		function scheduleUpdate() {
+			if (animationFrameId) {
+				return;
+			}
+
+			animationFrameId = window.requestAnimationFrame(updateSurfacePosition);
+		}
+
+		updateSurfacePosition();
+
+		const resizeObserver = new ResizeObserver(scheduleUpdate);
+		resizeObserver.observe(syncedSurfaceElement);
+		window.addEventListener("resize", scheduleUpdate);
+
+		return () => {
+			if (animationFrameId) {
+				window.cancelAnimationFrame(animationFrameId);
+			}
+
+			resizeObserver.disconnect();
+			window.removeEventListener("resize", scheduleUpdate);
+		};
+	}, [backgroundImageUrl, isOpen, metrics]);
+
+	const backgroundImageValue = backgroundImageUrl
+		? `url(${JSON.stringify(backgroundImageUrl)})`
+		: undefined;
+	const style = backgroundImageValue
+		? ({
+				"--wfchat-bg-image": backgroundImageValue,
+				"--wfchat-bg-render-size": metrics
+					? `${metrics.renderWidth}px ${metrics.renderHeight}px`
+					: "cover"
+			} as CSSProperties)
+		: undefined;
+
+	return { ref: surfaceRef, style };
+}
+
+function calculateCoverMetrics(imageWidth: number, imageHeight: number): BackgroundMetrics {
+	const viewportWidth = window.innerWidth;
+	const viewportHeight = window.innerHeight;
+	const scale = Math.max(viewportWidth / imageWidth, viewportHeight / imageHeight);
+	const renderWidth = imageWidth * scale;
+	const renderHeight = imageHeight * scale;
+
+	return {
+		renderWidth,
+		renderHeight,
+		originX: (viewportWidth - renderWidth) / 2,
+		originY: (viewportHeight - renderHeight) / 2
+	};
 }
 
 export default AuthProfileDialog;

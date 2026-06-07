@@ -126,6 +126,7 @@
 @layer components {
 	.app-surface-panel,
 	.app-surface-soft,
+	.app-surface-shell,
 	.mobile-app-surface-panel,
 	.mobile-app-surface-soft {
 		isolation: isolate;
@@ -135,10 +136,12 @@
 
 	.app-surface-panel::before,
 	.app-surface-soft::before,
+	.app-surface-shell::before,
 	.mobile-app-surface-panel::before,
 	.mobile-app-surface-soft::before,
 	.app-surface-panel::after,
 	.app-surface-soft::after,
+	.app-surface-shell::after,
 	.mobile-app-surface-panel::after,
 	.mobile-app-surface-soft::after {
 		content: "";
@@ -151,6 +154,7 @@
 
 	.app-surface-panel::before,
 	.app-surface-soft::before,
+	.app-surface-shell::before,
 	.mobile-app-surface-panel::before,
 	.mobile-app-surface-soft::before {
 		z-index: -2;
@@ -168,6 +172,10 @@
 
 	.app-surface-soft::after {
 		background-color: var(--app-soft);
+	}
+
+	.app-surface-shell::after {
+		background-color: color-mix(in srgb, var(--app-panel) 62%, transparent);
 	}
 
 	.mobile-app-surface-panel::after {
