@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { Languages, Moon, Settings, Sun, Type, User } from "lucide-react";
+import { Globe, Moon, Settings, Sun, Type, User } from "lucide-react";
 import IconButton from "@/components/ui/IconButton";
 import { FONT_OPTIONS, type AppFont } from "@/types/font";
 import type { Theme } from "@/types/theme";
@@ -46,7 +46,7 @@ export function AppHeaderDesktopControls({
 		<>
 			{leadingActions}
 			<label className="relative inline-flex h-9 w-[5.5rem] shrink-0 items-center rounded-lg border border-app-border bg-app-soft pl-2 pr-1 text-xs font-semibold text-app-text transition hover:border-primary focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/35 sm:h-10 sm:w-[6.25rem]">
-				<Languages size={18} aria-hidden="true" />
+				<Globe size={18} aria-hidden="true" />
 				<select
 					value={locale}
 					aria-label={t("chat.header.language")}
@@ -116,7 +116,7 @@ export function AppHeaderMobileControls({
 	return (
 		<div className="space-y-2">
 			<label className="flex h-10 items-center rounded-lg border border-app-border bg-app-soft pl-2 pr-1 text-xs font-semibold text-app-text">
-				<Languages size={18} aria-hidden="true" />
+				<Globe size={18} aria-hidden="true" />
 				<select
 					value={locale}
 					aria-label={t("chat.header.language")}
