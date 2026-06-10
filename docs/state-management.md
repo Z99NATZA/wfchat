@@ -18,23 +18,36 @@ The hook imports chat fixtures and the companion reply service. UI components re
 
 ## App Settings State
 
-Theme, font, locale, background image, auth/profile state, and sync orchestration are app-level state.
+Theme, font, locale, background image, avatar overlay preferences, auth/profile state, and sync orchestration are app-level state.
 
 - `apps/web/src/app/AppSettingsProvider.tsx` exposes persisted app settings to the app tree.
 - `apps/web/src/hooks/useTheme.ts` exposes React state and actions.
 - `apps/web/src/stores/themeStore.ts` resolves, persists, and applies the theme.
 - `apps/web/src/stores/fontStore.ts` resolves, persists, and applies the font.
 - `apps/web/src/stores/backgroundStore.ts` resolves and persists the background image URL.
+- `apps/web/src/stores/avatarOverlayStore.ts` resolves and persists local chat overlay preferences.
 - `apps/web/src/services/storageService.ts` wraps browser local storage access.
 
 This split keeps browser persistence separate from React rendering, and keeps app settings from being owned by one page such as chat.
+
+Avatar overlay preferences are local UI preferences, not synced settings. They can be revisited later if multi-device overlay layout becomes a real requirement.
+
+## Avatar Runtime State
+
+Avatar runtime state is feature-level state shared across routes by `AvatarRuntimeProvider`.
+
+- `apps/web/src/features/avatar/runtime/avatarRuntimeStore.tsx` owns the current semantic avatar state.
+- `apps/web/src/features/avatar/runtime/avatarChatBridge.ts` maps chat lifecycle events into runtime updates.
+- `apps/web/src/features/avatar/renderers/pngtuber/PngTuberRenderer.tsx` renders PNG-specific visuals from semantic state.
+
+Keep runtime state renderer-neutral. It should describe `avatarId`, `rendererKind`, expression, motion, and driver, not PNG URLs, CSS classes, or Live2D file paths.
 
 ## Feature State
 
 Feature state stays inside the feature boundary:
 
 - Chat sessions, messages, personas, draft text, and chat memory stay in `features/chat`.
-- Avatar workspace selections, pose/expression state, and inspector values should stay in the avatar page/feature.
+- Avatar workspace selections, pose/expression state, runtime bridge state, and inspector values should stay in the avatar page/feature.
 
 Feature state should not be moved into app-level state unless multiple unrelated pages genuinely need to read or update it.
 

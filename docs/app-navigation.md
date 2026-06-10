@@ -41,7 +41,7 @@ Keep page-specific state inside the page or feature boundary. The activity bar s
 
 App pages should keep shared header action positions stable where practical. Some users remember controls by spatial position, so pages can render disabled placeholder actions to mark the same station even when that page does not support the action yet.
 
-The PNGTuber page intentionally renders the delete/trash action disabled in the same position as chat clear/delete. It is a positional marker only and must not mutate avatar or chat data.
+The PNGTuber and Live2D shell pages intentionally render the delete/trash action disabled in the same position as chat clear/delete. It is a positional marker only and must not mutate avatar, model, or chat data.
 
 ## Styling
 

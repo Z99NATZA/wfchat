@@ -20,6 +20,7 @@ apps/web/src/main.tsx
       -> apps/web/src/layouts/AppLayout.tsx
       -> apps/web/src/pages/ChatPage.tsx
       -> apps/web/src/pages/PngTuberPage.tsx
+      -> apps/web/src/pages/Model2DPage.tsx
 ```
 
 The chat UI uses `apps/web/src/features/chat/services/chatApiService.ts` to create a guest session, create/load a chat, and send messages through the Rust backend.
@@ -30,9 +31,9 @@ The clear chat button in the header is supported. It calls `DELETE /api/chats/:c
 
 Chat layout and scroll contract (single-scroll message timeline, sticky header/composer): `docs/chat-layout-scroll.md`.
 
-The PNGTuber workspace renders Aiko with a lightweight PNG asset set before Live2D rigging. Runtime notes and the future chat-state bridge are documented in `docs/pngtuber.md`.
+The PNGTuber workspace renders Aiko with a lightweight PNG asset set before Live2D rigging. The Live2D page is currently a route shell only. Runtime notes, chat bridge behavior, and remaining avatar work are documented in `docs/pngtuber.md`.
 
-App-level page navigation uses the left activity bar and route map described in `docs/app-navigation.md`. The app currently supports the chat workspace and a PNGTuber avatar workspace for future 2D/VTuber-style tooling.
+App-level page navigation uses the left activity bar and route map described in `docs/app-navigation.md`. The app currently supports chat, PNGTuber Studio, and a reserved Live2D workspace shell.
 
 Auth/profile UI lives in `apps/web/src/components/auth/AuthProfileDialog.tsx`. It renders as a desktop right drawer and mobile bottom sheet, uses Google sign-in for login, and lets signed-in users edit `display_name` and `avatar_url` through `PATCH /api/auth/profile`.
 
@@ -45,4 +46,5 @@ App-level persisted settings live behind `apps/web/src/app/AppSettingsProvider.t
 - Use admin screens for AI profile configuration later.
 - Keep `VITE_*` variables limited to non-secret browser configuration.
 - Put reusable browser infrastructure in `apps/web/src/services`.
-- Keep unsupported controls disabled and visually muted. This currently includes attachments, voice input, image prompts, quick prompts, search, notifications, settings, chat modes, memory, response-shape controls, and safety toggles. Theme toggle, send message, and clear chat are supported controls.
+- Keep unsupported controls disabled and visually muted. This currently includes attachments, voice input, image prompts, quick prompts, search, notifications, chat modes, response-shape controls, and safety toggles.
+- Supported controls currently include theme toggle, settings, send message, and clear chat.

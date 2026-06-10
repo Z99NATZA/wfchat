@@ -1,20 +1,43 @@
 # Aiko PNGTuber
 
-The PNGTuber workspace supports the first lightweight visual implementation for Aiko before Live2D rigging is available.
+The PNGTuber stack is the current real avatar implementation for Aiko. Live2D has a separate route shell, but no Live2D runtime is loaded yet.
+
+## Current Status
+
+Implemented:
+
+- PNGTuber Studio page at `/avatar/pngtuber`.
+- Live2D workspace shell at `/model/live2d`.
+- Shared avatar runtime provider mounted above routes.
+- PNG renderer split into `PngTuberRenderer`.
+- Chat-to-avatar bridge wired from `ChatPage` to `useChatSession`.
+- Chat overlay using the same runtime and renderer.
+- Overlay visibility, position, and size settings persisted locally.
+- Chat reply emotion inference with a small conservative heuristic.
+- Renderer-level expression transition polish with reduced-motion support.
+
+Not implemented:
+
+- Live2D model loading, physics, motion priority, lip-sync, or runtime package.
+- SSE/token streaming for talking while the AI response is still generating.
+- Multi-persona avatar binding configuration.
+- User-uploaded/custom PNG asset management.
 
 ## Runtime Files
 
 - UI page: `apps/web/src/pages/PngTuberPage.tsx`
+- Live2D shell page: `apps/web/src/pages/Model2DPage.tsx`
 - PNGTuber metadata: `apps/web/src/features/avatar/data/aikoPngTuber.ts`
 - Runtime store: `apps/web/src/features/avatar/runtime/avatarRuntimeStore.tsx`
 - Runtime types: `apps/web/src/features/avatar/runtime/avatarRuntimeTypes.ts`
 - Chat bridge: `apps/web/src/features/avatar/runtime/avatarChatBridge.ts`
 - Chat overlay: `apps/web/src/features/avatar/components/AvatarOverlay.tsx`
 - PNGTuber renderer: `apps/web/src/features/avatar/renderers/pngtuber/PngTuberRenderer.tsx`
+- Overlay settings store: `apps/web/src/stores/avatarOverlayStore.ts`
 - Shared animation styles: `apps/web/src/styles.css`
 - Public assets: `apps/web/public/images/aiko-pngtuber/`
 
-## Current Asset Set
+## Asset Set
 
 ```text
 apps/web/public/images/aiko-pngtuber/
@@ -25,11 +48,11 @@ apps/web/public/images/aiko-pngtuber/
   aiko-surprised.png
 ```
 
-These are transparent PNG cutouts generated from chroma-key sources. The original generated source files remain under the local Codex generated-images directory and are not referenced by the app.
+Keep all expression files in the same general crop and character scale. Do not overwrite generated assets; add a new filename and update `aikoPngTuber.ts`.
 
-## Interaction Model
+## Runtime Contract
 
-The app keeps current avatar state in `AvatarRuntimeProvider`, mounted above routes in `apps/web/src/app/App.tsx`:
+The app keeps semantic avatar state in `AvatarRuntimeProvider`, mounted in `apps/web/src/app/App.tsx` above both chat and avatar routes:
 
 ```ts
 type AvatarRuntimeState = {
@@ -41,185 +64,23 @@ type AvatarRuntimeState = {
 };
 ```
 
-`PngTuberPage` owns the studio layout and controls. `PngTuberRenderer` owns the image rendering and renderer-specific animation class selection.
+Keep runtime state semantic. It should not contain PNG URLs, CSS class names, Live2D file paths, physics parameters, or renderer-specific motion names.
 
-The studio toolbar can manually preview all supported motion states: idle, thinking, and talking. These controls update the shared avatar runtime state, so the chat overlay reflects the same selected motion while the app remains mounted.
+## Page Boundaries
 
-The renderer currently applies one of three CSS animation loops:
+`PngTuberPage` owns the PNGTuber Studio layout, sidebar, controls, and inspector UI.
 
-- idle: slow breathing motion
-- thinking: subtle tilted thinking motion
-- talking: slightly faster bob motion
+`PngTuberRenderer` owns only the visual performer. It receives a resolved emotion and motion state, then renders the PNG asset and CSS animations.
 
-Expression changes use a short renderer-level fade/scale transition. Motion loops stay on the image element while expression transitions run on the wrapper, so the animations do not override each other's transforms. PNGTuber animations respect reduced-motion preferences.
+`ChatPage` owns chat layout and emits chat lifecycle events through `useChatSession({ onAvatarChatEvent })`.
 
-`thinking` is triggered by the chat bridge while the app waits for an AI response.
+`avatarChatBridge.ts` translates chat lifecycle events into semantic avatar state. Chat code should not import PNG metadata or renderer-specific components.
 
-The `AI state bridge` asset shown in the sidebar is a marker only. It reserves the product location for later chat-driven state without coupling the PNGTuber page to chat transport yet.
+`Model2DPage` is a separate Live2D workspace shell. It exists to keep future 2D model work out of the PNGTuber page.
 
-## Future Chat Bridge
+## Current Behavior
 
-When connecting chat events to the visual performer, keep the state bridge small:
-
-```text
-chat request starts        -> neutral + idle
-AI is generating           -> neutral + idle or thinking
-AI response streaming      -> selected emotion + talking
-AI response complete       -> selected emotion + idle
-```
-
-Emotion selection should be derived from message metadata or a small classifier result, not from raw UI text parsing inside `PngTuberPage`.
-
-Recommended future metadata:
-
-```ts
-type AvatarRuntimeState = {
-  avatarId: "aiko-pngtuber";
-  rendererKind: "pngtuber";
-  expressionId: AikoEmotionId;
-  motionState: "idle" | "thinking" | "talking";
-  drivenBy: "manual" | "chat-bridge";
-};
-```
-
-Keep this as app-level or feature-level state and pass it into renderer-specific components as props. The provider must be mounted above both `ChatPage` and `PngTuberPage`; otherwise chat events cannot update the avatar while the PNGTuber page is closed. Future Live2D support should add a separate renderer module while sharing the semantic runtime state.
-
-## Implementation Plan
-
-Build this in small steps. The goal is to make PNGTuber react to chat now without locking the chat system to PNG files or blocking future Live2D support.
-
-### 1. Add Avatar Runtime Core
-
-Status: implemented.
-
-Create a small runtime layer under `apps/web/src/features/avatar/runtime/`.
-
-Recommended files:
-
-```text
-apps/web/src/features/avatar/runtime/
-  avatarRuntimeTypes.ts
-  avatarRuntimeStore.ts
-```
-
-The runtime type should describe semantic avatar state, not renderer internals:
-
-```ts
-type AvatarRendererKind = "pngtuber" | "live2d";
-type AvatarMotionState = "idle" | "thinking" | "talking";
-type AvatarDrivenBy = "manual" | "chat-bridge";
-
-type AvatarRuntimeState = {
-  avatarId: string;
-  rendererKind: AvatarRendererKind;
-  expressionId: string;
-  motionState: AvatarMotionState;
-  drivenBy: AvatarDrivenBy;
-};
-```
-
-Start with a lightweight React store or context. Do not add a larger state library unless multiple app-level stores start needing the same pattern.
-
-Mount the provider at the app boundary:
-
-```text
-apps/web/src/app/App.tsx
-  -> AvatarRuntimeProvider
-     -> Routes
-```
-
-Do not put the provider inside `PngTuberPage`, because the chat bridge and future chat overlay must keep working when the user is on `/chat`.
-
-This step is done when:
-
-- `PngTuberPage` can read and update avatar state through the runtime store.
-- Manual controls still work.
-- The runtime state has no PNG asset URL, CSS class name, or Live2D file name.
-- Leaving `/avatar/pngtuber` does not reset the runtime state unless the app reloads.
-
-### 2. Split The PNGTuber Renderer
-
-Status: implemented.
-
-Move the image rendering and animation class selection out of `PngTuberPage` into a renderer component.
-
-Recommended files:
-
-```text
-apps/web/src/features/avatar/renderers/pngtuber/
-  PngTuberRenderer.tsx
-```
-
-`PngTuberRenderer` should receive resolved renderer props and only render the visual performer:
-
-```tsx
-<PngTuberRenderer
-  emotion={activeEmotion}
-  motionState={runtime.motionState}
-/>
-```
-
-Keep `PngTuberPage` responsible for studio layout, sidebars, controls, and inspector UI.
-
-This step is done when:
-
-- The same renderer can be mounted by `PngTuberPage` and later by `ChatPage`.
-- `PngTuberPage` no longer owns the raw `<img>` rendering details.
-- CSS animation names remain renderer-specific.
-
-### 3. Add Chat-To-Avatar Bridge
-
-Status: implemented.
-
-Create a bridge that translates chat lifecycle events into avatar runtime changes. Chat should emit semantic events; it should not select PNG assets.
-
-Recommended files:
-
-```text
-apps/web/src/features/avatar/runtime/
-  avatarChatBridge.ts
-```
-
-The current implementation wires this at the page boundary:
-
-```text
-ChatPage
-  -> useAvatarChatBridge()
-  -> useChatSession({ onAvatarChatEvent })
-```
-
-This keeps `useChatSession` independent of PNGTuber assets and renderer details. The chat hook only emits lifecycle-shaped events through the callback it receives.
-
-Recommended event shape:
-
-```ts
-type ChatAvatarEvent =
-  | { type: "assistant_waiting"; chatId: string | null; personaId: string }
-  | { type: "assistant_replied"; chatId: string; personaId: string; text: string }
-  | { type: "assistant_error"; chatId: string | null; personaId: string };
-```
-
-`chatId` is nullable for waiting/error events because a new draft chat may not have a persisted chat id until `createPersonaChat()` succeeds.
-
-Keep avatar binding separate from chat session state:
-
-```ts
-type AvatarBinding = {
-  personaId: string;
-  avatarId: string;
-  enabled: boolean;
-};
-```
-
-Initial binding can be hardcoded to Aiko only:
-
-```text
-personaId "aiko" -> avatarId "aiko-pngtuber"
-```
-
-If an event has no enabled binding, the bridge should no-op. This keeps chat and avatar separate and prevents future Live2D/model pages from becoming coupled to chat personas.
-
-Current mapping:
+Motion mapping:
 
 ```text
 assistant_waiting -> neutral + thinking
@@ -227,79 +88,47 @@ assistant_replied -> inferred expression + talking, then idle
 assistant_error   -> sad + idle
 ```
 
-Expression detection is currently a tiny conservative keyword heuristic inside `avatarChatBridge.ts`. It maps only to the known semantic expressions (`neutral`, `happy`, `shy`, `sad`, `surprised`) and defaults to `neutral` when no rule matches. Do not parse UI text inside `PngTuberPage`.
+Expression inference currently lives in `avatarChatBridge.ts` as a small keyword heuristic. It maps only to known expressions: `neutral`, `happy`, `shy`, `sad`, and `surprised`. If no rule matches, it defaults to `neutral`.
 
-The bridge uses a short timeout to return from `talking` to `idle` in the request/response phase. Store and clear that timeout inside the bridge/runtime layer so rapid messages do not leave stale timers that override newer avatar state.
+Manual motion controls in PNGTuber Studio can preview idle, thinking, and talking. They update the shared runtime, so the chat overlay reflects the same selected motion while the app remains mounted.
 
-This step is done when:
+Expression changes use a short fade/scale transition in `PngTuberRenderer`. Motion loops run on the image element while expression transitions run on the wrapper, so the animations do not override each other's transforms. PNGTuber animations respect reduced-motion preferences.
 
-- `useChatSession.sendMessage()` can notify the bridge before send, after reply, and on error.
-- Chat code does not import PNG asset metadata.
-- Avatar state updates happen even if the PNGTuber page is not currently open.
-- Rapid send/error/retry flows do not leave the avatar stuck in `talking` or `thinking`.
+## Chat Overlay Settings
 
-### 4. Mount A Chat Overlay
-
-Status: implemented.
-
-After the bridge exists, add a small optional PNGTuber overlay to `ChatPage` using the same runtime state and renderer.
-
-Recommended location:
+Overlay settings are controlled from the app settings dialog and persisted locally:
 
 ```text
-apps/web/src/features/avatar/components/
-  AvatarOverlay.tsx
+wfchat.avatarOverlayVisible
+wfchat.avatarOverlayPosition
+wfchat.avatarOverlaySize
 ```
 
-The overlay should be a consumer of avatar runtime state. It should not own chat state and should not call the chat API.
+The overlay can be hidden or moved without changing chat behavior. The bridge should continue updating runtime state even when the overlay is hidden.
 
-The current overlay is mounted by `ChatPage`, uses `PngTuberRenderer`, and is hidden on small screens to avoid covering mobile chat controls. It displays compact motion labels from `pngtuber.stateShort.*`.
+## Deferred Transport Work
 
-Overlay visibility, position, and size are controlled from the app settings dialog. These preferences are persisted locally with `wfchat.avatarOverlayVisible`, `wfchat.avatarOverlayPosition`, and `wfchat.avatarOverlaySize` so users can tune the chat page performer without disabling the runtime bridge or changing PNGTuber Studio behavior.
+Do not start with WebSocket for the current PNGTuber work. The chat flow is still request/response, so the bridge can run from existing `sendMessage()` lifecycle events.
 
-This step is done when:
-
-- Sending a chat message changes the overlay to thinking.
-- Receiving a reply makes the overlay talk briefly.
-- The overlay returns to idle without blocking the chat composer.
-- The overlay can be hidden or removed without changing chat behavior.
-
-### 5. Prepare Live2D Without Implementing It Yet
-
-Status: implemented as a route/page shell.
-
-Only reserve the renderer boundary for Live2D in the shared types:
-
-```text
-rendererKind: "pngtuber" | "live2d"
-```
-
-`/model/live2d` is a separate workspace shell from `/avatar/pngtuber`. It reserves the product surface for future rigged 2D models without importing a Live2D runtime or coupling chat to Live2D-specific files.
-
-Do not add Live2D model loading, physics, motion priority, or lip-sync parameters until real Live2D assets and runtime decisions exist. Those details should live under a future `renderers/live2d/` module.
-
-This step is done when:
-
-- PNGTuber still works as the only implemented renderer.
-- No chat code depends on PNGTuber-specific names.
-- Adding `Live2DRenderer` later would not require changing chat event flow.
-
-## Transport Decision
-
-Do not start with WebSocket for this work. The current chat flow is request/response, so the first bridge can run entirely in the frontend from existing `sendMessage()` lifecycle points.
-
-Preferred order:
+Preferred transport order:
 
 ```text
 runtime store -> renderer split -> chat bridge -> chat overlay -> SSE/token streaming -> WebSocket if needed
 ```
 
-Use SSE before WebSocket if the next need is one-way AI response streaming. Reserve WebSocket for truly bidirectional realtime features such as voice input, live mic volume, remote overlay control, OBS control, or multi-device avatar synchronization.
+Use SSE first if the next need is one-way AI response streaming. Reserve WebSocket for bidirectional realtime features such as voice input, live mic volume, remote overlay control, OBS control, or multi-device avatar synchronization.
 
-## Asset Guidelines
+## Remaining Work
 
-- Prefer transparent PNG or WebP cutouts.
-- Keep all expressions in the same general crop and character scale.
-- Use one file per expression until the app needs sprite-sheet performance.
-- Do not overwrite existing generated assets; add a new filename and update `aikoPngTuber.ts`.
-- If creating Live2D later, keep this PNGTuber metadata as the fallback renderer contract.
+Recommended next small station:
+
+- Split emotion inference from `avatarChatBridge.ts` into a pure helper and add focused unit tests.
+
+Other useful stations:
+
+- Add avatar binding config for multiple personas.
+- Add compact/mobile overlay behavior if mobile chat needs the performer.
+- Add SSE/token streaming so the avatar talks while AI text is streaming.
+- Add PNG asset management only when there are real custom assets to manage.
+
+Pause Live2D runtime work until real model assets and runtime decisions exist. Future Live2D implementation should live under a separate `renderers/live2d/` module while sharing the same semantic avatar runtime state.
