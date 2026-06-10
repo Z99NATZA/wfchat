@@ -51,6 +51,8 @@ The renderer currently applies one of three CSS animation loops:
 - thinking: subtle tilted thinking motion
 - talking: slightly faster bob motion
 
+Expression changes use a short renderer-level fade/scale transition. Motion loops stay on the image element while expression transitions run on the wrapper, so the animations do not override each other's transforms. PNGTuber animations respect reduced-motion preferences.
+
 `thinking` is triggered by the chat bridge while the app waits for an AI response.
 
 The `AI state bridge` asset shown in the sidebar is a marker only. It reserves the product location for later chat-driven state without coupling the PNGTuber page to chat transport yet.

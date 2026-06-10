@@ -213,9 +213,16 @@
 		@apply size-2 rounded-full bg-emerald-400 ring-4 ring-emerald-400/15;
 	}
 
+	.pngtuber-avatar-expression {
+		animation: pngtuber-expression-in 180ms ease-out both;
+		transform-origin: 50% 92%;
+		will-change: opacity, transform;
+	}
+
 	.pngtuber-avatar {
 		animation: pngtuber-breathe 4.8s ease-in-out infinite;
 		transform-origin: 50% 92%;
+		will-change: transform;
 	}
 
 	.pngtuber-avatar--talking {
@@ -224,6 +231,13 @@
 
 	.pngtuber-avatar--thinking {
 		animation: pngtuber-think 1.8s ease-in-out infinite;
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.pngtuber-avatar-expression,
+		.pngtuber-avatar {
+			animation: none;
+		}
 	}
 }
 
@@ -235,6 +249,18 @@
 	.chat-scroll {
 		scrollbar-width: thin;
 		scrollbar-color: color-mix(in srgb, var(--brand-primary) 45%, transparent) transparent;
+	}
+}
+
+@keyframes pngtuber-expression-in {
+	0% {
+		opacity: 0;
+		transform: translateY(0.15rem) scale(0.985);
+	}
+
+	100% {
+		opacity: 1;
+		transform: translateY(0) scale(1);
 	}
 }
 
