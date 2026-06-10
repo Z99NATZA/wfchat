@@ -8,6 +8,7 @@ The PNGTuber workspace supports the first lightweight visual implementation for 
 - PNGTuber metadata: `apps/web/src/features/avatar/data/aikoPngTuber.ts`
 - Runtime store: `apps/web/src/features/avatar/runtime/avatarRuntimeStore.tsx`
 - Runtime types: `apps/web/src/features/avatar/runtime/avatarRuntimeTypes.ts`
+- Chat bridge: `apps/web/src/features/avatar/runtime/avatarChatBridge.ts`
 - PNGTuber renderer: `apps/web/src/features/avatar/renderers/pngtuber/PngTuberRenderer.tsx`
 - Shared animation styles: `apps/web/src/styles.css`
 - Public assets: `apps/web/public/images/aiko-pngtuber/`
@@ -162,6 +163,8 @@ This step is done when:
 
 ### 3. Add Chat-To-Avatar Bridge
 
+Status: implemented.
+
 Create a bridge that translates chat lifecycle events into avatar runtime changes. Chat should emit semantic events; it should not select PNG assets.
 
 Recommended files:
@@ -170,6 +173,16 @@ Recommended files:
 apps/web/src/features/avatar/runtime/
   avatarChatBridge.ts
 ```
+
+The current implementation wires this at the page boundary:
+
+```text
+ChatPage
+  -> useAvatarChatBridge()
+  -> useChatSession({ onAvatarChatEvent })
+```
+
+This keeps `useChatSession` independent of PNGTuber assets and renderer details. The chat hook only emits lifecycle-shaped events through the callback it receives.
 
 Recommended event shape:
 
@@ -200,7 +213,7 @@ personaId "aiko" -> avatarId "aiko-pngtuber"
 
 If an event has no enabled binding, the bridge should no-op. This keeps chat and avatar separate and prevents future Live2D/model pages from becoming coupled to chat personas.
 
-Initial mapping:
+Current mapping:
 
 ```text
 assistant_waiting -> neutral + thinking
@@ -210,7 +223,7 @@ assistant_error   -> sad + idle
 
 Keep any expression detection conservative. If no response metadata exists yet, default to `neutral` or a tiny local heuristic in the bridge. Do not parse UI text inside `PngTuberPage`.
 
-The bridge may use a short timeout to return from `talking` to `idle` in the request/response phase. Store and clear that timeout inside the bridge/runtime layer so rapid messages do not leave stale timers that override newer avatar state.
+The bridge uses a short timeout to return from `talking` to `idle` in the request/response phase. Store and clear that timeout inside the bridge/runtime layer so rapid messages do not leave stale timers that override newer avatar state.
 
 This step is done when:
 

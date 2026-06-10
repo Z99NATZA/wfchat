@@ -1,0 +1,96 @@
+import { useCallback, useEffect, useRef } from "react";
+import { useAvatarRuntime } from "@/features/avatar/runtime/avatarRuntimeStore";
+
+export type ChatAvatarEvent =
+	| { type: "assistant_waiting"; chatId: string | null; personaId: string }
+	| { type: "assistant_replied"; chatId: string; personaId: string; text: string }
+	| { type: "assistant_error"; chatId: string | null; personaId: string };
+
+export type AvatarBinding = {
+	personaId: string;
+	avatarId: string;
+	enabled: boolean;
+};
+
+const TALKING_PREVIEW_MS = 1600;
+const DEFAULT_EXPRESSION_ID = "neutral";
+const ERROR_EXPRESSION_ID = "sad";
+
+const avatarBindings: AvatarBinding[] = [
+	{
+		personaId: "aiko",
+		avatarId: "aiko-pngtuber",
+		enabled: true
+	}
+];
+
+function resolveAvatarBinding(personaId: string): AvatarBinding | null {
+	return avatarBindings.find((binding) => binding.enabled && binding.personaId === personaId) ?? null;
+}
+
+export function useAvatarChatBridge() {
+	const { state, updateRuntimeState } = useAvatarRuntime();
+	const idleTimeoutRef = useRef<number | null>(null);
+
+	const clearIdleTimeout = useCallback(() => {
+		if (idleTimeoutRef.current === null) {
+			return;
+		}
+
+		window.clearTimeout(idleTimeoutRef.current);
+		idleTimeoutRef.current = null;
+	}, []);
+
+	useEffect(() => clearIdleTimeout, [clearIdleTimeout]);
+
+	const notifyAvatarChatEvent = useCallback(
+		(event: ChatAvatarEvent) => {
+			const binding = resolveAvatarBinding(event.personaId);
+			if (!binding) {
+				return;
+			}
+
+			clearIdleTimeout();
+
+			switch (event.type) {
+				case "assistant_waiting":
+					updateRuntimeState({
+						avatarId: binding.avatarId,
+						rendererKind: "pngtuber",
+						expressionId: DEFAULT_EXPRESSION_ID,
+						motionState: "thinking",
+						drivenBy: "chat-bridge"
+					});
+					return;
+				case "assistant_replied":
+					updateRuntimeState({
+						avatarId: binding.avatarId,
+						rendererKind: "pngtuber",
+						expressionId: state.expressionId || DEFAULT_EXPRESSION_ID,
+						motionState: "talking",
+						drivenBy: "chat-bridge"
+					});
+					idleTimeoutRef.current = window.setTimeout(() => {
+						updateRuntimeState({
+							motionState: "idle",
+							drivenBy: "chat-bridge"
+						});
+						idleTimeoutRef.current = null;
+					}, TALKING_PREVIEW_MS);
+					return;
+				case "assistant_error":
+					updateRuntimeState({
+						avatarId: binding.avatarId,
+						rendererKind: "pngtuber",
+						expressionId: ERROR_EXPRESSION_ID,
+						motionState: "idle",
+						drivenBy: "chat-bridge"
+					});
+					return;
+			}
+		},
+		[clearIdleTimeout, state.expressionId, updateRuntimeState]
+	);
+
+	return { notifyAvatarChatEvent };
+}

@@ -4,6 +4,7 @@ import ChatDetailsPanel from "@/features/chat/components/ChatDetailsPanel";
 import ChatHeader from "@/features/chat/components/ChatHeader";
 import ChatMessageList from "@/features/chat/components/ChatMessageList";
 import ChatSidebar from "@/features/chat/components/ChatSidebar";
+import { useAvatarChatBridge } from "@/features/avatar/runtime/avatarChatBridge";
 import { useChatSession } from "@/features/chat/hooks/useChatSession";
 import type { AuthSessionController } from "@/hooks/useAuthSession";
 import type { AppFont } from "@/types/font";
@@ -46,7 +47,8 @@ function ChatPage({
 	onToggleTheme,
 	onChatSyncSnapshotChange
 }: ChatPageProps) {
-	const chat = useChatSession();
+	const { notifyAvatarChatEvent } = useAvatarChatBridge();
+	const chat = useChatSession({ onAvatarChatEvent: notifyAvatarChatEvent });
 
 	useEffect(() => {
 		onChatSyncSnapshotChange({

@@ -50,7 +50,16 @@ function isDraftChatPath(pathname: string): boolean {
 	return pathname === CHAT_DRAFT_PATH || pathname === `${CHAT_DRAFT_PATH}/`;
 }
 
-export function useChatSession() {
+export type ChatSessionAvatarEvent =
+	| { type: "assistant_waiting"; chatId: string | null; personaId: string }
+	| { type: "assistant_replied"; chatId: string; personaId: string; text: string }
+	| { type: "assistant_error"; chatId: string | null; personaId: string };
+
+type UseChatSessionOptions = {
+	onAvatarChatEvent?: (event: ChatSessionAvatarEvent) => void;
+};
+
+export function useChatSession({ onAvatarChatEvent }: UseChatSessionOptions = {}) {
 	const { confirm } = useDialog();
 	const { t } = useI18n();
 	const location = useLocation();
@@ -379,6 +388,11 @@ export function useChatSession() {
 		setDraft("");
 		setIsSending(true);
 		setErrorMessage(null);
+		onAvatarChatEvent?.({
+			type: "assistant_waiting",
+			chatId: activeChatId,
+			personaId: selectedPersonaId
+		});
 		let createdChatId: string | null = null;
 
 		try {
@@ -390,6 +404,12 @@ export function useChatSession() {
 			}
 			const nextMessages = await sendChatMessage(chatId, trimmedDraft);
 			setMessages(nextMessages);
+			onAvatarChatEvent?.({
+				type: "assistant_replied",
+				chatId,
+				personaId: selectedPersonaId,
+				text: nextMessages.filter((message) => message.author === "companion").at(-1)?.text ?? ""
+			});
 			setSessions((currentSessions) =>
 				upsertSentSession(
 					currentSessions,
@@ -406,6 +426,11 @@ export function useChatSession() {
 			}
 			setMessages((currentMessages) => currentMessages.filter((message) => message.id !== optimisticMessage.id));
 			setErrorMessage(t("chat.session.aiNoResponse"));
+			onAvatarChatEvent?.({
+				type: "assistant_error",
+				chatId: createdChatId ?? activeChatId,
+				personaId: selectedPersonaId
+			});
 		} finally {
 			setIsSending(false);
 		}
