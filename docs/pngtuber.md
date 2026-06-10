@@ -221,11 +221,11 @@ Current mapping:
 
 ```text
 assistant_waiting -> neutral + thinking
-assistant_replied -> current/default expression + talking, then idle
+assistant_replied -> inferred expression + talking, then idle
 assistant_error   -> sad + idle
 ```
 
-Keep any expression detection conservative. If no response metadata exists yet, default to `neutral` or a tiny local heuristic in the bridge. Do not parse UI text inside `PngTuberPage`.
+Expression detection is currently a tiny conservative keyword heuristic inside `avatarChatBridge.ts`. It maps only to the known semantic expressions (`neutral`, `happy`, `shy`, `sad`, `surprised`) and defaults to `neutral` when no rule matches. Do not parse UI text inside `PngTuberPage`.
 
 The bridge uses a short timeout to return from `talking` to `idle` in the request/response phase. Store and clear that timeout inside the bridge/runtime layer so rapid messages do not leave stale timers that override newer avatar state.
 
