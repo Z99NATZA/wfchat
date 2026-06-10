@@ -9,6 +9,7 @@ The PNGTuber workspace supports the first lightweight visual implementation for 
 - Runtime store: `apps/web/src/features/avatar/runtime/avatarRuntimeStore.tsx`
 - Runtime types: `apps/web/src/features/avatar/runtime/avatarRuntimeTypes.ts`
 - Chat bridge: `apps/web/src/features/avatar/runtime/avatarChatBridge.ts`
+- Chat overlay: `apps/web/src/features/avatar/components/AvatarOverlay.tsx`
 - PNGTuber renderer: `apps/web/src/features/avatar/renderers/pngtuber/PngTuberRenderer.tsx`
 - Shared animation styles: `apps/web/src/styles.css`
 - Public assets: `apps/web/public/images/aiko-pngtuber/`
@@ -234,6 +235,8 @@ This step is done when:
 
 ### 4. Mount A Chat Overlay
 
+Status: implemented.
+
 After the bridge exists, add a small optional PNGTuber overlay to `ChatPage` using the same runtime state and renderer.
 
 Recommended location:
@@ -244,6 +247,8 @@ apps/web/src/features/avatar/components/
 ```
 
 The overlay should be a consumer of avatar runtime state. It should not own chat state and should not call the chat API.
+
+The current overlay is mounted by `ChatPage`, uses `PngTuberRenderer`, and is hidden on small screens to avoid covering mobile chat controls. It displays compact motion labels from `pngtuber.stateShort.*`.
 
 This step is done when:
 

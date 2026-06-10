@@ -1,4 +1,5 @@
 import AppLayout from "@/layouts/AppLayout";
+import AvatarOverlay from "@/features/avatar/components/AvatarOverlay";
 import ChatComposer from "@/features/chat/components/ChatComposer";
 import ChatDetailsPanel from "@/features/chat/components/ChatDetailsPanel";
 import ChatHeader from "@/features/chat/components/ChatHeader";
@@ -128,22 +129,27 @@ function ChatPage({
 					/>
 				}
 			>
-				<ChatMessageList
-					messages={chat.messages}
-					companionName={chat.activePersona.name}
-					companionAvatarUrl={chat.activePersona.avatarUrl}
-					errorMessage={chat.errorMessage}
-					isSending={chat.isSending}
-				/>
-				<ChatComposer
-					draft={chat.draft}
-					font={font}
-					companionName={chat.activePersona.name}
-					isDisabled={false}
-					isSending={chat.isSending}
-					onDraftChange={chat.setDraft}
-					onSend={chat.sendMessage}
-				/>
+			<div className="relative flex min-h-0 flex-1 flex-col">
+				<div className="relative z-10 flex min-h-0 flex-1 flex-col">
+					<ChatMessageList
+						messages={chat.messages}
+						companionName={chat.activePersona.name}
+						companionAvatarUrl={chat.activePersona.avatarUrl}
+						errorMessage={chat.errorMessage}
+						isSending={chat.isSending}
+					/>
+					<ChatComposer
+						draft={chat.draft}
+						font={font}
+						companionName={chat.activePersona.name}
+						isDisabled={false}
+						isSending={chat.isSending}
+						onDraftChange={chat.setDraft}
+						onSend={chat.sendMessage}
+					/>
+				</div>
+				<AvatarOverlay />
+			</div>
 			</AppLayout>
 	);
 }
