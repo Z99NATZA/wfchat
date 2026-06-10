@@ -7,8 +7,25 @@ import PngTuberRenderer from "@/features/avatar/renderers/pngtuber/PngTuberRende
 import { useAvatarRuntime } from "@/features/avatar/runtime/avatarRuntimeStore";
 import type { AvatarMotionState } from "@/features/avatar/runtime/avatarRuntimeTypes";
 import { useI18n } from "@/i18n";
+import { cn } from "@/utils/classNames";
+import type { AvatarOverlayPosition, AvatarOverlaySize } from "@/stores/avatarOverlayStore";
 
-function AvatarOverlay() {
+type AvatarOverlayProps = {
+	position: AvatarOverlayPosition;
+	size: AvatarOverlaySize;
+};
+
+const positionClassNames: Record<AvatarOverlayPosition, string> = {
+	"bottom-right": "bottom-24 right-4 lg:right-6",
+	"bottom-left": "bottom-24 left-4 lg:left-6"
+};
+
+const sizeClassNames: Record<AvatarOverlaySize, string> = {
+	small: "h-44 w-32",
+	medium: "h-56 w-40"
+};
+
+function AvatarOverlay({ position, size }: AvatarOverlayProps) {
 	const { t } = useI18n();
 	const { state } = useAvatarRuntime();
 
@@ -20,7 +37,11 @@ function AvatarOverlay() {
 
 	return (
 		<div
-			className="pointer-events-none absolute bottom-24 right-4 z-0 hidden h-44 w-32 md:block lg:right-6"
+			className={cn(
+				"pointer-events-none absolute z-0 hidden md:block",
+				positionClassNames[position],
+				sizeClassNames[size]
+			)}
 			aria-label={t("pngtuber.header.title")}
 		>
 			<div className="relative h-full overflow-hidden rounded-lg border border-app-border bg-app-panel/92 shadow-soft">

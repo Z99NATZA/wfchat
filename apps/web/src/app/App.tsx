@@ -193,6 +193,8 @@ function App() {
 			font={settings.font}
 			backgroundImageUrl={settings.backgroundImageUrl}
 			isAvatarOverlayVisible={settings.isAvatarOverlayVisible}
+			avatarOverlayPosition={settings.avatarOverlayPosition}
+			avatarOverlaySize={settings.avatarOverlaySize}
 			auth={auth}
 			onFontChange={settings.setFont}
 			onOpenProfile={() => setIsProfileOpen(true)}
@@ -264,9 +266,13 @@ function App() {
 				isOpen={isSettingsOpen}
 				backgroundImageUrl={settings.backgroundImageUrl}
 				isAvatarOverlayVisible={settings.isAvatarOverlayVisible}
+				avatarOverlayPosition={settings.avatarOverlayPosition}
+				avatarOverlaySize={settings.avatarOverlaySize}
 				onClose={() => setIsSettingsOpen(false)}
 				onUpdateBackgroundImageUrl={handleUpdateBackgroundImageUrl}
 				onAvatarOverlayVisibleChange={settings.setAvatarOverlayVisible}
+				onAvatarOverlayPositionChange={settings.setAvatarOverlayPosition}
+				onAvatarOverlaySizeChange={settings.setAvatarOverlaySize}
 			/>
 		</AvatarRuntimeProvider>
 	);

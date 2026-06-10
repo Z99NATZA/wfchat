@@ -2,23 +2,33 @@ import { Image, ScanFace, X } from "lucide-react";
 import { type FormEvent, useEffect, useState } from "react";
 import { useDialogBackgroundSurface } from "@/components/dialog/useDialogBackgroundSurface";
 import { useI18n } from "@/i18n";
+import { cn } from "@/utils/classNames";
+import type { AvatarOverlayPosition, AvatarOverlaySize } from "@/stores/avatarOverlayStore";
 
 type AppSettingsDialogProps = {
 	isOpen: boolean;
 	backgroundImageUrl: string;
 	isAvatarOverlayVisible: boolean;
+	avatarOverlayPosition: AvatarOverlayPosition;
+	avatarOverlaySize: AvatarOverlaySize;
 	onClose: () => void;
 	onUpdateBackgroundImageUrl: (url: string) => void;
 	onAvatarOverlayVisibleChange: (isVisible: boolean) => void;
+	onAvatarOverlayPositionChange: (position: AvatarOverlayPosition) => void;
+	onAvatarOverlaySizeChange: (size: AvatarOverlaySize) => void;
 };
 
 function AppSettingsDialog({
 	isOpen,
 	backgroundImageUrl,
 	isAvatarOverlayVisible,
+	avatarOverlayPosition,
+	avatarOverlaySize,
 	onClose,
 	onUpdateBackgroundImageUrl,
-	onAvatarOverlayVisibleChange
+	onAvatarOverlayVisibleChange,
+	onAvatarOverlayPositionChange,
+	onAvatarOverlaySizeChange
 }: AppSettingsDialogProps) {
 	const { t } = useI18n();
 	const [draftUrl, setDraftUrl] = useState(backgroundImageUrl);
@@ -160,9 +170,75 @@ function AppSettingsDialog({
 								/>
 							</span>
 						</button>
+						<SegmentedSetting
+							label={t("settings.avatarOverlay.position")}
+							options={[
+								{
+									value: "bottom-left",
+									label: t("settings.avatarOverlay.positionBottomLeft")
+								},
+								{
+									value: "bottom-right",
+									label: t("settings.avatarOverlay.positionBottomRight")
+								}
+							]}
+							value={avatarOverlayPosition}
+							onChange={onAvatarOverlayPositionChange}
+						/>
+						<SegmentedSetting
+							label={t("settings.avatarOverlay.size")}
+							options={[
+								{ value: "small", label: t("settings.avatarOverlay.sizeSmall") },
+								{ value: "medium", label: t("settings.avatarOverlay.sizeMedium") }
+							]}
+							value={avatarOverlaySize}
+							onChange={onAvatarOverlaySizeChange}
+						/>
 					</section>
 				</div>
 			</aside>
+		</div>
+	);
+}
+
+type SegmentedSettingProps<TValue extends string> = {
+	label: string;
+	options: Array<{ value: TValue; label: string }>;
+	value: TValue;
+	onChange: (value: TValue) => void;
+};
+
+function SegmentedSetting<TValue extends string>({
+	label,
+	options,
+	value,
+	onChange
+}: SegmentedSettingProps<TValue>) {
+	return (
+		<div className="space-y-2">
+			<p className="text-xs font-semibold text-muted">{label}</p>
+			<div className="grid grid-cols-2 gap-1 rounded-xl border border-dialog-border bg-dialog-soft p-1">
+				{options.map((option) => {
+					const isActive = option.value === value;
+
+					return (
+						<button
+							key={option.value}
+							type="button"
+							className={cn(
+								"min-h-9 rounded-lg px-3 py-2 text-sm font-semibold text-muted transition focus:outline-none focus:ring-2 focus:ring-primary/25",
+								isActive
+									? "bg-app-panel text-app-text shadow-soft"
+									: "hover:bg-app-soft hover:text-app-text"
+							)}
+							aria-pressed={isActive}
+							onClick={() => onChange(option.value)}
+						>
+							{option.label}
+						</button>
+					);
+				})}
+			</div>
 		</div>
 	);
 }

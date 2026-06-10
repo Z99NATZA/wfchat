@@ -11,6 +11,7 @@ import type { AuthSessionController } from "@/hooks/useAuthSession";
 import type { AppFont } from "@/types/font";
 import type { Theme } from "@/types/theme";
 import type { ChatMessage, ChatSessionSummary, MemoryFact, MemorySummary } from "@/types/chat";
+import type { AvatarOverlayPosition, AvatarOverlaySize } from "@/stores/avatarOverlayStore";
 import { type ReactNode, useEffect } from "react";
 
 export type ChatSyncSnapshot = {
@@ -29,6 +30,8 @@ type ChatPageProps = {
 	font: AppFont;
 	backgroundImageUrl: string;
 	isAvatarOverlayVisible: boolean;
+	avatarOverlayPosition: AvatarOverlayPosition;
+	avatarOverlaySize: AvatarOverlaySize;
 	auth: AuthSessionController;
 	onFontChange: (font: AppFont) => void;
 	onOpenProfile: () => void;
@@ -43,6 +46,8 @@ function ChatPage({
 	font,
 	backgroundImageUrl,
 	isAvatarOverlayVisible,
+	avatarOverlayPosition,
+	avatarOverlaySize,
 	auth,
 	onFontChange,
 	onOpenProfile,
@@ -150,7 +155,9 @@ function ChatPage({
 						onSend={chat.sendMessage}
 					/>
 				</div>
-				{isAvatarOverlayVisible ? <AvatarOverlay /> : null}
+				{isAvatarOverlayVisible ? (
+					<AvatarOverlay position={avatarOverlayPosition} size={avatarOverlaySize} />
+				) : null}
 			</div>
 			</AppLayout>
 	);
