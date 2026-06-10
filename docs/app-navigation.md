@@ -10,6 +10,7 @@ ActivityBar -> page sidebar -> page header/content/details
 
 - `chat`: the main chat workspace.
 - `pngtuber`: the PNGTuber workspace used for the current PNG-based visual performer.
+- `model2d`: the reserved Live2D workspace shell for future rigged 2D models.
 
 `apps/web/src/app/App.tsx` owns the top-level route map through `react-router-dom`:
 
@@ -18,7 +19,9 @@ ActivityBar -> page sidebar -> page header/content/details
 - `/chat/:chatId` opens the chat workspace and lets the chat feature load the active chat.
 - `/avatar` redirects to `/avatar/pngtuber` while the generic avatar hub is not built yet.
 - `/avatar/pngtuber` opens the PNGTuber workspace.
-- `/model3d` redirects to `/avatar/pngtuber` for compatibility with older local links.
+- `/model` redirects to `/model/live2d` while the generic model hub is not built yet.
+- `/model/live2d` opens the reserved Live2D workspace shell.
+- `/model3d` redirects to `/model/live2d` for compatibility with older local links.
 
 The activity bar uses route links instead of page state, so the URL is the source of truth for reload, back, and forward navigation.
 

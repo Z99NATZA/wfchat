@@ -264,11 +264,15 @@ This step is done when:
 
 ### 5. Prepare Live2D Without Implementing It Yet
 
+Status: implemented as a route/page shell.
+
 Only reserve the renderer boundary for Live2D in the shared types:
 
 ```text
 rendererKind: "pngtuber" | "live2d"
 ```
+
+`/model/live2d` is a separate workspace shell from `/avatar/pngtuber`. It reserves the product surface for future rigged 2D models without importing a Live2D runtime or coupling chat to Live2D-specific files.
 
 Do not add Live2D model loading, physics, motion priority, or lip-sync parameters until real Live2D assets and runtime decisions exist. Those details should live under a future `renderers/live2d/` module.
 

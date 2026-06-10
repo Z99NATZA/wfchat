@@ -9,6 +9,7 @@ import { useDialog } from "@/components/dialog/DialogProvider";
 import { useI18n } from "@/i18n";
 import { AvatarRuntimeProvider } from "@/features/avatar/runtime/avatarRuntimeStore";
 import ChatPage, { type ChatSyncSnapshot } from "@/pages/ChatPage";
+import Model2DPage from "@/pages/Model2DPage";
 import PngTuberPage from "@/pages/PngTuberPage";
 import {
 	clearLocalSyncState,
@@ -219,6 +220,7 @@ function App() {
 				<Route path="/chat" element={chatPage} />
 				<Route path="/chat/:chatId" element={chatPage} />
 				<Route path="/avatar" element={<Navigate to="/avatar/pngtuber" replace />} />
+				<Route path="/model" element={<Navigate to="/model/live2d" replace />} />
 				<Route
 					path="/avatar/pngtuber"
 					element={
@@ -229,7 +231,17 @@ function App() {
 						/>
 					}
 				/>
-				<Route path="/model3d" element={<Navigate to="/avatar/pngtuber" replace />} />
+				<Route
+					path="/model/live2d"
+					element={
+						<Model2DPage
+							activityBar={activityBar}
+							backgroundImageUrl={settings.backgroundImageUrl}
+							headerControls={headerControls}
+						/>
+					}
+				/>
+				<Route path="/model3d" element={<Navigate to="/model/live2d" replace />} />
 				<Route path="*" element={<Navigate to="/chat" replace />} />
 			</Routes>
 			<AuthProfileDialog
