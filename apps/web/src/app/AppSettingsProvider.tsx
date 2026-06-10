@@ -1,6 +1,7 @@
 import { createContext, type ReactNode, useCallback, useContext, useMemo, useState } from "react";
 import { useFont } from "@/hooks/useFont";
 import { useTheme } from "@/hooks/useTheme";
+import { persistAvatarOverlayVisible, readAvatarOverlayVisible } from "@/stores/avatarOverlayStore";
 import { persistBackgroundImageUrl, readBackgroundImageUrl } from "@/stores/backgroundStore";
 import type { AppFont } from "@/types/font";
 import type { Theme } from "@/types/theme";
@@ -9,9 +10,11 @@ type AppSettingsContextValue = {
 	theme: Theme;
 	font: AppFont;
 	backgroundImageUrl: string;
+	isAvatarOverlayVisible: boolean;
 	setFont: (font: AppFont) => void;
 	toggleTheme: () => void;
 	setBackgroundImageUrl: (url: string) => void;
+	setAvatarOverlayVisible: (isVisible: boolean) => void;
 	applyPulledBackgroundImageUrl: (url: string) => void;
 };
 
@@ -25,6 +28,7 @@ export function AppSettingsProvider({ children }: AppSettingsProviderProps) {
 	const { theme, toggleTheme } = useTheme();
 	const { font, setFont } = useFont();
 	const [backgroundImageUrl, setBackgroundImageUrlState] = useState(readBackgroundImageUrl);
+	const [isAvatarOverlayVisible, setAvatarOverlayVisibleState] = useState(readAvatarOverlayVisible);
 
 	const setBackgroundImageUrl = useCallback((url: string) => {
 		const nextUrl = url.trim();
@@ -36,23 +40,32 @@ export function AppSettingsProvider({ children }: AppSettingsProviderProps) {
 		setBackgroundImageUrlState(url.trim());
 	}, []);
 
+	const setAvatarOverlayVisible = useCallback((isVisible: boolean) => {
+		persistAvatarOverlayVisible(isVisible);
+		setAvatarOverlayVisibleState(isVisible);
+	}, []);
+
 	const value = useMemo<AppSettingsContextValue>(
 		() => ({
 			theme,
 			font,
 			backgroundImageUrl,
+			isAvatarOverlayVisible,
 			setFont,
 			toggleTheme,
 			setBackgroundImageUrl,
+			setAvatarOverlayVisible,
 			applyPulledBackgroundImageUrl
 		}),
 		[
 			theme,
 			font,
 			backgroundImageUrl,
+			isAvatarOverlayVisible,
 			setFont,
 			toggleTheme,
 			setBackgroundImageUrl,
+			setAvatarOverlayVisible,
 			applyPulledBackgroundImageUrl
 		]
 	);

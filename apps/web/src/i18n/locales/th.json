@@ -72,6 +72,8 @@
 	"settings.background.previewAlt": "ตัวอย่างพื้นหลัง",
 	"settings.background.clear": "ล้าง",
 	"settings.background.apply": "ใช้",
+	"settings.avatarOverlay.title": "อวาตาร์ในหน้าแชต",
+	"settings.avatarOverlay.showInChat": "แสดงในหน้าแชต",
 	"chat.sidebar.title": "WFChat",
 	"chat.sidebar.subtitle": "Waifu",
 	"chat.sidebar.closeSidebar": "ปิดแถบด้านข้าง",

@@ -1,4 +1,4 @@
-import { Image, X } from "lucide-react";
+import { Image, ScanFace, X } from "lucide-react";
 import { type FormEvent, useEffect, useState } from "react";
 import { useDialogBackgroundSurface } from "@/components/dialog/useDialogBackgroundSurface";
 import { useI18n } from "@/i18n";
@@ -6,15 +6,19 @@ import { useI18n } from "@/i18n";
 type AppSettingsDialogProps = {
 	isOpen: boolean;
 	backgroundImageUrl: string;
+	isAvatarOverlayVisible: boolean;
 	onClose: () => void;
 	onUpdateBackgroundImageUrl: (url: string) => void;
+	onAvatarOverlayVisibleChange: (isVisible: boolean) => void;
 };
 
 function AppSettingsDialog({
 	isOpen,
 	backgroundImageUrl,
+	isAvatarOverlayVisible,
 	onClose,
-	onUpdateBackgroundImageUrl
+	onUpdateBackgroundImageUrl,
+	onAvatarOverlayVisibleChange
 }: AppSettingsDialogProps) {
 	const { t } = useI18n();
 	const [draftUrl, setDraftUrl] = useState(backgroundImageUrl);
@@ -120,6 +124,42 @@ function AppSettingsDialog({
 								</button>
 							</div>
 						</form>
+					</section>
+					<section className="mt-6 space-y-3 border-t border-dialog-border pt-5">
+						<div className="flex items-center gap-3">
+							<div className="mt-0.5 rounded-xl bg-sky-500/10 p-2 text-sky-600 dark:bg-sky-300/15 dark:text-sky-200">
+								<ScanFace size={18} aria-hidden="true" />
+							</div>
+							<div className="min-w-0 flex-1">
+								<h3 className="text-sm font-semibold text-app-text">
+									{t("settings.avatarOverlay.title")}
+								</h3>
+							</div>
+						</div>
+						<button
+							type="button"
+							role="switch"
+							aria-checked={isAvatarOverlayVisible}
+							className="flex w-full items-center justify-between gap-4 rounded-xl border border-dialog-border bg-dialog-soft px-4 py-3 text-left transition hover:border-primary/40 focus:outline-none focus:ring-4 focus:ring-primary/15"
+							onClick={() => onAvatarOverlayVisibleChange(!isAvatarOverlayVisible)}
+						>
+							<span className="text-sm font-semibold text-app-text">
+								{t("settings.avatarOverlay.showInChat")}
+							</span>
+							<span
+								className={`relative h-6 w-11 shrink-0 rounded-full transition ${
+									isAvatarOverlayVisible
+										? "bg-primary dark:bg-muted/35"
+										: "bg-muted/35 dark:bg-primary"
+								}`}
+							>
+								<span
+									className={`absolute top-1 h-4 w-4 rounded-full bg-white shadow transition ${
+										isAvatarOverlayVisible ? "left-6" : "left-1"
+									}`}
+								/>
+							</span>
+						</button>
 					</section>
 				</div>
 			</aside>

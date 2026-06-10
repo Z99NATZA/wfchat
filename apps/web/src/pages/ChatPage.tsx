@@ -28,6 +28,7 @@ type ChatPageProps = {
 	theme: Theme;
 	font: AppFont;
 	backgroundImageUrl: string;
+	isAvatarOverlayVisible: boolean;
 	auth: AuthSessionController;
 	onFontChange: (font: AppFont) => void;
 	onOpenProfile: () => void;
@@ -41,6 +42,7 @@ function ChatPage({
 	theme,
 	font,
 	backgroundImageUrl,
+	isAvatarOverlayVisible,
 	auth,
 	onFontChange,
 	onOpenProfile,
@@ -148,7 +150,7 @@ function ChatPage({
 						onSend={chat.sendMessage}
 					/>
 				</div>
-				<AvatarOverlay />
+				{isAvatarOverlayVisible ? <AvatarOverlay /> : null}
 			</div>
 			</AppLayout>
 	);

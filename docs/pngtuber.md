@@ -253,6 +253,8 @@ The overlay should be a consumer of avatar runtime state. It should not own chat
 
 The current overlay is mounted by `ChatPage`, uses `PngTuberRenderer`, and is hidden on small screens to avoid covering mobile chat controls. It displays compact motion labels from `pngtuber.stateShort.*`.
 
+Overlay visibility is controlled from the app settings dialog. The preference is persisted locally with `wfchat.avatarOverlayVisible` so users can hide the performer on the chat page without disabling the runtime bridge or changing PNGTuber Studio behavior.
+
 This step is done when:
 
 - Sending a chat message changes the overlay to thinking.

@@ -191,6 +191,7 @@ function App() {
 			theme={settings.theme}
 			font={settings.font}
 			backgroundImageUrl={settings.backgroundImageUrl}
+			isAvatarOverlayVisible={settings.isAvatarOverlayVisible}
 			auth={auth}
 			onFontChange={settings.setFont}
 			onOpenProfile={() => setIsProfileOpen(true)}
@@ -250,8 +251,10 @@ function App() {
 			<AppSettingsDialog
 				isOpen={isSettingsOpen}
 				backgroundImageUrl={settings.backgroundImageUrl}
+				isAvatarOverlayVisible={settings.isAvatarOverlayVisible}
 				onClose={() => setIsSettingsOpen(false)}
 				onUpdateBackgroundImageUrl={handleUpdateBackgroundImageUrl}
+				onAvatarOverlayVisibleChange={settings.setAvatarOverlayVisible}
 			/>
 		</AvatarRuntimeProvider>
 	);

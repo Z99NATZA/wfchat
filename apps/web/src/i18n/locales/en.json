@@ -72,6 +72,8 @@
 	"settings.background.previewAlt": "Background preview",
 	"settings.background.clear": "Clear",
 	"settings.background.apply": "Apply",
+	"settings.avatarOverlay.title": "Avatar overlay",
+	"settings.avatarOverlay.showInChat": "Show in chat",
 	"chat.sidebar.title": "WFChat",
 	"chat.sidebar.subtitle": "Waifu companion UI",
 	"chat.sidebar.closeSidebar": "Close sidebar",
