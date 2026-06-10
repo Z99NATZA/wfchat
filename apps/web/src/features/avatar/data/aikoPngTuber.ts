@@ -10,32 +10,32 @@ export type AikoPngTuberEmotion = {
 export const AIKO_PNGTUBER_EMOTIONS: AikoPngTuberEmotion[] = [
 	{
 		id: "neutral",
-		labelKey: "avatar.emotion.neutral",
-		descriptionKey: "avatar.emotion.neutralDesc",
+		labelKey: "pngtuber.emotion.neutral",
+		descriptionKey: "pngtuber.emotion.neutralDesc",
 		assetUrl: "/images/aiko-pngtuber/aiko-neutral.png"
 	},
 	{
 		id: "happy",
-		labelKey: "avatar.emotion.happy",
-		descriptionKey: "avatar.emotion.happyDesc",
+		labelKey: "pngtuber.emotion.happy",
+		descriptionKey: "pngtuber.emotion.happyDesc",
 		assetUrl: "/images/aiko-pngtuber/aiko-happy.png"
 	},
 	{
 		id: "shy",
-		labelKey: "avatar.emotion.shy",
-		descriptionKey: "avatar.emotion.shyDesc",
+		labelKey: "pngtuber.emotion.shy",
+		descriptionKey: "pngtuber.emotion.shyDesc",
 		assetUrl: "/images/aiko-pngtuber/aiko-shy.png"
 	},
 	{
 		id: "sad",
-		labelKey: "avatar.emotion.sad",
-		descriptionKey: "avatar.emotion.sadDesc",
+		labelKey: "pngtuber.emotion.sad",
+		descriptionKey: "pngtuber.emotion.sadDesc",
 		assetUrl: "/images/aiko-pngtuber/aiko-sad.png"
 	},
 	{
 		id: "surprised",
-		labelKey: "avatar.emotion.surprised",
-		descriptionKey: "avatar.emotion.surprisedDesc",
+		labelKey: "pngtuber.emotion.surprised",
+		descriptionKey: "pngtuber.emotion.surprisedDesc",
 		assetUrl: "/images/aiko-pngtuber/aiko-surprised.png"
 	}
 ];

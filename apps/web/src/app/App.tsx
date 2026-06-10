@@ -7,8 +7,8 @@ import { useAppSettings } from "@/app/AppSettingsProvider";
 import { useAuthSession } from "@/hooks/useAuthSession";
 import { useDialog } from "@/components/dialog/DialogProvider";
 import { useI18n } from "@/i18n";
-import AvatarPage from "@/pages/AvatarPage";
 import ChatPage, { type ChatSyncSnapshot } from "@/pages/ChatPage";
+import PngTuberPage from "@/pages/PngTuberPage";
 import {
 	clearLocalSyncState,
 	enqueueGuestSync,
@@ -216,17 +216,18 @@ function App() {
 				<Route path="/" element={<Navigate to="/chat" replace />} />
 				<Route path="/chat" element={chatPage} />
 				<Route path="/chat/:chatId" element={chatPage} />
+				<Route path="/avatar" element={<Navigate to="/avatar/pngtuber" replace />} />
 				<Route
-					path="/avatar"
+					path="/avatar/pngtuber"
 					element={
-						<AvatarPage
+						<PngTuberPage
 							activityBar={activityBar}
 							backgroundImageUrl={settings.backgroundImageUrl}
 							headerControls={headerControls}
 						/>
 					}
 				/>
-				<Route path="/model3d" element={<Navigate to="/avatar" replace />} />
+				<Route path="/model3d" element={<Navigate to="/avatar/pngtuber" replace />} />
 				<Route path="*" element={<Navigate to="/chat" replace />} />
 			</Routes>
 			<AuthProfileDialog

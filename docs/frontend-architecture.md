@@ -17,9 +17,9 @@ The frontend should not import backend code, read backend files, or know provide
 ```text
 apps/web/src/main.tsx
   -> apps/web/src/app/App.tsx
-    -> apps/web/src/layouts/AppLayout.tsx
+      -> apps/web/src/layouts/AppLayout.tsx
       -> apps/web/src/pages/ChatPage.tsx
-      -> apps/web/src/pages/AvatarPage.tsx
+      -> apps/web/src/pages/PngTuberPage.tsx
 ```
 
 The chat UI uses `apps/web/src/features/chat/services/chatApiService.ts` to create a guest session, create/load a chat, and send messages through the Rust backend.
@@ -30,7 +30,7 @@ The clear chat button in the header is supported. It calls `DELETE /api/chats/:c
 
 Chat layout and scroll contract (single-scroll message timeline, sticky header/composer): `docs/chat-layout-scroll.md`.
 
-The avatar workspace renders Aiko with a lightweight PNGTuber asset set before Live2D rigging. Runtime notes and the future chat-state bridge are documented in `docs/avatar-pngtuber.md`.
+The PNGTuber workspace renders Aiko with a lightweight PNG asset set before Live2D rigging. Runtime notes and the future chat-state bridge are documented in `docs/pngtuber.md`.
 
 App-level page navigation uses the left activity bar and route map described in `docs/app-navigation.md`. The app currently supports the chat workspace and a PNGTuber avatar workspace for future 2D/VTuber-style tooling.
 

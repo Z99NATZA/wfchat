@@ -3,11 +3,11 @@ import { NavLink } from "react-router-dom";
 import { useI18n } from "@/i18n";
 import { cn } from "@/utils/classNames";
 
-export type AppPageId = "chat" | "avatar";
+export type AppPageId = "chat" | "pngtuber";
 
 const navItems: Array<{ id: AppPageId; labelKey: string; icon: LucideIcon; path: string }> = [
 	{ id: "chat", labelKey: "navigation.chat", icon: MessageCircle, path: "/chat" },
-	{ id: "avatar", labelKey: "navigation.avatar", icon: UserRound, path: "/avatar" }
+	{ id: "pngtuber", labelKey: "navigation.pngtuber", icon: UserRound, path: "/avatar/pngtuber" }
 ];
 
 function ActivityBar() {

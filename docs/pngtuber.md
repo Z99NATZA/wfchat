@@ -1,11 +1,11 @@
-# Aiko PNGTuber Avatar
+# Aiko PNGTuber
 
-The avatar workspace supports a first PNGTuber implementation for Aiko. This is the lightweight 2D path before Live2D rigging.
+The PNGTuber workspace supports the first lightweight visual implementation for Aiko before Live2D rigging is available.
 
 ## Runtime Files
 
-- UI page: `apps/web/src/pages/AvatarPage.tsx`
-- Avatar metadata: `apps/web/src/features/avatar/data/aikoPngTuber.ts`
+- UI page: `apps/web/src/pages/PngTuberPage.tsx`
+- PNGTuber metadata: `apps/web/src/features/avatar/data/aikoPngTuber.ts`
 - Shared animation styles: `apps/web/src/styles.css`
 - Public assets: `apps/web/public/images/aiko-pngtuber/`
 
@@ -24,7 +24,7 @@ These are transparent PNG cutouts generated from chroma-key sources. The origina
 
 ## Interaction Model
 
-The page currently keeps avatar state locally:
+The page currently keeps PNGTuber state locally:
 
 ```text
 activeEmotionId: neutral | happy | shy | sad | surprised
@@ -36,11 +36,11 @@ The stage renders the selected PNG and applies one of two CSS animation loops:
 - idle: slow breathing motion
 - talking: slightly faster bob motion
 
-The `AI state bridge` asset shown in the sidebar is a marker only. It reserves the product location for later chat-driven state without coupling the avatar page to chat transport yet.
+The `AI state bridge` asset shown in the sidebar is a marker only. It reserves the product location for later chat-driven state without coupling the PNGTuber page to chat transport yet.
 
 ## Future Chat Bridge
 
-When connecting the avatar to character AI, keep the state bridge small:
+When connecting chat events to the visual performer, keep the state bridge small:
 
 ```text
 chat request starts        -> neutral + idle
@@ -49,19 +49,20 @@ AI response streaming      -> selected emotion + talking
 AI response complete       -> selected emotion + idle
 ```
 
-Emotion selection should be derived from message metadata or a small classifier result, not from raw UI text parsing inside `AvatarPage`.
+Emotion selection should be derived from message metadata or a small classifier result, not from raw UI text parsing inside `PngTuberPage`.
 
 Recommended future metadata:
 
 ```ts
 type AvatarRuntimeState = {
-  characterId: "aiko";
-  emotionId: AikoEmotionId;
-  isTalking: boolean;
+  avatarId: "aiko-pngtuber";
+  rendererKind: "pngtuber";
+  expressionId: AikoEmotionId;
+  motionState: "idle" | "thinking" | "talking";
 };
 ```
 
-Keep this as app-level or feature-level state and pass it into the avatar renderer as props.
+Keep this as app-level or feature-level state and pass it into renderer-specific components as props. Future Live2D support should add a separate renderer module while sharing the semantic runtime state.
 
 ## Asset Guidelines
 
