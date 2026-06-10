@@ -43,6 +43,8 @@ type AvatarRuntimeState = {
 
 `PngTuberPage` owns the studio layout and controls. `PngTuberRenderer` owns the image rendering and renderer-specific animation class selection.
 
+The studio toolbar can manually preview all supported motion states: idle, thinking, and talking. These controls update the shared avatar runtime state, so the chat overlay reflects the same selected motion while the app remains mounted.
+
 The renderer currently applies one of three CSS animation loops:
 
 - idle: slow breathing motion

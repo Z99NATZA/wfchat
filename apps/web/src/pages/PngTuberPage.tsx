@@ -17,13 +17,12 @@ import AppLayout from "@/layouts/AppLayout";
 import { useMemo, type ReactNode } from "react";
 import {
 	Bell,
+	Brain,
 	CircleDot,
 	Eye,
 	type LucideIcon,
 	MessageCircle,
 	Move,
-	Pause,
-	Play,
 	ScanFace,
 	Sparkles,
 	Trash2,
@@ -47,6 +46,16 @@ const pngTuberAssets = [
 const darkAppControlHoverClassName =
 	"dark:hover:border-action-border dark:hover:bg-action-hover dark:hover:text-app-text dark:focus-visible:ring-action-ring/25";
 
+const pngTuberMotionControls: Array<{
+	id: AvatarMotionState;
+	icon: LucideIcon;
+	labelKey: string;
+}> = [
+	{ id: "idle", icon: CircleDot, labelKey: "pngtuber.controls.setIdle" },
+	{ id: "thinking", icon: Brain, labelKey: "pngtuber.controls.setThinking" },
+	{ id: "talking", icon: MessageCircle, labelKey: "pngtuber.controls.setTalking" }
+];
+
 function PngTuberPage({ activityBar, backgroundImageUrl, headerControls }: PngTuberPageProps) {
 	const { t } = useI18n();
 	const { state: runtimeState, setExpression, setMotionState } = useAvatarRuntime();
@@ -58,7 +67,6 @@ function PngTuberPage({ activityBar, backgroundImageUrl, headerControls }: PngTu
 	);
 	const activeEmotionId = activeEmotion.id;
 	const motionState = runtimeState.motionState;
-	const isTalking = motionState === "talking";
 
 	function handleCycleExpression() {
 		const activeIndex = AIKO_PNGTUBER_EMOTIONS.findIndex((emotion) => emotion.id === activeEmotionId);
@@ -83,19 +91,30 @@ function PngTuberPage({ activityBar, backgroundImageUrl, headerControls }: PngTu
 						<span>{t("pngtuber.viewport.stage")}</span>
 					</div>
 					<div className="flex items-center gap-2">
-						<button
-							type="button"
-							className={cn(
-								"flex size-8 items-center justify-center rounded-lg border text-muted transition hover:border-primary hover:text-primary",
-								darkAppControlHoverClassName,
-								isTalking ? "border-primary/35 bg-primary/10 text-app-text" : "border-app-border bg-app-soft"
-							)}
-							aria-label={isTalking ? t("pngtuber.controls.stopTalking") : t("pngtuber.controls.startTalking")}
-							title={isTalking ? t("pngtuber.controls.stopTalking") : t("pngtuber.controls.startTalking")}
-							onClick={() => setMotionState(isTalking ? "idle" : "talking")}
-						>
-							{isTalking ? <Pause size={16} aria-hidden="true" /> : <Play size={16} aria-hidden="true" />}
-						</button>
+						<div className="flex items-center gap-1 rounded-lg border border-app-border bg-app-soft p-1">
+							{pngTuberMotionControls.map((control) => {
+								const Icon = control.icon;
+								const isActive = motionState === control.id;
+
+								return (
+									<button
+										key={control.id}
+										type="button"
+										className={cn(
+											"flex size-7 items-center justify-center rounded-md text-muted transition hover:text-primary focus:outline-none focus:ring-2 focus:ring-primary/25",
+											darkAppControlHoverClassName,
+											isActive && "bg-app-panel text-app-text shadow-soft"
+										)}
+										aria-label={t(control.labelKey)}
+										title={t(control.labelKey)}
+										aria-pressed={isActive}
+										onClick={() => setMotionState(control.id)}
+									>
+										<Icon size={15} aria-hidden="true" />
+									</button>
+								);
+							})}
+						</div>
 						<button
 							type="button"
 							className={cn(
