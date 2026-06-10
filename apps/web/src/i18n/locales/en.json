@@ -24,6 +24,7 @@
 	"pngtuber.controls.startTalking": "Start talking preview",
 	"pngtuber.controls.stopTalking": "Stop talking preview",
 	"pngtuber.state.idle": "Idle breathing loop",
+	"pngtuber.state.thinking": "Thinking preview",
 	"pngtuber.state.talking": "Talking preview",
 	"pngtuber.assets.aikoPngTuber": "Aiko PNGTuber",
 	"pngtuber.assets.expressionSet": "Expression set",

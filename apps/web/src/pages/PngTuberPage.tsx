@@ -7,12 +7,14 @@ import {
 import IconButton from "@/components/ui/IconButton";
 import {
 	AIKO_PNGTUBER_EMOTIONS,
-	DEFAULT_AIKO_EMOTION_ID,
 	type AikoEmotionId,
 	type AikoPngTuberEmotion
 } from "@/features/avatar/data/aikoPngTuber";
+import PngTuberRenderer from "@/features/avatar/renderers/pngtuber/PngTuberRenderer";
+import { useAvatarRuntime } from "@/features/avatar/runtime/avatarRuntimeStore";
+import type { AvatarMotionState } from "@/features/avatar/runtime/avatarRuntimeTypes";
 import AppLayout from "@/layouts/AppLayout";
-import { useMemo, useState, type ReactNode } from "react";
+import { useMemo, type ReactNode } from "react";
 import {
 	Bell,
 	CircleDot,
@@ -47,28 +49,30 @@ const darkAppControlHoverClassName =
 
 function PngTuberPage({ activityBar, backgroundImageUrl, headerControls }: PngTuberPageProps) {
 	const { t } = useI18n();
-	const [activeEmotionId, setActiveEmotionId] = useState<AikoEmotionId>(DEFAULT_AIKO_EMOTION_ID);
-	const [isTalking, setIsTalking] = useState(false);
+	const { state: runtimeState, setExpression, setMotionState } = useAvatarRuntime();
 	const activeEmotion = useMemo(
 		() =>
-			AIKO_PNGTUBER_EMOTIONS.find((emotion) => emotion.id === activeEmotionId) ??
+			AIKO_PNGTUBER_EMOTIONS.find((emotion) => emotion.id === runtimeState.expressionId) ??
 			AIKO_PNGTUBER_EMOTIONS[0],
-		[activeEmotionId]
+		[runtimeState.expressionId]
 	);
+	const activeEmotionId = activeEmotion.id;
+	const motionState = runtimeState.motionState;
+	const isTalking = motionState === "talking";
 
 	function handleCycleExpression() {
 		const activeIndex = AIKO_PNGTUBER_EMOTIONS.findIndex((emotion) => emotion.id === activeEmotionId);
 		const nextEmotion = AIKO_PNGTUBER_EMOTIONS[(activeIndex + 1) % AIKO_PNGTUBER_EMOTIONS.length];
-		setActiveEmotionId(nextEmotion.id);
+		setExpression(nextEmotion.id);
 	}
 
 	return (
 		<AppLayout
 			activityBar={activityBar}
 			backgroundImageUrl={backgroundImageUrl}
-			sidebar={<PngTuberSidebar activeEmotionId={activeEmotionId} onEmotionChange={setActiveEmotionId} />}
+			sidebar={<PngTuberSidebar activeEmotionId={activeEmotionId} onEmotionChange={setExpression} />}
 			header={<PngTuberHeader controls={headerControls} />}
-			details={<PngTuberInspector activeEmotion={activeEmotion} isTalking={isTalking} />}
+			details={<PngTuberInspector activeEmotion={activeEmotion} motionState={motionState} />}
 		>
 			<section className="flex min-h-0 flex-1 flex-col bg-app-bg/40">
 				<div className="flex h-12 shrink-0 items-center justify-between border-b border-app-border bg-app-panel/62 px-4 text-xs text-muted">
@@ -88,7 +92,7 @@ function PngTuberPage({ activityBar, backgroundImageUrl, headerControls }: PngTu
 							)}
 							aria-label={isTalking ? t("pngtuber.controls.stopTalking") : t("pngtuber.controls.startTalking")}
 							title={isTalking ? t("pngtuber.controls.stopTalking") : t("pngtuber.controls.startTalking")}
-							onClick={() => setIsTalking((current) => !current)}
+							onClick={() => setMotionState(isTalking ? "idle" : "talking")}
 						>
 							{isTalking ? <Pause size={16} aria-hidden="true" /> : <Play size={16} aria-hidden="true" />}
 						</button>
@@ -115,17 +119,14 @@ function PngTuberPage({ activityBar, backgroundImageUrl, headerControls }: PngTu
 					<div className="relative flex h-full items-center justify-center p-6">
 						<div className="relative flex h-full max-h-[44rem] w-full max-w-[42rem] items-end justify-center">
 							<div className="absolute bottom-0 h-[76%] w-[72%] rounded-full border border-primary/20 bg-primary/8" />
-							<img
-								src={activeEmotion.assetUrl}
+							<PngTuberRenderer
+								emotion={activeEmotion}
+								motionState={motionState}
 								alt={t("pngtuber.previewAlt", { expression: t(activeEmotion.labelKey) })}
-								className={cn(
-									"pngtuber-avatar relative z-10 h-full max-h-full w-full object-contain object-bottom",
-									isTalking && "pngtuber-avatar--talking"
-								)}
 							/>
 							<div className="absolute bottom-4 right-4 z-20 flex items-center gap-2 rounded-lg border border-app-border bg-app-panel/92 px-3 py-2 text-xs text-muted shadow-soft">
 								<MessageCircle size={14} aria-hidden="true" />
-								{isTalking ? t("pngtuber.state.talking") : t("pngtuber.state.idle")}
+								{t(motionStateLabelKey(motionState))}
 							</div>
 						</div>
 					</div>
@@ -147,7 +148,7 @@ function PngTuberPage({ activityBar, backgroundImageUrl, headerControls }: PngTu
 												darkAppControlHoverClassName
 											)
 								)}
-								onClick={() => setActiveEmotionId(emotion.id)}
+								onClick={() => setExpression(emotion.id)}
 							>
 								{t(emotion.labelKey)}
 							</button>
@@ -301,14 +302,14 @@ function PngTuberHeader({ controls }: PngTuberHeaderProps) {
 
 type PngTuberInspectorProps = {
 	activeEmotion: AikoPngTuberEmotion;
-	isTalking: boolean;
+	motionState: AvatarMotionState;
 };
 
-function PngTuberInspector({ activeEmotion, isTalking }: PngTuberInspectorProps) {
+function PngTuberInspector({ activeEmotion, motionState }: PngTuberInspectorProps) {
 	const { t } = useI18n();
 	const inspectorRows = [
 		{ label: t("pngtuber.inspector.expression"), value: t(activeEmotion.labelKey) },
-		{ label: t("pngtuber.inspector.motion"), value: isTalking ? t("pngtuber.state.talking") : t("pngtuber.state.idle") },
+		{ label: t("pngtuber.inspector.motion"), value: t(motionStateLabelKey(motionState)) },
 		{ label: t("pngtuber.inspector.asset"), value: activeEmotion.assetUrl },
 		{ label: t("pngtuber.inspector.bridge"), value: t("pngtuber.inspector.bridgePending") }
 	];
@@ -356,6 +357,17 @@ function ToolButton({ icon: Icon, label, active = false }: ToolButtonProps) {
 			<Icon size={17} aria-hidden="true" />
 		</button>
 	);
+}
+
+function motionStateLabelKey(motionState: AvatarMotionState) {
+	switch (motionState) {
+		case "idle":
+			return "pngtuber.state.idle";
+		case "thinking":
+			return "pngtuber.state.thinking";
+		case "talking":
+			return "pngtuber.state.talking";
+	}
 }
 
 export default PngTuberPage;

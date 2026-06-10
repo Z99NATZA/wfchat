@@ -39,5 +39,3 @@ export const AIKO_PNGTUBER_EMOTIONS: AikoPngTuberEmotion[] = [
 		assetUrl: "/images/aiko-pngtuber/aiko-surprised.png"
 	}
 ];
-
-export const DEFAULT_AIKO_EMOTION_ID: AikoEmotionId = "neutral";

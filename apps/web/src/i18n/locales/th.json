@@ -24,6 +24,7 @@
 	"pngtuber.controls.startTalking": "เริ่มพรีวิวตอนพูด",
 	"pngtuber.controls.stopTalking": "หยุดพรีวิวตอนพูด",
 	"pngtuber.state.idle": "ลูปหายใจ",
+	"pngtuber.state.thinking": "พรีวิวตอนคิด",
 	"pngtuber.state.talking": "พรีวิวตอนพูด",
 	"pngtuber.assets.aikoPngTuber": "Aiko PNGTuber",
 	"pngtuber.assets.expressionSet": "ชุดสีหน้า",

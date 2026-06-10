@@ -7,6 +7,7 @@ import { useAppSettings } from "@/app/AppSettingsProvider";
 import { useAuthSession } from "@/hooks/useAuthSession";
 import { useDialog } from "@/components/dialog/DialogProvider";
 import { useI18n } from "@/i18n";
+import { AvatarRuntimeProvider } from "@/features/avatar/runtime/avatarRuntimeStore";
 import ChatPage, { type ChatSyncSnapshot } from "@/pages/ChatPage";
 import PngTuberPage from "@/pages/PngTuberPage";
 import {
@@ -211,7 +212,7 @@ function App() {
 	};
 
 	return (
-		<>
+		<AvatarRuntimeProvider>
 			<Routes>
 				<Route path="/" element={<Navigate to="/chat" replace />} />
 				<Route path="/chat" element={chatPage} />
@@ -252,7 +253,7 @@ function App() {
 				onClose={() => setIsSettingsOpen(false)}
 				onUpdateBackgroundImageUrl={handleUpdateBackgroundImageUrl}
 			/>
-		</>
+		</AvatarRuntimeProvider>
 	);
 }
 
