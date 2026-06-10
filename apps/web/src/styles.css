@@ -221,6 +221,10 @@
 	.pngtuber-avatar--talking {
 		animation: pngtuber-talk 520ms ease-in-out infinite;
 	}
+
+	.pngtuber-avatar--thinking {
+		animation: pngtuber-think 1.8s ease-in-out infinite;
+	}
 }
 
 @layer utilities {
@@ -253,5 +257,20 @@
 
 	45% {
 		transform: translateY(-0.35rem) scale(1.018);
+	}
+}
+
+@keyframes pngtuber-think {
+	0%,
+	100% {
+		transform: translateY(0) rotate(0deg) scale(1);
+	}
+
+	35% {
+		transform: translateY(-0.2rem) rotate(-1.4deg) scale(1.006);
+	}
+
+	70% {
+		transform: translateY(0.05rem) rotate(1deg) scale(1);
 	}
 }

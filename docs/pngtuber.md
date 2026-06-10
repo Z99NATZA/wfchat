@@ -43,12 +43,13 @@ type AvatarRuntimeState = {
 
 `PngTuberPage` owns the studio layout and controls. `PngTuberRenderer` owns the image rendering and renderer-specific animation class selection.
 
-The renderer currently applies one of two CSS animation loops:
+The renderer currently applies one of three CSS animation loops:
 
 - idle: slow breathing motion
+- thinking: subtle tilted thinking motion
 - talking: slightly faster bob motion
 
-`thinking` is a semantic runtime state reserved for the chat bridge. Until a dedicated thinking animation exists, the PNGTuber renderer displays it with the idle breathing loop.
+`thinking` is triggered by the chat bridge while the app waits for an AI response.
 
 The `AI state bridge` asset shown in the sidebar is a marker only. It reserves the product location for later chat-driven state without coupling the PNGTuber page to chat transport yet.
 

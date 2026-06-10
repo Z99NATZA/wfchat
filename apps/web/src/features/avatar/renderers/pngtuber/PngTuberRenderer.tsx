@@ -16,6 +16,7 @@ function PngTuberRenderer({ alt, className, emotion, motionState }: PngTuberRend
 			alt={alt}
 			className={cn(
 				"pngtuber-avatar relative z-10 h-full max-h-full w-full object-contain object-bottom",
+				motionState === "thinking" && "pngtuber-avatar--thinking",
 				motionState === "talking" && "pngtuber-avatar--talking",
 				className
 			)}
