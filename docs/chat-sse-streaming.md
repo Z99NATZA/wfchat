@@ -435,15 +435,25 @@ Current backend shell behavior:
 - emits `message_done` with the full persisted message list
 - keeps the original non-streaming endpoint unchanged
 
-### 2. Frontend SSE parser and service - Next
+### 2. Frontend SSE parser and service - Implemented
 
 Files:
 
 - `apps/web/src/features/chat/services/chatApiService.ts`
+- `apps/web/src/features/chat/services/chatApiService.test.ts`
+- `apps/web/src/services/apiClient.ts`
 
 Add a small SSE parser local to the service file unless it becomes shared.
 
 Keep the existing Axios `apiClient` for non-streaming calls. Use `fetch` for streaming because the response body must be read incrementally.
+
+Current service behavior:
+
+- `streamChatMessage()` calls the backend SSE route with `fetch`
+- existing `sendChatMessage()` remains unchanged
+- parser supports split frames, CRLF framing, comments, multi-line data, and final frames without trailing blank lines
+- `message_done` maps API messages into existing `ChatMessage` objects
+- `error` events call `onError` and throw
 
 ### 3. Hook integration behind one path
 

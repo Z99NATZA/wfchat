@@ -1,5 +1,5 @@
 import { AxiosError } from "axios";
-import { apiClient } from "@/services/apiClient";
+import { apiBaseUrl, apiClient } from "@/services/apiClient";
 import { readStorageItem, writeStorageItem } from "@/services/storageService";
 import type { ChatMessage, ChatPersona, ChatSessionSummary, MemoryFact, MemorySummary } from "@/types/chat";
 import { formatMessageTime } from "@/utils/date";
@@ -29,6 +29,50 @@ type ApiChat = {
 
 type ApiSendMessageResponse = {
 	messages: ApiMessage[];
+};
+
+type ApiStreamMessageStartEvent = {
+	chat_id: string;
+	persona_id: string;
+};
+
+type ApiStreamTokenEvent = {
+	text: string;
+};
+
+type ApiStreamMessageDoneEvent = {
+	chat_id: string;
+	user_message: ApiMessage;
+	assistant_message: ApiMessage;
+	messages: ApiMessage[];
+};
+
+type ApiStreamMessageErrorEvent = {
+	message: string;
+};
+
+export type StreamMessageStartEvent = {
+	chatId: string;
+	personaId: string;
+};
+
+export type StreamMessageDoneEvent = {
+	chatId: string;
+	userMessage: ChatMessage;
+	assistantMessage: ChatMessage;
+	messages: ChatMessage[];
+};
+
+export type StreamChatMessageHandlers = {
+	onStart?: (event: StreamMessageStartEvent) => void;
+	onToken?: (text: string) => void;
+	onDone?: (event: StreamMessageDoneEvent) => void;
+	onError?: (message: string) => void;
+};
+
+export type ParsedSseEvent = {
+	event: string;
+	data: string;
 };
 
 type ApiChatUiPersona = {
@@ -104,6 +148,51 @@ export async function sendChatMessage(chatId: string, content: string): Promise<
 	);
 
 	return response.data.messages.map(toChatMessage);
+}
+
+export async function streamChatMessage(
+	chatId: string,
+	content: string,
+	handlers: StreamChatMessageHandlers
+): Promise<void> {
+	const sessionId = await ensureGuestSession();
+	const response = await fetch(apiUrl(`/api/chats/${chatId}/messages/stream`), {
+		method: "POST",
+		credentials: "include",
+		headers: {
+			...sessionHeaders(sessionId),
+			Accept: "text/event-stream",
+			"Content-Type": "application/json"
+		},
+		body: JSON.stringify({ content })
+	});
+
+	if (!response.ok) {
+		throw new Error(await readApiError(response));
+	}
+
+	if (!response.body) {
+		throw new Error("streaming response did not include a body");
+	}
+
+	const decoder = new TextDecoder();
+	const reader = response.body.getReader();
+	const parser = createSseEventParser((event) => dispatchStreamEvent(event, handlers));
+
+	while (true) {
+		const { done, value } = await reader.read();
+		if (done) {
+			break;
+		}
+
+		parser.push(decoder.decode(value, { stream: true }));
+	}
+
+	const remainingText = decoder.decode();
+	if (remainingText) {
+		parser.push(remainingText);
+	}
+	parser.end();
 }
 
 export async function clearChatMessages(chatId: string): Promise<ChatMessage[]> {
@@ -267,6 +356,127 @@ function toSessionSummary(chat: ApiChat): ChatSessionSummary {
 
 export function isNotFound(error: unknown): boolean {
 	return error instanceof AxiosError && error.response?.status === 404;
+}
+
+export function createSseEventParser(onEvent: (event: ParsedSseEvent) => void) {
+	let buffer = "";
+
+	return {
+		push(chunk: string) {
+			buffer = `${buffer}${chunk}`.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+
+			while (true) {
+				const frameEndIndex = buffer.indexOf("\n\n");
+				if (frameEndIndex < 0) {
+					return;
+				}
+
+				const frame = buffer.slice(0, frameEndIndex);
+				buffer = buffer.slice(frameEndIndex + 2);
+				const event = parseSseFrame(frame);
+				if (event) {
+					onEvent(event);
+				}
+			}
+		},
+		end() {
+			const event = parseSseFrame(buffer);
+			buffer = "";
+			if (event) {
+				onEvent(event);
+			}
+		}
+	};
+}
+
+function parseSseFrame(frame: string): ParsedSseEvent | null {
+	let eventName = "message";
+	const dataLines: string[] = [];
+
+	for (const line of frame.split("\n")) {
+		if (!line || line.startsWith(":")) {
+			continue;
+		}
+
+		const separatorIndex = line.indexOf(":");
+		const field = separatorIndex >= 0 ? line.slice(0, separatorIndex) : line;
+		let value = separatorIndex >= 0 ? line.slice(separatorIndex + 1) : "";
+		if (value.startsWith(" ")) {
+			value = value.slice(1);
+		}
+
+		if (field === "event") {
+			eventName = value;
+		}
+		if (field === "data") {
+			dataLines.push(value);
+		}
+	}
+
+	if (dataLines.length === 0) {
+		return null;
+	}
+
+	return {
+		event: eventName,
+		data: dataLines.join("\n")
+	};
+}
+
+function dispatchStreamEvent(event: ParsedSseEvent, handlers: StreamChatMessageHandlers): void {
+	switch (event.event) {
+		case "message_start": {
+			const payload = parseStreamEventData<ApiStreamMessageStartEvent>(event);
+			handlers.onStart?.({
+				chatId: payload.chat_id,
+				personaId: payload.persona_id
+			});
+			return;
+		}
+		case "token": {
+			const payload = parseStreamEventData<ApiStreamTokenEvent>(event);
+			if (payload.text) {
+				handlers.onToken?.(payload.text);
+			}
+			return;
+		}
+		case "message_done": {
+			const payload = parseStreamEventData<ApiStreamMessageDoneEvent>(event);
+			handlers.onDone?.({
+				chatId: payload.chat_id,
+				userMessage: toChatMessage(payload.user_message),
+				assistantMessage: toChatMessage(payload.assistant_message),
+				messages: payload.messages.map(toChatMessage)
+			});
+			return;
+		}
+		case "error": {
+			const payload = parseStreamEventData<ApiStreamMessageErrorEvent>(event);
+			handlers.onError?.(payload.message);
+			throw new Error(payload.message);
+		}
+	}
+}
+
+function parseStreamEventData<TPayload>(event: ParsedSseEvent): TPayload {
+	try {
+		return JSON.parse(event.data) as TPayload;
+	} catch {
+		throw new Error(`invalid ${event.event} stream event`);
+	}
+}
+
+async function readApiError(response: Response): Promise<string> {
+	try {
+		const body = (await response.json()) as { error?: string };
+		return body.error ?? `request failed with status ${response.status}`;
+	} catch {
+		return `request failed with status ${response.status}`;
+	}
+}
+
+function apiUrl(path: string): string {
+	return new URL(path, apiBaseUrl).toString();
 }
 
 function toMemoryFact(fact: ApiMemoryFact): MemoryFact {

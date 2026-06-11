@@ -42,8 +42,8 @@ Read these only when touching related areas:
 Follow the sequence from `docs/chat-sse-streaming.md`:
 
 1. Completed: backend SSE shell using the existing non-streaming completion path.
-2. Next: frontend SSE parser and `streamChatMessage()` service.
-3. Then: `useChatSession` integration with optimistic assistant message updates.
+2. Completed: frontend SSE parser and `streamChatMessage()` service.
+3. Next: `useChatSession` integration with optimistic assistant message updates.
 4. Then: avatar streaming lifecycle event only if needed.
 5. Later: provider-native streaming after the contract is proven.
 
@@ -71,6 +71,25 @@ Current behavior:
 - emits guarded final assistant text as one `token`
 - persists user and assistant messages only after successful completion
 - keeps `POST /api/chats/:chat_id/messages` unchanged
+
+## Current Frontend Service Status
+
+The frontend service layer now has:
+
+```text
+streamChatMessage(chatId, content, handlers)
+```
+
+Current behavior:
+
+- uses `fetch()` against `POST /api/chats/:chat_id/messages/stream`
+- sends the existing `X-WFChat-Session` header
+- parses SSE frames from `ReadableStream`
+- handles frames split across chunks
+- maps `message_start`, `token`, `message_done`, and `error`
+- keeps `sendChatMessage()` unchanged
+
+The service is not wired into `useChatSession` yet.
 
 ## Hard Boundaries
 
