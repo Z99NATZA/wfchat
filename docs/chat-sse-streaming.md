@@ -540,10 +540,11 @@ Current automated coverage:
 Current automated coverage:
 
 - SSE parser tests in `apps/web/src/features/chat/services/chatApiService.test.ts` cover split frames, CRLF framing, comments, multi-line data, and final frames without trailing blank lines.
+- Hook tests in `apps/web/src/features/chat/hooks/useChatSession.test.ts` cover optimistic assistant creation, token append, final server replacement, stream-started error cleanup, avatar lifecycle events, and pre-start non-streaming fallback.
 
 Recommended next automated coverage:
 
-- Add `useChatSession.sendMessage()` streaming tests for optimistic assistant creation, token append, final server replacement, stream-started error cleanup, avatar lifecycle events, and pre-start non-streaming fallback.
+- Add a backend endpoint failure-path integration test if a test-only failing provider seam is introduced; keep the current production provider routing unchanged.
 
 ### Manual QA
 
