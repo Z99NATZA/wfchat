@@ -32,7 +32,7 @@ struct SyncCommitRequest {
     items: Vec<SyncItemInput>,
 }
 
-#[derive(Deserialize, Serialize)]
+#[derive(Clone, Deserialize, Serialize)]
 struct SyncItemInput {
     item_id: String,
     item_type: String,
@@ -239,6 +239,8 @@ fn advance_cursor(cursor: u64, updated_at: u64) -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::Config;
+    use axum::extract::State;
     use serde_json::json;
 
     fn item(updated_at: u64) -> SyncItemInput {
@@ -249,6 +251,52 @@ mod tests {
             deleted_at: None,
             payload: json!({ "key": "theme", "value": "dark" }),
         }
+    }
+
+    fn unique_item(updated_at: u64) -> SyncItemInput {
+        let item_id = format!("settings.theme.{}", Uuid::new_v4());
+        SyncItemInput {
+            item_id,
+            item_type: "setting".to_owned(),
+            updated_at,
+            deleted_at: None,
+            payload: json!({ "key": "theme", "value": "dark" }),
+        }
+    }
+
+    async fn test_state() -> Option<AppState> {
+        let database_url = std::env::var("WFCHAT_TEST_DATABASE_URL").ok()?;
+        AppState::new(Config {
+            app_host: "127.0.0.1".to_owned(),
+            app_port: 0,
+            frontend_origin: "http://localhost:5173".to_owned(),
+            ai_provider: "mock".to_owned(),
+            ai_model: "mock-waifu".to_owned(),
+            database_url,
+            openai_api_key: None,
+            openai_base_url: "https://api.openai.com/v1".to_owned(),
+            openai_model: "gpt-4.1-mini".to_owned(),
+            lmstudio_base_url: "http://localhost:1234/v1".to_owned(),
+            lmstudio_model: "local-model".to_owned(),
+            xai_api_key: None,
+            xai_base_url: "https://api.x.ai/v1".to_owned(),
+            xai_model: "grok-3-mini".to_owned(),
+            google_client_id: None,
+        })
+        .await
+        .ok()
+    }
+
+    fn session_headers(session_id: Uuid) -> HeaderMap {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            "x-wfchat-session",
+            session_id
+                .to_string()
+                .parse()
+                .expect("session id should be a valid header value"),
+        );
+        headers
     }
 
     #[test]
@@ -283,5 +331,174 @@ mod tests {
         let cursor = advance_cursor(cursor, 110);
         let cursor = advance_cursor(cursor, 105);
         assert_eq!(cursor, 110);
+    }
+
+    #[tokio::test]
+    async fn sync_preview_commit_and_changes_roundtrip_for_guest_session() {
+        let Some(state) = test_state().await else {
+            return;
+        };
+        let session = state.store.create_guest_session().await;
+        let headers = session_headers(session.id);
+        let sync_item = unique_item(100);
+
+        let Json(preview) = sync_preview(
+            State(state.clone()),
+            headers.clone(),
+            Json(SyncPreviewRequest {
+                items: vec![sync_item.clone()],
+            }),
+        )
+        .await
+        .expect("preview should succeed");
+        assert_eq!(preview.to_create, 1);
+        assert_eq!(preview.to_update, 0);
+        assert_eq!(preview.conflicts, 0);
+
+        let operation_id = format!("test-operation-{}", Uuid::new_v4());
+        let Json(commit) = sync_commit(
+            State(state.clone()),
+            headers.clone(),
+            Json(SyncCommitRequest {
+                operation_id: operation_id.clone(),
+                items: vec![sync_item.clone()],
+            }),
+        )
+        .await
+        .expect("commit should succeed");
+        assert_eq!(commit.operation_id, operation_id);
+        assert_eq!(commit.merged_count, 1);
+        assert_eq!(commit.conflict_count, 0);
+        assert!(commit.committed_at > 0);
+
+        let Json(changes) = sync_changes(
+            State(state.clone()),
+            headers,
+            Query(SyncChangesQuery {
+                cursor: Some(0),
+                limit: Some(10),
+            }),
+        )
+        .await
+        .expect("changes should succeed");
+        let saved = changes
+            .items
+            .iter()
+            .find(|item| item.item_id == sync_item.item_id)
+            .expect("committed sync item should be listed");
+        assert_eq!(saved.item_type, "setting");
+        assert_eq!(saved.updated_at, 100);
+        assert_eq!(saved.payload["value"], "dark");
+        assert!(changes.next_cursor >= 100);
+    }
+
+    #[tokio::test]
+    async fn sync_preview_reports_update_and_conflict_against_existing_item() {
+        let Some(state) = test_state().await else {
+            return;
+        };
+        let session = state.store.create_guest_session().await;
+        let headers = session_headers(session.id);
+        let mut existing = unique_item(50);
+
+        let _ = sync_commit(
+            State(state.clone()),
+            headers.clone(),
+            Json(SyncCommitRequest {
+                operation_id: format!("seed-operation-{}", Uuid::new_v4()),
+                items: vec![existing.clone()],
+            }),
+        )
+        .await
+        .expect("seed commit should succeed");
+
+        let mut newer = existing.clone();
+        newer.updated_at = 60;
+        newer.payload = json!({ "key": "theme", "value": "light" });
+        existing.updated_at = 40;
+
+        let Json(preview) = sync_preview(
+            State(state),
+            headers,
+            Json(SyncPreviewRequest {
+                items: vec![newer, existing],
+            }),
+        )
+        .await
+        .expect("preview should succeed");
+        assert_eq!(preview.to_create, 0);
+        assert_eq!(preview.to_update, 1);
+        assert_eq!(preview.conflicts, 1);
+    }
+
+    #[tokio::test]
+    async fn registered_sync_changes_are_visible_across_sessions() {
+        let Some(state) = test_state().await else {
+            return;
+        };
+        let user_id = Uuid::new_v4();
+        let first_session = state.store.create_guest_session().await;
+        let first_session = state
+            .store
+            .promote_session_to_registered(first_session.id, user_id)
+            .await
+            .expect("first session should promote");
+        let second_session = state.store.create_guest_session().await;
+        let second_session = state
+            .store
+            .promote_session_to_registered(second_session.id, user_id)
+            .await
+            .expect("second session should promote");
+        let sync_item = unique_item(75);
+
+        let _ = sync_commit(
+            State(state.clone()),
+            session_headers(first_session.id),
+            Json(SyncCommitRequest {
+                operation_id: format!("registered-operation-{}", Uuid::new_v4()),
+                items: vec![sync_item.clone()],
+            }),
+        )
+        .await
+        .expect("registered commit should succeed");
+
+        let Json(changes) = sync_changes(
+            State(state),
+            session_headers(second_session.id),
+            Query(SyncChangesQuery {
+                cursor: Some(0),
+                limit: Some(50),
+            }),
+        )
+        .await
+        .expect("changes should succeed");
+        assert!(changes
+            .items
+            .iter()
+            .any(|item| item.item_id == sync_item.item_id));
+    }
+
+    #[tokio::test]
+    async fn sync_commit_requires_operation_id() {
+        let Some(state) = test_state().await else {
+            return;
+        };
+        let session = state.store.create_guest_session().await;
+
+        let result = sync_commit(
+            State(state),
+            session_headers(session.id),
+            Json(SyncCommitRequest {
+                operation_id: " ".to_owned(),
+                items: vec![unique_item(10)],
+            }),
+        )
+        .await;
+        let error = match result {
+            Ok(_) => panic!("blank operation id should fail"),
+            Err(error) => error,
+        };
+
+        assert_eq!(error.to_string(), "bad request: operation_id is required");
     }
 }
