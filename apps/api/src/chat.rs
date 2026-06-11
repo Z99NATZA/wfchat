@@ -1,11 +1,18 @@
 use axum::{
     extract::{Path, State},
-    http::HeaderMap,
+    http::{header, HeaderMap, HeaderName, HeaderValue},
+    response::{
+        sse::{Event, KeepAlive, Sse},
+        IntoResponse,
+    },
     routing::get,
     Json, Router,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use std::{convert::Infallible, time::Duration};
+use tokio::sync::mpsc;
+use tokio_stream::wrappers::ReceiverStream;
 use uuid::Uuid;
 
 use crate::{
@@ -27,6 +34,10 @@ pub fn router() -> Router<AppState> {
         .route(
             "/chats/{chat_id}/messages",
             axum::routing::post(send_message).delete(clear_messages),
+        )
+        .route(
+            "/chats/{chat_id}/messages/stream",
+            axum::routing::post(stream_message),
         )
 }
 
@@ -59,6 +70,36 @@ struct SendMessageResponse {
     user_message: MessageResponse,
     assistant_message: MessageResponse,
     messages: Vec<MessageResponse>,
+}
+
+#[derive(Serialize)]
+struct StreamMessageStartEvent {
+    chat_id: Uuid,
+    persona_id: String,
+}
+
+#[derive(Serialize)]
+struct StreamTokenEvent {
+    text: String,
+}
+
+#[derive(Serialize)]
+struct StreamMessageDoneEvent {
+    chat_id: Uuid,
+    user_message: MessageResponse,
+    assistant_message: MessageResponse,
+    messages: Vec<MessageResponse>,
+}
+
+#[derive(Serialize)]
+struct StreamMessageErrorEvent {
+    message: String,
+}
+
+struct ChatCompletionContext {
+    chat: ChatRecord,
+    ai_messages: Vec<AiMessage>,
+    user_ai_message: AiMessage,
 }
 
 #[derive(Serialize)]
@@ -149,75 +190,107 @@ async fn send_message(
     Path(chat_id): Path<Uuid>,
     Json(payload): Json<SendMessageRequest>,
 ) -> AppResult<Json<SendMessageResponse>> {
-    let content = payload.content.trim();
-
-    if content.is_empty() {
-        return Err(AppError::BadRequest("message content is empty".to_owned()));
-    }
-
     let session = state
         .store
         .ensure_session(session_id_from_headers(&headers))
         .await;
     let owner = OwnerScope::from_session(&session);
-    let chat = state
-        .store
-        .get_chat(owner, chat_id)
-        .await
-        .ok_or(AppError::NotFound)?;
-
-    let mut ai_messages = chat
-        .messages
-        .iter()
-        .map(StoredMessage::to_ai_message)
-        .collect::<Vec<_>>();
-    let memory_facts = state
-        .store
-        .list_memory_facts(owner, &chat.character_id)
-        .await;
-    let memory_summaries = state
-        .store
-        .list_memory_summaries(owner, &chat.character_id)
-        .await;
-    let memory_context = build_memory_context(&memory_facts, &memory_summaries);
-    if let Some(memory_note) = memory_context {
-        ai_messages.insert(
-            0,
-            AiMessage {
-                role: AiRole::System,
-                content: memory_note,
-            },
-        );
-    }
-    let user_ai_message = AiMessage::user(content.to_owned());
-    ai_messages.push(user_ai_message.clone());
-
-    let ai = AiService::new(state.clone());
-    let assistant_ai_message = ai.complete_chat(&chat.ai_profile_id, &ai_messages).await?;
-
-    let user_message = StoredMessage::from_ai_message(user_ai_message);
-    let assistant_message = StoredMessage::from_ai_message(assistant_ai_message);
-    let updated_chat = state
-        .store
-        .append_chat_messages(
-            owner,
-            chat_id,
-            user_message.clone(),
-            assistant_message.clone(),
-        )
-        .await
-        .ok_or(AppError::NotFound)?;
+    let context = prepare_chat_completion_context(&state, owner, chat_id, &payload.content).await?;
+    let completed = complete_and_append_chat_message(state, owner, chat_id, context).await?;
 
     Ok(Json(SendMessageResponse {
         chat_id,
-        user_message: message_response(user_message),
-        assistant_message: message_response(assistant_message),
-        messages: updated_chat
+        user_message: message_response(completed.user_message),
+        assistant_message: message_response(completed.assistant_message),
+        messages: completed
+            .updated_chat
             .messages
             .into_iter()
             .map(message_response)
             .collect(),
     }))
+}
+
+async fn stream_message(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(chat_id): Path<Uuid>,
+    Json(payload): Json<SendMessageRequest>,
+) -> AppResult<impl IntoResponse> {
+    let session = state
+        .store
+        .ensure_session(session_id_from_headers(&headers))
+        .await;
+    let owner = OwnerScope::from_session(&session);
+    let context = prepare_chat_completion_context(&state, owner, chat_id, &payload.content).await?;
+    let persona_id = context.chat.character_id.clone();
+    let (sender, receiver) = mpsc::channel::<Result<Event, Infallible>>(16);
+
+    tokio::spawn(async move {
+        send_sse_event(
+            &sender,
+            "message_start",
+            StreamMessageStartEvent {
+                chat_id,
+                persona_id,
+            },
+        )
+        .await;
+
+        match complete_and_append_chat_message(state, owner, chat_id, context).await {
+            Ok(completed) => {
+                let assistant_text = completed.assistant_message.content.clone();
+                send_sse_event(
+                    &sender,
+                    "token",
+                    StreamTokenEvent {
+                        text: assistant_text,
+                    },
+                )
+                .await;
+                send_sse_event(
+                    &sender,
+                    "message_done",
+                    StreamMessageDoneEvent {
+                        chat_id,
+                        user_message: message_response(completed.user_message),
+                        assistant_message: message_response(completed.assistant_message),
+                        messages: completed
+                            .updated_chat
+                            .messages
+                            .into_iter()
+                            .map(message_response)
+                            .collect(),
+                    },
+                )
+                .await;
+            }
+            Err(error) => {
+                send_sse_event(
+                    &sender,
+                    "error",
+                    StreamMessageErrorEvent {
+                        message: error.to_string(),
+                    },
+                )
+                .await;
+            }
+        }
+    });
+
+    let stream = ReceiverStream::new(receiver);
+    let response_headers = [
+        (header::CACHE_CONTROL, HeaderValue::from_static("no-cache")),
+        (
+            HeaderName::from_static("x-accel-buffering"),
+            HeaderValue::from_static("no"),
+        ),
+    ];
+
+    Ok((
+        response_headers,
+        Sse::new(stream).keep_alive(KeepAlive::new().interval(Duration::from_secs(15))),
+    ))
 }
 
 async fn clear_messages(
@@ -282,6 +355,114 @@ fn message_response(message: StoredMessage) -> MessageResponse {
         content: message.content,
         created_at: message.created_at,
     }
+}
+
+struct CompletedChatMessage {
+    user_message: StoredMessage,
+    assistant_message: StoredMessage,
+    updated_chat: ChatRecord,
+}
+
+async fn prepare_chat_completion_context(
+    state: &AppState,
+    owner: OwnerScope,
+    chat_id: Uuid,
+    content: &str,
+) -> AppResult<ChatCompletionContext> {
+    let content = content.trim();
+
+    if content.is_empty() {
+        return Err(AppError::BadRequest("message content is empty".to_owned()));
+    }
+
+    let chat = state
+        .store
+        .get_chat(owner, chat_id)
+        .await
+        .ok_or(AppError::NotFound)?;
+    let mut ai_messages = chat
+        .messages
+        .iter()
+        .map(StoredMessage::to_ai_message)
+        .collect::<Vec<_>>();
+    let memory_facts = state
+        .store
+        .list_memory_facts(owner, &chat.character_id)
+        .await;
+    let memory_summaries = state
+        .store
+        .list_memory_summaries(owner, &chat.character_id)
+        .await;
+    let memory_context = build_memory_context(&memory_facts, &memory_summaries);
+    if let Some(memory_note) = memory_context {
+        ai_messages.insert(
+            0,
+            AiMessage {
+                role: AiRole::System,
+                content: memory_note,
+            },
+        );
+    }
+    let user_ai_message = AiMessage::user(content.to_owned());
+    ai_messages.push(user_ai_message.clone());
+
+    Ok(ChatCompletionContext {
+        chat,
+        ai_messages,
+        user_ai_message,
+    })
+}
+
+async fn complete_and_append_chat_message(
+    state: AppState,
+    owner: OwnerScope,
+    chat_id: Uuid,
+    context: ChatCompletionContext,
+) -> AppResult<CompletedChatMessage> {
+    let ai = AiService::new(state.clone());
+    let assistant_ai_message = ai
+        .complete_chat(&context.chat.ai_profile_id, &context.ai_messages)
+        .await?;
+
+    let user_message = StoredMessage::from_ai_message(context.user_ai_message);
+    let assistant_message = StoredMessage::from_ai_message(assistant_ai_message);
+    let updated_chat = state
+        .store
+        .append_chat_messages(
+            owner,
+            chat_id,
+            user_message.clone(),
+            assistant_message.clone(),
+        )
+        .await
+        .ok_or(AppError::NotFound)?;
+
+    Ok(CompletedChatMessage {
+        user_message,
+        assistant_message,
+        updated_chat,
+    })
+}
+
+async fn send_sse_event<T: Serialize>(
+    sender: &mpsc::Sender<Result<Event, Infallible>>,
+    event_name: &'static str,
+    payload: T,
+) {
+    let data = match serde_json::to_string(&payload) {
+        Ok(data) => data,
+        Err(error) => {
+            let fallback = StreamMessageErrorEvent {
+                message: format!("failed to serialize SSE event: {error}"),
+            };
+            serde_json::to_string(&fallback)
+                .unwrap_or_else(|_| "{\"message\":\"failed to serialize SSE event\"}".to_owned())
+        }
+    };
+
+    let _ = sender
+        .send(Ok(Event::default().event(event_name).data(data)))
+        .await;
 }
 
 fn build_memory_context(

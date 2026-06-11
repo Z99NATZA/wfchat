@@ -41,11 +41,11 @@ Read these only when touching related areas:
 
 Follow the sequence from `docs/chat-sse-streaming.md`:
 
-1. Backend SSE shell using the existing non-streaming completion path.
-2. Frontend SSE parser and `streamChatMessage()` service.
-3. `useChatSession` integration with optimistic assistant message updates.
-4. Avatar streaming lifecycle event only if needed.
-5. Provider-native streaming after the contract is proven.
+1. Completed: backend SSE shell using the existing non-streaming completion path.
+2. Next: frontend SSE parser and `streamChatMessage()` service.
+3. Then: `useChatSession` integration with optimistic assistant message updates.
+4. Then: avatar streaming lifecycle event only if needed.
+5. Later: provider-native streaming after the contract is proven.
 
 The first working version may use pseudo-streaming:
 
@@ -54,6 +54,23 @@ complete_chat() -> emit guarded final text as SSE token(s) -> message_done
 ```
 
 This is intentional. It proves the frontend and avatar contract without forcing native provider streaming in the first pass.
+
+## Current Backend Status
+
+The backend shell exists at:
+
+```text
+POST /api/chats/:chat_id/messages/stream
+```
+
+Current behavior:
+
+- validates session, chat ownership, and non-empty content before opening the stream
+- returns SSE-framed `message_start`, `token`, and `message_done`
+- uses the existing `AiService::complete_chat()` path
+- emits guarded final assistant text as one `token`
+- persists user and assistant messages only after successful completion
+- keeps `POST /api/chats/:chat_id/messages` unchanged
 
 ## Hard Boundaries
 

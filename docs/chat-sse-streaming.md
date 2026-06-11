@@ -407,11 +407,13 @@ assistant_error     -> error expression + idle
 
 Keep the work in small commits.
 
-### 1. Backend SSE shell
+### 1. Backend SSE shell - Implemented
 
 Files:
 
 - `apps/api/src/chat.rs`
+- `apps/api/Cargo.toml`
+- `Cargo.lock`
 
 Add `POST /api/chats/{chat_id}/messages/stream`.
 
@@ -425,7 +427,15 @@ message_done
 
 This proves the end-to-end frontend contract without provider-native streaming.
 
-### 2. Frontend SSE parser and service
+Current backend shell behavior:
+
+- returns `text/event-stream`
+- emits `message_start`
+- emits one guarded full-content `token`
+- emits `message_done` with the full persisted message list
+- keeps the original non-streaming endpoint unchanged
+
+### 2. Frontend SSE parser and service - Next
 
 Files:
 
