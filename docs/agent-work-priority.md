@@ -72,7 +72,9 @@ Current behavior:
 - uses OpenAI-compatible native streaming for unguarded profiles
 - uses a streaming-safe Aiko response guard before emitting guarded native provider tokens
 - covers provider stream parser edge cases with focused unit tests
+- covers the mock-provider streaming endpoint path with an integration test gated by `WFCHAT_TEST_DATABASE_URL`
 - persists user and assistant messages only after successful completion
+- sends a sanitized SSE `error` message for upstream AI failures instead of raw provider details
 - keeps `POST /api/chats/:chat_id/messages` unchanged
 
 ## Current Frontend Service Status
@@ -149,3 +151,15 @@ The SSE milestone is complete only when:
 - `docs/pngtuber.md` marks SSE/token streaming as implemented
 
 Current status: complete for the first SSE iteration. Future work should be scoped separately unless it directly hardens this transport.
+
+## Current Test Follow-Up
+
+Completed after the first SSE iteration:
+
+- Backend SSE endpoint integration test for `POST /api/chats/:chat_id/messages/stream` using the mock provider.
+- The endpoint test verifies `text/event-stream`, `Cache-Control: no-cache`, `X-Accel-Buffering: no`, `message_start`, `token`, `message_done`, and final persistence of exactly one user message plus one assistant message.
+- SSE stream AI error sanitization unit tests.
+
+Recommended next test scope:
+
+- Add focused frontend hook tests for `useChatSession.sendMessage()` streaming behavior: optimistic assistant creation, token append, `message_done` replacement, stream-started error rollback, and pre-start fallback to `sendChatMessage()`.

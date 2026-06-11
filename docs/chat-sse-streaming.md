@@ -433,6 +433,7 @@ Current backend shell behavior:
 - emits `message_start`
 - emits one guarded full-content `token`
 - emits `message_done` with the full persisted message list
+- sends sanitized SSE `error` messages for upstream AI failures
 - keeps the original non-streaming endpoint unchanged
 
 ### 2. Frontend SSE parser and service - Implemented
@@ -521,6 +522,12 @@ Current provider streaming behavior:
 - `message_done` persists exactly one user message and one assistant message.
 - If provider fails before completion, no partial assistant message is persisted.
 
+Current automated coverage:
+
+- Provider stream parser and Aiko streaming guard unit tests are implemented in `apps/api/src/ai/providers/openai.rs`.
+- SSE stream error sanitization unit tests are implemented in `apps/api/src/chat.rs`.
+- A mock-provider endpoint integration test is implemented in `apps/api/src/chat.rs` and runs when `WFCHAT_TEST_DATABASE_URL` is set. It verifies response headers, `message_start`, `token`, `message_done`, final assistant content, and persisted user/assistant messages.
+
 ### Frontend
 
 - SSE parser handles frames split across reader chunks.
@@ -529,6 +536,14 @@ Current provider streaming behavior:
 - stream error removes optimistic messages and shows existing error state.
 - avatar enters talking on stream token or `assistant_streaming`.
 - avatar returns idle after final reply behavior.
+
+Current automated coverage:
+
+- SSE parser tests in `apps/web/src/features/chat/services/chatApiService.test.ts` cover split frames, CRLF framing, comments, multi-line data, and final frames without trailing blank lines.
+
+Recommended next automated coverage:
+
+- Add `useChatSession.sendMessage()` streaming tests for optimistic assistant creation, token append, final server replacement, stream-started error cleanup, avatar lifecycle events, and pre-start non-streaming fallback.
 
 ### Manual QA
 

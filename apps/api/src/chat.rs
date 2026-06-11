@@ -547,6 +547,15 @@ fn build_memory_context(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use axum::{
+        body::{to_bytes, Body},
+        http::{header, HeaderName, Request, StatusCode},
+    };
+    use reqwest::Client;
+    use serde_json::Value;
+    use tower::ServiceExt;
+
+    use crate::{app::build_router, config::Config, store::ChatStore};
 
     #[test]
     fn stream_error_message_hides_upstream_ai_details() {
@@ -563,5 +572,149 @@ mod tests {
             stream_error_message(&AppError::BadRequest("message content is empty".to_owned()));
 
         assert_eq!(message, "bad request: message content is empty");
+    }
+
+    #[tokio::test]
+    async fn stream_message_endpoint_emits_sse_and_persists_after_done() {
+        let Some(state) = test_state().await else {
+            return;
+        };
+        let session = state.store.create_guest_session().await;
+        let owner = OwnerScope::from_session(&session);
+        let chat = state
+            .store
+            .create_chat(owner, "aiko".to_owned(), "aiko_default".to_owned())
+            .await;
+        let app = build_router(state.clone());
+        let request = Request::builder()
+            .method("POST")
+            .uri(format!("/api/chats/{}/messages/stream", chat.id))
+            .header(header::CONTENT_TYPE, "application/json")
+            .header(header::ACCEPT, "text/event-stream")
+            .header("x-wfchat-session", session.id.to_string())
+            .body(Body::from(r#"{"content":"hello stream"}"#))
+            .expect("request should build");
+
+        let response = app.oneshot(request).await.expect("request should run");
+
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_header_contains(&response, header::CONTENT_TYPE, "text/event-stream");
+        assert_header_contains(&response, header::CACHE_CONTROL, "no-cache");
+        assert_header_contains(
+            &response,
+            HeaderName::from_static("x-accel-buffering"),
+            "no",
+        );
+
+        let body = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("body should collect");
+        let body = String::from_utf8(body.to_vec()).expect("body should be utf-8");
+        let events = parse_sse_events(&body);
+
+        assert_eq!(
+            events.first().map(|event| event.0.as_str()),
+            Some("message_start")
+        );
+        assert!(
+            events.iter().any(|event| event.0 == "token"),
+            "stream should emit token events: {body}"
+        );
+        assert_eq!(
+            events.last().map(|event| event.0.as_str()),
+            Some("message_done")
+        );
+
+        let done_payload = events
+            .iter()
+            .find(|event| event.0 == "message_done")
+            .and_then(|event| serde_json::from_str::<Value>(&event.1).ok())
+            .expect("message_done should include json payload");
+        let assistant_content = done_payload["assistant_message"]["content"]
+            .as_str()
+            .expect("assistant content should be present");
+        assert_eq!(
+            assistant_content,
+            "[aiko_default] mock reply: I received \"hello stream\"."
+        );
+        assert_eq!(
+            done_payload["messages"].as_array().map(Vec::len),
+            Some(2),
+            "message_done should return persisted full message list"
+        );
+
+        let persisted = state
+            .store
+            .get_chat(owner, chat.id)
+            .await
+            .expect("chat should still exist");
+        assert_eq!(persisted.messages.len(), 2);
+        assert_eq!(persisted.messages[0].content, "hello stream");
+        assert_eq!(persisted.messages[1].content, assistant_content);
+
+        state.store.delete_chat(owner, chat.id).await;
+    }
+
+    async fn test_state() -> Option<AppState> {
+        let database_url = std::env::var("WFCHAT_TEST_DATABASE_URL").ok()?;
+        let store = ChatStore::connect(&database_url).await.ok()?;
+        Some(AppState {
+            config: Config {
+                app_host: "127.0.0.1".to_owned(),
+                app_port: 0,
+                frontend_origin: "http://localhost:5173".to_owned(),
+                ai_provider: "mock".to_owned(),
+                ai_model: "mock-waifu".to_owned(),
+                database_url,
+                openai_api_key: None,
+                openai_base_url: "https://api.openai.com/v1".to_owned(),
+                openai_model: "gpt-4.1-mini".to_owned(),
+                lmstudio_base_url: "http://localhost:1234/v1".to_owned(),
+                lmstudio_model: "local-model".to_owned(),
+                xai_api_key: None,
+                xai_base_url: "https://api.x.ai/v1".to_owned(),
+                xai_model: "grok-3-mini".to_owned(),
+                google_client_id: None,
+            },
+            http: Client::new(),
+            store,
+        })
+    }
+
+    fn assert_header_contains(
+        response: &axum::response::Response,
+        header_name: HeaderName,
+        expected: &str,
+    ) {
+        let value = response
+            .headers()
+            .get(header_name)
+            .and_then(|value| value.to_str().ok())
+            .unwrap_or_default();
+        assert!(
+            value.contains(expected),
+            "expected header to contain {expected:?}, got {value:?}"
+        );
+    }
+
+    fn parse_sse_events(body: &str) -> Vec<(String, String)> {
+        body.replace("\r\n", "\n")
+            .replace('\r', "\n")
+            .split("\n\n")
+            .filter_map(|frame| {
+                let mut event_name = "message".to_owned();
+                let mut data_lines = Vec::new();
+                for line in frame.lines() {
+                    if let Some(value) = line.strip_prefix("event:") {
+                        event_name = value.trim_start().to_owned();
+                    }
+                    if let Some(value) = line.strip_prefix("data:") {
+                        data_lines.push(value.trim_start().to_owned());
+                    }
+                }
+
+                (!data_lines.is_empty()).then(|| (event_name, data_lines.join("\n")))
+            })
+            .collect()
     }
 }
