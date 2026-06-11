@@ -527,6 +527,7 @@ Current automated coverage:
 - Provider stream parser and Aiko streaming guard unit tests are implemented in `apps/api/src/ai/providers/openai.rs`.
 - SSE stream error sanitization unit tests are implemented in `apps/api/src/chat.rs`.
 - A mock-provider endpoint integration test is implemented in `apps/api/src/chat.rs` and runs when `WFCHAT_TEST_DATABASE_URL` is set. It verifies response headers, `message_start`, `token`, `message_done`, final assistant content, and persisted user/assistant messages.
+- A provider-failure endpoint integration test is implemented in `apps/api/src/chat.rs` and runs when `WFCHAT_TEST_DATABASE_URL` is set. It uses OpenAI provider config without an API key to verify `message_start`, sanitized `error`, no raw upstream/config details in the SSE body, no `message_done`, and no persisted messages.
 
 ### Frontend
 
@@ -544,7 +545,7 @@ Current automated coverage:
 
 Recommended next automated coverage:
 
-- Add a backend endpoint failure-path integration test if a test-only failing provider seam is introduced; keep the current production provider routing unchanged.
+- Add backend validation tests for empty message and unknown chat only if the next work changes request validation or ownership behavior.
 
 ### Manual QA
 

@@ -158,6 +158,8 @@ Completed after the first SSE iteration:
 
 - Backend SSE endpoint integration test for `POST /api/chats/:chat_id/messages/stream` using the mock provider.
 - The endpoint test verifies `text/event-stream`, `Cache-Control: no-cache`, `X-Accel-Buffering: no`, `message_start`, `token`, `message_done`, and final persistence of exactly one user message plus one assistant message.
+- Backend SSE failure-path integration test for provider-layer failure after the stream opens.
+- The failure-path test verifies `message_start`, sanitized `error`, no raw upstream/config details in the SSE body, no `message_done`, and no persisted user/assistant messages.
 - SSE stream AI error sanitization unit tests.
 - Frontend hook tests for `useChatSession.sendMessage()` streaming behavior.
 - The hook tests verify optimistic assistant creation, token append, `message_done` replacement, stream-started error rollback, avatar lifecycle events, and pre-start fallback to `sendChatMessage()`.
@@ -165,4 +167,4 @@ Completed after the first SSE iteration:
 Recommended next test scope:
 
 - Run manual QA with `AI_PROVIDER=mock` against the local app to confirm progressive chat text, avatar thinking/talking/idle, and persisted messages after refresh.
-- Add a backend endpoint failure-path integration test if a test-only failing provider seam is introduced; keep the current production provider routing unchanged.
+- Add backend validation tests for empty message and unknown chat only if the next work changes request validation or ownership behavior.

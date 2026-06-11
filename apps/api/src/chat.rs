@@ -655,7 +655,69 @@ mod tests {
         state.store.delete_chat(owner, chat.id).await;
     }
 
+    #[tokio::test]
+    async fn stream_message_endpoint_sends_sanitized_error_without_persisting() {
+        let Some(state) = test_state_with_provider("openai").await else {
+            return;
+        };
+        let session = state.store.create_guest_session().await;
+        let owner = OwnerScope::from_session(&session);
+        let chat = state
+            .store
+            .create_chat(owner, "aiko".to_owned(), "aiko_default".to_owned())
+            .await;
+        let app = build_router(state.clone());
+        let request = Request::builder()
+            .method("POST")
+            .uri(format!("/api/chats/{}/messages/stream", chat.id))
+            .header(header::CONTENT_TYPE, "application/json")
+            .header(header::ACCEPT, "text/event-stream")
+            .header("x-wfchat-session", session.id.to_string())
+            .body(Body::from(r#"{"content":"hello stream"}"#))
+            .expect("request should build");
+
+        let response = app.oneshot(request).await.expect("request should run");
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("body should collect");
+        let body = String::from_utf8(body.to_vec()).expect("body should be utf-8");
+        let events = parse_sse_events(&body);
+
+        assert_eq!(
+            events.iter().map(|event| event.0.as_str()).collect::<Vec<_>>(),
+            ["message_start", "error"]
+        );
+        let error_payload = events
+            .iter()
+            .find(|event| event.0 == "error")
+            .and_then(|event| serde_json::from_str::<Value>(&event.1).ok())
+            .expect("error event should include json payload");
+        assert_eq!(
+            error_payload["message"].as_str(),
+            Some("assistant response failed")
+        );
+        assert!(
+            !body.contains("OPENAI_API_KEY"),
+            "stream error should not expose upstream configuration details: {body}"
+        );
+
+        let persisted = state
+            .store
+            .get_chat(owner, chat.id)
+            .await
+            .expect("chat should still exist");
+        assert!(persisted.messages.is_empty());
+
+        state.store.delete_chat(owner, chat.id).await;
+    }
+
     async fn test_state() -> Option<AppState> {
+        test_state_with_provider("mock").await
+    }
+
+    async fn test_state_with_provider(ai_provider: &str) -> Option<AppState> {
         let database_url = std::env::var("WFCHAT_TEST_DATABASE_URL").ok()?;
         let store = ChatStore::connect(&database_url).await.ok()?;
         Some(AppState {
@@ -663,7 +725,7 @@ mod tests {
                 app_host: "127.0.0.1".to_owned(),
                 app_port: 0,
                 frontend_origin: "http://localhost:5173".to_owned(),
-                ai_provider: "mock".to_owned(),
+                ai_provider: ai_provider.to_owned(),
                 ai_model: "mock-waifu".to_owned(),
                 database_url,
                 openai_api_key: None,
