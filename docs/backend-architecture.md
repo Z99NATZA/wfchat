@@ -23,6 +23,19 @@ React
 
 The chat request sends user intent only. Provider and model selection happen inside the backend.
 
+The planned streaming path is additive and should not replace this endpoint until it is stable:
+
+```text
+React
+  -> POST /api/chats/:chat_id/messages/stream
+    -> chat.rs
+      -> ai/mod.rs
+        -> ai/providers/<provider>.rs
+      <- text/event-stream
+```
+
+See `docs/chat-sse-streaming.md` for the scoped SSE contract and rollout plan.
+
 Clear chat flow:
 
 ```text

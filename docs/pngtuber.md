@@ -28,6 +28,7 @@ Not implemented:
 
 ## Runtime Files
 
+- Agent work priority: `docs/agent-work-priority.md`
 - UI page: `apps/web/src/pages/PngTuberPage.tsx`
 - Live2D shell page: `apps/web/src/pages/Model2DPage.tsx`
 - PNGTuber metadata: `apps/web/src/features/avatar/data/aikoPngTuber.ts`
