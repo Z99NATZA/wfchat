@@ -6,7 +6,6 @@ use serde::Deserialize;
 use serde::Serialize;
 
 use crate::{
-    characters,
     error::{AppError, AppResult},
     state::AppState,
 };
@@ -94,23 +93,11 @@ impl AiService {
 
         match provider {
             "mock" => providers::mock::stream_chat(ai_profile_id, messages, on_event).await,
-            "openai" if characters::is_aiko_profile(ai_profile_id) => {
-                self.stream_chat_fallback(ai_profile_id, messages, on_event)
-                    .await
-            }
             "openai" => {
                 providers::openai::stream_chat(&self.state, ai_profile_id, messages, on_event).await
             }
-            "lmstudio" if characters::is_aiko_profile(ai_profile_id) => {
-                self.stream_chat_fallback(ai_profile_id, messages, on_event)
-                    .await
-            }
             "lmstudio" => {
                 providers::lmstudio::stream_chat(&self.state, ai_profile_id, messages, on_event)
-                    .await
-            }
-            "xai" if characters::is_aiko_profile(ai_profile_id) => {
-                self.stream_chat_fallback(ai_profile_id, messages, on_event)
                     .await
             }
             "xai" => {

@@ -118,7 +118,7 @@ For the first implementation, use one of these safe options:
 - Use fallback pseudo-streaming for guarded profiles: call `complete_chat()`, apply the existing guard, then emit the guarded final content as one or more SSE `token` events.
 - Or implement a streaming-safe guard with a small rolling buffer before emitting chunks.
 
-Recommended first pass: fallback pseudo-streaming for Aiko and native streaming only after a streaming-safe guard exists. This preserves current character behavior while still proving the frontend SSE contract and avatar lifecycle.
+The OpenAI-compatible streaming path now uses a rolling guard for Aiko. It keeps boundary-sensitive suffixes such as `ครั` or `ครับ` buffered, applies the same Aiko guard replacements, and emits only guarded text to the frontend. This preserves current character behavior while allowing native provider streaming for Aiko.
 
 ## Backend Contract
 
@@ -506,8 +506,8 @@ Current provider streaming behavior:
 
 - `AiService::stream_chat()` is available next to `complete_chat()`
 - `mock` streams deterministic chunks with a short delay for local QA
-- OpenAI-compatible providers parse provider SSE chunks and emit `token` events for unguarded profiles
-- Aiko/guarded profiles still use safe fallback pseudo-streaming so raw provider text is not displayed before the response guard runs
+- OpenAI-compatible providers parse provider SSE chunks and emit `token` events
+- Aiko/guarded profiles use the streaming-safe rolling response guard before any token is emitted
 - the chat streaming route persists messages only after `stream_chat()` returns the final assistant message
 
 ## Testing Plan

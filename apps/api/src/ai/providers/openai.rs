@@ -164,7 +164,7 @@ where
 
     let mut body_stream = response.bytes_stream();
     let mut buffer = String::new();
-    let mut content = String::new();
+    let mut guard = StreamingResponseGuard::new(provider.ai_profile_id);
 
     while let Some(chunk) = body_stream.next().await {
         let chunk = chunk.map_err(|error| AppError::Ai(error.to_string()))?;
@@ -175,19 +175,21 @@ where
             let frame = buffer[..frame_end_index].to_owned();
             buffer = buffer[frame_end_index + 2..].to_owned();
 
-            if process_stream_frame(&frame, &mut content, &mut on_event).await? {
-                return final_stream_message(content);
+            if process_stream_frame(&frame, &mut guard, &mut on_event).await? {
+                emit_guarded_tail(&mut guard, &mut on_event).await?;
+                return final_stream_message(guard.content().to_owned());
             }
         }
     }
 
-    if !buffer.trim().is_empty()
-        && process_stream_frame(&buffer, &mut content, &mut on_event).await?
+    if !buffer.trim().is_empty() && process_stream_frame(&buffer, &mut guard, &mut on_event).await?
     {
-        return final_stream_message(content);
+        emit_guarded_tail(&mut guard, &mut on_event).await?;
+        return final_stream_message(guard.content().to_owned());
     }
 
-    final_stream_message(content)
+    emit_guarded_tail(&mut guard, &mut on_event).await?;
+    final_stream_message(guard.content().to_owned())
 }
 
 fn final_stream_message(content: String) -> AppResult<AiMessage> {
@@ -202,7 +204,7 @@ fn final_stream_message(content: String) -> AppResult<AiMessage> {
 
 async fn process_stream_frame<F, Fut>(
     frame: &str,
-    content: &mut String,
+    guard: &mut StreamingResponseGuard,
     on_event: &mut F,
 ) -> AppResult<bool>
 where
@@ -227,8 +229,9 @@ where
                 if delta.is_empty() {
                     continue;
                 }
-                content.push_str(&delta);
-                on_event(AiChatStreamEvent::Token(delta)).await?;
+                if let Some(token) = guard.push_delta(&delta) {
+                    on_event(AiChatStreamEvent::Token(token)).await?;
+                }
             }
         }
     }
@@ -236,17 +239,118 @@ where
     Ok(false)
 }
 
+async fn emit_guarded_tail<F, Fut>(
+    guard: &mut StreamingResponseGuard,
+    on_event: &mut F,
+) -> AppResult<()>
+where
+    F: FnMut(AiChatStreamEvent) -> Fut,
+    Fut: Future<Output = AppResult<()>>,
+{
+    if let Some(token) = guard.finish() {
+        on_event(AiChatStreamEvent::Token(token)).await?;
+    }
+
+    Ok(())
+}
+
 fn apply_character_response_guard(ai_profile_id: &str, content: String) -> String {
     if !characters::is_aiko_profile(ai_profile_id) {
         return content;
     }
 
-    content
-        .replace("ครับนะ", "ค่ะนะ")
-        .replace("ครับผม", "ค่ะ")
-        .replace("ครับ", "ค่ะ")
-        .replace("คับ", "ค่ะ")
-        .replace("ผม", "ไอโกะ")
+    apply_aiko_response_guard(content)
+}
+
+fn apply_aiko_response_guard(content: String) -> String {
+    AIKO_RESPONSE_GUARD_REPLACEMENTS
+        .iter()
+        .fold(content, |guarded, (from, to)| guarded.replace(from, to))
+}
+
+struct StreamingResponseGuard {
+    enabled: bool,
+    pending: String,
+    content: String,
+}
+
+const AIKO_RESPONSE_GUARD_REPLACEMENTS: [(&str, &str); 5] = [
+    ("ครับนะ", "ค่ะนะ"),
+    ("ครับผม", "ค่ะ"),
+    ("ครับ", "ค่ะ"),
+    ("คับ", "ค่ะ"),
+    ("ผม", "ไอโกะ"),
+];
+
+impl StreamingResponseGuard {
+    fn new(ai_profile_id: &str) -> Self {
+        Self {
+            enabled: characters::is_aiko_profile(ai_profile_id),
+            pending: String::new(),
+            content: String::new(),
+        }
+    }
+
+    fn push_delta(&mut self, delta: &str) -> Option<String> {
+        if !self.enabled {
+            self.content.push_str(delta);
+            return Some(delta.to_owned());
+        }
+
+        self.pending.push_str(delta);
+        let split_index = aiko_guard_safe_split_index(&self.pending)?;
+        let tail = self.pending.split_off(split_index);
+        let safe_prefix = std::mem::replace(&mut self.pending, tail);
+        let guarded = apply_aiko_response_guard(safe_prefix);
+
+        if guarded.is_empty() {
+            return None;
+        }
+
+        self.content.push_str(&guarded);
+        Some(guarded)
+    }
+
+    fn finish(&mut self) -> Option<String> {
+        if self.pending.is_empty() {
+            return None;
+        }
+
+        let token = if self.enabled {
+            apply_aiko_response_guard(std::mem::take(&mut self.pending))
+        } else {
+            std::mem::take(&mut self.pending)
+        };
+
+        if token.is_empty() {
+            return None;
+        }
+
+        self.content.push_str(&token);
+        Some(token)
+    }
+
+    fn content(&self) -> &str {
+        &self.content
+    }
+}
+
+fn aiko_guard_safe_split_index(content: &str) -> Option<usize> {
+    if content.is_empty() {
+        return None;
+    }
+
+    let mut split_index = content.len();
+    for (from, _) in AIKO_RESPONSE_GUARD_REPLACEMENTS {
+        for (prefix_end_index, _) in from.char_indices().skip(1) {
+            let prefix = &from[..prefix_end_index];
+            if content.ends_with(prefix) {
+                split_index = split_index.min(content.len() - prefix.len());
+            }
+        }
+    }
+
+    (split_index > 0).then_some(split_index)
 }
 
 fn build_messages<'a>(ai_profile_id: &str, messages: &'a [AiMessage]) -> Vec<ProviderMessage<'a>> {
@@ -321,4 +425,57 @@ struct ChatCompletionStreamChoice {
 #[derive(Deserialize)]
 struct ChatCompletionStreamDelta {
     content: Option<String>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn streaming_guard_matches_full_aiko_guard_across_chunk_boundaries() {
+        let chunks = ["สวัสดีครั", "บนะ ผ", "มเองคั", "บ"];
+        let mut guard = StreamingResponseGuard::new("aiko_default");
+        let mut emitted = String::new();
+
+        for chunk in chunks {
+            if let Some(token) = guard.push_delta(chunk) {
+                emitted.push_str(&token);
+            }
+        }
+        if let Some(token) = guard.finish() {
+            emitted.push_str(&token);
+        }
+
+        let full_content = chunks.join("");
+        assert_eq!(
+            emitted,
+            apply_character_response_guard("aiko_default", full_content)
+        );
+        assert!(!emitted.contains("ครับ"));
+        assert!(!emitted.contains("คับ"));
+        assert!(!emitted.contains("ผม"));
+    }
+
+    #[test]
+    fn streaming_guard_holds_boundary_sensitive_tail() {
+        let mut guard = StreamingResponseGuard::new("aiko_default");
+
+        assert_eq!(guard.push_delta("ครั"), None);
+        assert_eq!(
+            guard.push_delta("บนะ สบายดี"),
+            Some("ค่ะนะ สบายดี".to_owned())
+        );
+        assert_eq!(guard.finish(), None);
+        assert_eq!(guard.content(), "ค่ะนะ สบายดี");
+    }
+
+    #[test]
+    fn streaming_guard_passes_unguarded_profiles_through() {
+        let mut guard = StreamingResponseGuard::new("other_profile");
+
+        assert_eq!(guard.push_delta("ครับ"), Some("ครับ".to_owned()));
+        assert_eq!(guard.push_delta("ผม"), Some("ผม".to_owned()));
+        assert_eq!(guard.finish(), None);
+        assert_eq!(guard.content(), "ครับผม");
+    }
 }

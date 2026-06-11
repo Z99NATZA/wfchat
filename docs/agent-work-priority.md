@@ -70,7 +70,7 @@ Current behavior:
 - uses `AiService::stream_chat()` for the streaming endpoint
 - emits mock provider chunks for local QA
 - uses OpenAI-compatible native streaming for unguarded profiles
-- keeps guarded Aiko profiles on the safe complete-then-token fallback
+- uses a streaming-safe Aiko response guard before emitting guarded native provider tokens
 - persists user and assistant messages only after successful completion
 - keeps `POST /api/chats/:chat_id/messages` unchanged
 
@@ -128,13 +128,13 @@ Do not remove or replace:
 
 For Aiko, do not stream raw provider tokens to the UI unless the response guard is streaming-safe.
 
-Use the conservative first-pass behavior from `docs/chat-sse-streaming.md`:
+The OpenAI-compatible provider path now uses a rolling streaming guard:
 
 ```text
-provider full response -> apply existing guard -> emit guarded text through SSE
+provider token -> hold boundary-sensitive suffix -> apply Aiko guard -> emit guarded SSE token
 ```
 
-This preserves current Aiko behavior while still allowing the UI and avatar to use the SSE lifecycle.
+This preserves the current Aiko guard behavior while allowing native stream tokens to reach the UI after guard processing.
 
 ## Completion Signal
 
