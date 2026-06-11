@@ -21,7 +21,7 @@
    มี cursor แล้ว แต่ยังไม่มีกลไก recover ขั้นสูงเมื่อ apply ล้มเหลวบางส่วน
 
 4. Test coverage ยังไม่ครบ e2e
-   มี unit tests หลักและ API handler coverage สำหรับ preview/commit/changes แล้ว แต่ยังไม่ครบเส้นทาง e2e ฝั่ง web และ auth/google ทั้งก้อน
+   มี unit tests หลัก, API handler coverage สำหรับ preview/commit/changes, และ auth promotion coverage แล้ว แต่ยังไม่ครบเส้นทาง e2e ฝั่ง web และ Google verifier mock ทั้งก้อน
 
 5. Observability ยังไม่ครบ production-grade
    ยังไม่มี metrics/alerts ครบชุดสำหรับ success/fail/retry/conflict แบบติดตามได้ง่าย
@@ -32,8 +32,8 @@
 - ปัญหาที่เกิดเฉพาะ production load อาจยังมองไม่เห็นจนกว่าจะมี metric/alert ครบ
 
 ## 4) Next Steps (แนะนำลำดับ)
-1. ขยาย API sync tests ส่วน auth/google promotion และ error cases ที่ต้อง mock identity provider
-2. ทำ e2e tests ฝั่ง web สำหรับ queue/retry/pull/tombstone
+1. ทำ e2e tests ฝั่ง web สำหรับ queue/retry/pull/tombstone
+2. เพิ่ม Google verifier mock/integration coverage สำหรับ `POST /api/auth/google`
 3. ทำ source-of-truth strategy ให้ชัด และลดการพึ่ง cache fallback
 4. เพิ่ม observability (metrics + logs + alerts)
 5. ปรับ conflict policy ให้ละเอียดขึ้นตาม use case จริง

@@ -110,6 +110,14 @@ async fn login_with_google(
         .ok_or_else(|| AppError::BadRequest("GOOGLE_CLIENT_ID is not configured".to_owned()))?;
 
     let token_info = verify_google_id_token(&state, &payload.id_token, client_id).await?;
+    promote_with_google_token_info(state, headers, token_info).await
+}
+
+async fn promote_with_google_token_info(
+    state: AppState,
+    headers: HeaderMap,
+    token_info: GoogleTokenInfoResponse,
+) -> AppResult<(HeaderMap, Json<SessionResponse>)> {
     let promoted_user_id = Uuid::new_v5(&Uuid::NAMESPACE_OID, token_info.sub.as_bytes());
     let session = state
         .store
@@ -306,5 +314,193 @@ async fn session_response(
         email: identity.and_then(|record| record.email),
         name,
         profile: profile_response,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{
+        config::Config,
+        store::{OwnerScope, SyncEntityRecord},
+    };
+    use axum::extract::State;
+    use serde_json::json;
+
+    async fn test_state(google_client_id: Option<String>) -> Option<AppState> {
+        let database_url = std::env::var("WFCHAT_TEST_DATABASE_URL").ok()?;
+        AppState::new(Config {
+            app_host: "127.0.0.1".to_owned(),
+            app_port: 0,
+            frontend_origin: "http://localhost:5173".to_owned(),
+            ai_provider: "mock".to_owned(),
+            ai_model: "mock-waifu".to_owned(),
+            database_url,
+            openai_api_key: None,
+            openai_base_url: "https://api.openai.com/v1".to_owned(),
+            openai_model: "gpt-4.1-mini".to_owned(),
+            lmstudio_base_url: "http://localhost:1234/v1".to_owned(),
+            lmstudio_model: "local-model".to_owned(),
+            xai_api_key: None,
+            xai_base_url: "https://api.x.ai/v1".to_owned(),
+            xai_model: "grok-3-mini".to_owned(),
+            google_client_id,
+        })
+        .await
+        .ok()
+    }
+
+    fn session_headers(session_id: Uuid) -> HeaderMap {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            "x-wfchat-session",
+            session_id
+                .to_string()
+                .parse()
+                .expect("session id should be a valid header value"),
+        );
+        headers
+    }
+
+    fn token_info(subject: &str) -> GoogleTokenInfoResponse {
+        GoogleTokenInfoResponse {
+            aud: "test-client".to_owned(),
+            sub: subject.to_owned(),
+            email: Some(format!("{subject}@example.com")),
+            name: Some("Google User".to_owned()),
+            picture: Some("https://example.com/google.png".to_owned()),
+        }
+    }
+
+    #[tokio::test]
+    async fn google_login_requires_non_empty_id_token() {
+        let Some(state) = test_state(Some("test-client".to_owned())).await else {
+            return;
+        };
+
+        let result = login_with_google(
+            State(state),
+            HeaderMap::new(),
+            Json(GoogleLoginRequest {
+                id_token: " ".to_owned(),
+            }),
+        )
+        .await;
+        let error = match result {
+            Ok(_) => panic!("blank id token should fail"),
+            Err(error) => error,
+        };
+
+        assert_eq!(error.to_string(), "bad request: id_token is required");
+    }
+
+    #[tokio::test]
+    async fn google_login_requires_client_id_config() {
+        let Some(state) = test_state(None).await else {
+            return;
+        };
+
+        let result = login_with_google(
+            State(state),
+            HeaderMap::new(),
+            Json(GoogleLoginRequest {
+                id_token: "token".to_owned(),
+            }),
+        )
+        .await;
+        let error = match result {
+            Ok(_) => panic!("missing google client id should fail before remote verify"),
+            Err(error) => error,
+        };
+
+        assert_eq!(
+            error.to_string(),
+            "bad request: GOOGLE_CLIENT_ID is not configured"
+        );
+    }
+
+    #[tokio::test]
+    async fn guest_cannot_update_profile() {
+        let Some(state) = test_state(None).await else {
+            return;
+        };
+        let session = state.store.create_guest_session().await;
+
+        let result = update_profile(
+            State(state),
+            session_headers(session.id),
+            Json(UpdateProfileRequest {
+                display_name: Some("Guest".to_owned()),
+                avatar_url: None,
+            }),
+        )
+        .await;
+        let error = match result {
+            Ok(_) => panic!("guest profile update should be forbidden"),
+            Err(error) => error,
+        };
+
+        assert_eq!(error.to_string(), "forbidden");
+    }
+
+    #[tokio::test]
+    async fn google_promotion_migrates_guest_sync_data_to_registered_owner() {
+        let Some(state) = test_state(Some("test-client".to_owned())).await else {
+            return;
+        };
+        let guest = state.store.create_guest_session().await;
+        let guest_owner = OwnerScope::from_session(&guest);
+        let item_id = format!("settings.theme.{}", Uuid::new_v4());
+        let saved = state
+            .store
+            .upsert_sync_entity(&SyncEntityRecord {
+                session_id: guest.id,
+                owner_user_id: guest_owner.user_id,
+                item_id: item_id.clone(),
+                item_type: "setting".to_owned(),
+                updated_at: 101,
+                deleted_at: None,
+                payload: json!({ "key": "theme", "value": "dark" }),
+            })
+            .await;
+        assert!(saved);
+
+        let subject = format!("google-subject-{}", Uuid::new_v4());
+        let (headers, Json(response)) = promote_with_google_token_info(
+            state.clone(),
+            session_headers(guest.id),
+            token_info(&subject),
+        )
+        .await
+        .expect("google promotion should succeed");
+
+        assert_eq!(response.kind, "registered");
+        assert_eq!(
+            response.email.as_deref(),
+            Some(format!("{subject}@example.com").as_str())
+        );
+        assert_eq!(response.name.as_deref(), Some("Google User"));
+        assert_eq!(
+            response
+                .profile
+                .as_ref()
+                .map(|profile| profile.display_name.as_str()),
+            Some("Google User")
+        );
+        assert!(headers.get(SET_COOKIE).is_some());
+
+        let promoted_session = state
+            .store
+            .get_session(response.session_id)
+            .await
+            .expect("promoted session should exist");
+        let promoted_owner = OwnerScope::from_session(&promoted_session);
+        assert_eq!(promoted_owner.user_id, Some(response.user_id));
+
+        let pulled = state
+            .store
+            .list_sync_entities_since(promoted_owner, 0, 50)
+            .await;
+        assert!(pulled.iter().any(|item| item.item_id == item_id));
     }
 }
