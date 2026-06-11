@@ -23,7 +23,7 @@ React
 
 The chat request sends user intent only. Provider and model selection happen inside the backend.
 
-The planned streaming path is additive and should not replace this endpoint until it is stable:
+The streaming path is additive and does not replace the non-streaming endpoint:
 
 ```text
 React
@@ -34,7 +34,7 @@ React
       <- text/event-stream
 ```
 
-See `docs/chat-sse-streaming.md` for the scoped SSE contract and rollout plan.
+See `docs/chat-sse-streaming.md` for the completed first-iteration SSE contract.
 
 Clear chat flow:
 

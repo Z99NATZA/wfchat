@@ -16,7 +16,9 @@
 - `POST /api/personas/:persona_id/chats`
 - `GET /api/chats/:chat_id`
 - `POST /api/chats/:chat_id/messages`
-- Planned additive streaming path: `POST /api/chats/:chat_id/messages/stream`
+- `POST /api/chats/:chat_id/messages/stream`
 - `DELETE /api/chats/:chat_id/messages`
 
-See `docs/chat-sse-streaming.md` for the scoped SSE design.
+The streaming path is additive. It returns SSE-framed assistant response events and keeps the non-streaming message endpoint available as a fallback.
+
+See `docs/chat-sse-streaming.md` for the completed first-iteration SSE contract.
