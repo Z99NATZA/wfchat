@@ -16,13 +16,14 @@ Implemented:
 - Chat reply emotion inference with a small conservative heuristic.
 - Chat reply emotion inference split into a pure helper with focused unit tests.
 - Persona-to-avatar binding config split into a pure helper with Aiko as the only enabled binding.
+- Compact mobile chat overlay behavior using the same visibility, position, and size settings.
 - Renderer-level expression transition polish with reduced-motion support.
 
 Not implemented:
 
 - Live2D model loading, physics, motion priority, lip-sync, or runtime package.
 - SSE/token streaming for talking while the AI response is still generating.
-- Multi-persona avatar binding configuration.
+- Additional non-Aiko persona assets and bindings.
 - User-uploaded/custom PNG asset management.
 
 ## Runtime Files
@@ -118,6 +119,8 @@ wfchat.avatarOverlaySize
 
 The overlay can be hidden or moved without changing chat behavior. The bridge should continue updating runtime state even when the overlay is hidden.
 
+On mobile chat viewports, the overlay uses a compact performer size and sits above the composer. On medium and larger viewports, it uses the larger desktop dimensions.
+
 ## Deferred Transport Work
 
 Do not start with WebSocket for the current PNGTuber work. The chat flow is still request/response, so the bridge can run from existing `sendMessage()` lifecycle events.
@@ -134,7 +137,6 @@ Use SSE first if the next need is one-way AI response streaming. Reserve WebSock
 
 Useful next stations:
 
-- Add compact/mobile overlay behavior if mobile chat needs the performer.
 - Add SSE/token streaming so the avatar talks while AI text is streaming.
 - Add PNG asset management only when there are real custom assets to manage.
 

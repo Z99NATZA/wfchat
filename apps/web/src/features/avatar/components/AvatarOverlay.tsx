@@ -16,13 +16,13 @@ type AvatarOverlayProps = {
 };
 
 const positionClassNames: Record<AvatarOverlayPosition, string> = {
-	"bottom-right": "bottom-24 right-4 lg:right-6",
-	"bottom-left": "bottom-24 left-4 lg:left-6"
+	"bottom-right": "bottom-[6.5rem] right-3 md:bottom-24 md:right-4 lg:right-6",
+	"bottom-left": "bottom-[6.5rem] left-3 md:bottom-24 md:left-4 lg:left-6"
 };
 
 const sizeClassNames: Record<AvatarOverlaySize, string> = {
-	small: "h-44 w-32",
-	medium: "h-56 w-40"
+	small: "h-32 w-24 md:h-44 md:w-32",
+	medium: "h-36 w-28 md:h-56 md:w-40"
 };
 
 function AvatarOverlay({ position, size }: AvatarOverlayProps) {
@@ -38,14 +38,14 @@ function AvatarOverlay({ position, size }: AvatarOverlayProps) {
 	return (
 		<div
 			className={cn(
-				"pointer-events-none absolute z-0 hidden md:block",
+				"pointer-events-none absolute z-20 block md:z-0",
 				positionClassNames[position],
 				sizeClassNames[size]
 			)}
 			aria-label={t("pngtuber.header.title")}
 		>
 			<div className="relative h-full overflow-hidden rounded-lg border border-app-border bg-app-panel/92 shadow-soft">
-				<div className="absolute inset-x-3 bottom-5 h-20 rounded-full border border-primary/15 bg-primary/8" />
+				<div className="absolute inset-x-3 bottom-5 h-14 rounded-full border border-primary/15 bg-primary/8 md:h-20" />
 				<div className="absolute inset-2 flex items-end justify-center">
 					<PngTuberRenderer
 						emotion={activeEmotion}
@@ -53,9 +53,9 @@ function AvatarOverlay({ position, size }: AvatarOverlayProps) {
 						alt={t("pngtuber.previewAlt", { expression: t(activeEmotion.labelKey) })}
 					/>
 				</div>
-				<div className="absolute bottom-2 right-2 z-20 flex items-center gap-1.5 rounded-md border border-app-border bg-app-soft/92 px-2 py-1 text-[11px] text-muted">
+				<div className="absolute bottom-1.5 right-1.5 z-20 flex max-w-[calc(100%-0.75rem)] items-center gap-1 rounded-md border border-app-border bg-app-soft/92 px-1.5 py-1 text-[10px] text-muted md:bottom-2 md:right-2 md:gap-1.5 md:px-2 md:text-[11px]">
 					<MessageCircle size={12} aria-hidden="true" />
-					{t(motionStateShortLabelKey(state.motionState))}
+					<span className="truncate">{t(motionStateShortLabelKey(state.motionState))}</span>
 				</div>
 			</div>
 		</div>
