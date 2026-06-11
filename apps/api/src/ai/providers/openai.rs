@@ -429,7 +429,88 @@ struct ChatCompletionStreamDelta {
 
 #[cfg(test)]
 mod tests {
+    use std::{cell::RefCell, rc::Rc};
+
     use super::*;
+
+    #[tokio::test]
+    async fn stream_frame_emits_token_and_detects_done() {
+        let emitted = Rc::new(RefCell::new(Vec::new()));
+        let emitted_events = emitted.clone();
+        let mut on_event = move |event| {
+            let emitted_events = emitted_events.clone();
+            async move {
+                match event {
+                    AiChatStreamEvent::Token(text) => emitted_events.borrow_mut().push(text),
+                }
+                Ok(())
+            }
+        };
+        let mut guard = StreamingResponseGuard::new("other_profile");
+        let frame = concat!(
+            "data: {\"choices\":[{\"delta\":{\"content\":\"hel\"}}]}\n",
+            "data: {\"choices\":[{\"delta\":{\"content\":\"lo\"}}]}\n",
+            "data: [DONE]\n",
+        );
+
+        let is_done = process_stream_frame(frame, &mut guard, &mut on_event)
+            .await
+            .expect("frame should parse");
+
+        assert!(is_done);
+        assert_eq!(emitted.borrow().as_slice(), ["hel", "lo"]);
+        assert_eq!(guard.content(), "hello");
+    }
+
+    #[tokio::test]
+    async fn stream_frame_ignores_role_only_and_empty_deltas() {
+        let emitted = Rc::new(RefCell::new(Vec::new()));
+        let emitted_events = emitted.clone();
+        let mut on_event = move |event| {
+            let emitted_events = emitted_events.clone();
+            async move {
+                match event {
+                    AiChatStreamEvent::Token(text) => emitted_events.borrow_mut().push(text),
+                }
+                Ok(())
+            }
+        };
+        let mut guard = StreamingResponseGuard::new("other_profile");
+        let frame = concat!(
+            "data: {\"choices\":[{\"delta\":{\"role\":\"assistant\"}}]}\n",
+            "data: {\"choices\":[{\"delta\":{\"content\":\"\"}}]}\n",
+        );
+
+        let is_done = process_stream_frame(frame, &mut guard, &mut on_event)
+            .await
+            .expect("frame should parse");
+
+        assert!(!is_done);
+        assert!(emitted.borrow().is_empty());
+        assert_eq!(guard.content(), "");
+    }
+
+    #[tokio::test]
+    async fn stream_frame_returns_error_for_malformed_json() {
+        let mut on_event = |_event| async { Ok(()) };
+        let mut guard = StreamingResponseGuard::new("other_profile");
+
+        let error = process_stream_frame("data: {not-json}\n", &mut guard, &mut on_event)
+            .await
+            .expect_err("malformed provider frames should fail");
+
+        assert!(error.to_string().contains("upstream ai error"));
+    }
+
+    #[test]
+    fn final_stream_message_rejects_empty_content() {
+        let error = final_stream_message(String::new()).expect_err("empty stream should fail");
+
+        assert_eq!(
+            error.to_string(),
+            "upstream ai error: provider stream did not include content"
+        );
+    }
 
     #[test]
     fn streaming_guard_matches_full_aiko_guard_across_chunk_boundaries() {

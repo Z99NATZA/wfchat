@@ -488,7 +488,7 @@ Current behavior:
 - `assistant_streaming` moves the avatar into talking using the bound avatar default expression
 - `assistant_replied` still infers the final expression from the completed assistant text and schedules the idle transition
 
-### 5. Provider-native streaming - In progress
+### 5. Provider-native streaming - Implemented
 
 Files:
 
@@ -508,6 +508,7 @@ Current provider streaming behavior:
 - `mock` streams deterministic chunks with a short delay for local QA
 - OpenAI-compatible providers parse provider SSE chunks and emit `token` events
 - Aiko/guarded profiles use the streaming-safe rolling response guard before any token is emitted
+- parser tests cover normal token frames, `[DONE]`, role-only deltas, malformed JSON, empty final content, and Aiko guard chunk boundaries
 - the chat streaming route persists messages only after `stream_chat()` returns the final assistant message
 
 ## Testing Plan
@@ -561,3 +562,5 @@ The first SSE iteration is complete when:
 - final messages persist only after successful completion
 - avatar talks while streaming and idles after completion
 - docs/pngtuber.md can mark SSE/token streaming as implemented
+
+Current status: implemented for the first SSE iteration.

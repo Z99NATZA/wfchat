@@ -19,11 +19,11 @@ Implemented:
 - Compact mobile chat overlay behavior using the same visibility, position, and size settings.
 - Renderer-level expression transition polish with reduced-motion support.
 - Chat SSE lifecycle wired into the PNGTuber bridge so Aiko can enter talking while stream tokens arrive.
+- Provider-native SSE token streaming for OpenAI-compatible providers with an Aiko streaming-safe response guard.
 
 Not implemented:
 
 - Live2D model loading, physics, motion priority, lip-sync, or runtime package.
-- Additional hardening for provider-native streaming edge cases.
 - Additional non-Aiko persona assets and bindings.
 - User-uploaded/custom PNG asset management.
 
@@ -140,7 +140,6 @@ Use SSE first if the next need is one-way AI response streaming. Reserve WebSock
 
 Useful next stations:
 
-- Harden provider-native streaming with broader provider fixtures and failure-mode tests.
 - Add PNG asset management only when there are real custom assets to manage.
 
 Pause Live2D runtime work until real model assets and runtime decisions exist. Future Live2D implementation should live under a separate `renderers/live2d/` module while sharing the same semantic avatar runtime state.

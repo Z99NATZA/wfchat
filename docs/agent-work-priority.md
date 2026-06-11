@@ -45,7 +45,7 @@ Follow the sequence from `docs/chat-sse-streaming.md`:
 2. Completed: frontend SSE parser and `streamChatMessage()` service.
 3. Completed: `useChatSession` integration with optimistic assistant message updates.
 4. Completed: avatar streaming lifecycle event for first-token talking.
-5. In progress: provider-native streaming after the contract is proven.
+5. Completed: provider-native streaming after the contract is proven.
 
 The first working version may use pseudo-streaming:
 
@@ -71,6 +71,7 @@ Current behavior:
 - emits mock provider chunks for local QA
 - uses OpenAI-compatible native streaming for unguarded profiles
 - uses a streaming-safe Aiko response guard before emitting guarded native provider tokens
+- covers provider stream parser edge cases with focused unit tests
 - persists user and assistant messages only after successful completion
 - keeps `POST /api/chats/:chat_id/messages` unchanged
 
@@ -146,3 +147,5 @@ The SSE milestone is complete only when:
 - final messages are persisted only after successful completion
 - avatar enters talking during streaming and idles after completion
 - `docs/pngtuber.md` marks SSE/token streaming as implemented
+
+Current status: complete for the first SSE iteration. Future work should be scoped separately unless it directly hardens this transport.
