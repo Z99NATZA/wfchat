@@ -17,6 +17,7 @@ import {
 	listMemorySummaries,
 	listPersonaChats,
 	sendChatMessage,
+	streamChatMessage,
 	updateMemoryFact,
 	updateMemorySummary
 } from "@/features/chat/services/chatApiService";
@@ -52,6 +53,7 @@ function isDraftChatPath(pathname: string): boolean {
 
 export type ChatSessionAvatarEvent =
 	| { type: "assistant_waiting"; chatId: string | null; personaId: string }
+	| { type: "assistant_streaming"; chatId: string; personaId: string }
 	| { type: "assistant_replied"; chatId: string; personaId: string; text: string }
 	| { type: "assistant_error"; chatId: string | null; personaId: string };
 
@@ -394,21 +396,46 @@ export function useChatSession({ onAvatarChatEvent }: UseChatSessionOptions = {}
 			personaId: selectedPersonaId
 		});
 		let createdChatId: string | null = null;
+		let assistantMessageId: string | null = null;
+		let streamStarted = false;
+		let streamReceivedToken = false;
+		let streamCompleted = false;
+		let didNotifyStreaming = false;
 
-		try {
-			const chatId = activeChatId ?? (await createPersonaChat(selectedPersonaId)).chatId;
-			if (!activeChatId) {
-				createdChatId = chatId;
-				setActiveChatId(chatId);
-				navigateToChat(chatId);
+		const ensureOptimisticAssistantMessage = () => {
+			if (assistantMessageId) {
+				return assistantMessageId;
 			}
-			const nextMessages = await sendChatMessage(chatId, trimmedDraft);
+
+			assistantMessageId = `local-assistant-${Date.now()}`;
+			const assistantMessage: ChatMessage = {
+				id: assistantMessageId,
+				author: "companion",
+				text: "",
+				createdAt,
+				time: timestamp
+			};
+
+			setMessages((currentMessages) =>
+				currentMessages.some((message) => message.id === assistantMessage.id)
+					? currentMessages
+					: [...currentMessages, assistantMessage]
+			);
+
+			return assistantMessageId;
+		};
+
+		const applyServerMessages = (
+			chatId: string,
+			nextMessages: ChatMessage[],
+			assistantText: string
+		) => {
 			setMessages(nextMessages);
 			onAvatarChatEvent?.({
 				type: "assistant_replied",
 				chatId,
 				personaId: selectedPersonaId,
-				text: nextMessages.filter((message) => message.author === "companion").at(-1)?.text ?? ""
+				text: assistantText
 			});
 			setSessions((currentSessions) =>
 				upsertSentSession(
@@ -418,13 +445,78 @@ export function useChatSession({ onAvatarChatEvent }: UseChatSessionOptions = {}
 					nextMessages.at(-1)?.text ?? trimmedDraft
 				)
 			);
+		};
+
+		try {
+			const chatId = activeChatId ?? (await createPersonaChat(selectedPersonaId)).chatId;
+			if (!activeChatId) {
+				createdChatId = chatId;
+				setActiveChatId(chatId);
+				navigateToChat(chatId);
+			}
+
+			try {
+				await streamChatMessage(chatId, trimmedDraft, {
+					onStart: () => {
+						streamStarted = true;
+						ensureOptimisticAssistantMessage();
+					},
+					onToken: (text) => {
+						streamReceivedToken = true;
+						const currentAssistantMessageId = ensureOptimisticAssistantMessage();
+						setMessages((currentMessages) =>
+							currentMessages.map((message) =>
+								message.id === currentAssistantMessageId
+									? { ...message, text: `${message.text}${text}` }
+									: message
+							)
+						);
+						if (!didNotifyStreaming) {
+							didNotifyStreaming = true;
+							onAvatarChatEvent?.({
+								type: "assistant_streaming",
+								chatId,
+								personaId: selectedPersonaId
+							});
+						}
+					},
+					onDone: (event) => {
+						streamCompleted = true;
+						applyServerMessages(chatId, event.messages, event.assistantMessage.text);
+					}
+				});
+
+				if (!streamCompleted) {
+					throw new Error("chat stream ended before completion");
+				}
+			} catch (streamError) {
+				if (streamCompleted) {
+					return;
+				}
+
+				if (!streamStarted && !streamReceivedToken) {
+					const nextMessages = await sendChatMessage(chatId, trimmedDraft);
+					applyServerMessages(
+						chatId,
+						nextMessages,
+						nextMessages.filter((message) => message.author === "companion").at(-1)?.text ?? ""
+					);
+					return;
+				}
+
+				throw streamError;
+			}
 		} catch {
 			if (createdChatId) {
 				void deleteChat(createdChatId);
 				setActiveChatId(null);
 				navigateToDraft();
 			}
-			setMessages((currentMessages) => currentMessages.filter((message) => message.id !== optimisticMessage.id));
+			setMessages((currentMessages) =>
+				currentMessages.filter(
+					(message) => message.id !== optimisticMessage.id && message.id !== assistantMessageId
+				)
+			);
 			setErrorMessage(t("chat.session.aiNoResponse"));
 			onAvatarChatEvent?.({
 				type: "assistant_error",

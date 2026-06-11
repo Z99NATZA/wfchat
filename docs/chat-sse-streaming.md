@@ -455,7 +455,7 @@ Current service behavior:
 - `message_done` maps API messages into existing `ChatMessage` objects
 - `error` events call `onError` and throw
 
-### 3. Hook integration behind one path
+### 3. Hook integration behind one path - Implemented
 
 Files:
 
@@ -463,7 +463,16 @@ Files:
 
 Switch `sendMessage()` to call `streamChatMessage()` if available. Keep a fallback to `sendChatMessage()` in the same function, so a streaming regression can fall back without losing chat.
 
-### 4. Avatar streaming event
+Current hook behavior:
+
+- creates the existing optimistic user message immediately
+- starts `streamChatMessage()` after chat creation or route resolution
+- creates one optimistic assistant placeholder on `message_start`
+- appends `token` text into that assistant message
+- replaces local optimistic messages with server-confirmed messages on `message_done`
+- falls back to `sendChatMessage()` when the stream fails before `message_start`
+
+### 4. Avatar streaming event - Implemented
 
 Files:
 
@@ -471,6 +480,13 @@ Files:
 - `apps/web/src/features/avatar/runtime/avatarChatBridge.ts`
 
 Add `assistant_streaming` only if using first-token talking cannot be cleanly represented with current events.
+
+Current behavior:
+
+- `assistant_waiting` moves the avatar into thinking
+- the first non-empty `token` emits `assistant_streaming`
+- `assistant_streaming` moves the avatar into talking using the bound avatar default expression
+- `assistant_replied` still infers the final expression from the completed assistant text and schedules the idle transition
 
 ### 5. Provider-native streaming
 

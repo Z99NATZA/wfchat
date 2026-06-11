@@ -43,9 +43,9 @@ Follow the sequence from `docs/chat-sse-streaming.md`:
 
 1. Completed: backend SSE shell using the existing non-streaming completion path.
 2. Completed: frontend SSE parser and `streamChatMessage()` service.
-3. Next: `useChatSession` integration with optimistic assistant message updates.
-4. Then: avatar streaming lifecycle event only if needed.
-5. Later: provider-native streaming after the contract is proven.
+3. Completed: `useChatSession` integration with optimistic assistant message updates.
+4. Completed: avatar streaming lifecycle event for first-token talking.
+5. Next: provider-native streaming after the contract is proven.
 
 The first working version may use pseudo-streaming:
 
@@ -89,7 +89,18 @@ Current behavior:
 - maps `message_start`, `token`, `message_done`, and `error`
 - keeps `sendChatMessage()` unchanged
 
-The service is not wired into `useChatSession` yet.
+The service is wired into `useChatSession.sendMessage()`.
+
+## Current Hook Status
+
+`useChatSession.sendMessage()` now attempts the streaming path first:
+
+- keeps the existing optimistic user message behavior
+- creates one optimistic assistant message when the stream starts
+- appends `token` event text into that assistant message
+- emits `assistant_streaming` on the first non-empty token so the avatar can talk before final completion
+- replaces optimistic messages with server-confirmed messages on `message_done`
+- falls back to the existing non-streaming `sendChatMessage()` path only when the stream fails before the backend starts streaming
 
 ## Hard Boundaries
 

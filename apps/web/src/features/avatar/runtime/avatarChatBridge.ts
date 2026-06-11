@@ -7,6 +7,7 @@ import {
 
 export type ChatAvatarEvent =
 	| { type: "assistant_waiting"; chatId: string | null; personaId: string }
+	| { type: "assistant_streaming"; chatId: string; personaId: string }
 	| { type: "assistant_replied"; chatId: string; personaId: string; text: string }
 	| { type: "assistant_error"; chatId: string | null; personaId: string };
 
@@ -43,6 +44,15 @@ export function useAvatarChatBridge() {
 						rendererKind: binding.rendererKind,
 						expressionId: binding.defaultExpressionId,
 						motionState: "thinking",
+						drivenBy: "chat-bridge"
+					});
+					return;
+				case "assistant_streaming":
+					updateRuntimeState({
+						avatarId: binding.avatarId,
+						rendererKind: binding.rendererKind,
+						expressionId: binding.defaultExpressionId,
+						motionState: "talking",
 						drivenBy: "chat-bridge"
 					});
 					return;

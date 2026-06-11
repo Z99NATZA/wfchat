@@ -18,11 +18,12 @@ Implemented:
 - Persona-to-avatar binding config split into a pure helper with Aiko as the only enabled binding.
 - Compact mobile chat overlay behavior using the same visibility, position, and size settings.
 - Renderer-level expression transition polish with reduced-motion support.
+- Chat SSE lifecycle wired into the PNGTuber bridge so Aiko can enter talking while stream tokens arrive.
 
 Not implemented:
 
 - Live2D model loading, physics, motion priority, lip-sync, or runtime package.
-- SSE/token streaming for talking while the AI response is still generating.
+- Provider-native SSE token streaming; the current first pass uses the backend streaming contract with guarded pseudo-streaming.
 - Additional non-Aiko persona assets and bindings.
 - User-uploaded/custom PNG asset management.
 
@@ -98,6 +99,7 @@ Motion mapping:
 
 ```text
 assistant_waiting -> neutral + thinking
+assistant_streaming -> neutral + talking
 assistant_replied -> inferred expression + talking, then idle
 assistant_error   -> sad + idle
 ```
@@ -138,7 +140,7 @@ Use SSE first if the next need is one-way AI response streaming. Reserve WebSock
 
 Useful next stations:
 
-- Add SSE/token streaming so the avatar talks while AI text is streaming.
+- Add provider-native SSE token streaming after the guarded first-pass streaming contract is stable.
 - Add PNG asset management only when there are real custom assets to manage.
 
 Pause Live2D runtime work until real model assets and runtime decisions exist. Future Live2D implementation should live under a separate `renderers/live2d/` module while sharing the same semantic avatar runtime state.
