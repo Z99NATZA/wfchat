@@ -261,7 +261,7 @@ async fn stream_message(
                     &sender,
                     "error",
                     StreamMessageErrorEvent {
-                        message: error.to_string(),
+                        message: stream_error_message(&error),
                     },
                 )
                 .await;
@@ -504,6 +504,13 @@ async fn send_sse_event<T: Serialize>(
         .await;
 }
 
+fn stream_error_message(error: &AppError) -> String {
+    match error {
+        AppError::Ai(_) => "assistant response failed".to_owned(),
+        _ => error.to_string(),
+    }
+}
+
 fn build_memory_context(
     facts: &[crate::store::MemoryFactRecord],
     summaries: &[crate::store::MemorySummaryRecord],
@@ -535,4 +542,26 @@ fn build_memory_context(
     }
 
     Some(lines.join("\n"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn stream_error_message_hides_upstream_ai_details() {
+        let message = stream_error_message(&AppError::Ai(
+            "provider returned 401: raw upstream body".to_owned(),
+        ));
+
+        assert_eq!(message, "assistant response failed");
+    }
+
+    #[test]
+    fn stream_error_message_keeps_non_ai_errors_actionable() {
+        let message =
+            stream_error_message(&AppError::BadRequest("message content is empty".to_owned()));
+
+        assert_eq!(message, "bad request: message content is empty");
+    }
 }
