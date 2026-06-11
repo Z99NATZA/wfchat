@@ -14,6 +14,7 @@ Implemented:
 - Chat overlay using the same runtime and renderer.
 - Overlay visibility, position, and size settings persisted locally.
 - Chat reply emotion inference with a small conservative heuristic.
+- Chat reply emotion inference split into a pure helper with focused unit tests.
 - Renderer-level expression transition polish with reduced-motion support.
 
 Not implemented:
@@ -31,6 +32,7 @@ Not implemented:
 - Runtime store: `apps/web/src/features/avatar/runtime/avatarRuntimeStore.tsx`
 - Runtime types: `apps/web/src/features/avatar/runtime/avatarRuntimeTypes.ts`
 - Chat bridge: `apps/web/src/features/avatar/runtime/avatarChatBridge.ts`
+- Emotion inference helper: `apps/web/src/features/avatar/runtime/avatarEmotionInference.ts`
 - Chat overlay: `apps/web/src/features/avatar/components/AvatarOverlay.tsx`
 - PNGTuber renderer: `apps/web/src/features/avatar/renderers/pngtuber/PngTuberRenderer.tsx`
 - Overlay settings store: `apps/web/src/stores/avatarOverlayStore.ts`
@@ -88,7 +90,7 @@ assistant_replied -> inferred expression + talking, then idle
 assistant_error   -> sad + idle
 ```
 
-Expression inference currently lives in `avatarChatBridge.ts` as a small keyword heuristic. It maps only to known expressions: `neutral`, `happy`, `shy`, `sad`, and `surprised`. If no rule matches, it defaults to `neutral`.
+Expression inference currently lives in `avatarEmotionInference.ts` as a small keyword heuristic. It maps only to known expressions: `neutral`, `happy`, `shy`, `sad`, and `surprised`. If no rule matches, it defaults to `neutral`.
 
 Manual motion controls in PNGTuber Studio can preview idle, thinking, and talking. They update the shared runtime, so the chat overlay reflects the same selected motion while the app remains mounted.
 
@@ -120,11 +122,7 @@ Use SSE first if the next need is one-way AI response streaming. Reserve WebSock
 
 ## Remaining Work
 
-Recommended next small station:
-
-- Split emotion inference from `avatarChatBridge.ts` into a pure helper and add focused unit tests.
-
-Other useful stations:
+Useful next stations:
 
 - Add avatar binding config for multiple personas.
 - Add compact/mobile overlay behavior if mobile chat needs the performer.

@@ -1,6 +1,10 @@
 import { useCallback, useEffect, useRef } from "react";
 import { useAvatarRuntime } from "@/features/avatar/runtime/avatarRuntimeStore";
-import type { AikoEmotionId } from "@/features/avatar/data/aikoPngTuber";
+import {
+	DEFAULT_CHAT_EXPRESSION_ID,
+	ERROR_CHAT_EXPRESSION_ID,
+	inferExpressionIdFromText
+} from "@/features/avatar/runtime/avatarEmotionInference";
 
 export type ChatAvatarEvent =
 	| { type: "assistant_waiting"; chatId: string | null; personaId: string }
@@ -14,50 +18,6 @@ export type AvatarBinding = {
 };
 
 const TALKING_PREVIEW_MS = 1600;
-const DEFAULT_EXPRESSION_ID: AikoEmotionId = "neutral";
-const ERROR_EXPRESSION_ID: AikoEmotionId = "sad";
-
-const emotionKeywordRules: Array<{ expressionId: AikoEmotionId; keywords: string[] }> = [
-	{
-		expressionId: "sad",
-		keywords: [
-			"sad",
-			"sorry",
-			"hurt",
-			"lonely",
-			"cry",
-			"เศร้า",
-			"เสียใจ",
-			"ขอโทษ",
-			"เจ็บ",
-			"เหงา",
-			"ร้องไห้"
-		]
-	},
-	{
-		expressionId: "surprised",
-		keywords: ["wow", "whoa", "surprise", "unexpected", "ตกใจ", "ว้าว", "จริงเหรอ", "ไม่น่าเชื่อ"]
-	},
-	{
-		expressionId: "shy",
-		keywords: ["blush", "shy", "embarrassed", "เขิน", "อาย", "หน้าแดง"]
-	},
-	{
-		expressionId: "happy",
-		keywords: [
-			"happy",
-			"glad",
-			"great",
-			"love",
-			"nice",
-			"ดีใจ",
-			"เยี่ยม",
-			"รัก",
-			"น่ารัก",
-			"ขอบคุณ"
-		]
-	}
-];
 
 const avatarBindings: AvatarBinding[] = [
 	{
@@ -69,19 +29,6 @@ const avatarBindings: AvatarBinding[] = [
 
 function resolveAvatarBinding(personaId: string): AvatarBinding | null {
 	return avatarBindings.find((binding) => binding.enabled && binding.personaId === personaId) ?? null;
-}
-
-function inferExpressionIdFromText(text: string): AikoEmotionId {
-	const normalizedText = text.trim().toLocaleLowerCase();
-	if (!normalizedText) {
-		return DEFAULT_EXPRESSION_ID;
-	}
-
-	const matchedRule = emotionKeywordRules.find((rule) =>
-		rule.keywords.some((keyword) => normalizedText.includes(keyword.toLocaleLowerCase()))
-	);
-
-	return matchedRule?.expressionId ?? DEFAULT_EXPRESSION_ID;
 }
 
 export function useAvatarChatBridge() {
@@ -113,7 +60,7 @@ export function useAvatarChatBridge() {
 					updateRuntimeState({
 						avatarId: binding.avatarId,
 						rendererKind: "pngtuber",
-						expressionId: DEFAULT_EXPRESSION_ID,
+						expressionId: DEFAULT_CHAT_EXPRESSION_ID,
 						motionState: "thinking",
 						drivenBy: "chat-bridge"
 					});
@@ -138,7 +85,7 @@ export function useAvatarChatBridge() {
 					updateRuntimeState({
 						avatarId: binding.avatarId,
 						rendererKind: "pngtuber",
-						expressionId: ERROR_EXPRESSION_ID,
+						expressionId: ERROR_CHAT_EXPRESSION_ID,
 						motionState: "idle",
 						drivenBy: "chat-bridge"
 					});
