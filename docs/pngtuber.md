@@ -23,7 +23,7 @@ Implemented:
 Not implemented:
 
 - Live2D model loading, physics, motion priority, lip-sync, or runtime package.
-- Provider-native SSE token streaming; the current first pass uses the backend streaming contract with guarded pseudo-streaming.
+- Streaming-safe response guard for Aiko native provider tokens; Aiko still uses guarded pseudo-streaming.
 - Additional non-Aiko persona assets and bindings.
 - User-uploaded/custom PNG asset management.
 
@@ -140,7 +140,7 @@ Use SSE first if the next need is one-way AI response streaming. Reserve WebSock
 
 Useful next stations:
 
-- Add provider-native SSE token streaming after the guarded first-pass streaming contract is stable.
+- Add a streaming-safe response guard before enabling native provider tokens for Aiko.
 - Add PNG asset management only when there are real custom assets to manage.
 
 Pause Live2D runtime work until real model assets and runtime decisions exist. Future Live2D implementation should live under a separate `renderers/live2d/` module while sharing the same semantic avatar runtime state.

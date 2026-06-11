@@ -45,7 +45,7 @@ Follow the sequence from `docs/chat-sse-streaming.md`:
 2. Completed: frontend SSE parser and `streamChatMessage()` service.
 3. Completed: `useChatSession` integration with optimistic assistant message updates.
 4. Completed: avatar streaming lifecycle event for first-token talking.
-5. Next: provider-native streaming after the contract is proven.
+5. In progress: provider-native streaming after the contract is proven.
 
 The first working version may use pseudo-streaming:
 
@@ -67,8 +67,10 @@ Current behavior:
 
 - validates session, chat ownership, and non-empty content before opening the stream
 - returns SSE-framed `message_start`, `token`, and `message_done`
-- uses the existing `AiService::complete_chat()` path
-- emits guarded final assistant text as one `token`
+- uses `AiService::stream_chat()` for the streaming endpoint
+- emits mock provider chunks for local QA
+- uses OpenAI-compatible native streaming for unguarded profiles
+- keeps guarded Aiko profiles on the safe complete-then-token fallback
 - persists user and assistant messages only after successful completion
 - keeps `POST /api/chats/:chat_id/messages` unchanged
 

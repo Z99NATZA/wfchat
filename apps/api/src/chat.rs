@@ -16,7 +16,7 @@ use tokio_stream::wrappers::ReceiverStream;
 use uuid::Uuid;
 
 use crate::{
-    ai::{AiMessage, AiRole, AiService},
+    ai::{AiChatStreamEvent, AiMessage, AiRole, AiService},
     characters,
     error::{AppError, AppResult},
     state::AppState,
@@ -237,17 +237,8 @@ async fn stream_message(
         )
         .await;
 
-        match complete_and_append_chat_message(state, owner, chat_id, context).await {
+        match stream_and_append_chat_message(state, owner, chat_id, context, sender.clone()).await {
             Ok(completed) => {
-                let assistant_text = completed.assistant_message.content.clone();
-                send_sse_event(
-                    &sender,
-                    "token",
-                    StreamTokenEvent {
-                        text: assistant_text,
-                    },
-                )
-                .await;
                 send_sse_event(
                     &sender,
                     "message_done",
@@ -422,6 +413,54 @@ async fn complete_and_append_chat_message(
     let ai = AiService::new(state.clone());
     let assistant_ai_message = ai
         .complete_chat(&context.chat.ai_profile_id, &context.ai_messages)
+        .await?;
+
+    let user_message = StoredMessage::from_ai_message(context.user_ai_message);
+    let assistant_message = StoredMessage::from_ai_message(assistant_ai_message);
+    let updated_chat = state
+        .store
+        .append_chat_messages(
+            owner,
+            chat_id,
+            user_message.clone(),
+            assistant_message.clone(),
+        )
+        .await
+        .ok_or(AppError::NotFound)?;
+
+    Ok(CompletedChatMessage {
+        user_message,
+        assistant_message,
+        updated_chat,
+    })
+}
+
+async fn stream_and_append_chat_message(
+    state: AppState,
+    owner: OwnerScope,
+    chat_id: Uuid,
+    context: ChatCompletionContext,
+    sender: mpsc::Sender<Result<Event, Infallible>>,
+) -> AppResult<CompletedChatMessage> {
+    let ai = AiService::new(state.clone());
+    let token_sender = sender.clone();
+    let assistant_ai_message = ai
+        .stream_chat(
+            &context.chat.ai_profile_id,
+            &context.ai_messages,
+            move |event| {
+                let token_sender = token_sender.clone();
+                async move {
+                    match event {
+                        AiChatStreamEvent::Token(text) => {
+                            send_sse_event(&token_sender, "token", StreamTokenEvent { text }).await;
+                        }
+                    }
+
+                    Ok(())
+                }
+            },
+        )
         .await?;
 
     let user_message = StoredMessage::from_ai_message(context.user_ai_message);

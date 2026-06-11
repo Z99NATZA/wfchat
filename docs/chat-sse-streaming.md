@@ -488,7 +488,7 @@ Current behavior:
 - `assistant_streaming` moves the avatar into talking using the bound avatar default expression
 - `assistant_replied` still infers the final expression from the completed assistant text and schedules the idle transition
 
-### 5. Provider-native streaming
+### 5. Provider-native streaming - In progress
 
 Files:
 
@@ -501,6 +501,14 @@ Files:
 Add native streaming to the OpenAI-compatible helper. LM Studio and xAI inherit it because they already route through the same helper.
 
 Keep fallback behavior for providers that do not support streaming yet, and for guarded profiles until token emission is guard-safe.
+
+Current provider streaming behavior:
+
+- `AiService::stream_chat()` is available next to `complete_chat()`
+- `mock` streams deterministic chunks with a short delay for local QA
+- OpenAI-compatible providers parse provider SSE chunks and emit `token` events for unguarded profiles
+- Aiko/guarded profiles still use safe fallback pseudo-streaming so raw provider text is not displayed before the response guard runs
+- the chat streaming route persists messages only after `stream_chat()` returns the final assistant message
 
 ## Testing Plan
 
