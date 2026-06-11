@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useRef } from "react";
+import { resolveAvatarBinding } from "@/features/avatar/runtime/avatarBindings";
 import { useAvatarRuntime } from "@/features/avatar/runtime/avatarRuntimeStore";
 import {
-	DEFAULT_CHAT_EXPRESSION_ID,
-	ERROR_CHAT_EXPRESSION_ID,
 	inferExpressionIdFromText
 } from "@/features/avatar/runtime/avatarEmotionInference";
 
@@ -11,25 +10,7 @@ export type ChatAvatarEvent =
 	| { type: "assistant_replied"; chatId: string; personaId: string; text: string }
 	| { type: "assistant_error"; chatId: string | null; personaId: string };
 
-export type AvatarBinding = {
-	personaId: string;
-	avatarId: string;
-	enabled: boolean;
-};
-
 const TALKING_PREVIEW_MS = 1600;
-
-const avatarBindings: AvatarBinding[] = [
-	{
-		personaId: "aiko",
-		avatarId: "aiko-pngtuber",
-		enabled: true
-	}
-];
-
-function resolveAvatarBinding(personaId: string): AvatarBinding | null {
-	return avatarBindings.find((binding) => binding.enabled && binding.personaId === personaId) ?? null;
-}
 
 export function useAvatarChatBridge() {
 	const { updateRuntimeState } = useAvatarRuntime();
@@ -59,8 +40,8 @@ export function useAvatarChatBridge() {
 				case "assistant_waiting":
 					updateRuntimeState({
 						avatarId: binding.avatarId,
-						rendererKind: "pngtuber",
-						expressionId: DEFAULT_CHAT_EXPRESSION_ID,
+						rendererKind: binding.rendererKind,
+						expressionId: binding.defaultExpressionId,
 						motionState: "thinking",
 						drivenBy: "chat-bridge"
 					});
@@ -68,7 +49,7 @@ export function useAvatarChatBridge() {
 				case "assistant_replied":
 					updateRuntimeState({
 						avatarId: binding.avatarId,
-						rendererKind: "pngtuber",
+						rendererKind: binding.rendererKind,
 						expressionId: inferExpressionIdFromText(event.text),
 						motionState: "talking",
 						drivenBy: "chat-bridge"
@@ -84,8 +65,8 @@ export function useAvatarChatBridge() {
 				case "assistant_error":
 					updateRuntimeState({
 						avatarId: binding.avatarId,
-						rendererKind: "pngtuber",
-						expressionId: ERROR_CHAT_EXPRESSION_ID,
+						rendererKind: binding.rendererKind,
+						expressionId: binding.errorExpressionId,
 						motionState: "idle",
 						drivenBy: "chat-bridge"
 					});

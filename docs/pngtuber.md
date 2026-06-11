@@ -15,6 +15,7 @@ Implemented:
 - Overlay visibility, position, and size settings persisted locally.
 - Chat reply emotion inference with a small conservative heuristic.
 - Chat reply emotion inference split into a pure helper with focused unit tests.
+- Persona-to-avatar binding config split into a pure helper with Aiko as the only enabled binding.
 - Renderer-level expression transition polish with reduced-motion support.
 
 Not implemented:
@@ -31,6 +32,7 @@ Not implemented:
 - PNGTuber metadata: `apps/web/src/features/avatar/data/aikoPngTuber.ts`
 - Runtime store: `apps/web/src/features/avatar/runtime/avatarRuntimeStore.tsx`
 - Runtime types: `apps/web/src/features/avatar/runtime/avatarRuntimeTypes.ts`
+- Avatar binding config: `apps/web/src/features/avatar/runtime/avatarBindings.ts`
 - Chat bridge: `apps/web/src/features/avatar/runtime/avatarChatBridge.ts`
 - Emotion inference helper: `apps/web/src/features/avatar/runtime/avatarEmotionInference.ts`
 - Chat overlay: `apps/web/src/features/avatar/components/AvatarOverlay.tsx`
@@ -78,9 +80,17 @@ Keep runtime state semantic. It should not contain PNG URLs, CSS class names, Li
 
 `avatarChatBridge.ts` translates chat lifecycle events into semantic avatar state. Chat code should not import PNG metadata or renderer-specific components.
 
+`avatarBindings.ts` maps chat personas to semantic avatar runtime targets. Keep it small and data-first so forks can add another persona binding without changing the chat bridge lifecycle logic.
+
 `Model2DPage` is a separate Live2D workspace shell. It exists to keep future 2D model work out of the PNGTuber page.
 
 ## Current Behavior
+
+Avatar binding:
+
+```text
+aiko -> aiko-pngtuber, pngtuber, enabled
+```
 
 Motion mapping:
 
@@ -124,7 +134,6 @@ Use SSE first if the next need is one-way AI response streaming. Reserve WebSock
 
 Useful next stations:
 
-- Add avatar binding config for multiple personas.
 - Add compact/mobile overlay behavior if mobile chat needs the performer.
 - Add SSE/token streaming so the avatar talks while AI text is streaming.
 - Add PNG asset management only when there are real custom assets to manage.
