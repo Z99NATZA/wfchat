@@ -25,7 +25,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 function App() {
 	const settings = useAppSettings();
 	const auth = useAuthSession();
-	const { setLocale, t } = useI18n();
+	const { applyPulledLocale, t } = useI18n();
 	const { alert } = useDialog();
 	const [isProfileOpen, setIsProfileOpen] = useState(false);
 	const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -59,9 +59,10 @@ function App() {
 				if (result) {
 					auth.markGuestSyncDone();
 					await pullSyncChanges(
-						setLocale,
+						applyPulledLocale,
 						settings.applyPulledBackgroundImageUrl,
-						settings.applyPulledTheme
+						settings.applyPulledTheme,
+						settings.applyPulledFont
 					);
 					refreshMountedChat();
 				}
@@ -72,10 +73,11 @@ function App() {
 	}, [
 		auth.isAuthenticated,
 		auth.markGuestSyncDone,
+		applyPulledLocale,
 		refreshMountedChat,
-		setLocale,
 		settings.applyPulledBackgroundImageUrl,
-		settings.applyPulledTheme
+		settings.applyPulledTheme,
+		settings.applyPulledFont
 	]);
 
 	useEffect(() => {
@@ -83,16 +85,18 @@ function App() {
 			return;
 		}
 		void pullSyncChanges(
-			setLocale,
+			applyPulledLocale,
 			settings.applyPulledBackgroundImageUrl,
-			settings.applyPulledTheme
+			settings.applyPulledTheme,
+			settings.applyPulledFont
 		).then(() => refreshMountedChat());
 	}, [
 		auth.isAuthenticated,
+		applyPulledLocale,
 		refreshMountedChat,
-		setLocale,
 		settings.applyPulledBackgroundImageUrl,
-		settings.applyPulledTheme
+		settings.applyPulledTheme,
+		settings.applyPulledFont
 	]);
 
 	useEffect(() => {
@@ -111,9 +115,10 @@ function App() {
 					markSyncRetry();
 				});
 			void pullSyncChanges(
-				setLocale,
+				applyPulledLocale,
 				settings.applyPulledBackgroundImageUrl,
-				settings.applyPulledTheme
+				settings.applyPulledTheme,
+				settings.applyPulledFont
 			).then(() => refreshMountedChat());
 		}
 
@@ -122,10 +127,11 @@ function App() {
 	}, [
 		auth.isAuthenticated,
 		auth.markGuestSyncDone,
+		applyPulledLocale,
 		refreshMountedChat,
-		setLocale,
 		settings.applyPulledBackgroundImageUrl,
-		settings.applyPulledTheme
+		settings.applyPulledTheme,
+		settings.applyPulledFont
 	]);
 
 	async function handleSyncNow() {
@@ -150,9 +156,10 @@ function App() {
 			if (!result) {
 				auth.markGuestSyncDone();
 				await pullSyncChanges(
-					setLocale,
+					applyPulledLocale,
 					settings.applyPulledBackgroundImageUrl,
-					settings.applyPulledTheme
+					settings.applyPulledTheme,
+					settings.applyPulledFont
 				);
 				refreshMountedChat();
 				await alert({
@@ -165,9 +172,10 @@ function App() {
 				auth.markGuestSyncDone();
 			}
 			await pullSyncChanges(
-				setLocale,
+				applyPulledLocale,
 				settings.applyPulledBackgroundImageUrl,
-				settings.applyPulledTheme
+				settings.applyPulledTheme,
+				settings.applyPulledFont
 			);
 			refreshMountedChat();
 			await alert({

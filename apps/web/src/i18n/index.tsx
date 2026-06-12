@@ -21,6 +21,7 @@ type TranslationParams = Record<string, string | number>;
 type I18nContextValue = {
 	locale: Locale;
 	setLocale: (locale: Locale) => void;
+	applyPulledLocale: (locale: Locale) => void;
 	t: (key: string, params?: TranslationParams) => string;
 };
 
@@ -29,6 +30,10 @@ const I18nContext = createContext<I18nContextValue | null>(null);
 function getStoredLocale(): Locale {
 	const savedLocale = readStorageItem(LOCALE_STORAGE_KEY);
 	return savedLocale === "th" || savedLocale === "en" ? savedLocale : "en";
+}
+
+export function writeLocale(locale: Locale): void {
+	writeStorageItem(LOCALE_STORAGE_KEY, locale);
 }
 
 function translate(locale: Locale, key: string, params?: TranslationParams) {
@@ -55,14 +60,20 @@ export function I18nProvider({ children }: I18nProviderProps) {
 
 	function setLocale(nextLocale: Locale) {
 		setLocaleState(nextLocale);
-		writeStorageItem(LOCALE_STORAGE_KEY, nextLocale);
+		writeLocale(nextLocale);
 		touchSyncKey("settings.locale");
+	}
+
+	function applyPulledLocale(nextLocale: Locale) {
+		setLocaleState(nextLocale);
+		writeLocale(nextLocale);
 	}
 
 	const value = useMemo<I18nContextValue>(
 		() => ({
 			locale,
 			setLocale,
+			applyPulledLocale,
 			t: (key, params) => translate(locale, key, params)
 		}),
 		[locale]

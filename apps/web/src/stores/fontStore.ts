@@ -19,6 +19,10 @@ export function persistFont(font: AppFont): void {
 	touchSyncKey("settings.font");
 }
 
+export function writeFont(font: AppFont): void {
+	writeStorageItem(FONT_STORAGE_KEY, font);
+}
+
 export function applyFontToDocument(font: AppFont): void {
 	if (typeof document === "undefined") {
 		return;

@@ -453,6 +453,7 @@ describe("syncService queue helpers", () => {
 		const onLocaleChange = vi.fn();
 		const onBackgroundImageUrlChange = vi.fn();
 		const onThemeChange = vi.fn();
+		const onFontChange = vi.fn();
 		apiClientMock.get.mockResolvedValueOnce({
 			data: {
 				next_cursor: 50,
@@ -546,7 +547,8 @@ describe("syncService queue helpers", () => {
 		const appliedCount = await pullSyncChanges(
 			onLocaleChange,
 			onBackgroundImageUrlChange,
-			onThemeChange
+			onThemeChange,
+			onFontChange
 		);
 
 		expect(apiClientMock.get).toHaveBeenCalledWith("/api/sync/changes", {
@@ -556,7 +558,10 @@ describe("syncService queue helpers", () => {
 		expect(appliedCount).toBe(8);
 		expect(window.localStorage.getItem(themeStorageKey)).toBe("dark");
 		expect(JSON.parse(window.localStorage.getItem(syncMetaStorageKey) ?? "{}")).toMatchObject({
-			"settings.theme": 10
+			"settings.theme": 10,
+			"settings.font": 11,
+			"settings.locale": 12,
+			"settings.backgroundImageUrl": 13
 		});
 		expect(window.localStorage.getItem(fontStorageKey)).toBe("jetbrains-mono");
 		expect(window.localStorage.getItem(localeStorageKey)).toBe("th");
@@ -566,6 +571,7 @@ describe("syncService queue helpers", () => {
 		expect(onLocaleChange).toHaveBeenCalledWith("th");
 		expect(onBackgroundImageUrlChange).toHaveBeenCalledWith("https://example.com/bg.png");
 		expect(onThemeChange).toHaveBeenCalledWith("dark");
+		expect(onFontChange).toHaveBeenCalledWith("jetbrains-mono");
 		expect(readMemoryFactsCache()).toEqual([
 			expect.objectContaining({ id: "fact-1", characterId: "aiko", content: "Likes tea" })
 		]);
@@ -606,6 +612,70 @@ describe("syncService queue helpers", () => {
 		expect(appliedCount).toBe(1);
 		expect(window.localStorage.getItem(themeStorageKey)).toBe("dark");
 		expect(onThemeChange).not.toHaveBeenCalled();
+		expect(window.localStorage.getItem(syncCursorStorageKey)).toBe("50");
+	});
+
+	it("does not let stale cloud settings overwrite newer local settings", async () => {
+		window.localStorage.setItem(sessionStorageKey, "session-1");
+		window.localStorage.setItem(fontStorageKey, "inter");
+		window.localStorage.setItem(localeStorageKey, "en");
+		window.localStorage.setItem(backgroundImageUrlStorageKey, "https://example.com/local.png");
+		window.localStorage.setItem(
+			syncMetaStorageKey,
+			JSON.stringify({
+				"settings.font": 20,
+				"settings.locale": 20,
+				"settings.backgroundImageUrl": 20
+			})
+		);
+		const onLocaleChange = vi.fn();
+		const onBackgroundImageUrlChange = vi.fn();
+		const onFontChange = vi.fn();
+		apiClientMock.get.mockResolvedValueOnce({
+			data: {
+				next_cursor: 50,
+				items: [
+					{
+						item_id: "settings.font",
+						item_type: "setting",
+						updated_at: 10,
+						deleted_at: null,
+						payload: { key: "font", value: "itim" }
+					},
+					{
+						item_id: "settings.locale",
+						item_type: "setting",
+						updated_at: 11,
+						deleted_at: null,
+						payload: { key: "locale", value: "th" }
+					},
+					{
+						item_id: "settings.backgroundImageUrl",
+						item_type: "setting",
+						updated_at: 12,
+						deleted_at: null,
+						payload: { key: "backgroundImageUrl", value: "https://example.com/cloud.png" }
+					}
+				]
+			}
+		});
+
+		const appliedCount = await pullSyncChanges(
+			onLocaleChange,
+			onBackgroundImageUrlChange,
+			undefined,
+			onFontChange
+		);
+
+		expect(appliedCount).toBe(3);
+		expect(window.localStorage.getItem(fontStorageKey)).toBe("inter");
+		expect(window.localStorage.getItem(localeStorageKey)).toBe("en");
+		expect(window.localStorage.getItem(backgroundImageUrlStorageKey)).toBe(
+			"https://example.com/local.png"
+		);
+		expect(onFontChange).not.toHaveBeenCalled();
+		expect(onLocaleChange).not.toHaveBeenCalled();
+		expect(onBackgroundImageUrlChange).not.toHaveBeenCalled();
 		expect(window.localStorage.getItem(syncCursorStorageKey)).toBe("50");
 	});
 

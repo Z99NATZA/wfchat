@@ -2,11 +2,11 @@ import { apiClient } from "@/services/apiClient";
 import { readStorageItem, removeStorageItem, writeStorageItem } from "@/services/storageService";
 import { readSyncUpdatedAt, recordSyncUpdatedAt } from "@/stores/syncStateStore";
 import { applyThemeToDocument, writeTheme } from "@/stores/themeStore";
-import { applyFontToDocument, persistFont } from "@/stores/fontStore";
+import { applyFontToDocument, writeFont } from "@/stores/fontStore";
 import {
 	BACKGROUND_IMAGE_URL_STORAGE_KEY,
 	BACKGROUND_IMAGE_URL_SYNC_KEY,
-	persistBackgroundImageUrl
+	writeBackgroundImageUrl
 } from "@/stores/backgroundStore";
 import type { ChatMessage, ChatSessionSummary, MemoryFact, MemorySummary } from "@/types/chat";
 import type { AppFont } from "@/types/font";
@@ -238,7 +238,8 @@ export function clearLocalSyncState(): void {
 export async function pullSyncChanges(
 	onLocaleChange?: (locale: "en" | "th") => void,
 	onBackgroundImageUrlChange?: (url: string) => void,
-	onThemeChange?: (theme: Theme) => void
+	onThemeChange?: (theme: Theme) => void,
+	onFontChange?: (font: AppFont) => void
 ): Promise<number> {
 	const sessionId = await ensureGuestSession();
 	const cursor = Number(readStorageItem(syncCursorStorageKey) ?? "0");
@@ -248,7 +249,7 @@ export async function pullSyncChanges(
 	});
 
 	for (const item of response.data.items) {
-		applySyncItem(item, onLocaleChange, onBackgroundImageUrlChange, onThemeChange);
+		applySyncItem(item, onLocaleChange, onBackgroundImageUrlChange, onThemeChange, onFontChange);
 	}
 
 	writeStorageItem(syncCursorStorageKey, String(response.data.next_cursor));
@@ -394,7 +395,8 @@ function applySyncItem(
 	item: SyncItem,
 	onLocaleChange?: (locale: "en" | "th") => void,
 	onBackgroundImageUrlChange?: (url: string) => void,
-	onThemeChange?: (theme: Theme) => void
+	onThemeChange?: (theme: Theme) => void,
+	onFontChange?: (font: AppFont) => void
 ) {
 	if (item.deleted_at && item.deleted_at > 0) {
 		if (item.item_type === "memory_fact") {
@@ -455,20 +457,26 @@ function applySyncItem(
 	}
 
 	if (key === "font" && (value === "inter" || value === "itim" || value === "jetbrains-mono")) {
-		persistFont(value as AppFont);
-		applyFontToDocument(value as AppFont);
+		const font = value as AppFont;
+		writeFont(font);
+		recordSyncUpdatedAt("settings.font", item.updated_at);
+		applyFontToDocument(font);
+		onFontChange?.(font);
 		return;
 	}
 
 	if (key === "locale" && (value === "en" || value === "th")) {
+		recordSyncUpdatedAt("settings.locale", item.updated_at);
 		writeStorageItem(localeStorageKey, value);
 		onLocaleChange?.(value);
 		return;
 	}
 
 	if (key === "backgroundImageUrl") {
-		persistBackgroundImageUrl(value);
-		onBackgroundImageUrlChange?.(value.trim());
+		const url = value.trim();
+		writeBackgroundImageUrl(url);
+		recordSyncUpdatedAt(BACKGROUND_IMAGE_URL_SYNC_KEY, item.updated_at);
+		onBackgroundImageUrlChange?.(url);
 	}
 }
 

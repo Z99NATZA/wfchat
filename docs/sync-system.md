@@ -40,6 +40,11 @@ The sync system is designed to:
   authenticated.
 - Stale pulled setting guard that avoids applying a cloud setting when the
   local `wfchat-sync-meta` timestamp is newer.
+- Uniform pulled setting handling for theme, font, locale, and background image:
+  pulled values record the cloud timestamp, avoid touching local edit metadata,
+  and update React state through pulled-setting callbacks.
+- Web sync flow tests for enqueue/flush/pull, retry, stale pulled settings, and
+  tombstone pull behavior.
 
 ### Not Done Yet
 
@@ -52,7 +57,7 @@ The sync system is designed to:
 - Accurate `conflict_count` from `/api/sync/commit`.
 - Cursor checkpointing for partial local apply failures.
 - Deterministic pagination for many items sharing the same `updated_at`.
-- Complete web e2e sync coverage.
+- Browser-level web e2e sync coverage.
 - Production-grade metrics and alerting.
 
 ### Important Limitation
@@ -62,10 +67,8 @@ The sync system is designed to:
   materialize pulled sync items back into the main `chats`, `chat_messages`,
   `memory_facts`, or `memory_summaries` tables.
 
-- Pulled settings are applied through a mix of setting-specific paths. Theme is
-  written without touching local sync metadata and updates React state through
-  an app callback. Font, locale, and background image currently reuse existing
-  persistence paths more directly, so their pull behavior is not fully uniform.
+- Pulled settings use dedicated pulled-setting paths. They do not touch local
+  edit metadata, and app-level React state is updated through callbacks.
 
 ## Terminology
 
@@ -177,10 +180,9 @@ Timestamp behavior:
 - Settings fall back to current time when no metadata exists.
 - Local setting changes call `touchSyncKey(...)` so future sync operations use
   the local edit timestamp.
-- Pulled theme changes call `recordSyncUpdatedAt("settings.theme", updated_at)`
-  and write `wfchat-theme` without touching the local edit timestamp.
-- Pulled font, locale, and background image changes currently apply through
-  their existing persistence/update paths and may touch local sync metadata.
+- Pulled setting changes call `recordSyncUpdatedAt(...)` with the cloud
+  `updated_at`, write local storage without touching the local edit timestamp,
+  and notify app-level callbacks when React state must update.
 - Memory sync items use record timestamps.
 - Chat session sync items use session timestamps.
 - Active-chat message sync items currently use enqueue-time timestamps.
@@ -191,13 +193,13 @@ Pulled setting behavior:
   `wfchat-sync-meta`; otherwise writes local storage, applies the document
   theme, records the cloud timestamp, and updates React state through
   `applyPulledTheme`.
-- `font`: skipped when stale; otherwise persists the font and applies the
-  document font. The current React app settings state is not updated through a
-  pulled-font callback.
+- `font`: skipped when stale; otherwise writes local storage, applies the
+  document font, records the cloud timestamp, and updates React state through
+  `applyPulledFont`.
 - `locale`: skipped when stale; otherwise writes local storage and calls the
-  i18n locale callback.
+  pulled i18n locale callback without touching local edit metadata.
 - `backgroundImageUrl`: skipped when stale; otherwise persists the background
-  image URL and calls the app background callback.
+  image URL, records the cloud timestamp, and calls the app background callback.
 - memory/chat items: upsert into local sync caches.
 - memory/chat tombstones: remove matching cache entries.
 
@@ -384,54 +386,43 @@ Current queue constraints:
 These are not all confirmed bugs. They are implementation risks that should be
 covered by tests before broadening sync behavior.
 
-### 1. Pulled settings can diverge from React state
+### 1. Authenticated font and locale changes do not immediately flush
 
-Theme has a dedicated pulled-state callback. Font currently applies to the
-document and local storage, but `AppSettingsProvider` does not receive a
-pulled-font callback. A header or control that reads the React `font` state can
-temporarily disagree with the document after a cross-device pull.
+Theme and background image changes call the app-setting sync path immediately
+while authenticated. Font and locale changes touch local sync metadata, but
+they are not yet wired to the same immediate flush path from `App`.
 
-Locale and background image do have callbacks, but locale currently uses the
-same setter as local changes and can touch sync metadata during pull.
-
-### 2. Pulled settings can look like local edits
-
-Pulled font, locale, and background image changes can update
-`wfchat-sync-meta` through existing persistence paths. That can make a pulled
-cloud value appear newer locally than it really is, which can affect later
-conflict decisions or cause redundant re-sync.
-
-### 3. Registered sync upsert is not DB-unique
+### 2. Registered sync upsert is not DB-unique
 
 Registered sync treats `owner_user_id + item_id` as the account-level identity,
 but this is implemented with update/select/insert logic rather than a unique
 database constraint. Concurrent commits for the same owner and item could race.
 
-### 4. Cursor pagination can miss same-timestamp items
+### 3. Cursor pagination can miss same-timestamp items
 
 `GET /api/sync/changes` uses `updated_at > cursor` and advances the cursor to
 the max timestamp in the returned batch. If more than one page of items share
 the same timestamp, later pages with that timestamp can be skipped.
 
-### 5. Partial pull apply has no checkpoint
+### 4. Partial pull apply has no checkpoint
 
 The frontend writes the cursor after applying a whole batch. If local apply is
 partially successful and then fails before or during cursor persistence, retry
 behavior is not explicitly modeled or tested.
 
-### 6. Commit conflicts are not returned accurately
+### 5. Commit conflicts are not returned accurately
 
 `POST /api/sync/preview` can report conflicts, but `POST /api/sync/commit`
 records `conflict_count: 0` even when incoming items are skipped because they
 are older than existing rows.
 
-### 7. Delete tombstones are not guaranteed after failed API deletes
+### 6. Delete tombstones are not guaranteed after failed API deletes
 
 Memory/chat tombstones are usually recorded after a successful delete or a
 not-found response. If the API delete fails before local tombstone creation,
 that deletion may not be queued for sync later.
 
-### 8. Mounted-state sync can miss older local data
+### 7. Mounted-state sync can miss older local data
 
 `Sync now` only includes currently mounted persona state and active-chat
 messages. Older local cache entries or server-known account data outside the
@@ -478,10 +469,10 @@ that fails before local tombstone creation is not yet guaranteed to sync later.
 
 ### 7. Test coverage is not complete
 
-Existing coverage includes queue helper tests, API handler tests for
-preview/commit/changes, registered-owner sync coverage, and auth promotion
-coverage. Missing coverage includes web e2e flows for queue/retry/pull/tombstone
-and full Google verifier integration mocking.
+Existing coverage includes queue helper tests, web sync flow tests, API handler
+tests for preview/commit/changes, registered-owner sync coverage, and auth
+promotion coverage. Missing coverage includes browser-level web e2e flows and
+full Google verifier integration mocking.
 
 ### 8. Observability is not production-grade
 
@@ -495,7 +486,7 @@ adding new providers or UX surface area.
 
 In scope:
 
-1. Add web e2e tests for:
+1. Add browser-level web e2e tests for:
    - queue flush success
    - retry/backoff after failed flush
    - pull applying settings/chat/memory cache

@@ -20,3 +20,14 @@ export function persistBackgroundImageUrl(url: string): void {
 	writeStorageItem(BACKGROUND_IMAGE_URL_STORAGE_KEY, nextUrl);
 	touchSyncKey(BACKGROUND_IMAGE_URL_SYNC_KEY);
 }
+
+export function writeBackgroundImageUrl(url: string): void {
+	const nextUrl = url.trim();
+
+	if (!nextUrl) {
+		removeStorageItem(BACKGROUND_IMAGE_URL_STORAGE_KEY);
+		return;
+	}
+
+	writeStorageItem(BACKGROUND_IMAGE_URL_STORAGE_KEY, nextUrl);
+}

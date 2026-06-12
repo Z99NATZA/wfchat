@@ -11,7 +11,11 @@ import {
 	type AvatarOverlayPosition,
 	type AvatarOverlaySize
 } from "@/stores/avatarOverlayStore";
-import { persistBackgroundImageUrl, readBackgroundImageUrl } from "@/stores/backgroundStore";
+import {
+	persistBackgroundImageUrl,
+	readBackgroundImageUrl,
+	writeBackgroundImageUrl
+} from "@/stores/backgroundStore";
 import type { AppFont } from "@/types/font";
 import type { Theme } from "@/types/theme";
 
@@ -30,6 +34,7 @@ type AppSettingsContextValue = {
 	setAvatarOverlayPosition: (position: AvatarOverlayPosition) => void;
 	setAvatarOverlaySize: (size: AvatarOverlaySize) => void;
 	applyPulledTheme: (theme: Theme) => void;
+	applyPulledFont: (font: AppFont) => void;
 	applyPulledBackgroundImageUrl: (url: string) => void;
 };
 
@@ -41,7 +46,7 @@ type AppSettingsProviderProps = {
 
 export function AppSettingsProvider({ children }: AppSettingsProviderProps) {
 	const { theme, setTheme, applyPulledTheme, toggleTheme } = useTheme();
-	const { font, setFont } = useFont();
+	const { font, setFont, applyPulledFont } = useFont();
 	const [backgroundImageUrl, setBackgroundImageUrlState] = useState(readBackgroundImageUrl);
 	const [isAvatarOverlayVisible, setAvatarOverlayVisibleState] = useState(readAvatarOverlayVisible);
 	const [avatarOverlayPosition, setAvatarOverlayPositionState] = useState(readAvatarOverlayPosition);
@@ -54,7 +59,9 @@ export function AppSettingsProvider({ children }: AppSettingsProviderProps) {
 	}, []);
 
 	const applyPulledBackgroundImageUrl = useCallback((url: string) => {
-		setBackgroundImageUrlState(url.trim());
+		const nextUrl = url.trim();
+		writeBackgroundImageUrl(nextUrl);
+		setBackgroundImageUrlState(nextUrl);
 	}, []);
 
 	const setAvatarOverlayVisible = useCallback((isVisible: boolean) => {
@@ -88,6 +95,7 @@ export function AppSettingsProvider({ children }: AppSettingsProviderProps) {
 			setAvatarOverlayPosition,
 			setAvatarOverlaySize,
 			applyPulledTheme,
+			applyPulledFont,
 			applyPulledBackgroundImageUrl
 		}),
 		[
@@ -105,6 +113,7 @@ export function AppSettingsProvider({ children }: AppSettingsProviderProps) {
 			setAvatarOverlayPosition,
 			setAvatarOverlaySize,
 			applyPulledTheme,
+			applyPulledFont,
 			applyPulledBackgroundImageUrl
 		]
 	);
