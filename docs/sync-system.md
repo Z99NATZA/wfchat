@@ -16,7 +16,7 @@ The sync system is designed to:
 
 ## Current State
 
-Implemented:
+### Completed
 
 - Backend guest sessions.
 - In-app auth UI with Google login.
@@ -33,13 +33,39 @@ Implemented:
   - memory cache: facts and summaries
   - chat cache: session summaries and active-chat messages
   - tombstones for memory/chat deletes
+- Automatic pull when the app is authenticated.
+- Automatic queue flush when the app is authenticated and a sync queue already
+  exists.
+- Automatic app-setting sync for theme and background image changes while
+  authenticated.
+- Stale pulled setting guard that avoids applying a cloud setting when the
+  local `wfchat-sync-meta` timestamp is newer.
 
-Important limitation:
+### Not Done Yet
+
+- Full canonical chat/memory sync into the backend `chats`, `chat_messages`,
+  `memory_facts`, and `memory_summaries` tables.
+- Full enumeration of every persona, chat session, message, memory fact, and
+  memory summary when creating a sync operation.
+- Field-level merge, detailed conflict payloads, or user-facing conflict
+  resolution.
+- Accurate `conflict_count` from `/api/sync/commit`.
+- Cursor checkpointing for partial local apply failures.
+- Deterministic pagination for many items sharing the same `updated_at`.
+- Complete web e2e sync coverage.
+- Production-grade metrics and alerting.
+
+### Important Limitation
 
 - Chat and memory sync is a V1 cache/delta layer, not a complete canonical
   database sync. The sync API writes to `sync_entities`; it does not currently
   materialize pulled sync items back into the main `chats`, `chat_messages`,
   `memory_facts`, or `memory_summaries` tables.
+
+- Pulled settings are applied through a mix of setting-specific paths. Theme is
+  written without touching local sync metadata and updates React state through
+  an app callback. Font, locale, and background image currently reuse existing
+  persistence paths more directly, so their pull behavior is not fully uniform.
 
 ## Terminology
 
@@ -94,6 +120,9 @@ Ownership behavior:
 - Registered reads/writes are scoped by `owner_user_id`.
 - Registered upsert uses `owner_user_id + item_id` semantics so another
   browser session for the same account can pull the latest item.
+- The registered `owner_user_id + item_id` behavior is implemented in store
+  logic, not by a database unique constraint. The database currently has an
+  index for this access pattern but not a uniqueness guarantee.
 
 ### `sync_commits`
 
@@ -146,9 +175,31 @@ Timestamp behavior:
 
 - Settings use `wfchat-sync-meta` when available.
 - Settings fall back to current time when no metadata exists.
+- Local setting changes call `touchSyncKey(...)` so future sync operations use
+  the local edit timestamp.
+- Pulled theme changes call `recordSyncUpdatedAt("settings.theme", updated_at)`
+  and write `wfchat-theme` without touching the local edit timestamp.
+- Pulled font, locale, and background image changes currently apply through
+  their existing persistence/update paths and may touch local sync metadata.
 - Memory sync items use record timestamps.
 - Chat session sync items use session timestamps.
 - Active-chat message sync items currently use enqueue-time timestamps.
+
+Pulled setting behavior:
+
+- `theme`: skipped when the cloud `updated_at` is older than local
+  `wfchat-sync-meta`; otherwise writes local storage, applies the document
+  theme, records the cloud timestamp, and updates React state through
+  `applyPulledTheme`.
+- `font`: skipped when stale; otherwise persists the font and applies the
+  document font. The current React app settings state is not updated through a
+  pulled-font callback.
+- `locale`: skipped when stale; otherwise writes local storage and calls the
+  i18n locale callback.
+- `backgroundImageUrl`: skipped when stale; otherwise persists the background
+  image URL and calls the app background callback.
+- memory/chat items: upsert into local sync caches.
+- memory/chat tombstones: remove matching cache entries.
 
 ## API Contract
 
@@ -255,18 +306,36 @@ Not implemented:
 
 ## User Flow
 
+### Login And Pull
+
 1. A guest opens the app.
 2. The guest changes settings or uses chat/memory features.
 3. Settings are persisted locally and their sync keys are touched.
 4. The user opens the profile UI and logs in with Google.
 5. The backend promotes current-session guest rows to `owner_user_id`.
-6. The app shows pending sync.
-7. The user clicks `Sync now`.
-8. The frontend enqueues sync items into `wfchat-sync-queue`.
-9. The frontend flushes the first queued operation through `preview -> commit`.
-10. On success, the operation is removed from the queue.
-11. If the queue is empty, pending guest sync is marked done.
-12. The frontend pulls cloud changes and refreshes mounted chat state.
+6. The app shows pending sync when `hasPendingGuestSync` is true.
+7. When authenticated, the app pulls cloud changes and refreshes mounted chat
+   state.
+8. If a local sync queue already exists, the app attempts to flush the first
+   queued operation and then pulls cloud changes.
+
+### Manual Sync Now
+
+1. The user clicks `Sync now`.
+2. The frontend enqueues settings and, when chat is mounted, the mounted chat
+   and memory snapshot into `wfchat-sync-queue`.
+3. The frontend flushes the first queued operation through `preview -> commit`.
+4. On success, the operation is removed from the queue.
+5. If the queue is empty, pending guest sync is marked done.
+6. The frontend pulls cloud changes and refreshes mounted chat state.
+
+### Authenticated Setting Changes
+
+- Theme changes call `syncAppSettings()` immediately while authenticated.
+- Background image changes call `syncAppSettings()` immediately while
+  authenticated.
+- Font and locale changes touch their sync keys, but they are not currently
+  wired to the same immediate app-setting sync path from `App`.
 
 The current enqueue scope is intentionally limited to mounted state:
 
@@ -309,6 +378,64 @@ Current queue constraints:
 - Queue length is capped to the newest 20 operations.
 - Items inside an operation are compacted by `item_id`, keeping the newest
   `updated_at`.
+
+## Potential Bug Risks
+
+These are not all confirmed bugs. They are implementation risks that should be
+covered by tests before broadening sync behavior.
+
+### 1. Pulled settings can diverge from React state
+
+Theme has a dedicated pulled-state callback. Font currently applies to the
+document and local storage, but `AppSettingsProvider` does not receive a
+pulled-font callback. A header or control that reads the React `font` state can
+temporarily disagree with the document after a cross-device pull.
+
+Locale and background image do have callbacks, but locale currently uses the
+same setter as local changes and can touch sync metadata during pull.
+
+### 2. Pulled settings can look like local edits
+
+Pulled font, locale, and background image changes can update
+`wfchat-sync-meta` through existing persistence paths. That can make a pulled
+cloud value appear newer locally than it really is, which can affect later
+conflict decisions or cause redundant re-sync.
+
+### 3. Registered sync upsert is not DB-unique
+
+Registered sync treats `owner_user_id + item_id` as the account-level identity,
+but this is implemented with update/select/insert logic rather than a unique
+database constraint. Concurrent commits for the same owner and item could race.
+
+### 4. Cursor pagination can miss same-timestamp items
+
+`GET /api/sync/changes` uses `updated_at > cursor` and advances the cursor to
+the max timestamp in the returned batch. If more than one page of items share
+the same timestamp, later pages with that timestamp can be skipped.
+
+### 5. Partial pull apply has no checkpoint
+
+The frontend writes the cursor after applying a whole batch. If local apply is
+partially successful and then fails before or during cursor persistence, retry
+behavior is not explicitly modeled or tested.
+
+### 6. Commit conflicts are not returned accurately
+
+`POST /api/sync/preview` can report conflicts, but `POST /api/sync/commit`
+records `conflict_count: 0` even when incoming items are skipped because they
+are older than existing rows.
+
+### 7. Delete tombstones are not guaranteed after failed API deletes
+
+Memory/chat tombstones are usually recorded after a successful delete or a
+not-found response. If the API delete fails before local tombstone creation,
+that deletion may not be queued for sync later.
+
+### 8. Mounted-state sync can miss older local data
+
+`Sync now` only includes currently mounted persona state and active-chat
+messages. Older local cache entries or server-known account data outside the
+mounted view are not guaranteed to be included in the outgoing operation.
 
 ## Known Gaps
 
@@ -401,22 +528,149 @@ Later scope:
 - User-facing conflict resolution.
 - Production metrics, dashboards, and alerts.
 
+## Test Plan
+
+### Web Unit Tests
+
+Use `apps/web/src/services/syncService.test.ts` for local queue, pull, cache,
+and tombstone behavior.
+
+Recommended cases:
+
+1. Queue flush success:
+   - seed `wfchat.sessionId`
+   - seed one queued operation
+   - mock `POST /api/sync/preview` and `POST /api/sync/commit`
+   - assert the first operation is removed after commit
+2. Queue retry:
+   - seed one queued operation
+   - make preview or commit reject
+   - call `markSyncRetry()`
+   - assert `attempt` increments and `next_retry_at` is in the expected range
+3. Settings enqueue:
+   - seed `wfchat-theme`, `wfchat-font`, `wfchat.locale`, and
+     `wfchat.backgroundImageUrl`
+   - seed or omit `wfchat-sync-meta`
+   - call `enqueueGuestSyncWithMemory(...)`
+   - assert setting items use the expected `updated_at` and payload values
+4. Pull applies settings:
+   - mock `/api/sync/changes` with theme, font, locale, and background image
+   - assert local storage and callbacks are updated
+   - assert stale cloud settings do not overwrite newer local metadata
+5. Pull applies memory/chat cache:
+   - mock memory fact, memory summary, chat session, and chat message items
+   - call `pullSyncChanges(...)`
+   - assert cache readers return the expected normalized records
+6. Pull applies tombstones:
+   - seed local memory/chat caches
+   - mock deleted sync items
+   - assert matching cache entries are removed
+7. Same-timestamp compaction:
+   - pass duplicate `item_id` values to `compactItems(...)`
+   - assert the newest or equal-newest item is kept
+
+### Web Hook Tests
+
+Use `apps/web/src/features/chat/hooks/useChatSession.test.ts` for mounted-state
+sync boundaries.
+
+Recommended cases:
+
+1. API success plus cache merge:
+   - mock API sessions/facts/summaries
+   - seed sync cache with older and newer records
+   - assert newer records win
+2. API failure fallback:
+   - make list/get calls fail
+   - seed sync cache
+   - assert cached sessions, messages, facts, or summaries are displayed
+3. Delete tombstone creation:
+   - mock successful delete
+   - assert the relevant `mark*Deleted(...)` helper is called
+4. Delete failure:
+   - mock delete failure before not-found
+   - assert no tombstone is created unless the intended offline-first behavior
+     changes
+
+### API Unit And Integration Tests
+
+Use tests inside `apps/api/src/sync.rs`, `apps/api/src/auth.rs`, and
+`apps/api/src/store.rs`. Database-backed tests require `WFCHAT_TEST_DATABASE_URL`.
+
+Recommended cases:
+
+1. Preview actions:
+   - no existing item -> create
+   - newer/equal item -> update
+   - older or invalid item -> conflict
+2. Commit upsert:
+   - guest rows upsert by `(session_id, item_id)`
+   - registered rows upsert by account owner semantics
+   - older incoming items do not overwrite newer existing rows
+3. Commit conflict count:
+   - seed a newer existing item
+   - commit an older incoming item
+   - assert current behavior remains `conflict_count: 0`
+   - update this test when accurate commit conflicts are implemented
+4. Commit idempotency:
+   - commit the same `operation_id` twice
+   - assert the existing commit record is returned consistently
+5. Changes pagination:
+   - seed more than `limit` items
+   - include multiple items with the same timestamp
+   - assert current cursor behavior and document any skipped same-timestamp
+     case before changing the algorithm
+6. Auth promotion:
+   - seed guest chat, memory, and sync rows
+   - promote the session through the Google token-info helper
+   - assert `owner_user_id` is set and a second session for the same user can
+     pull the sync item
+7. Google verifier boundary:
+   - introduce a mockable verifier before testing remote token verification
+   - assert invalid token, wrong audience, and valid token flows without
+     calling Google's real endpoint
+
+### Web E2E Tests
+
+No web e2e sync suite exists yet. When adding one, prefer a real browser test
+that controls local storage and mocks API responses at the network boundary.
+
+Recommended flows:
+
+1. Guest changes theme to dark, logs in, clicks `Sync now`, and the queued
+   setting is committed.
+2. Logged-in user changes theme, logs out, logs back in, and stale cloud light
+   does not overwrite newer local dark.
+3. Second browser/session pulls theme, locale, font, background, chat cache,
+   and memory cache for the same account.
+4. Failed preview/commit leaves the queue intact and shows retry metadata.
+5. Browser online event flushes pending queue and pulls remote changes.
+6. Pulled tombstones remove cached chat/memory items.
+7. API unavailable after previous pull still allows cache fallback for
+   chat/memory screens.
+
 ## Manual Test Checklist
 
 1. Start backend and frontend.
 2. Change theme, font, locale, or background image.
 3. Verify `wfchat-sync-meta` is updated in local storage.
 4. Log in with Google from the profile UI.
-5. Click `Sync now`.
-6. Verify network calls:
+5. Verify the authenticated app pulls cloud changes with
+   `GET /api/sync/changes`.
+6. Click `Sync now`.
+7. Verify network calls:
    - `POST /api/sync/preview`
    - `POST /api/sync/commit`
    - `GET /api/sync/changes`
-7. Verify `merged_count > 0` when changed items are present.
-8. Open a second browser/session with the same account and verify pulled
+8. Verify `merged_count > 0` when changed items are present.
+9. Change theme or background image while still authenticated and verify the
+   app sends a settings sync operation without requiring `Sync now`.
+10. Open a second browser/session with the same account and verify pulled
    settings/cache are applied.
-9. Temporarily stop the API, reload the web app, and verify previously pulled
+11. Temporarily stop the API, reload the web app, and verify previously pulled
    chat/memory cache can still be displayed as fallback.
+12. Verify a newer local theme is not overwritten by an older cloud theme after
+   logout/login and pull.
 
 ## Automated Tests
 
