@@ -1,12 +1,84 @@
-import { describe, expect, it, vi } from "vitest";
+/**
+ * @vitest-environment happy-dom
+ */
+
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+const apiClientMock = vi.hoisted(() => ({
+	get: vi.fn(),
+	post: vi.fn()
+}));
+
+vi.mock("@/services/apiClient", () => ({
+	apiClient: apiClientMock
+}));
+
 import {
 	compactItems,
 	compactQueue,
 	computeNextRetryAt,
+	flushGuestSyncQueue,
+	markSyncRetry,
+	pullSyncChanges,
+	readChatMessagesCache,
+	readChatSessionsCache,
+	readMemoryFactsCache,
+	readMemorySummariesCache,
 	trimQueue,
 	type SyncItem,
 	type SyncQueueOperation
 } from "@/services/syncService";
+
+const sessionStorageKey = "wfchat.sessionId";
+const syncQueueStorageKey = "wfchat-sync-queue";
+const syncCursorStorageKey = "wfchat-sync-cursor";
+const themeStorageKey = "wfchat-theme";
+const fontStorageKey = "wfchat-font";
+const localeStorageKey = "wfchat.locale";
+const backgroundImageUrlStorageKey = "wfchat.backgroundImageUrl";
+const memoryFactsCacheKey = "wfchat-memory-facts-cache";
+const memorySummariesCacheKey = "wfchat-memory-summaries-cache";
+const chatSessionsCacheKey = "wfchat-chat-sessions-cache";
+const chatMessagesCacheKey = "wfchat-chat-messages-cache";
+
+function installLocalStorageMock() {
+	const storage = new Map<string, string>();
+	const localStorageMock = {
+		clear: vi.fn(() => storage.clear()),
+		getItem: vi.fn((key: string) => storage.get(key) ?? null),
+		removeItem: vi.fn((key: string) => {
+			storage.delete(key);
+		}),
+		setItem: vi.fn((key: string, value: string) => {
+			storage.set(key, value);
+		})
+	};
+	Object.defineProperty(window, "localStorage", {
+		configurable: true,
+		value: localStorageMock
+	});
+}
+
+function writeQueue(queue: SyncQueueOperation[]) {
+	window.localStorage.setItem(syncQueueStorageKey, JSON.stringify(queue));
+}
+
+function readQueue(): SyncQueueOperation[] {
+	return JSON.parse(window.localStorage.getItem(syncQueueStorageKey) ?? "[]") as SyncQueueOperation[];
+}
+
+beforeEach(() => {
+	installLocalStorageMock();
+	window.localStorage.clear();
+	apiClientMock.get.mockReset();
+	apiClientMock.post.mockReset();
+	vi.restoreAllMocks();
+});
+
+afterEach(() => {
+	vi.restoreAllMocks();
+	window.localStorage.clear();
+});
 
 describe("syncService queue helpers", () => {
 	it("keeps newest item per item_id", () => {
@@ -74,5 +146,335 @@ describe("syncService queue helpers", () => {
 		expect(result).toBeGreaterThanOrEqual(108);
 		expect(result).toBeLessThanOrEqual(110);
 		vi.restoreAllMocks();
+	});
+
+	it("flushes the first queued operation and removes it after commit succeeds", async () => {
+		window.localStorage.setItem(sessionStorageKey, "session-1");
+		writeQueue([
+			{
+				operation_id: "op-1",
+				attempt: 0,
+				next_retry_at: 0,
+				items: [
+					{
+						item_id: "settings.theme",
+						item_type: "setting",
+						updated_at: 10,
+						deleted_at: null,
+						payload: { key: "theme", value: "dark" }
+					}
+				]
+			}
+		]);
+		apiClientMock.post
+			.mockResolvedValueOnce({ data: { to_create: 1, to_update: 0, conflicts: 0 } })
+			.mockResolvedValueOnce({
+				data: {
+					operation_id: "op-1",
+					merged_count: 1,
+					conflict_count: 0,
+					committed_at: 11
+				}
+			});
+
+		const result = await flushGuestSyncQueue({ force: true });
+
+		expect(apiClientMock.post).toHaveBeenNthCalledWith(
+			1,
+			"/api/sync/preview",
+			{
+				items: [
+					{
+						item_id: "settings.theme",
+						item_type: "setting",
+						updated_at: 10,
+						deleted_at: null,
+						payload: { key: "theme", value: "dark" }
+					}
+				]
+			},
+			{ headers: { "X-WFChat-Session": "session-1" } }
+		);
+		expect(apiClientMock.post).toHaveBeenNthCalledWith(
+			2,
+			"/api/sync/commit",
+			{
+				operation_id: "op-1",
+				items: [
+					{
+						item_id: "settings.theme",
+						item_type: "setting",
+						updated_at: 10,
+						deleted_at: null,
+						payload: { key: "theme", value: "dark" }
+					}
+				]
+			},
+			{ headers: { "X-WFChat-Session": "session-1" } }
+		);
+		expect(result?.merged_count).toBe(1);
+		expect(readQueue()).toEqual([]);
+	});
+
+	it("keeps a failed operation queued and marks retry metadata", async () => {
+		window.localStorage.setItem(sessionStorageKey, "session-1");
+		writeQueue([
+			{
+				operation_id: "op-1",
+				attempt: 0,
+				next_retry_at: 0,
+				items: [
+					{
+						item_id: "settings.font",
+						item_type: "setting",
+						updated_at: 20,
+						deleted_at: null,
+						payload: { key: "font", value: "inter" }
+					}
+				]
+			}
+		]);
+		apiClientMock.post.mockRejectedValueOnce(new Error("network down"));
+		vi.spyOn(Date, "now").mockReturnValue(100_000);
+		vi.spyOn(Math, "random").mockReturnValue(0);
+
+		await expect(flushGuestSyncQueue({ force: true })).rejects.toThrow("network down");
+		expect(readQueue()[0]).toMatchObject({
+			operation_id: "op-1",
+			attempt: 0,
+			next_retry_at: 0
+		});
+
+		markSyncRetry();
+
+		expect(readQueue()[0]).toMatchObject({
+			operation_id: "op-1",
+			attempt: 1,
+			next_retry_at: 102
+		});
+	});
+
+	it("pulls cloud changes into settings and memory/chat caches", async () => {
+		window.localStorage.setItem(sessionStorageKey, "session-1");
+		window.localStorage.setItem(syncCursorStorageKey, "5");
+		const onLocaleChange = vi.fn();
+		const onBackgroundImageUrlChange = vi.fn();
+		apiClientMock.get.mockResolvedValueOnce({
+			data: {
+				next_cursor: 50,
+				items: [
+					{
+						item_id: "settings.theme",
+						item_type: "setting",
+						updated_at: 10,
+						deleted_at: null,
+						payload: { key: "theme", value: "dark" }
+					},
+					{
+						item_id: "settings.font",
+						item_type: "setting",
+						updated_at: 11,
+						deleted_at: null,
+						payload: { key: "font", value: "jetbrains-mono" }
+					},
+					{
+						item_id: "settings.locale",
+						item_type: "setting",
+						updated_at: 12,
+						deleted_at: null,
+						payload: { key: "locale", value: "th" }
+					},
+					{
+						item_id: "settings.backgroundImageUrl",
+						item_type: "setting",
+						updated_at: 13,
+						deleted_at: null,
+						payload: { key: "backgroundImageUrl", value: "https://example.com/bg.png" }
+					},
+					{
+						item_id: "memory.fact.fact-1",
+						item_type: "memory_fact",
+						updated_at: 20,
+						deleted_at: null,
+						payload: {
+							id: "fact-1",
+							characterId: "aiko",
+							content: "Likes tea",
+							confidence: "0.8",
+							sourceChatId: "chat-1",
+							updatedAt: "20"
+						}
+					},
+					{
+						item_id: "memory.summary.summary-1",
+						item_type: "memory_summary",
+						updated_at: 21,
+						deleted_at: null,
+						payload: {
+							id: "summary-1",
+							characterId: "aiko",
+							summary: "Met the user",
+							sourceChatId: "chat-1",
+							createdAt: "21"
+						}
+					},
+					{
+						item_id: "chat.session.chat-1",
+						item_type: "chat_session",
+						updated_at: 30,
+						deleted_at: null,
+						payload: {
+							id: "chat-1",
+							characterId: "aiko",
+							createdAt: "29",
+							updatedAt: "30",
+							lastMessage: "hello"
+						}
+					},
+					{
+						item_id: "chat.message.chat-1.message-1",
+						item_type: "chat_message",
+						updated_at: 31,
+						deleted_at: null,
+						payload: {
+							id: "message-1",
+							chatId: "chat-1",
+							author: "user",
+							text: "hello",
+							createdAt: "31",
+							time: "12:00"
+						}
+					}
+				]
+			}
+		});
+
+		const appliedCount = await pullSyncChanges(onLocaleChange, onBackgroundImageUrlChange);
+
+		expect(apiClientMock.get).toHaveBeenCalledWith("/api/sync/changes", {
+			params: { cursor: 5, limit: 100 },
+			headers: { "X-WFChat-Session": "session-1" }
+		});
+		expect(appliedCount).toBe(8);
+		expect(window.localStorage.getItem(themeStorageKey)).toBe("dark");
+		expect(window.localStorage.getItem(fontStorageKey)).toBe("jetbrains-mono");
+		expect(window.localStorage.getItem(localeStorageKey)).toBe("th");
+		expect(window.localStorage.getItem(backgroundImageUrlStorageKey)).toBe(
+			"https://example.com/bg.png"
+		);
+		expect(onLocaleChange).toHaveBeenCalledWith("th");
+		expect(onBackgroundImageUrlChange).toHaveBeenCalledWith("https://example.com/bg.png");
+		expect(readMemoryFactsCache()).toEqual([
+			expect.objectContaining({ id: "fact-1", characterId: "aiko", content: "Likes tea" })
+		]);
+		expect(readMemorySummariesCache()).toEqual([
+			expect.objectContaining({ id: "summary-1", characterId: "aiko", summary: "Met the user" })
+		]);
+		expect(readChatSessionsCache()).toEqual([
+			expect.objectContaining({ id: "chat-1", characterId: "aiko", lastMessage: "hello" })
+		]);
+		expect(readChatMessagesCache("chat-1")).toEqual([
+			expect.objectContaining({ id: "message-1", author: "user", text: "hello" })
+		]);
+		expect(window.localStorage.getItem(syncCursorStorageKey)).toBe("50");
+	});
+
+	it("applies tombstones by removing memory and chat cache entries", async () => {
+		window.localStorage.setItem(sessionStorageKey, "session-1");
+		window.localStorage.setItem(
+			memoryFactsCacheKey,
+			JSON.stringify([
+				{
+					id: "fact-1",
+					characterId: "aiko",
+					content: "Likes tea",
+					confidence: "0.8",
+					sourceChatId: "chat-1",
+					updatedAt: "20"
+				}
+			])
+		);
+		window.localStorage.setItem(
+			memorySummariesCacheKey,
+			JSON.stringify([
+				{
+					id: "summary-1",
+					characterId: "aiko",
+					summary: "Met the user",
+					sourceChatId: "chat-1",
+					createdAt: "21"
+				}
+			])
+		);
+		window.localStorage.setItem(
+			chatSessionsCacheKey,
+			JSON.stringify([
+				{
+					id: "chat-1",
+					characterId: "aiko",
+					createdAt: "29",
+					updatedAt: "30",
+					lastMessage: "hello"
+				}
+			])
+		);
+		window.localStorage.setItem(
+			chatMessagesCacheKey,
+			JSON.stringify([
+				{
+					id: "message-1",
+					chatId: "chat-1",
+					author: "user",
+					text: "hello",
+					createdAt: "31",
+					time: "12:00",
+					updatedAt: "31"
+				}
+			])
+		);
+		apiClientMock.get.mockResolvedValueOnce({
+			data: {
+				next_cursor: 60,
+				items: [
+					{
+						item_id: "memory.fact.fact-1",
+						item_type: "memory_fact",
+						updated_at: 40,
+						deleted_at: 40,
+						payload: {}
+					},
+					{
+						item_id: "memory.summary.summary-1",
+						item_type: "memory_summary",
+						updated_at: 41,
+						deleted_at: 41,
+						payload: {}
+					},
+					{
+						item_id: "chat.session.chat-1",
+						item_type: "chat_session",
+						updated_at: 42,
+						deleted_at: 42,
+						payload: {}
+					},
+					{
+						item_id: "chat.message.chat-1.message-1",
+						item_type: "chat_message",
+						updated_at: 43,
+						deleted_at: 43,
+						payload: {}
+					}
+				]
+			}
+		});
+
+		const appliedCount = await pullSyncChanges();
+
+		expect(appliedCount).toBe(4);
+		expect(readMemoryFactsCache()).toEqual([]);
+		expect(readMemorySummariesCache()).toEqual([]);
+		expect(readChatSessionsCache()).toEqual([]);
+		expect(readChatMessagesCache("chat-1")).toEqual([]);
+		expect(window.localStorage.getItem(syncCursorStorageKey)).toBe("60");
 	});
 });
