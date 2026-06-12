@@ -17,8 +17,11 @@ import {
 	compactItems,
 	compactQueue,
 	computeNextRetryAt,
+	enqueueGuestSyncWithMemory,
 	flushGuestSyncQueue,
 	markSyncRetry,
+	markChatMessagesDeleted,
+	markMemoryFactDeleted,
 	pullSyncChanges,
 	readChatMessagesCache,
 	readChatSessionsCache,
@@ -28,6 +31,7 @@ import {
 	type SyncItem,
 	type SyncQueueOperation
 } from "@/services/syncService";
+import type { ChatMessage, ChatSessionSummary, MemoryFact, MemorySummary } from "@/types/chat";
 
 const sessionStorageKey = "wfchat.sessionId";
 const syncQueueStorageKey = "wfchat-sync-queue";
@@ -65,6 +69,14 @@ function writeQueue(queue: SyncQueueOperation[]) {
 
 function readQueue(): SyncQueueOperation[] {
 	return JSON.parse(window.localStorage.getItem(syncQueueStorageKey) ?? "[]") as SyncQueueOperation[];
+}
+
+function readQueuedItems(): SyncItem[] {
+	return readQueue()[0]?.items ?? [];
+}
+
+function findQueuedItem(itemId: string): SyncItem | undefined {
+	return readQueuedItems().find((item) => item.item_id === itemId);
 }
 
 beforeEach(() => {
@@ -251,6 +263,186 @@ describe("syncService queue helpers", () => {
 			operation_id: "op-1",
 			attempt: 1,
 			next_retry_at: 102
+		});
+	});
+
+	it("enqueues settings, memory, chat sessions, and active chat messages", async () => {
+		vi.spyOn(Date, "now").mockReturnValue(100_000);
+		vi.spyOn(Math, "random").mockReturnValue(0.5);
+		window.localStorage.setItem(themeStorageKey, "dark");
+		window.localStorage.setItem(fontStorageKey, "inter");
+		window.localStorage.setItem(localeStorageKey, "th");
+		window.localStorage.setItem(backgroundImageUrlStorageKey, "https://example.com/bg.png");
+		const memoryFacts: MemoryFact[] = [
+			{
+				id: "fact-1",
+				characterId: "aiko",
+				content: "Likes tea",
+				confidence: 0.8,
+				sourceChatId: "chat-1",
+				createdAt: 10,
+				updatedAt: 20
+			}
+		];
+		const memorySummaries: MemorySummary[] = [
+			{
+				id: "summary-1",
+				characterId: "aiko",
+				summary: "Met the user",
+				sourceChatId: "chat-1",
+				createdAt: 21
+			}
+		];
+		const sessions: ChatSessionSummary[] = [
+			{
+				id: "chat-1",
+				characterId: "aiko",
+				createdAt: 29,
+				updatedAt: 30,
+				lastMessage: "hello"
+			},
+			{
+				id: "empty-chat",
+				characterId: "aiko",
+				createdAt: 31,
+				updatedAt: 32,
+				lastMessage: " "
+			}
+		];
+		const messages: ChatMessage[] = [
+			{
+				id: "message-1",
+				author: "user",
+				text: "hello",
+				createdAt: 31,
+				time: "12:00"
+			}
+		];
+
+		await enqueueGuestSyncWithMemory(memoryFacts, memorySummaries, sessions, messages, "chat-1");
+
+		expect(readQueue()).toHaveLength(1);
+		expect(readQueue()[0]).toMatchObject({
+			operation_id: "sync-100000-8",
+			attempt: 0,
+			next_retry_at: 0
+		});
+		expect(findQueuedItem("settings.theme")).toMatchObject({
+			item_type: "setting",
+			updated_at: 100,
+			payload: { key: "theme", value: "dark" }
+		});
+		expect(findQueuedItem("settings.font")).toMatchObject({
+			item_type: "setting",
+			updated_at: 100,
+			payload: { key: "font", value: "inter" }
+		});
+		expect(findQueuedItem("settings.locale")).toMatchObject({
+			item_type: "setting",
+			updated_at: 100,
+			payload: { key: "locale", value: "th" }
+		});
+		expect(findQueuedItem("settings.backgroundImageUrl")).toMatchObject({
+			item_type: "setting",
+			updated_at: 100,
+			payload: { key: "backgroundImageUrl", value: "https://example.com/bg.png" }
+		});
+		expect(findQueuedItem("memory.fact.fact-1")).toMatchObject({
+			item_type: "memory_fact",
+			updated_at: 20,
+			payload: {
+				id: "fact-1",
+				characterId: "aiko",
+				content: "Likes tea",
+				confidence: "0.8",
+				sourceChatId: "chat-1",
+				updatedAt: "20"
+			}
+		});
+		expect(findQueuedItem("memory.summary.summary-1")).toMatchObject({
+			item_type: "memory_summary",
+			updated_at: 21,
+			payload: {
+				id: "summary-1",
+				characterId: "aiko",
+				summary: "Met the user",
+				sourceChatId: "chat-1",
+				createdAt: "21"
+			}
+		});
+		expect(findQueuedItem("chat.session.chat-1")).toMatchObject({
+			item_type: "chat_session",
+			updated_at: 30,
+			payload: {
+				id: "chat-1",
+				characterId: "aiko",
+				createdAt: "29",
+				updatedAt: "30",
+				lastMessage: "hello"
+			}
+		});
+		expect(findQueuedItem("chat.session.empty-chat")).toBeUndefined();
+		expect(findQueuedItem("chat.message.chat-1.message-1")).toMatchObject({
+			item_type: "chat_message",
+			updated_at: 100,
+			payload: {
+				id: "message-1",
+				chatId: "chat-1",
+				author: "user",
+				text: "hello",
+				createdAt: "31",
+				time: "12:00"
+			}
+		});
+	});
+
+	it("does not enqueue chat messages when there is no active chat", async () => {
+		vi.spyOn(Date, "now").mockReturnValue(200_000);
+		vi.spyOn(Math, "random").mockReturnValue(0.25);
+		const sessions: ChatSessionSummary[] = [
+			{
+				id: "chat-1",
+				characterId: "aiko",
+				createdAt: 29,
+				updatedAt: 30,
+				lastMessage: "hello"
+			}
+		];
+		const messages: ChatMessage[] = [
+			{
+				id: "message-1",
+				author: "user",
+				text: "hello",
+				createdAt: 31,
+				time: "12:00"
+			}
+		];
+
+		await enqueueGuestSyncWithMemory([], [], sessions, messages, null);
+
+		expect(findQueuedItem("chat.session.chat-1")).toBeDefined();
+		expect(readQueuedItems().some((item) => item.item_type === "chat_message")).toBe(false);
+	});
+
+	it("enqueues recorded memory and chat tombstones with empty payloads", async () => {
+		vi.spyOn(Date, "now").mockReturnValue(300_000);
+		vi.spyOn(Math, "random").mockReturnValue(0);
+
+		markMemoryFactDeleted("fact-1");
+		markChatMessagesDeleted("chat-1", ["message-1"]);
+		await enqueueGuestSyncWithMemory([], [], [], [], null);
+
+		expect(findQueuedItem("memory.fact.fact-1")).toMatchObject({
+			item_type: "memory_fact",
+			updated_at: 300,
+			deleted_at: 300,
+			payload: {}
+		});
+		expect(findQueuedItem("chat.message.chat-1.message-1")).toMatchObject({
+			item_type: "chat_message",
+			updated_at: 300,
+			deleted_at: 300,
+			payload: {}
 		});
 	});
 
