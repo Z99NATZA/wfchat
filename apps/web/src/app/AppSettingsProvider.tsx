@@ -22,12 +22,14 @@ type AppSettingsContextValue = {
 	isAvatarOverlayVisible: boolean;
 	avatarOverlayPosition: AvatarOverlayPosition;
 	avatarOverlaySize: AvatarOverlaySize;
+	setTheme: (theme: Theme) => void;
 	setFont: (font: AppFont) => void;
 	toggleTheme: () => void;
 	setBackgroundImageUrl: (url: string) => void;
 	setAvatarOverlayVisible: (isVisible: boolean) => void;
 	setAvatarOverlayPosition: (position: AvatarOverlayPosition) => void;
 	setAvatarOverlaySize: (size: AvatarOverlaySize) => void;
+	applyPulledTheme: (theme: Theme) => void;
 	applyPulledBackgroundImageUrl: (url: string) => void;
 };
 
@@ -38,7 +40,7 @@ type AppSettingsProviderProps = {
 };
 
 export function AppSettingsProvider({ children }: AppSettingsProviderProps) {
-	const { theme, toggleTheme } = useTheme();
+	const { theme, setTheme, applyPulledTheme, toggleTheme } = useTheme();
 	const { font, setFont } = useFont();
 	const [backgroundImageUrl, setBackgroundImageUrlState] = useState(readBackgroundImageUrl);
 	const [isAvatarOverlayVisible, setAvatarOverlayVisibleState] = useState(readAvatarOverlayVisible);
@@ -78,12 +80,14 @@ export function AppSettingsProvider({ children }: AppSettingsProviderProps) {
 			isAvatarOverlayVisible,
 			avatarOverlayPosition,
 			avatarOverlaySize,
+			setTheme,
 			setFont,
 			toggleTheme,
 			setBackgroundImageUrl,
 			setAvatarOverlayVisible,
 			setAvatarOverlayPosition,
 			setAvatarOverlaySize,
+			applyPulledTheme,
 			applyPulledBackgroundImageUrl
 		}),
 		[
@@ -93,12 +97,14 @@ export function AppSettingsProvider({ children }: AppSettingsProviderProps) {
 			isAvatarOverlayVisible,
 			avatarOverlayPosition,
 			avatarOverlaySize,
+			setTheme,
 			setFont,
 			toggleTheme,
 			setBackgroundImageUrl,
 			setAvatarOverlayVisible,
 			setAvatarOverlayPosition,
 			setAvatarOverlaySize,
+			applyPulledTheme,
 			applyPulledBackgroundImageUrl
 		]
 	);

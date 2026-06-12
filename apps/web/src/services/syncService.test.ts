@@ -36,6 +36,7 @@ import type { ChatMessage, ChatSessionSummary, MemoryFact, MemorySummary } from 
 const sessionStorageKey = "wfchat.sessionId";
 const syncQueueStorageKey = "wfchat-sync-queue";
 const syncCursorStorageKey = "wfchat-sync-cursor";
+const syncMetaStorageKey = "wfchat-sync-meta";
 const themeStorageKey = "wfchat-theme";
 const fontStorageKey = "wfchat-font";
 const localeStorageKey = "wfchat.locale";
@@ -451,6 +452,7 @@ describe("syncService queue helpers", () => {
 		window.localStorage.setItem(syncCursorStorageKey, "5");
 		const onLocaleChange = vi.fn();
 		const onBackgroundImageUrlChange = vi.fn();
+		const onThemeChange = vi.fn();
 		apiClientMock.get.mockResolvedValueOnce({
 			data: {
 				next_cursor: 50,
@@ -541,7 +543,11 @@ describe("syncService queue helpers", () => {
 			}
 		});
 
-		const appliedCount = await pullSyncChanges(onLocaleChange, onBackgroundImageUrlChange);
+		const appliedCount = await pullSyncChanges(
+			onLocaleChange,
+			onBackgroundImageUrlChange,
+			onThemeChange
+		);
 
 		expect(apiClientMock.get).toHaveBeenCalledWith("/api/sync/changes", {
 			params: { cursor: 5, limit: 100 },
@@ -549,6 +555,9 @@ describe("syncService queue helpers", () => {
 		});
 		expect(appliedCount).toBe(8);
 		expect(window.localStorage.getItem(themeStorageKey)).toBe("dark");
+		expect(JSON.parse(window.localStorage.getItem(syncMetaStorageKey) ?? "{}")).toMatchObject({
+			"settings.theme": 10
+		});
 		expect(window.localStorage.getItem(fontStorageKey)).toBe("jetbrains-mono");
 		expect(window.localStorage.getItem(localeStorageKey)).toBe("th");
 		expect(window.localStorage.getItem(backgroundImageUrlStorageKey)).toBe(
@@ -556,6 +565,7 @@ describe("syncService queue helpers", () => {
 		);
 		expect(onLocaleChange).toHaveBeenCalledWith("th");
 		expect(onBackgroundImageUrlChange).toHaveBeenCalledWith("https://example.com/bg.png");
+		expect(onThemeChange).toHaveBeenCalledWith("dark");
 		expect(readMemoryFactsCache()).toEqual([
 			expect.objectContaining({ id: "fact-1", characterId: "aiko", content: "Likes tea" })
 		]);
@@ -568,6 +578,34 @@ describe("syncService queue helpers", () => {
 		expect(readChatMessagesCache("chat-1")).toEqual([
 			expect.objectContaining({ id: "message-1", author: "user", text: "hello" })
 		]);
+		expect(window.localStorage.getItem(syncCursorStorageKey)).toBe("50");
+	});
+
+	it("does not let stale cloud theme overwrite a newer local theme", async () => {
+		window.localStorage.setItem(sessionStorageKey, "session-1");
+		window.localStorage.setItem(themeStorageKey, "dark");
+		window.localStorage.setItem(syncMetaStorageKey, JSON.stringify({ "settings.theme": 20 }));
+		const onThemeChange = vi.fn();
+		apiClientMock.get.mockResolvedValueOnce({
+			data: {
+				next_cursor: 50,
+				items: [
+					{
+						item_id: "settings.theme",
+						item_type: "setting",
+						updated_at: 10,
+						deleted_at: null,
+						payload: { key: "theme", value: "light" }
+					}
+				]
+			}
+		});
+
+		const appliedCount = await pullSyncChanges(undefined, undefined, onThemeChange);
+
+		expect(appliedCount).toBe(1);
+		expect(window.localStorage.getItem(themeStorageKey)).toBe("dark");
+		expect(onThemeChange).not.toHaveBeenCalled();
 		expect(window.localStorage.getItem(syncCursorStorageKey)).toBe("50");
 	});
 

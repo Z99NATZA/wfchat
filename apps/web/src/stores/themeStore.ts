@@ -31,6 +31,10 @@ export function persistTheme(theme: Theme): void {
 	touchSyncKey("settings.theme");
 }
 
+export function writeTheme(theme: Theme): void {
+	writeStorageItem(THEME_STORAGE_KEY, theme);
+}
+
 export function applyThemeToDocument(theme: Theme): void {
 	if (typeof document === "undefined") {
 		return;

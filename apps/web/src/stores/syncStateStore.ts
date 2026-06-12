@@ -28,6 +28,17 @@ export function touchSyncKey(key: string): number {
 	return timestamp;
 }
 
+export function recordSyncUpdatedAt(key: string, timestamp: number): void {
+	const normalizedTimestamp = Math.floor(timestamp);
+	if (!Number.isFinite(normalizedTimestamp) || normalizedTimestamp <= 0) {
+		return;
+	}
+
+	const meta = readMeta();
+	meta[key] = normalizedTimestamp;
+	writeMeta(meta);
+}
+
 export function readSyncUpdatedAt(key: string): number | null {
 	const meta = readMeta();
 	const value = meta[key];

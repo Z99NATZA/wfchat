@@ -58,7 +58,11 @@ function App() {
 			.then(async (result) => {
 				if (result) {
 					auth.markGuestSyncDone();
-					await pullSyncChanges(setLocale, settings.applyPulledBackgroundImageUrl);
+					await pullSyncChanges(
+						setLocale,
+						settings.applyPulledBackgroundImageUrl,
+						settings.applyPulledTheme
+					);
 					refreshMountedChat();
 				}
 			})
@@ -70,15 +74,26 @@ function App() {
 		auth.markGuestSyncDone,
 		refreshMountedChat,
 		setLocale,
-		settings.applyPulledBackgroundImageUrl
+		settings.applyPulledBackgroundImageUrl,
+		settings.applyPulledTheme
 	]);
 
 	useEffect(() => {
 		if (!auth.isAuthenticated) {
 			return;
 		}
-		void pullSyncChanges(setLocale, settings.applyPulledBackgroundImageUrl).then(() => refreshMountedChat());
-	}, [auth.isAuthenticated, refreshMountedChat, setLocale, settings.applyPulledBackgroundImageUrl]);
+		void pullSyncChanges(
+			setLocale,
+			settings.applyPulledBackgroundImageUrl,
+			settings.applyPulledTheme
+		).then(() => refreshMountedChat());
+	}, [
+		auth.isAuthenticated,
+		refreshMountedChat,
+		setLocale,
+		settings.applyPulledBackgroundImageUrl,
+		settings.applyPulledTheme
+	]);
 
 	useEffect(() => {
 		if (!auth.isAuthenticated) {
@@ -95,7 +110,11 @@ function App() {
 				.catch(() => {
 					markSyncRetry();
 				});
-			void pullSyncChanges(setLocale, settings.applyPulledBackgroundImageUrl).then(() => refreshMountedChat());
+			void pullSyncChanges(
+				setLocale,
+				settings.applyPulledBackgroundImageUrl,
+				settings.applyPulledTheme
+			).then(() => refreshMountedChat());
 		}
 
 		window.addEventListener("online", handleOnline);
@@ -105,7 +124,8 @@ function App() {
 		auth.markGuestSyncDone,
 		refreshMountedChat,
 		setLocale,
-		settings.applyPulledBackgroundImageUrl
+		settings.applyPulledBackgroundImageUrl,
+		settings.applyPulledTheme
 	]);
 
 	async function handleSyncNow() {
@@ -129,7 +149,11 @@ function App() {
 			const result = await flushGuestSyncQueue({ force: true });
 			if (!result) {
 				auth.markGuestSyncDone();
-				await pullSyncChanges(setLocale, settings.applyPulledBackgroundImageUrl);
+				await pullSyncChanges(
+					setLocale,
+					settings.applyPulledBackgroundImageUrl,
+					settings.applyPulledTheme
+				);
 				refreshMountedChat();
 				await alert({
 					title: t("auth.profile.syncCompleteTitle"),
@@ -140,7 +164,11 @@ function App() {
 			if (!hasPendingSyncQueue()) {
 				auth.markGuestSyncDone();
 			}
-			await pullSyncChanges(setLocale, settings.applyPulledBackgroundImageUrl);
+			await pullSyncChanges(
+				setLocale,
+				settings.applyPulledBackgroundImageUrl,
+				settings.applyPulledTheme
+			);
 			refreshMountedChat();
 			await alert({
 				title: t("auth.profile.syncCompleteTitle"),
@@ -164,6 +192,13 @@ function App() {
 
 	function handleUpdateBackgroundImageUrl(url: string) {
 		settings.setBackgroundImageUrl(url);
+		if (auth.isAuthenticated) {
+			void syncAppSettings();
+		}
+	}
+
+	function handleToggleTheme() {
+		settings.toggleTheme();
 		if (auth.isAuthenticated) {
 			void syncAppSettings();
 		}
@@ -199,7 +234,7 @@ function App() {
 			onFontChange={settings.setFont}
 			onOpenProfile={() => setIsProfileOpen(true)}
 			onOpenSettings={() => setIsSettingsOpen(true)}
-			onToggleTheme={settings.toggleTheme}
+			onToggleTheme={handleToggleTheme}
 			onChatSyncSnapshotChange={handleChatSyncSnapshotChange}
 		/>
 	);
@@ -212,7 +247,7 @@ function App() {
 		onFontChange: settings.setFont,
 		onOpenProfile: () => setIsProfileOpen(true),
 		onOpenSettings: () => setIsSettingsOpen(true),
-		onToggleTheme: settings.toggleTheme
+		onToggleTheme: handleToggleTheme
 	};
 
 	return (

@@ -1,7 +1,7 @@
 import { apiClient } from "@/services/apiClient";
 import { readStorageItem, removeStorageItem, writeStorageItem } from "@/services/storageService";
-import { readSyncUpdatedAt } from "@/stores/syncStateStore";
-import { applyThemeToDocument, persistTheme } from "@/stores/themeStore";
+import { readSyncUpdatedAt, recordSyncUpdatedAt } from "@/stores/syncStateStore";
+import { applyThemeToDocument, writeTheme } from "@/stores/themeStore";
 import { applyFontToDocument, persistFont } from "@/stores/fontStore";
 import {
 	BACKGROUND_IMAGE_URL_STORAGE_KEY,
@@ -237,7 +237,8 @@ export function clearLocalSyncState(): void {
 
 export async function pullSyncChanges(
 	onLocaleChange?: (locale: "en" | "th") => void,
-	onBackgroundImageUrlChange?: (url: string) => void
+	onBackgroundImageUrlChange?: (url: string) => void,
+	onThemeChange?: (theme: Theme) => void
 ): Promise<number> {
 	const sessionId = await ensureGuestSession();
 	const cursor = Number(readStorageItem(syncCursorStorageKey) ?? "0");
@@ -247,7 +248,7 @@ export async function pullSyncChanges(
 	});
 
 	for (const item of response.data.items) {
-		applySyncItem(item, onLocaleChange, onBackgroundImageUrlChange);
+		applySyncItem(item, onLocaleChange, onBackgroundImageUrlChange, onThemeChange);
 	}
 
 	writeStorageItem(syncCursorStorageKey, String(response.data.next_cursor));
@@ -392,7 +393,8 @@ function buildSyncItems(): SyncItem[] {
 function applySyncItem(
 	item: SyncItem,
 	onLocaleChange?: (locale: "en" | "th") => void,
-	onBackgroundImageUrlChange?: (url: string) => void
+	onBackgroundImageUrlChange?: (url: string) => void,
+	onThemeChange?: (theme: Theme) => void
 ) {
 	if (item.deleted_at && item.deleted_at > 0) {
 		if (item.item_type === "memory_fact") {
@@ -439,9 +441,16 @@ function applySyncItem(
 		return;
 	}
 
+	if (isStaleSettingItem(item, key)) {
+		return;
+	}
+
 	if (key === "theme" && (value === "light" || value === "dark")) {
-		persistTheme(value as Theme);
-		applyThemeToDocument(value as Theme);
+		const theme = value as Theme;
+		writeTheme(theme);
+		recordSyncUpdatedAt("settings.theme", item.updated_at);
+		applyThemeToDocument(theme);
+		onThemeChange?.(theme);
 		return;
 	}
 
@@ -461,6 +470,11 @@ function applySyncItem(
 		persistBackgroundImageUrl(value);
 		onBackgroundImageUrlChange?.(value.trim());
 	}
+}
+
+function isStaleSettingItem(item: SyncItem, key: string): boolean {
+	const localUpdatedAt = readSyncUpdatedAt(`settings.${key}`);
+	return localUpdatedAt !== null && toSyncTimestamp(item.updated_at) < localUpdatedAt;
 }
 
 function buildMemorySyncItems(
