@@ -32,6 +32,7 @@ function ChatMessageList({
 	const [activeMessageMenuId, setActiveMessageMenuId] = useState<string | null>(null);
 	const [showJumpToLatest, setShowJumpToLatest] = useState(false);
 	const [unseenMessageCount, setUnseenMessageCount] = useState(0);
+	const messageBubbleClassName = "max-w-[min(30rem,72vw)] sm:max-w-[min(32rem,70%)]";
 	const visibleMessages = useMemo(
 		() => messages.filter((message) => !(message.author === "user" && hiddenUserMessageIds.has(message.id))),
 		[messages, hiddenUserMessageIds]
@@ -226,7 +227,8 @@ function ChatMessageList({
 									)}
 									<div
 										className={cn(
-											"max-w-[min(36rem,82vw)] rounded-lg px-4 py-3 shadow-soft",
+											messageBubbleClassName,
+											"rounded-lg px-4 py-3 shadow-soft",
 											isUser
 												? "bg-primary text-white dark:border dark:border-app-border dark:bg-primary dark:text-app-text"
 												: "border border-app-border bg-app-panel/92 text-app-text"
@@ -251,7 +253,12 @@ function ChatMessageList({
 					{isSending && (
 						<article className="flex items-end gap-3 justify-start">
 							<img className="size-9 shrink-0 rounded-lg object-cover" src={companionAvatarUrl} alt="" />
-							<div className="max-w-[min(36rem,82vw)] rounded-lg border border-app-border bg-app-panel/92 px-4 py-3 text-app-text shadow-soft">
+							<div
+								className={cn(
+									messageBubbleClassName,
+									"rounded-lg border border-app-border bg-app-panel/92 px-4 py-3 text-app-text shadow-soft"
+								)}
+							>
 								<p className="text-sm leading-6 text-app-text">{t("chat.messageList.thinking", { name: companionName })}</p>
 							</div>
 						</article>
