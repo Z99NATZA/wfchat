@@ -25,28 +25,35 @@
 
 @layer base {
 	:root {
-		--brand-primary: #4070f4;
-		--brand-primary-hover: #2f5fdd;
-		--app-bg: #f6f8fc;
-		--app-panel: rgb(255 255 255 / 0.82);
-		--app-soft: rgb(240 244 251 / 0.66);
-		--app-text: #111827;
-		--app-border: rgb(220 227 239 / 0.52);
+		--brand-primary: #4f8ef7;
+		--brand-primary-hover: #3b7ee8;
+
+		--app-bg: #f8fafc;
+		--app-panel: rgb(255 255 255 / 0.92);
+		--app-soft: rgb(241 245 249 / 0.86);
+
+		--app-text: #0f172a;
+		--muted: #64748b;
+
+		--app-border: rgb(226 232 240 / 0.8);
+
 		--dialog-panel: #ffffff;
-		--dialog-soft: #f0f4fb;
-		--dialog-border: #dce3ef;
+		--dialog-soft: #f1f5f9;
+		--dialog-border: #e2e8f0;
+
 		--wfchat-bg-image: none;
 		--wfchat-bg-render-size: cover;
 		--wfchat-bg-root-position: center;
 		--wfchat-surface-bg-position: center;
 		--wfchat-surface-bg-opacity: 0;
-		--app-bg-image-opacity: 0.18;
-		--action-bg: #4070f4;
-		--action-bg-hover: #2f5fdd;
-		--action-border: #4070f4;
+		--app-bg-image-opacity: 0.08;
+
+		--action-bg: #4f8ef7;
+		--action-bg-hover: #3b7ee8;
+		--action-border: #4f8ef7;
 		--action-text: #ffffff;
-		--action-ring: #4070f4;
-		--muted: #69758a;
+		--action-ring: rgb(79 142 247 / 0.35);
+
 		--app-font-family: Inter, "Noto Sans Thai", ui-sans-serif, system-ui, -apple-system,
 			BlinkMacSystemFont, "Segoe UI", sans-serif;
 	}
