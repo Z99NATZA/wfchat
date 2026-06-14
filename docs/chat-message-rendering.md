@@ -232,6 +232,14 @@ The first chat message rendering iteration is complete when:
 
 Current status: implemented for the first chat message rendering iteration.
 
+## Implemented Follow-up Scopes
+
+These follow-up scopes are complete and should be treated as current behavior:
+
+- `feat(web): add assistant message actions` - assistant messages with non-empty text expose a full-message copy action. The action copies the raw `ChatMessage.text` value, not rendered HTML.
+- `feat(web): improve assistant bubble layout` - assistant message bubbles are wider than user bubbles and keep table/code overflow inside the bubble instead of creating page-level horizontal overflow.
+- `feat(web): add markdown manual QA fixtures` - local dev and local Docker builds can load frontend-only Markdown QA messages from `http://localhost:5173/chat?qa=markdown` with the `Load QA` action.
+
 ## Future Work
 
 Potential later scopes:
