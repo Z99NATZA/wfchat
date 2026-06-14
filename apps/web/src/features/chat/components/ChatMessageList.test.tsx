@@ -21,6 +21,9 @@ vi.mock("@/i18n", () => ({
 			if (key === "chat.messageList.assistantMessageCopied") {
 				return "Copied";
 			}
+			if (key === "chat.messageList.loadMarkdownQa") {
+				return "Load QA";
+			}
 			return key;
 		}
 	})
@@ -174,6 +177,32 @@ describe("ChatMessageList streaming state", () => {
 
 		expect(screen.getAllByText("Aiko is thinking...")).toHaveLength(1);
 		expect(screen.queryByRole("button", { name: "Copy message" })).toBeNull();
+	});
+
+	it("shows the markdown QA loader only when provided", () => {
+		const loadMarkdownQaMessages = vi.fn();
+		const { rerender } = render(
+			<ChatMessageList
+				messages={[]}
+				companionName="Aiko"
+				companionAvatarUrl="/images/aiko-avatar.png"
+			/>
+		);
+
+		expect(screen.queryByRole("button", { name: "Load QA" })).toBeNull();
+
+		rerender(
+			<ChatMessageList
+				messages={[]}
+				companionName="Aiko"
+				companionAvatarUrl="/images/aiko-avatar.png"
+				onLoadMarkdownQaMessages={loadMarkdownQaMessages}
+			/>
+		);
+
+		fireEvent.click(screen.getByRole("button", { name: "Load QA" }));
+
+		expect(loadMarkdownQaMessages).toHaveBeenCalledTimes(1);
 	});
 });
 

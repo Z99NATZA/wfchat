@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { CHAT_PERSONAS } from "@/features/chat/data/chatFixtures";
+import { CHAT_PERSONAS, MARKDOWN_QA_MESSAGES } from "@/features/chat/data/chatFixtures";
 import { useI18n } from "@/i18n";
 import {
 	clearChatMessages,
@@ -37,6 +37,7 @@ import { formatMessageTime } from "@/utils/date";
 
 const CHAT_PATH_PREFIX = "/chat/";
 const CHAT_DRAFT_PATH = "/chat";
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function parseChatIdFromPath(pathname: string): string | null {
 	if (!pathname.startsWith(CHAT_PATH_PREFIX)) {
@@ -44,11 +45,15 @@ function parseChatIdFromPath(pathname: string): string | null {
 	}
 
 	const chatId = pathname.slice(CHAT_PATH_PREFIX.length).trim();
-	return chatId.length > 0 ? chatId : null;
+	return UUID_PATTERN.test(chatId) ? chatId : null;
 }
 
 function isDraftChatPath(pathname: string): boolean {
 	return pathname === CHAT_DRAFT_PATH || pathname === `${CHAT_DRAFT_PATH}/`;
+}
+
+function isInvalidChatPath(pathname: string): boolean {
+	return pathname.startsWith(CHAT_PATH_PREFIX) && parseChatIdFromPath(pathname) === null;
 }
 
 export type ChatSessionAvatarEvent =
@@ -104,6 +109,12 @@ export function useChatSession({ onAvatarChatEvent }: UseChatSessionOptions = {}
 			return haystack.includes(query);
 		});
 	}, [debouncedChatSearchQuery, sessions]);
+	const isMarkdownQaEnabled = useMemo(() => {
+		const search = typeof location.search === "string" ? location.search : "";
+		const isQaBuildEnabled =
+			import.meta.env.DEV || import.meta.env.VITE_ENABLE_MARKDOWN_QA === "true";
+		return isQaBuildEnabled && new URLSearchParams(search).get("qa") === "markdown";
+	}, [location.search]);
 
 	useEffect(() => {
 		const timeoutId = window.setTimeout(() => {
@@ -311,6 +322,14 @@ export function useChatSession({ onAvatarChatEvent }: UseChatSessionOptions = {}
 				setActiveChatId(null);
 				setMessages([]);
 				setDraft("");
+				return;
+			}
+
+			if (isInvalidChatPath(location.pathname)) {
+				setActiveChatId(null);
+				setMessages([]);
+				setDraft("");
+				navigateToDraft();
 			}
 		}
 
@@ -334,6 +353,18 @@ export function useChatSession({ onAvatarChatEvent }: UseChatSessionOptions = {}
 		setErrorMessage(null);
 		navigateToDraft();
 	}, [navigateToDraft]);
+
+	const loadMarkdownQaMessages = useCallback(() => {
+		if (!isMarkdownQaEnabled) {
+			return;
+		}
+
+		setActiveChatId(null);
+		setMessages(MARKDOWN_QA_MESSAGES.map((message) => ({ ...message })));
+		setDraft("");
+		setErrorMessage(null);
+		setIsSidebarOpen(false);
+	}, [isMarkdownQaEnabled]);
 
 	function selectPersona(personaId: string) {
 		setSelectedPersonaId(personaId);
@@ -723,6 +754,8 @@ export function useChatSession({ onAvatarChatEvent }: UseChatSessionOptions = {}
 		messages,
 		openSidebar: () => setIsSidebarOpen(true),
 		refreshRemoteState,
+		isMarkdownQaEnabled,
+		loadMarkdownQaMessages,
 		resetToDraft,
 		personas,
 		chatSearchQuery,

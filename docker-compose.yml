@@ -54,6 +54,7 @@ services:
       args:
         VITE_API_BASE_URL: http://localhost:8080
         VITE_GOOGLE_CLIENT_ID: ${VITE_GOOGLE_CLIENT_ID}
+        VITE_ENABLE_MARKDOWN_QA: "true"
     ports:
       - "5173:80"
     depends_on:

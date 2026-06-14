@@ -25,6 +25,7 @@ The first implementation should make long assistant replies easier to scan by su
 - Assistant messages render Markdown through `ChatMessageContent`.
 - Assistant message bubbles use a wider layout than user bubbles so tables, lists, and code blocks have more readable space.
 - Assistant messages with non-empty text expose a copy action that copies the raw `ChatMessage.text` value.
+- Local development and local Docker builds can expose frontend-only Markdown QA fixtures with `/chat?qa=markdown` when `import.meta.env.DEV` is true or `VITE_ENABLE_MARKDOWN_QA=true`.
 - SSE streaming appends token text into one optimistic assistant message.
 - The message list uses `local-assistant-*` companion messages as active streaming assistant placeholders.
 - The backend stores plain text content only. No structured message parts exist yet.

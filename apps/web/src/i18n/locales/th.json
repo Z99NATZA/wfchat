@@ -143,6 +143,7 @@
 	"chat.messageList.hideMessage": "ซ่อนข้อความ",
 	"chat.messageList.copyAssistantMessage": "คัดลอกข้อความ",
 	"chat.messageList.assistantMessageCopied": "คัดลอกแล้ว",
+	"chat.messageList.loadMarkdownQa": "โหลด QA",
 	"chat.messageList.thinking": "{name} กำลังคิดคำตอบ...",
 	"chat.messageList.jumpToLatest": "ล่าสุด",
 	"chat.messageList.hideConfirmTitle": "ซ่อนข้อความนี้ใช่ไหม?",

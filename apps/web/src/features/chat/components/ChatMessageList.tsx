@@ -14,6 +14,7 @@ type ChatMessageListProps = {
 	companionAvatarUrl: string;
 	errorMessage?: string | null;
 	isSending?: boolean;
+	onLoadMarkdownQaMessages?: () => void;
 };
 
 function ChatMessageList({
@@ -21,7 +22,8 @@ function ChatMessageList({
 	companionName,
 	companionAvatarUrl,
 	errorMessage,
-	isSending = false
+	isSending = false,
+	onLoadMarkdownQaMessages
 }: ChatMessageListProps) {
 	const { confirm } = useDialog();
 	const { t } = useI18n();
@@ -181,7 +183,16 @@ function ChatMessageList({
 					<div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary text-white">
 						<Wand2 size={17} aria-hidden="true" />
 					</div>
-					<p>{t("chat.messageList.banner", { name: companionName })}</p>
+					<p className="min-w-0 flex-1">{t("chat.messageList.banner", { name: companionName })}</p>
+					{onLoadMarkdownQaMessages && (
+						<button
+							type="button"
+							className="shrink-0 rounded-md border border-app-border bg-app-soft px-3 py-1.5 text-xs font-medium text-app-text transition hover:border-primary hover:text-primary dark:hover:border-action-border dark:hover:bg-action-hover dark:hover:text-app-text"
+							onClick={onLoadMarkdownQaMessages}
+						>
+							{t("chat.messageList.loadMarkdownQa")}
+						</button>
+					)}
 				</div>
 
 				<div className="mx-auto flex max-w-3xl flex-col gap-4">

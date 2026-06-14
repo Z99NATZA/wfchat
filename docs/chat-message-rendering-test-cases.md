@@ -465,6 +465,16 @@ Expected:
 
 Run manual QA after automated tests pass.
 
+For local manual QA, start the web app in development mode or through the repo `docker-compose.yml`, then open the exact query-string URL:
+
+```text
+http://localhost:5173/chat?qa=markdown
+```
+
+Then click `Load QA` in the chat banner. This loads frontend-only fixture messages that cover headings, lists, tables, code blocks, raw HTML, and wide overflow cases. The fixture is local UI state only; it does not create or persist backend chat messages.
+
+The QA action is gated to dev builds or builds with `VITE_ENABLE_MARKDOWN_QA=true`. The root `docker-compose.yml` enables that build arg for local Docker QA; the web `Dockerfile` defaults it to `false`.
+
 ### Desktop
 
 - open chat at normal desktop width

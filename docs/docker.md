@@ -48,6 +48,14 @@ VITE_API_BASE_URL=http://localhost:8080
 
 Use `http://api:8080` only for server-to-server calls from inside Docker.
 
+For local chat Markdown QA, the root `docker-compose.yml` builds the web image with:
+
+```text
+VITE_ENABLE_MARKDOWN_QA=true
+```
+
+This exposes the frontend-only `Load QA` action at `http://localhost:5173/chat?qa=markdown`. Use the query string exactly; `/chat/qa` is a chat path segment, not the QA fixture route. The web `Dockerfile` defaults this build arg to `false` for non-local builds.
+
 ## Database Init Options
 
 Single schema SQL lives at `apps/api/db/init.sql`.

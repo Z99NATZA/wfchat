@@ -143,6 +143,7 @@
 	"chat.messageList.hideMessage": "Hide message",
 	"chat.messageList.copyAssistantMessage": "Copy message",
 	"chat.messageList.assistantMessageCopied": "Copied",
+	"chat.messageList.loadMarkdownQa": "Load QA",
 	"chat.messageList.thinking": "{name} is thinking...",
 	"chat.messageList.jumpToLatest": "Jump to latest",
 	"chat.messageList.hideConfirmTitle": "Hide this message?",

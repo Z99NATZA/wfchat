@@ -16,7 +16,7 @@ ActivityBar -> page sidebar -> page header/content/details
 
 - `/` redirects to `/chat`.
 - `/chat` opens the chat workspace without an active chat.
-- `/chat/:chatId` opens the chat workspace and lets the chat feature load the active chat.
+- `/chat/:chatId` opens the chat workspace and lets the chat feature load the active chat. `:chatId` must be a UUID; invalid chat path segments are treated as draft chat paths and must not call the backend chat detail endpoint.
 - `/avatar` redirects to `/avatar/pngtuber` while the generic avatar hub is not built yet.
 - `/avatar/pngtuber` opens the PNGTuber workspace.
 - `/model` redirects to `/model/live2d` while the generic model hub is not built yet.

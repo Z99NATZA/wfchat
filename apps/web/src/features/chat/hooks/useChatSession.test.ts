@@ -14,7 +14,7 @@ import {
 
 const mocks = vi.hoisted(() => ({
 	navigate: vi.fn(),
-	location: { pathname: "/chat" },
+	location: { pathname: "/chat", search: "" },
 	t: vi.fn((key: string) => key),
 	confirm: vi.fn(),
 	getChatUiConfig: vi.fn(),
@@ -99,6 +99,7 @@ describe("useChatSession streaming sendMessage", () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
 		mocks.location.pathname = "/chat";
+		mocks.location.search = "";
 		mocks.confirm.mockResolvedValue(true);
 		mocks.getChatUiConfig.mockResolvedValue({ personas: [persona], quickPrompts: [] });
 		mocks.listPersonaChats.mockResolvedValue([]);
@@ -222,6 +223,38 @@ describe("useChatSession streaming sendMessage", () => {
 			"assistant_streaming",
 			"assistant_error"
 		]);
+	});
+
+	it("loads markdown QA fixture messages only when the dev query flag is present", async () => {
+		const { result, rerender } = renderHook(() => useChatSession());
+
+		expect(result.current.isMarkdownQaEnabled).toBe(false);
+		await act(async () => {
+			result.current.loadMarkdownQaMessages();
+		});
+		expect(result.current.messages).toEqual([]);
+
+		mocks.location.search = "?qa=markdown";
+		rerender();
+
+		expect(result.current.isMarkdownQaEnabled).toBe(true);
+		await act(async () => {
+			result.current.loadMarkdownQaMessages();
+		});
+
+		expect(result.current.activeChatId).toBeNull();
+		expect(result.current.messages.length).toBeGreaterThan(0);
+		expect(result.current.messages.some((item) => item.id === "qa-assistant-markdown-table")).toBe(true);
+		expect(result.current.messages.some((item) => item.text.includes("<script>"))).toBe(true);
+	});
+
+	it("does not load invalid chat route segments as backend chat ids", async () => {
+		mocks.location.pathname = "/chat/qa";
+
+		renderHook(() => useChatSession());
+
+		await waitFor(() => expect(mocks.navigate).toHaveBeenCalledWith("/chat"));
+		expect(mocks.getChat).not.toHaveBeenCalled();
 	});
 });
 

@@ -144,6 +144,9 @@ function ChatPage({
 						companionAvatarUrl={chat.activePersona.avatarUrl}
 						errorMessage={chat.errorMessage}
 						isSending={chat.isSending}
+						onLoadMarkdownQaMessages={
+							chat.isMarkdownQaEnabled ? chat.loadMarkdownQaMessages : undefined
+						}
 					/>
 					<ChatComposer
 						draft={chat.draft}
