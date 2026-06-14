@@ -1,4 +1,4 @@
-import { ArrowDown, Ellipsis, EyeOff } from "lucide-react";
+import { ArrowDown, Check, Clipboard, Ellipsis, EyeOff } from "lucide-react";
 import { UIEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Wand2 } from "lucide-react";
 import { useDialog } from "@/components/dialog/DialogProvider";
@@ -31,6 +31,7 @@ function ChatMessageList({
 	const previousMessageCountRef = useRef(messages.length);
 	const [hiddenUserMessageIds, setHiddenUserMessageIds] = useState<Set<string>>(new Set());
 	const [activeMessageMenuId, setActiveMessageMenuId] = useState<string | null>(null);
+	const [copiedAssistantMessageId, setCopiedAssistantMessageId] = useState<string | null>(null);
 	const [showJumpToLatest, setShowJumpToLatest] = useState(false);
 	const [unseenMessageCount, setUnseenMessageCount] = useState(0);
 	const userMessageBubbleClassName = "max-w-[min(30rem,72vw)] sm:max-w-[min(32rem,70%)]";
@@ -141,6 +142,18 @@ function ChatMessageList({
 		setActiveMessageMenuId(null);
 	}
 
+	async function copyAssistantMessage(message: ChatMessage) {
+		if (!message.text) {
+			return;
+		}
+
+		await navigator.clipboard?.writeText(message.text);
+		setCopiedAssistantMessageId(message.id);
+		window.setTimeout(() => {
+			setCopiedAssistantMessageId((currentId) => (currentId === message.id ? null : currentId));
+		}, 1200);
+	}
+
 	function scrollToLatest() {
 		const container = scrollContainerRef.current;
 
@@ -183,6 +196,8 @@ function ChatMessageList({
 					{messageGroups.map(({ dateLabel, message }) => {
 						const isUser = message.author === "user";
 						const isMenuOpen = activeMessageMenuId === message.id;
+						const didCopyAssistantMessage = copiedAssistantMessageId === message.id;
+						const canCopyAssistantMessage = !isUser && message.text.length > 0;
 						const messageText =
 							isSending && isStreamingAssistantMessage(message) && !message.text
 								? t("chat.messageList.thinking", { name: companionName })
@@ -245,9 +260,34 @@ function ChatMessageList({
 										)}
 									>
 										<ChatMessageContent author={message.author} text={messageText} />
-										<p className={cn("mt-2 text-[11px]", isUser ? "text-white/75 dark:text-muted" : "text-muted")}>
-											{message.time}
-										</p>
+										<div className="mt-2 flex items-center justify-between gap-3">
+											<p className={cn("text-[11px]", isUser ? "text-white/75 dark:text-muted" : "text-muted")}>
+												{message.time}
+											</p>
+											{canCopyAssistantMessage && (
+												<button
+													type="button"
+													className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted transition hover:bg-app-soft hover:text-app-text focus:outline-none focus:ring-2 focus:ring-primary/30"
+													aria-label={
+														didCopyAssistantMessage
+															? t("chat.messageList.assistantMessageCopied")
+															: t("chat.messageList.copyAssistantMessage")
+													}
+													title={
+														didCopyAssistantMessage
+															? t("chat.messageList.assistantMessageCopied")
+															: t("chat.messageList.copyAssistantMessage")
+													}
+													onClick={() => copyAssistantMessage(message)}
+												>
+													{didCopyAssistantMessage ? (
+														<Check size={14} aria-hidden="true" />
+													) : (
+														<Clipboard size={14} aria-hidden="true" />
+													)}
+												</button>
+											)}
+										</div>
 									</div>
 								</article>
 								{dateLabel && (

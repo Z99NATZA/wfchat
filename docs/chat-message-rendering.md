@@ -24,6 +24,7 @@ The first implementation should make long assistant replies easier to scan by su
 - User messages render as plain text.
 - Assistant messages render Markdown through `ChatMessageContent`.
 - Assistant message bubbles use a wider layout than user bubbles so tables, lists, and code blocks have more readable space.
+- Assistant messages with non-empty text expose a copy action that copies the raw `ChatMessage.text` value.
 - SSE streaming appends token text into one optimistic assistant message.
 - The message list uses `local-assistant-*` companion messages as active streaming assistant placeholders.
 - The backend stores plain text content only. No structured message parts exist yet.
@@ -49,7 +50,7 @@ The first implementation should make long assistant replies easier to scan by su
 - Message attachments, file uploads, image generation, audio, voice input, and multimodal message parts.
 - Tool-call cards, citations, web references, source inspectors, or artifact previews.
 - Mermaid diagrams, LaTeX/math rendering, charts, iframes, embeds, or custom HTML blocks.
-- Assistant message actions such as regenerate, thumbs up/down, edit, branch, share, or full-message copy.
+- Additional assistant message actions such as regenerate, thumbs up/down, edit, branch, or share.
 - Prompt-engineering changes that force every model response into a specific format.
 - Backend schema changes or database migrations.
 - SSE protocol changes.

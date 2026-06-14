@@ -1,7 +1,7 @@
 /**
  * @vitest-environment happy-dom
  */
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import ChatMessageList from "@/features/chat/components/ChatMessageList";
 import type { ChatMessage } from "@/types/chat";
@@ -14,6 +14,12 @@ vi.mock("@/i18n", () => ({
 			}
 			if (key === "chat.messageList.banner") {
 				return `${params?.name} banner`;
+			}
+			if (key === "chat.messageList.copyAssistantMessage") {
+				return "Copy message";
+			}
+			if (key === "chat.messageList.assistantMessageCopied") {
+				return "Copied";
 			}
 			return key;
 		}
@@ -29,6 +35,12 @@ vi.mock("@/components/dialog/DialogProvider", () => ({
 describe("ChatMessageList streaming state", () => {
 	beforeEach(() => {
 		HTMLElement.prototype.scrollTo = vi.fn();
+		Object.defineProperty(navigator, "clipboard", {
+			configurable: true,
+			value: {
+				writeText: vi.fn().mockResolvedValue(undefined)
+			}
+		});
 	});
 
 	afterEach(() => {
@@ -116,6 +128,52 @@ describe("ChatMessageList streaming state", () => {
 
 		expect(assistantBubble?.className).toContain("min-w-0");
 		expect(assistantBubble?.className).toContain("sm:max-w-[min(42rem,calc(100%-2.75rem))]");
+	});
+
+	it("copies raw assistant message text", async () => {
+		render(
+			<ChatMessageList
+				messages={[
+					message("assistant-1", "companion", "## Heading\n\n- Item")
+				]}
+				companionName="Aiko"
+				companionAvatarUrl="/images/aiko-avatar.png"
+			/>
+		);
+
+		fireEvent.click(screen.getByRole("button", { name: "Copy message" }));
+
+		expect(navigator.clipboard.writeText).toHaveBeenCalledWith("## Heading\n\n- Item");
+		await waitFor(() => expect(screen.getByRole("button", { name: "Copied" })).toBeTruthy());
+	});
+
+	it("does not show copy actions on user messages", () => {
+		render(
+			<ChatMessageList
+				messages={[message("user-1", "user", "## User text")]}
+				companionName="Aiko"
+				companionAvatarUrl="/images/aiko-avatar.png"
+			/>
+		);
+
+		expect(screen.queryByRole("button", { name: "Copy message" })).toBeNull();
+	});
+
+	it("does not copy generated thinking text from an empty assistant placeholder", () => {
+		render(
+			<ChatMessageList
+				messages={[
+					message("local-user", "user", "hello"),
+					message("local-assistant-1", "companion", "")
+				]}
+				companionName="Aiko"
+				companionAvatarUrl="/images/aiko-avatar.png"
+				isSending
+			/>
+		);
+
+		expect(screen.getAllByText("Aiko is thinking...")).toHaveLength(1);
+		expect(screen.queryByRole("button", { name: "Copy message" })).toBeNull();
 	});
 });
 

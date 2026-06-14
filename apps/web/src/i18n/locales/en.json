@@ -141,6 +141,8 @@
 	"chat.messageList.emptyDesc": "Your chat is empty. Send the first message when you are ready.",
 	"chat.messageList.openMessageActions": "Open message actions",
 	"chat.messageList.hideMessage": "Hide message",
+	"chat.messageList.copyAssistantMessage": "Copy message",
+	"chat.messageList.assistantMessageCopied": "Copied",
 	"chat.messageList.thinking": "{name} is thinking...",
 	"chat.messageList.jumpToLatest": "Jump to latest",
 	"chat.messageList.hideConfirmTitle": "Hide this message?",
