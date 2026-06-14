@@ -8,7 +8,7 @@ WaifuChat is a full-stack chat app with a React frontend, Rust API, and PostgreS
 - Backend: Rust + Axum
 - Database: PostgreSQL
 
-## Install
+## Install and Docker run
 
 ```bash
 # clone the repository
