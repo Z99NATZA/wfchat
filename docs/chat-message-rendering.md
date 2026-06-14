@@ -23,6 +23,7 @@ The first implementation should make long assistant replies easier to scan by su
 - User and assistant messages are rendered by `ChatMessageList`.
 - User messages render as plain text.
 - Assistant messages render Markdown through `ChatMessageContent`.
+- Assistant message bubbles use a wider layout than user bubbles so tables, lists, and code blocks have more readable space.
 - SSE streaming appends token text into one optimistic assistant message.
 - The message list uses `local-assistant-*` companion messages as active streaming assistant placeholders.
 - The backend stores plain text content only. No structured message parts exist yet.
@@ -76,7 +77,7 @@ Assistant messages may render Markdown from `ChatMessage.text`.
 The renderer must:
 
 - preserve readable paragraph spacing
-- constrain content to the existing bubble width
+- constrain content to the assistant bubble width
 - allow long code lines and wide tables to scroll horizontally inside the bubble
 - avoid page-level horizontal overflow
 - avoid nested card-like surfaces inside the message bubble unless needed for code blocks

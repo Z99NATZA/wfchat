@@ -38,6 +38,7 @@ Current chat message rendering:
 - User and assistant messages still use `ChatMessage.text` as the only content field.
 - User messages render as plain text.
 - Assistant messages render a safe Markdown subset through the frontend renderer.
+- Assistant bubbles are wider than user bubbles to improve readability for structured Markdown such as tables and code blocks.
 - Assistant streaming uses one optimistic local assistant message with id prefix `local-assistant-`.
 - While that optimistic assistant message exists, the message list should render loading text inside that placeholder only when it has no token text yet, and should not render a second standalone thinking bubble.
 - Supported assistant formats and explicit non-goals are defined in `docs/chat-message-rendering.md`.

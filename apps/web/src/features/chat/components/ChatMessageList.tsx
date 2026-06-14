@@ -33,7 +33,9 @@ function ChatMessageList({
 	const [activeMessageMenuId, setActiveMessageMenuId] = useState<string | null>(null);
 	const [showJumpToLatest, setShowJumpToLatest] = useState(false);
 	const [unseenMessageCount, setUnseenMessageCount] = useState(0);
-	const messageBubbleClassName = "max-w-[min(30rem,72vw)] sm:max-w-[min(32rem,70%)]";
+	const userMessageBubbleClassName = "max-w-[min(30rem,72vw)] sm:max-w-[min(32rem,70%)]";
+	const assistantMessageBubbleClassName =
+		"min-w-0 max-w-[calc(100%-2.75rem)] sm:max-w-[min(42rem,calc(100%-2.75rem))] lg:max-w-[min(44rem,calc(100%-2.75rem))]";
 	const visibleMessages = useMemo(
 		() => messages.filter((message) => !(message.author === "user" && hiddenUserMessageIds.has(message.id))),
 		[messages, hiddenUserMessageIds]
@@ -233,8 +235,9 @@ function ChatMessageList({
 										</div>
 									)}
 									<div
+										data-message-bubble={message.author}
 										className={cn(
-											messageBubbleClassName,
+											isUser ? userMessageBubbleClassName : assistantMessageBubbleClassName,
 											"rounded-lg px-4 py-3 shadow-soft",
 											isUser
 												? "bg-primary text-white dark:border dark:border-app-border dark:bg-primary dark:text-app-text"
@@ -261,8 +264,9 @@ function ChatMessageList({
 						<article className="flex items-end gap-3 justify-start">
 							<img className="size-9 shrink-0 rounded-lg object-cover" src={companionAvatarUrl} alt="" />
 							<div
+								data-message-bubble="companion"
 								className={cn(
-									messageBubbleClassName,
+									assistantMessageBubbleClassName,
 									"rounded-lg border border-app-border bg-app-panel/92 px-4 py-3 text-app-text shadow-soft"
 								)}
 							>
