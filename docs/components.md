@@ -30,6 +30,7 @@ Chat feature components live in `apps/web/src/features/chat/components`.
 - `ChatSidebar`: companion list, search field, and mobile sidebar close action.
 - `ChatHeader`: active companion identity and global chat actions.
 - `ChatMessageList`: message timeline rendering.
+- `ChatMessageContent`: user plain-text rendering and assistant Markdown rendering inside message bubbles.
 - `ChatComposer`: draft input, quick prompts, and send action.
 - `ChatDetailsPanel`: companion profile, memory, response metrics, and safety controls.
 

@@ -21,7 +21,8 @@ The first implementation should make long assistant replies easier to scan by su
 
 - `ChatMessage.text` is the only message content field.
 - User and assistant messages are rendered by `ChatMessageList`.
-- Assistant messages currently render as plain text.
+- User messages render as plain text.
+- Assistant messages render Markdown through `ChatMessageContent`.
 - SSE streaming appends token text into one optimistic assistant message.
 - The message list uses `local-assistant-*` companion messages as active streaming assistant placeholders.
 - The backend stores plain text content only. No structured message parts exist yet.
@@ -38,7 +39,7 @@ The first implementation should make long assistant replies easier to scan by su
 - Style rendered content with semantic app tokens from `docs/theme.md`.
 - Keep rendering compatible with streaming text updates. Partial Markdown may look incomplete while streaming, but it must not crash.
 - Open links in a new tab with safe `rel` attributes.
-- Add a copy button for fenced code blocks only if it can be implemented locally inside the message renderer without adding message-level actions.
+- Add a copy button for fenced code blocks only if it can be implemented locally inside the message renderer without adding message-level actions. Current implementation includes a code-block copy button.
 - Add focused component tests for supported Markdown shapes and streaming placeholder behavior. Required cases live in `docs/chat-message-rendering-test-cases.md`.
 - Update this document when the supported format set changes.
 
@@ -159,10 +160,12 @@ Allowed dependency direction:
 
 Recommended candidates:
 
-- `react-markdown`
-- `remark-gfm`
+- `react-markdown` - implemented
+- `remark-gfm` - implemented
 
-Syntax highlighting should be deferred unless the initial code block UI is weak without it. If added, document the package choice and bundle-size tradeoff in the implementation summary.
+Syntax highlighting is deferred. Code blocks currently use plain monospace rendering with a language label and copy button.
+
+Build note: adding `react-markdown` and `remark-gfm` increases the frontend bundle enough for Vite to warn that the main chunk is larger than 500 kB after minification. This is accepted for the first implementation; revisit code splitting or lighter rendering if bundle size becomes a product concern.
 
 ## Styling Rules
 
@@ -223,6 +226,8 @@ The first chat message rendering iteration is complete when:
 - streaming still shows only one assistant loading/message surface
 - automated frontend tests cover the required cases in `docs/chat-message-rendering-test-cases.md`
 - docs list the final supported formats and explicit non-goals
+
+Current status: implemented for the first chat message rendering iteration.
 
 ## Future Work
 

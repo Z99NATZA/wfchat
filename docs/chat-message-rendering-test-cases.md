@@ -15,6 +15,11 @@ Use this file with `docs/chat-message-rendering.md`. The rendering document defi
 
 ## Required Automated Cases
 
+Current coverage lives in:
+
+- `apps/web/src/features/chat/components/ChatMessageContent.test.tsx`
+- `apps/web/src/features/chat/components/ChatMessageList.test.tsx`
+
 ### 1. User Plain Text
 
 Input author:
@@ -422,6 +427,8 @@ Add these if implementation includes the related optional behavior.
 
 ### Code Copy Button
 
+Current status: implemented and covered in `ChatMessageContent.test.tsx`.
+
 Input:
 
 ````markdown
@@ -437,6 +444,8 @@ Expected:
 - UI gives lightweight copied feedback if implemented
 
 ### Syntax Highlighting
+
+Current status: deferred.
 
 Input:
 

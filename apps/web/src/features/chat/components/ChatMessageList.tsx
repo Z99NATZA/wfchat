@@ -2,6 +2,7 @@ import { ArrowDown, Ellipsis, EyeOff } from "lucide-react";
 import { UIEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Wand2 } from "lucide-react";
 import { useDialog } from "@/components/dialog/DialogProvider";
+import ChatMessageContent from "@/features/chat/components/ChatMessageContent";
 import { useI18n } from "@/i18n";
 import type { ChatMessage } from "@/types/chat";
 import { cn } from "@/utils/classNames";
@@ -240,7 +241,7 @@ function ChatMessageList({
 												: "border border-app-border bg-app-panel/92 text-app-text"
 										)}
 									>
-										<p className="text-sm leading-6">{messageText}</p>
+										<ChatMessageContent author={message.author} text={messageText} />
 										<p className={cn("mt-2 text-[11px]", isUser ? "text-white/75 dark:text-muted" : "text-muted")}>
 											{message.time}
 										</p>
