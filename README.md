@@ -19,11 +19,11 @@ cd wfchat
 npm run init 
 
 # .env
-VITE_GOOGLE_CLIENT_ID=
+# VITE_GOOGLE_CLIENT_ID=
 
 # apps/api/.env
-OPENAI_API_KEY=
-GOOGLE_CLIENT_ID=
+# OPENAI_API_KEY=
+# GOOGLE_CLIENT_ID=
 
 # start
 docker compose up -d --build
