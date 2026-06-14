@@ -37,6 +37,8 @@ function ChatMessageList({
 		() => messages.filter((message) => !(message.author === "user" && hiddenUserMessageIds.has(message.id))),
 		[messages, hiddenUserMessageIds]
 	);
+	const hasStreamingAssistantMessage = visibleMessages.some(isStreamingAssistantMessage);
+	const shouldShowThinkingBubble = isSending && !hasStreamingAssistantMessage;
 	const messageGroups = useMemo(() => {
 		return visibleMessages.map((message, index) => {
 			const createdAt = message.createdAt > 0 ? message.createdAt : Math.floor(Date.now() / 1000);
@@ -178,6 +180,10 @@ function ChatMessageList({
 					{messageGroups.map(({ dateLabel, message }) => {
 						const isUser = message.author === "user";
 						const isMenuOpen = activeMessageMenuId === message.id;
+						const messageText =
+							isSending && isStreamingAssistantMessage(message) && !message.text
+								? t("chat.messageList.thinking", { name: companionName })
+								: message.text;
 
 						return (
 							<div key={message.id} className="space-y-4">
@@ -234,7 +240,7 @@ function ChatMessageList({
 												: "border border-app-border bg-app-panel/92 text-app-text"
 										)}
 									>
-										<p className="text-sm leading-6">{message.text}</p>
+										<p className="text-sm leading-6">{messageText}</p>
 										<p className={cn("mt-2 text-[11px]", isUser ? "text-white/75 dark:text-muted" : "text-muted")}>
 											{message.time}
 										</p>
@@ -250,7 +256,7 @@ function ChatMessageList({
 							</div>
 						);
 					})}
-					{isSending && (
+					{shouldShowThinkingBubble && (
 						<article className="flex items-end gap-3 justify-start">
 							<img className="size-9 shrink-0 rounded-lg object-cover" src={companionAvatarUrl} alt="" />
 							<div
@@ -290,6 +296,10 @@ function ChatMessageList({
 			)}
 		</div>
 	);
+}
+
+function isStreamingAssistantMessage(message: ChatMessage): boolean {
+	return message.author === "companion" && message.id.startsWith("local-assistant-");
 }
 
 export default ChatMessageList;

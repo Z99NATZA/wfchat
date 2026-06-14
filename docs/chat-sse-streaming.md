@@ -473,6 +473,13 @@ Current hook behavior:
 - replaces local optimistic messages with server-confirmed messages on `message_done`
 - falls back to `sendChatMessage()` when the stream fails before `message_start`
 
+Current message-list behavior:
+
+- renders the standalone thinking bubble only before an optimistic assistant placeholder exists
+- treats `local-assistant-*` companion messages as the active streaming assistant placeholder
+- renders the thinking text inside an empty streaming assistant placeholder until the first token arrives
+- avoids showing both a streaming assistant placeholder and a separate thinking bubble at the same time
+
 ### 4. Avatar streaming event - Implemented
 
 Files:
@@ -542,6 +549,7 @@ Current automated coverage:
 
 - SSE parser tests in `apps/web/src/features/chat/services/chatApiService.test.ts` cover split frames, CRLF framing, comments, multi-line data, and final frames without trailing blank lines.
 - Hook tests in `apps/web/src/features/chat/hooks/useChatSession.test.ts` cover optimistic assistant creation, token append, final server replacement, stream-started error cleanup, avatar lifecycle events, and pre-start non-streaming fallback.
+- Message list tests in `apps/web/src/features/chat/components/ChatMessageList.test.tsx` cover the streaming placeholder versus thinking-bubble loading states.
 
 Recommended next automated coverage:
 

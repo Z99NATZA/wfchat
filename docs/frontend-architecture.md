@@ -23,13 +23,20 @@ apps/web/src/main.tsx
       -> apps/web/src/pages/Model2DPage.tsx
 ```
 
-The chat UI uses `apps/web/src/features/chat/services/chatApiService.ts` to create a guest session, create/load a chat, and send messages through the Rust backend.
+The chat UI uses `apps/web/src/features/chat/services/chatApiService.ts` to create a guest session, create/load a chat, and send messages through the Rust backend. Message sends try the SSE streaming endpoint first and fall back to the non-streaming endpoint if the stream fails before it starts.
 
 The current supported chat companion is Aiko only. If a browser has no stored session/chat history, the message list starts empty.
 
 The clear chat button in the header is supported. It calls `DELETE /api/chats/:chat_id/messages` after a browser confirmation and leaves the current chat/session intact.
 
 Chat layout and scroll contract (single-scroll message timeline, sticky header/composer): `docs/chat-layout-scroll.md`.
+
+Current chat message rendering is intentionally simple:
+
+- User and assistant messages render from `ChatMessage.text`.
+- Assistant streaming uses one optimistic local assistant message with id prefix `local-assistant-`.
+- While that optimistic assistant message exists, the message list should render loading text inside that placeholder only when it has no token text yet, and should not render a second standalone thinking bubble.
+- Markdown, tables, code block controls, assistant message actions, attachments, and rich response cards are not implemented yet.
 
 The PNGTuber workspace renders Aiko with a lightweight PNG asset set before Live2D rigging. The Live2D page is currently a route shell only. Runtime notes, chat bridge behavior, and remaining avatar work are documented in `docs/pngtuber.md`.
 
