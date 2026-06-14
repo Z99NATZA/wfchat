@@ -10,46 +10,30 @@ WaifuChat is a full-stack chat app with a React frontend, Rust API, and PostgreS
 
 ## Install
 
-Clone the repository:
-
 ```bash
+# clone the repository
 git clone https://github.com/Z99NATZA/wfchat.git
 cd wfchat
-npm run init
-```
 
-`npm run init` creates or updates local env files from the example files.
+# 'npm run init' creates or updates local env files from the example files.
+npm run init 
 
-## Docker
-
-Edit `.env`:
-
-```env
+# .env
 VITE_GOOGLE_CLIENT_ID=
-```
 
-Edit `apps/api/.env`:
-
-```env
+# apps/api/.env
 OPENAI_API_KEY=
 GOOGLE_CLIENT_ID=
-```
 
-Start all services:
-
-```bash
+# start
 docker compose up -d --build
-```
 
-Default URLs:
-
-- Web: `http://localhost:5173`
-- API: `http://localhost:8080`
-
-Stop services:
-
-```bash
+# stop
 docker compose down
+
+# default URLs
+web: http://localhost:5173
+api: http://localhost:8080
 ```
 
 More Docker details: [docs/docker.md](docs/docker.md).
