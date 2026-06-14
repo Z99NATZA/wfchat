@@ -32,8 +32,8 @@ docker compose up -d --build
 docker compose down
 
 # default URLs
-web: http://localhost:5173
-api: http://localhost:8080
+# web: http://localhost:5173
+# api: http://localhost:8080
 ```
 
 More Docker details: [docs/docker.md](docs/docker.md).
