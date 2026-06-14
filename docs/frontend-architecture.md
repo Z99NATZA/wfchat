@@ -31,12 +31,14 @@ The clear chat button in the header is supported. It calls `DELETE /api/chats/:c
 
 Chat layout and scroll contract (single-scroll message timeline, sticky header/composer): `docs/chat-layout-scroll.md`.
 
+Chat message rendering scope and rich-format rules: `docs/chat-message-rendering.md`.
+
 Current chat message rendering is intentionally simple:
 
 - User and assistant messages render from `ChatMessage.text`.
 - Assistant streaming uses one optimistic local assistant message with id prefix `local-assistant-`.
 - While that optimistic assistant message exists, the message list should render loading text inside that placeholder only when it has no token text yet, and should not render a second standalone thinking bubble.
-- Markdown, tables, code block controls, assistant message actions, attachments, and rich response cards are not implemented yet.
+- Markdown, tables, code block controls, assistant message actions, attachments, and rich response cards are not implemented yet. The first rich-format rendering scope is defined in `docs/chat-message-rendering.md`.
 
 The PNGTuber workspace renders Aiko with a lightweight PNG asset set before Live2D rigging. The Live2D page is currently a route shell only. Runtime notes, chat bridge behavior, and remaining avatar work are documented in `docs/pngtuber.md`.
 

@@ -33,6 +33,8 @@ Chat feature components live in `apps/web/src/features/chat/components`.
 - `ChatComposer`: draft input, quick prompts, and send action.
 - `ChatDetailsPanel`: companion profile, memory, response metrics, and safety controls.
 
+Chat message content rendering has its own scope document: `docs/chat-message-rendering.md`. Read it before adding Markdown, code blocks, tables, message actions, or other rich response surfaces.
+
 ## Component Boundaries
 
 Keep components focused on rendering and UI events. Move non-trivial state logic into hooks and move domain decisions into services.
