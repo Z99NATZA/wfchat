@@ -662,7 +662,9 @@ export function useChatSession({ onAvatarChatEvent }: UseChatSessionOptions = {}
 
 		const shouldDelete = await confirm({
 			title: t("chat.session.deleteConfirmTitle"),
-			description: t("chat.session.deleteConfirmDesc")
+			description: t("chat.session.deleteConfirmDesc"),
+			confirmLabel: t("chat.sidebar.deleteChat"),
+			tone: "destructive"
 		});
 
 		if (!shouldDelete) {

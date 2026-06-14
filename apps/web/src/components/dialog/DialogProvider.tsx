@@ -8,6 +8,7 @@ type ConfirmOptions = {
 	description?: string;
 	confirmLabel?: string;
 	cancelLabel?: string;
+	tone?: "default" | "destructive";
 };
 
 type ConfirmState = ConfirmOptions & {
@@ -141,6 +142,7 @@ function DialogProvider({ children }: DialogProviderProps) {
 				description={confirmState?.description}
 				confirmLabel={confirmState?.confirmLabel}
 				cancelLabel={confirmState?.cancelLabel}
+				tone={confirmState?.tone}
 				onCancel={() => closeConfirm(false)}
 				onConfirm={() => closeConfirm(true)}
 			/>
