@@ -168,7 +168,7 @@ Recommended candidates:
 
 Syntax highlighting is deferred. Code blocks currently use plain monospace rendering with a language label and copy button.
 
-Build note: adding `react-markdown` and `remark-gfm` increases the frontend bundle enough for Vite to warn that the main chunk is larger than 500 kB after minification. This is accepted for the first implementation; revisit code splitting or lighter rendering if bundle size becomes a product concern.
+Build note: `react-markdown`, `remark-gfm`, and their Markdown parsing dependencies are split into a dedicated Vite `markdown-renderer` chunk through `apps/web/vite.config.ts`. Keep Markdown renderer dependencies frontend-only and update the manual chunk package list if the renderer dependency graph changes.
 
 ## Styling Rules
 
@@ -239,6 +239,7 @@ These follow-up scopes are complete and should be treated as current behavior:
 - `feat(web): add assistant message actions` - assistant messages with non-empty text expose a full-message copy action. The action copies the raw `ChatMessage.text` value, not rendered HTML.
 - `feat(web): improve assistant bubble layout` - assistant message bubbles are wider than user bubbles and keep table/code overflow inside the bubble instead of creating page-level horizontal overflow.
 - `feat(web): add markdown manual QA fixtures` - local dev and local Docker builds can load frontend-only Markdown QA messages from `http://localhost:5173/chat?qa=markdown` with the `Load QA` action.
+- `chore(web): split markdown renderer chunk` - Markdown rendering dependencies build into a dedicated Vite `markdown-renderer` chunk so they do not inflate the main application chunk.
 
 ## Future Work
 
