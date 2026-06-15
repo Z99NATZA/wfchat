@@ -10,6 +10,8 @@ Frontend code calls the backend through axios from `apps/web/src/services/apiCli
 VITE_API_BASE_URL=http://localhost:8080
 ```
 
+For local non-Docker development, `VITE_API_BASE_URL` points at the API port directly. For Docker web builds, `VITE_API_BASE_URL` is intentionally empty so requests stay relative to the web origin and nginx proxies `/api/*` to the API container. This lets LAN clients use only the web port.
+
 The frontend should not import backend code, read backend files, or know provider/model names.
 
 ## Runtime Flow
