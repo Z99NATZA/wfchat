@@ -20,6 +20,7 @@ npm run init
 
 # .env
 # VITE_GOOGLE_CLIENT_ID=
+# WFCHAT_PUBLIC_HOST=localhost
 
 # apps/api/.env
 # OPENAI_API_KEY=
@@ -34,6 +35,13 @@ docker compose down
 # default URLs
 # web: http://localhost:5173
 # api: http://localhost:8080
+```
+
+To open the Docker app from another device on the same Wi-Fi, set `WFCHAT_PUBLIC_HOST` in the root `.env` to this machine's LAN IP, then rebuild:
+
+```bash
+WFCHAT_PUBLIC_HOST=192.168.1.20
+docker compose up -d --build
 ```
 
 More Docker details: [docs/docker.md](docs/docker.md).
