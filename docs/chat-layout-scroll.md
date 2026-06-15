@@ -19,6 +19,7 @@ This document defines the intended scroll behavior for the chat screen in `apps/
 - Header (`ChatHeader`) stays pinned at top of the main chat column.
 - Composer (`ChatComposer`) stays pinned at bottom of the main chat column.
 - Sidebar and details panel manage their own internal overflow where needed.
+- When the chat PNGTuber overlay is visible, the message timeline reserves bottom clearance for the measured composer and overlay heights so bubbles do not sit under the avatar.
 
 ## Auto-Scroll Rule
 

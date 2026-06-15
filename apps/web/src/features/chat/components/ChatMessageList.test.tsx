@@ -117,6 +117,21 @@ describe("ChatMessageList streaming state", () => {
 		expect(assistantBubble?.className).not.toContain("sm:max-w-[min(32rem,70%)]");
 	});
 
+	it("reserves bottom space when an overlay clearance is provided", () => {
+		const { container } = render(
+			<ChatMessageList
+				messages={[message("assistant-1", "companion", "hello")]}
+				companionName="Aiko"
+				companionAvatarUrl="/images/aiko-avatar.png"
+				bottomClearancePx={320}
+			/>
+		);
+
+		const scrollContainer = container.querySelector(".chat-scroll") as HTMLDivElement;
+
+		expect(scrollContainer.style.paddingBottom).toBe("320px");
+	});
+
 	it("uses the wider assistant layout for the standalone thinking bubble", () => {
 		const { container } = render(
 			<ChatMessageList

@@ -1,4 +1,5 @@
 import { MessageCircle } from "lucide-react";
+import { forwardRef } from "react";
 import {
 	AIKO_PNGTUBER_EMOTIONS,
 	type AikoPngTuberEmotion
@@ -26,7 +27,10 @@ const sizeClassNames: Record<AvatarOverlaySize, string> = {
 	medium: "h-36 w-28 md:h-56 md:w-40"
 };
 
-function AvatarOverlay({ position, size, bottomOffsetPx = 104 }: AvatarOverlayProps) {
+const AvatarOverlay = forwardRef<HTMLDivElement, AvatarOverlayProps>(function AvatarOverlay(
+	{ position, size, bottomOffsetPx = 104 },
+	ref
+) {
 	const { t } = useI18n();
 	const { state } = useAvatarRuntime();
 
@@ -38,8 +42,9 @@ function AvatarOverlay({ position, size, bottomOffsetPx = 104 }: AvatarOverlayPr
 
 	return (
 		<div
+			ref={ref}
 			className={cn(
-				"pointer-events-none absolute z-20 block md:z-0",
+				"pointer-events-none absolute z-20 block",
 				positionClassNames[position],
 				sizeClassNames[size]
 			)}
@@ -62,7 +67,7 @@ function AvatarOverlay({ position, size, bottomOffsetPx = 104 }: AvatarOverlayPr
 			</div>
 		</div>
 	);
-}
+});
 
 function resolvePngTuberEmotion(expressionId: string): AikoPngTuberEmotion {
 	return (

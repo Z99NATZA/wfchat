@@ -58,7 +58,15 @@ function ChatPage({
 	const { notifyAvatarChatEvent } = useAvatarChatBridge();
 	const chat = useChatSession({ onAvatarChatEvent: notifyAvatarChatEvent });
 	const composerContainerRef = useRef<HTMLDivElement>(null);
+	const avatarOverlayRef = useRef<HTMLDivElement>(null);
 	const [composerHeight, setComposerHeight] = useState(104);
+	const [avatarOverlayHeight, setAvatarOverlayHeight] = useState(0);
+	const avatarOverlayGap = 12;
+	const messageOverlayGap = avatarOverlayGap / 2;
+	const messageListBottomClearance =
+		isAvatarOverlayVisible && avatarOverlayHeight > 0
+			? avatarOverlayHeight + avatarOverlayGap + messageOverlayGap
+			: 0;
 
 	useEffect(() => {
 		onChatSyncSnapshotChange({
@@ -108,6 +116,37 @@ function ChatPage({
 
 		return () => resizeObserver.disconnect();
 	}, []);
+
+	useLayoutEffect(() => {
+		if (!isAvatarOverlayVisible) {
+			setAvatarOverlayHeight(0);
+			return;
+		}
+
+		const overlayElement = avatarOverlayRef.current;
+
+		if (!overlayElement) {
+			return;
+		}
+
+		const measuredOverlayElement: HTMLDivElement = overlayElement;
+
+		function updateOverlayHeight() {
+			setAvatarOverlayHeight(Math.ceil(measuredOverlayElement.getBoundingClientRect().height));
+		}
+
+		updateOverlayHeight();
+
+		if (typeof ResizeObserver === "undefined") {
+			window.addEventListener("resize", updateOverlayHeight);
+			return () => window.removeEventListener("resize", updateOverlayHeight);
+		}
+
+		const resizeObserver = new ResizeObserver(updateOverlayHeight);
+		resizeObserver.observe(measuredOverlayElement);
+
+		return () => resizeObserver.disconnect();
+	}, [avatarOverlaySize, isAvatarOverlayVisible]);
 
 	return (
 		<AppLayout
@@ -172,6 +211,7 @@ function ChatPage({
 						companionAvatarUrl={chat.activePersona.avatarUrl}
 						errorMessage={chat.errorMessage}
 						isSending={chat.isSending}
+						bottomClearancePx={messageListBottomClearance}
 						onLoadMarkdownQaMessages={
 							chat.isMarkdownQaEnabled ? chat.loadMarkdownQaMessages : undefined
 						}
@@ -191,6 +231,7 @@ function ChatPage({
 				</div>
 				{isAvatarOverlayVisible ? (
 					<AvatarOverlay
+						ref={avatarOverlayRef}
 						position={avatarOverlayPosition}
 						size={avatarOverlaySize}
 						bottomOffsetPx={composerHeight}
