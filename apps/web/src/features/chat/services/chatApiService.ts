@@ -476,6 +476,10 @@ async function readApiError(response: Response): Promise<string> {
 }
 
 function apiUrl(path: string): string {
+	if (!apiBaseUrl) {
+		return path;
+	}
+
 	return new URL(path, apiBaseUrl).toString();
 }
 

@@ -108,6 +108,8 @@ Expression inference currently lives in `avatarEmotionInference.ts` as a small k
 
 Manual motion controls in PNGTuber Studio can preview idle, thinking, and talking. They update the shared runtime, so the chat overlay reflects the same selected motion while the app remains mounted.
 
+The PNGTuber Studio viewport keeps the decorative stage and performer visual non-interactive. The top expression control strip is the interactive layer and must stay above the renderer so emotion buttons remain tappable on small screens.
+
 Expression changes use a short fade/scale transition in `PngTuberRenderer`. Motion loops run on the image element while expression transitions run on the wrapper, so the animations do not override each other's transforms. PNGTuber animations respect reduced-motion preferences.
 
 ## Chat Overlay Settings

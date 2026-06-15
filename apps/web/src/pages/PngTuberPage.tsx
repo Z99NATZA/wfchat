@@ -131,11 +131,11 @@ function PngTuberPage({ activityBar, backgroundImageUrl, headerControls }: PngTu
 				</div>
 
 				<div className="relative min-h-0 flex-1 overflow-hidden">
-					<div className="absolute inset-0 bg-app-soft/30" />
-					<div className="absolute inset-x-0 top-1/2 h-px bg-app-border/70" />
-					<div className="absolute left-1/2 top-0 h-full w-px bg-app-border/70" />
-					<div className="absolute inset-x-[18%] bottom-[18%] h-px bg-primary/25" />
-					<div className="relative flex h-full items-center justify-center p-6">
+					<div className="pointer-events-none absolute inset-0 bg-app-soft/30" />
+					<div className="pointer-events-none absolute inset-x-0 top-1/2 h-px bg-app-border/70" />
+					<div className="pointer-events-none absolute left-1/2 top-0 h-full w-px bg-app-border/70" />
+					<div className="pointer-events-none absolute inset-x-[18%] bottom-[18%] h-px bg-primary/25" />
+					<div className="pointer-events-none relative flex h-full items-center justify-center p-6">
 						<div className="relative flex h-full max-h-[44rem] w-full max-w-[42rem] items-end justify-center">
 							<div className="absolute bottom-0 h-[76%] w-[72%] rounded-full border border-primary/20 bg-primary/8" />
 							<PngTuberRenderer
@@ -149,11 +149,14 @@ function PngTuberPage({ activityBar, backgroundImageUrl, headerControls }: PngTu
 							</div>
 						</div>
 					</div>
-					<div className="absolute bottom-4 left-4 flex items-center gap-2 rounded-lg border border-app-border bg-app-panel/92 px-3 py-2 text-xs text-muted shadow-soft">
+					<div className="pointer-events-none absolute bottom-4 left-4 flex items-center gap-2 rounded-lg border border-app-border bg-app-panel/92 px-3 py-2 text-xs text-muted shadow-soft">
 						<CircleDot size={14} aria-hidden="true" />
 						{t(activeEmotion.descriptionKey)}
 					</div>
-					<div className="absolute inset-x-4 top-4 flex flex-wrap justify-center gap-2">
+					<div
+						className="absolute inset-x-4 top-4 z-30 flex flex-wrap justify-center gap-2"
+						data-pngtuber-emotion-strip
+					>
 						{AIKO_PNGTUBER_EMOTIONS.map((emotion) => (
 							<button
 								key={emotion.id}
@@ -167,6 +170,7 @@ function PngTuberPage({ activityBar, backgroundImageUrl, headerControls }: PngTu
 												darkAppControlHoverClassName
 											)
 								)}
+								aria-pressed={emotion.id === activeEmotionId}
 								onClick={() => setExpression(emotion.id)}
 							>
 								{t(emotion.labelKey)}

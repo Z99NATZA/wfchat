@@ -13,6 +13,8 @@ The api image builds `apps/api` and runs the Axum binary.
 
 The api service reads backend-only secrets from `apps/api/.env`.
 
+In Docker, nginx also proxies `/api/*` from the web container to the API service at `http://api:8080`. This keeps browser traffic on the same origin as the web app and avoids requiring LAN clients to reach port `8080` directly.
+
 ## Environment Setup
 
 Create local env files once after clone:
@@ -40,40 +42,31 @@ Provider requirements:
 
 Unknown provider values also fail at startup.
 
-For browser-side axios calls, use:
+For local non-Docker browser-side axios calls, use:
 
 ```text
 VITE_API_BASE_URL=http://localhost:8080
 ```
 
-Use `http://api:8080` only for server-to-server calls from inside Docker.
+For Docker web builds, `VITE_API_BASE_URL` is intentionally empty so browser requests stay relative to the web origin and go through the nginx `/api` proxy. Use `http://api:8080` only for server-to-server calls from inside Docker.
 
 ## LAN Sharing
 
-To open the Docker web app from another device on the same Wi-Fi, set the root `.env` `WFCHAT_PUBLIC_HOST` to the host machine's LAN IP:
-
-```text
-WFCHAT_PUBLIC_HOST=10.42.17.228
-```
-
-Then rebuild the web image because `VITE_API_BASE_URL` is baked into the static frontend bundle:
-
-```bash
-docker compose up -d --build
-```
-
-Open the web app from the other device with:
+To open the Docker web app from another device on the same Wi-Fi, use the host machine's LAN IP:
 
 ```text
 http://10.42.17.228:5173
 ```
 
-The root `docker-compose.yml` uses this host for both:
+Rebuild and start the containers:
 
-- API CORS `FRONTEND_ORIGINS`
-- web build arg `VITE_API_BASE_URL`
+```bash
+docker compose up -d --build
+```
 
-Docker keeps both `http://localhost:5173` and `http://<WFCHAT_PUBLIC_HOST>:5173` in the API CORS allow-list, so the same containers can be opened from the host machine and another device on the LAN.
+The other device only needs to reach port `5173`. Chat API calls go to `http://10.42.17.228:5173/api/...` and nginx forwards them to the API container inside Docker.
+
+The root `docker-compose.yml` still keeps both `http://localhost:5173` and `http://<WFCHAT_PUBLIC_HOST>:5173` in the API CORS allow-list for direct API access and development diagnostics.
 
 If `WFCHAT_PUBLIC_HOST` is unset, Docker Compose defaults to `localhost` for normal local use.
 

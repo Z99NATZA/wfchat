@@ -37,14 +37,13 @@ docker compose down
 # api: http://localhost:8080
 ```
 
-To open the Docker app from another device on the same Wi-Fi, set `WFCHAT_PUBLIC_HOST` in the root `.env` to this machine's LAN IP, then rebuild:
+To open the Docker app from another device on the same Wi-Fi, use this machine's LAN IP:
 
 ```bash
-WFCHAT_PUBLIC_HOST=192.168.1.20
 docker compose up -d --build
 ```
 
-After this, both `http://localhost:5173` and `http://<WFCHAT_PUBLIC_HOST>:5173` can use the same API containers.
+Open `http://<LAN_IP>:5173` from the other device. The Docker web container proxies `/api` to the API container internally, so the browser only needs to reach port `5173`.
 
 More Docker details: [docs/docker.md](docs/docker.md).
 

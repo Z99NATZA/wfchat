@@ -53,7 +53,7 @@ services:
     build:
       context: ./apps/web
       args:
-        VITE_API_BASE_URL: http://${WFCHAT_PUBLIC_HOST:-localhost}:8080
+        VITE_API_BASE_URL: ""
         VITE_GOOGLE_CLIENT_ID: ${VITE_GOOGLE_CLIENT_ID}
         VITE_ENABLE_MARKDOWN_QA: "true"
     ports:
