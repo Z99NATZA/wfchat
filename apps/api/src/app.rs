@@ -4,18 +4,17 @@ use axum::{
     Json, Router,
 };
 use serde::Serialize;
-use tower_http::{cors::CorsLayer, trace::TraceLayer};
+use tower_http::{
+    cors::{AllowOrigin, CorsLayer},
+    trace::TraceLayer,
+};
 
 use crate::{admin, auth, characters, chat, memory, state::AppState, sync};
 
 pub fn build_router(state: AppState) -> Router {
-    let frontend_origin = state
-        .config
-        .frontend_origin
-        .parse::<HeaderValue>()
-        .unwrap_or_else(|_| HeaderValue::from_static("http://localhost:5173"));
+    let frontend_origins = parse_frontend_origins(&state.config.frontend_origin);
     let cors = CorsLayer::new()
-        .allow_origin(frontend_origin)
+        .allow_origin(AllowOrigin::list(frontend_origins))
         .allow_methods([
             Method::GET,
             Method::POST,
@@ -48,4 +47,17 @@ struct HealthResponse {
 
 async fn health() -> Json<HealthResponse> {
     Json(HealthResponse { status: "ok" })
+}
+
+fn parse_frontend_origins(frontend_origin: &str) -> Vec<HeaderValue> {
+    let origins = frontend_origin
+        .split(',')
+        .filter_map(|origin| origin.trim().parse::<HeaderValue>().ok())
+        .collect::<Vec<_>>();
+
+    if origins.is_empty() {
+        vec![HeaderValue::from_static("http://localhost:5173")]
+    } else {
+        origins
+    }
 }

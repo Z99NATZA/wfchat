@@ -26,6 +26,7 @@ services:
       APP_HOST: 0.0.0.0
       APP_PORT: 8080
       FRONTEND_ORIGIN: http://${WFCHAT_PUBLIC_HOST:-localhost}:5173
+      FRONTEND_ORIGINS: http://localhost:5173,http://${WFCHAT_PUBLIC_HOST:-localhost}:5173
       DATABASE_URL: postgres://postgres:postgres@postgres:5432/wfchat
     ports:
       - "8080:8080"

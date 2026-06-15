@@ -70,8 +70,10 @@ http://10.42.17.228:5173
 
 The root `docker-compose.yml` uses this host for both:
 
-- API CORS `FRONTEND_ORIGIN`
+- API CORS `FRONTEND_ORIGINS`
 - web build arg `VITE_API_BASE_URL`
+
+Docker keeps both `http://localhost:5173` and `http://<WFCHAT_PUBLIC_HOST>:5173` in the API CORS allow-list, so the same containers can be opened from the host machine and another device on the LAN.
 
 If `WFCHAT_PUBLIC_HOST` is unset, Docker Compose defaults to `localhost` for normal local use.
 

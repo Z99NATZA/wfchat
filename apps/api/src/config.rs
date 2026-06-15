@@ -24,7 +24,10 @@ impl Config {
         let config = Self {
             app_host: env_value("APP_HOST", "0.0.0.0"),
             app_port: env_value("APP_PORT", "8080").parse().unwrap_or(8080),
-            frontend_origin: env_value("FRONTEND_ORIGIN", "http://localhost:5173"),
+            frontend_origin: env_value(
+                "FRONTEND_ORIGINS",
+                &env_value("FRONTEND_ORIGIN", "http://localhost:5173"),
+            ),
             ai_provider: env_value("AI_PROVIDER", "mock"),
             ai_model: env_value("AI_MODEL", "mock-waifu"),
             database_url: env_value(
@@ -142,7 +145,9 @@ mod tests {
         let mut config = base_config();
         config.ai_provider = "openai".to_owned();
 
-        let error = config.validate().expect_err("openai should require api key");
+        let error = config
+            .validate()
+            .expect_err("openai should require api key");
         assert_eq!(error, "OPENAI_API_KEY is required when AI_PROVIDER=openai");
     }
 

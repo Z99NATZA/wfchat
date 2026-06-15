@@ -44,6 +44,8 @@ WFCHAT_PUBLIC_HOST=192.168.1.20
 docker compose up -d --build
 ```
 
+After this, both `http://localhost:5173` and `http://<WFCHAT_PUBLIC_HOST>:5173` can use the same API containers.
+
 More Docker details: [docs/docker.md](docs/docker.md).
 
 ## License
