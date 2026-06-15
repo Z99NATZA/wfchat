@@ -248,6 +248,19 @@ describe("useChatSession streaming sendMessage", () => {
 		expect(result.current.messages.some((item) => item.text.includes("<script>"))).toBe(true);
 	});
 
+	it("exposes quick prompts from chat UI config", async () => {
+		mocks.getChatUiConfig.mockResolvedValue({
+			personas: [persona],
+			quickPrompts: ["Make it sweeter", "Suggest a reply"]
+		});
+
+		const { result } = renderHook(() => useChatSession());
+
+		await waitFor(() =>
+			expect(result.current.quickPrompts).toEqual(["Make it sweeter", "Suggest a reply"])
+		);
+	});
+
 	it("does not load invalid chat route segments as backend chat ids", async () => {
 		mocks.location.pathname = "/chat/qa";
 

@@ -13,11 +13,12 @@ import type { AvatarOverlayPosition, AvatarOverlaySize } from "@/stores/avatarOv
 type AvatarOverlayProps = {
 	position: AvatarOverlayPosition;
 	size: AvatarOverlaySize;
+	bottomOffsetPx?: number;
 };
 
 const positionClassNames: Record<AvatarOverlayPosition, string> = {
-	"bottom-right": "bottom-[6.5rem] right-3 md:bottom-24 md:right-4 lg:right-6",
-	"bottom-left": "bottom-[6.5rem] left-3 md:bottom-24 md:left-4 lg:left-6"
+	"bottom-right": "right-3 md:right-4 lg:right-6",
+	"bottom-left": "left-3 md:left-4 lg:left-6"
 };
 
 const sizeClassNames: Record<AvatarOverlaySize, string> = {
@@ -25,7 +26,7 @@ const sizeClassNames: Record<AvatarOverlaySize, string> = {
 	medium: "h-36 w-28 md:h-56 md:w-40"
 };
 
-function AvatarOverlay({ position, size }: AvatarOverlayProps) {
+function AvatarOverlay({ position, size, bottomOffsetPx = 104 }: AvatarOverlayProps) {
 	const { t } = useI18n();
 	const { state } = useAvatarRuntime();
 
@@ -42,6 +43,7 @@ function AvatarOverlay({ position, size }: AvatarOverlayProps) {
 				positionClassNames[position],
 				sizeClassNames[size]
 			)}
+			style={{ bottom: `calc(${bottomOffsetPx}px + 0.75rem)` }}
 			aria-label={t("pngtuber.header.title")}
 		>
 			<div className="relative h-full overflow-hidden rounded-lg border border-app-border bg-app-panel/92 shadow-soft">

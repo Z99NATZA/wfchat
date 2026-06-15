@@ -12,7 +12,7 @@ import type { AppFont } from "@/types/font";
 import type { Theme } from "@/types/theme";
 import type { ChatMessage, ChatSessionSummary, MemoryFact, MemorySummary } from "@/types/chat";
 import type { AvatarOverlayPosition, AvatarOverlaySize } from "@/stores/avatarOverlayStore";
-import { type ReactNode, useEffect } from "react";
+import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 export type ChatSyncSnapshot = {
 	activeChatId: string | null;
@@ -57,6 +57,8 @@ function ChatPage({
 }: ChatPageProps) {
 	const { notifyAvatarChatEvent } = useAvatarChatBridge();
 	const chat = useChatSession({ onAvatarChatEvent: notifyAvatarChatEvent });
+	const composerContainerRef = useRef<HTMLDivElement>(null);
+	const [composerHeight, setComposerHeight] = useState(104);
 
 	useEffect(() => {
 		onChatSyncSnapshotChange({
@@ -80,6 +82,32 @@ function ChatPage({
 		chat.resetToDraft,
 		onChatSyncSnapshotChange
 	]);
+
+	useLayoutEffect(() => {
+		const composerElement = composerContainerRef.current;
+
+		if (!composerElement) {
+			return;
+		}
+
+		const measuredComposerElement: HTMLDivElement = composerElement;
+
+		function updateComposerHeight() {
+			setComposerHeight(Math.ceil(measuredComposerElement.getBoundingClientRect().height));
+		}
+
+		updateComposerHeight();
+
+		if (typeof ResizeObserver === "undefined") {
+			window.addEventListener("resize", updateComposerHeight);
+			return () => window.removeEventListener("resize", updateComposerHeight);
+		}
+
+		const resizeObserver = new ResizeObserver(updateComposerHeight);
+		resizeObserver.observe(measuredComposerElement);
+
+		return () => resizeObserver.disconnect();
+	}, []);
 
 	return (
 		<AppLayout
@@ -148,18 +176,25 @@ function ChatPage({
 							chat.isMarkdownQaEnabled ? chat.loadMarkdownQaMessages : undefined
 						}
 					/>
-					<ChatComposer
-						draft={chat.draft}
-						font={font}
-						companionName={chat.activePersona.name}
-						isDisabled={false}
-						isSending={chat.isSending}
-						onDraftChange={chat.setDraft}
-						onSend={chat.sendMessage}
-					/>
+					<div ref={composerContainerRef}>
+						<ChatComposer
+							draft={chat.draft}
+							font={font}
+							companionName={chat.activePersona.name}
+							quickPrompts={chat.quickPrompts}
+							isDisabled={false}
+							isSending={chat.isSending}
+							onDraftChange={chat.setDraft}
+							onSend={chat.sendMessage}
+						/>
+					</div>
 				</div>
 				{isAvatarOverlayVisible ? (
-					<AvatarOverlay position={avatarOverlayPosition} size={avatarOverlaySize} />
+					<AvatarOverlay
+						position={avatarOverlayPosition}
+						size={avatarOverlaySize}
+						bottomOffsetPx={composerHeight}
+					/>
 				) : null}
 			</div>
 			</AppLayout>

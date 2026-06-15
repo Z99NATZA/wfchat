@@ -3,11 +3,13 @@ import { Image, Mic, Paperclip, Send } from "lucide-react";
 import { useI18n } from "@/i18n";
 import IconButton from "@/components/ui/IconButton";
 import type { AppFont } from "@/types/font";
+import { cn } from "@/utils/classNames";
 
 type ChatComposerProps = {
 	draft: string;
 	font: AppFont;
 	companionName: string;
+	quickPrompts?: string[];
 	onDraftChange: (draft: string) => void;
 	onSend: () => void;
 	isDisabled?: boolean;
@@ -18,6 +20,7 @@ function ChatComposer({
 	draft,
 	font,
 	companionName,
+	quickPrompts = [],
 	onDraftChange,
 	onSend,
 	isDisabled = false,
@@ -77,9 +80,51 @@ function ChatComposer({
 		requestAnimationFrame(() => textareaRef.current?.focus());
 	}
 
+	function handleQuickPromptSelect(prompt: string) {
+		if (isDisabled || isSending) {
+			return;
+		}
+
+		onDraftChange(prompt);
+		requestAnimationFrame(() => {
+			const textarea = textareaRef.current;
+
+			if (!textarea) {
+				return;
+			}
+
+			textarea.focus();
+			textarea.setSelectionRange(prompt.length, prompt.length);
+		});
+	}
+
+	const visibleQuickPrompts = quickPrompts.filter((prompt) => prompt.trim().length > 0);
+
 	return (
 		<div className="sticky bottom-0 z-20 border-t border-app-border bg-app-panel/62 px-4 py-4 lg:px-8">
-			<div className="mx-auto max-w-3xl">
+			<div className="mx-auto flex max-w-3xl flex-col gap-2">
+				{visibleQuickPrompts.length > 0 ? (
+					<div
+						className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1"
+						aria-label={t("chat.composer.quickPrompts")}
+					>
+						{visibleQuickPrompts.map((prompt) => (
+							<button
+								key={prompt}
+								type="button"
+								className={cn(
+									"shrink-0 rounded-full border border-app-border bg-app-soft/76 px-3 py-1.5 text-xs font-medium text-app-text shadow-soft transition hover:border-primary/50 hover:bg-app-panel/86 focus:outline-none focus:ring-2 focus:ring-primary/25",
+									(isDisabled || isSending) &&
+										"cursor-not-allowed opacity-50 hover:border-app-border hover:bg-app-soft/76"
+								)}
+								disabled={isDisabled || isSending}
+								onClick={() => handleQuickPromptSelect(prompt)}
+							>
+								{prompt}
+							</button>
+						))}
+					</div>
+				) : null}
 				<form
 					className="flex items-end gap-2 rounded-lg border border-app-border bg-app-soft/82 p-2 shadow-soft focus-within:border-primary focus-within:ring-4 focus-within:ring-primary/15"
 					onSubmit={handleSubmit}

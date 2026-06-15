@@ -40,6 +40,7 @@ Current chat message rendering:
 - Assistant messages render a safe Markdown subset through the frontend renderer.
 - Assistant bubbles are wider than user bubbles to improve readability for structured Markdown such as tables and code blocks.
 - Assistant messages with non-empty text expose a copy action for the raw message text.
+- Quick prompts from `/api/chat-ui/config` render as chips above the composer. Selecting a chip fills the composer draft and focuses the textarea; it does not auto-send.
 - In development mode or local Docker builds with `VITE_ENABLE_MARKDOWN_QA=true`, `/chat?qa=markdown` exposes a local-only `Load QA` action for Markdown rendering fixtures. Chat route ids must be UUIDs so invalid paths such as `/chat/qa` do not call `/api/chats/:chat_id`.
 - Assistant streaming uses one optimistic local assistant message with id prefix `local-assistant-`.
 - While that optimistic assistant message exists, the message list should render loading text inside that placeholder only when it has no token text yet, and should not render a second standalone thinking bubble.
@@ -60,5 +61,5 @@ App-level persisted settings live behind `apps/web/src/app/AppSettingsProvider.t
 - Use admin screens for AI profile configuration later.
 - Keep `VITE_*` variables limited to non-secret browser configuration.
 - Put reusable browser infrastructure in `apps/web/src/services`.
-- Keep unsupported controls disabled and visually muted. This currently includes attachments, voice input, image prompts, quick prompts, search, notifications, chat modes, response-shape controls, and safety toggles.
-- Supported controls currently include theme toggle, settings, send message, and clear chat.
+- Keep unsupported controls disabled and visually muted. This currently includes attachments, voice input, image prompts, search, notifications, chat modes, response-shape controls, and safety toggles.
+- Supported controls currently include theme toggle, settings, send message, quick prompts, and clear chat.

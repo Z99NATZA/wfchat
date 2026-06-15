@@ -153,6 +153,7 @@
 	"chat.composer.placeholder": "Message {name}",
 	"chat.composer.voiceMessage": "Voice message",
 	"chat.composer.imagePrompt": "Image prompt",
+	"chat.composer.quickPrompts": "Quick prompts",
 	"chat.composer.waitingForResponse": "Waiting for response",
 	"chat.composer.sendMessage": "Send message",
 	"chat.composer.waitBeforeSending": "Wait for {name} to reply before sending again",

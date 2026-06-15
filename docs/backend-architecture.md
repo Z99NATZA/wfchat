@@ -124,7 +124,7 @@ This lets an admin switch OpenAI, LM Studio, xAI, or Claude without changing cha
 
 The active character registry is static code in `apps/api/src/characters.rs`.
 
-Chat UI persona metadata is also sourced from this registry (`status`, `last_message`, `last_active_at`, `unread_count`, `avatar_url`) and exposed through `GET /api/chat-ui/config`.
+Chat UI persona metadata is also sourced from this registry (`status`, `last_message`, `last_active_at`, `unread_count`, `avatar_url`) and exposed through `GET /api/chat-ui/config`. The same config response exposes `quick_prompts`, which the frontend renders as composer chips that fill the draft without sending.
 
 Current character:
 

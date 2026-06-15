@@ -153,6 +153,7 @@
 	"chat.composer.placeholder": "พิมพ์ข้อความ",
 	"chat.composer.voiceMessage": "ข้อความเสียง",
 	"chat.composer.imagePrompt": "พรอมป์ตรูปภาพ",
+	"chat.composer.quickPrompts": "พรอมป์ต์ด่วน",
 	"chat.composer.waitingForResponse": "กำลังรอคำตอบ",
 	"chat.composer.sendMessage": "ส่งข้อความ",
 	"chat.composer.waitBeforeSending": "รอให้ {name} ตอบก่อนส่งข้อความถัดไป",

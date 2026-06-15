@@ -60,7 +60,7 @@ export const MARKDOWN_QA_MESSAGES: ChatMessage[] = [
 			"| --- | --- | --- |",
 			"| Markdown | Ready | First rendering scope |",
 			"| Attachments | Later | Out of scope |",
-			"| Quick prompts | Later | Separate feature scope |",
+			"| Quick prompts | Ready | Composer chips fill the draft |",
 			"",
 			"| Column A | Column B | Column C | Column D | Column E |",
 			"| --- | --- | --- | --- | --- |",

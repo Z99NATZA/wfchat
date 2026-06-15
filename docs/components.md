@@ -31,7 +31,7 @@ Chat feature components live in `apps/web/src/features/chat/components`.
 - `ChatHeader`: active companion identity and global chat actions.
 - `ChatMessageList`: message timeline rendering.
 - `ChatMessageContent`: user plain-text rendering and assistant Markdown rendering inside message bubbles.
-- `ChatComposer`: draft input, quick prompts, and send action.
+- `ChatComposer`: draft input, quick prompt chips that fill the draft without auto-send, and send action.
 - `ChatDetailsPanel`: companion profile, memory, response metrics, and safety controls.
 
 Chat message content rendering has its own scope document: `docs/chat-message-rendering.md`. Read it before adding Markdown, code blocks, tables, message actions, or other rich response surfaces.

@@ -73,6 +73,7 @@ export function useChatSession({ onAvatarChatEvent }: UseChatSessionOptions = {}
 	const navigate = useNavigate();
 	const [personas, setPersonas] = useState(CHAT_PERSONAS);
 	const [selectedPersonaId, setSelectedPersonaId] = useState(CHAT_PERSONAS[0]?.id ?? "");
+	const [quickPrompts, setQuickPrompts] = useState<string[]>([]);
 	const [messages, setMessages] = useState<ChatMessage[]>([]);
 	const [draft, setDraft] = useState("");
 	const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -151,6 +152,7 @@ export function useChatSession({ onAvatarChatEvent }: UseChatSessionOptions = {}
 				}
 
 				setPersonas(config.personas);
+				setQuickPrompts(config.quickPrompts);
 				setSelectedPersonaId((currentId) =>
 					config.personas.some((persona) => persona.id === currentId)
 						? currentId
@@ -163,6 +165,7 @@ export function useChatSession({ onAvatarChatEvent }: UseChatSessionOptions = {}
 				}
 
 				setPersonas(CHAT_PERSONAS);
+				setQuickPrompts([]);
 				setSelectedPersonaId((currentId) =>
 					CHAT_PERSONAS.some((persona) => persona.id === currentId)
 						? currentId
@@ -753,6 +756,7 @@ export function useChatSession({ onAvatarChatEvent }: UseChatSessionOptions = {}
 		memorySummaries,
 		messages,
 		openSidebar: () => setIsSidebarOpen(true),
+		quickPrompts,
 		refreshRemoteState,
 		isMarkdownQaEnabled,
 		loadMarkdownQaMessages,
