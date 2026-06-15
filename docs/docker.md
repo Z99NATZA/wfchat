@@ -48,6 +48,33 @@ VITE_API_BASE_URL=http://localhost:8080
 
 Use `http://api:8080` only for server-to-server calls from inside Docker.
 
+## LAN Sharing
+
+To open the Docker web app from another device on the same Wi-Fi, set the root `.env` `WFCHAT_PUBLIC_HOST` to the host machine's LAN IP:
+
+```text
+WFCHAT_PUBLIC_HOST=10.42.17.228
+```
+
+Then rebuild the web image because `VITE_API_BASE_URL` is baked into the static frontend bundle:
+
+```bash
+docker compose up -d --build
+```
+
+Open the web app from the other device with:
+
+```text
+http://10.42.17.228:5173
+```
+
+The root `docker-compose.yml` uses this host for both:
+
+- API CORS `FRONTEND_ORIGIN`
+- web build arg `VITE_API_BASE_URL`
+
+If `WFCHAT_PUBLIC_HOST` is unset, Docker Compose defaults to `localhost` for normal local use.
+
 For local chat Markdown QA, the root `docker-compose.yml` builds the web image with:
 
 ```text

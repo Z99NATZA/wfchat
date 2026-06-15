@@ -25,7 +25,7 @@ services:
     environment:
       APP_HOST: 0.0.0.0
       APP_PORT: 8080
-      FRONTEND_ORIGIN: http://localhost:5173
+      FRONTEND_ORIGIN: http://${WFCHAT_PUBLIC_HOST:-localhost}:5173
       DATABASE_URL: postgres://postgres:postgres@postgres:5432/wfchat
     ports:
       - "8080:8080"
@@ -52,7 +52,7 @@ services:
     build:
       context: ./apps/web
       args:
-        VITE_API_BASE_URL: http://localhost:8080
+        VITE_API_BASE_URL: http://${WFCHAT_PUBLIC_HOST:-localhost}:8080
         VITE_GOOGLE_CLIENT_ID: ${VITE_GOOGLE_CLIENT_ID}
         VITE_ENABLE_MARKDOWN_QA: "true"
     ports:
