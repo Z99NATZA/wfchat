@@ -44,6 +44,12 @@ Make the app shell use the visible mobile viewport reliably while preserving the
 
 ## Layout Contract
 
+Current implementation:
+
+- `apps/web/src/styles.css` defines `.app-viewport`.
+- `apps/web/src/layouts/AppLayout.tsx` uses `.app-viewport` for the primary app shell.
+- `body` is locked with `overflow: hidden` so normal chat use does not fall back to page-level scrolling.
+
 The app shell should prefer dynamic viewport units in this order:
 
 ```css
@@ -71,6 +77,8 @@ Do not move scrolling back to `body`, `main`, or the browser page.
 ## Safe Area Contract
 
 The chat composer sits at the bottom of the chat column and must avoid device safe areas.
+
+Current implementation: `ChatComposer` uses base bottom padding plus `env(safe-area-inset-bottom)`.
 
 The composer bottom padding should include:
 

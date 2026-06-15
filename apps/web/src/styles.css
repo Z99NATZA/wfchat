@@ -91,6 +91,7 @@
 		min-width: 320px;
 		margin: 0;
 		font-family: var(--app-font-family);
+		overflow: hidden;
 	}
 
 	html[data-font="inter"] {
@@ -249,6 +250,13 @@
 }
 
 @layer utilities {
+	.app-viewport {
+		height: 100vh;
+		height: 100svh;
+		height: 100dvh;
+		overflow: hidden;
+	}
+
 	.bg-primary\/8 {
 		background-color: color-mix(in srgb, var(--brand-primary) 8%, transparent);
 	}

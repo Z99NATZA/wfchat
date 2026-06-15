@@ -101,7 +101,9 @@ function ChatComposer({
 	const visibleQuickPrompts = quickPrompts.filter((prompt) => prompt.trim().length > 0);
 
 	return (
-		<div className="sticky bottom-0 z-20 border-t border-app-border bg-app-panel/62 px-4 py-4 lg:px-8">
+		<div
+			className="sticky bottom-0 z-20 border-t border-app-border bg-app-panel/62 px-4 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-4 lg:px-8"
+		>
 			<div className="mx-auto flex max-w-3xl flex-col gap-2">
 				{visibleQuickPrompts.length > 0 ? (
 					<div

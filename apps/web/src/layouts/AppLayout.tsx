@@ -62,7 +62,7 @@ function AppLayout({
 	return (
 		<main
 			ref={layoutRef}
-			className="relative h-screen overflow-hidden bg-app-bg text-app-text antialiased transition-colors"
+			className="app-viewport relative bg-app-bg text-app-text antialiased transition-colors"
 			style={layoutStyle}
 		>
 			{backgroundImageStyle && (
