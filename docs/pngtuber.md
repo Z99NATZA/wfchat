@@ -122,7 +122,7 @@ wfchat.avatarOverlaySize
 
 The overlay can be hidden or moved without changing chat behavior. The bridge should continue updating runtime state even when the overlay is hidden.
 
-On mobile chat viewports, the overlay uses a compact performer size and sits above the composer. The chat page measures the composer height and overlay height, offsets the overlay from the live composer height, and adds bottom clearance to the message timeline so quick prompt chips, a taller draft textarea, and the PNGTuber overlay do not cover chat bubbles. On medium and larger viewports, it uses the larger desktop dimensions.
+On mobile chat viewports, the overlay uses a compact performer size and sits above the composer. The chat page measures the composer height to offset the overlay above the live composer, then measures the overlay height and adds only overlay-height bottom clearance to the message timeline so chat bubbles do not sit under the PNGTuber. On medium and larger viewports, it uses the larger desktop dimensions.
 
 ## Deferred Transport Work
 
