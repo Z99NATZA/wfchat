@@ -10,7 +10,7 @@ This document defines the intended scroll behavior for the chat screen in `apps/
 
 ## Layout Contract
 
-- The app shell uses a fixed viewport height container (`h-screen`) with `overflow-hidden`.
+- The app shell uses the dynamic viewport contract from `docs/mobile-viewport.md` with `overflow-hidden`.
 - The page body/root is also fixed to full height (`html`, `body`, `#root` set to `height: 100%`).
 - The chat message timeline is the primary scroll container (`overflow-y-auto`).
 

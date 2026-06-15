@@ -31,6 +31,8 @@ The clear chat button in the header is supported. It calls `DELETE /api/chats/:c
 
 Chat layout and scroll contract (single-scroll message timeline, sticky header/composer): `docs/chat-layout-scroll.md`.
 
+Mobile browser viewport and safe-area scope: `docs/mobile-viewport.md`.
+
 Chat message rendering scope and rich-format rules: `docs/chat-message-rendering.md`.
 
 Current chat message rendering:
