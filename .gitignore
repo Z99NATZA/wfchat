@@ -9,3 +9,4 @@ apps/api/data
 npm-debug.log*
 Dockerfile.*
 .VSCodeCounter/
+me/

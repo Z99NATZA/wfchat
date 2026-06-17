@@ -168,6 +168,18 @@ Recommended candidates:
 
 Syntax highlighting is deferred. Code blocks currently use plain monospace rendering with a language label and copy button.
 
+When syntax highlighting is implemented, it should be treated as a performance-sensitive enhancement:
+
+- Render the existing plain code block immediately as the fallback.
+- Load the highlighter lazily only when assistant fenced code blocks are present.
+- Highlight fenced code blocks only; keep inline code plain.
+- Skip or delay highlighting while an assistant message is actively streaming.
+- Debounce highlight work for changing code content.
+- Cache highlighted output by code, language, and theme.
+- Keep a max-size guard for very large code blocks and fall back to plain rendering.
+- Do not render raw assistant HTML. If highlighted HTML is used, it must come only from the trusted highlighter output.
+- Keep the code block padding, font size, and line height stable before and after highlighting so scroll measurement remains predictable.
+
 Build note: `react-markdown`, `remark-gfm`, and their Markdown parsing dependencies are split into a dedicated Vite `markdown-renderer` chunk through `apps/web/vite.config.ts`. Keep Markdown renderer dependencies frontend-only and update the manual chunk package list if the renderer dependency graph changes.
 
 ## Styling Rules
@@ -247,7 +259,7 @@ Potential later scopes:
 
 - full assistant message actions
 - full-message copy
-- syntax highlighting
+- lazy syntax highlighting for fenced code blocks
 - citation/source cards
 - attachment rendering
 - image message parts
