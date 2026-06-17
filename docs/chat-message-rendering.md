@@ -217,6 +217,7 @@ Testing rules for this scope:
 - cover every format added in the first implementation
 - keep the streaming placeholder behavior covered
 - do not add backend tests for a frontend-only rendering change
+- planned syntax highlighting test cases are tracked in `docs/chat-message-rendering-test-cases.md` and should be updated when that scope is implemented
 
 ## Manual QA
 

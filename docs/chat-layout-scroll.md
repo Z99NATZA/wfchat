@@ -46,6 +46,18 @@ Virtualization requirements:
 - Keep PNGTuber bottom clearance as part of the timeline's bottom spacing contract.
 - Unmounted messages must not keep expensive rendering work, highlight effects, observers, or timers alive.
 
+Planned test and QA coverage:
+
+- long conversations render only visible messages plus overscan, while the scrollbar still represents the loaded timeline
+- bottom auto-scroll still occurs only when the user is near the latest message
+- incoming messages do not force-jump the viewport when the user is reading history
+- `Jump to latest` remains visible and returns to the latest message when the user is away from the bottom
+- prepending older messages preserves the user's anchored viewport position
+- variable-height Markdown, tables, code blocks, and streaming text are measured without page-level scroll regressions
+- PNGTuber overlay clearance still prevents the latest visible bubble from sitting under the overlay
+- unmounted messages do not keep highlight work, resize observers, timers, or other expensive effects alive
+- mobile-width chat keeps the composer reachable and does not reintroduce body/page scrolling
+
 ## Why This Matters
 
 - Removes double-scroll UX (browser page + message list).

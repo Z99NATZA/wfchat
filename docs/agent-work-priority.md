@@ -4,10 +4,13 @@ Use this file as the first document to read before starting a new scoped agent t
 
 ## Active Scope
 
-Planned chat rendering performance work. Implement in separate scopes:
+Implement lazy, non-blocking syntax highlighting for assistant fenced code blocks.
 
-1. Add lazy, non-blocking syntax highlighting for assistant fenced code blocks.
-2. Add virtualized chat timeline rendering after syntax highlighting is stable.
+Out of scope for this priority:
+
+- virtualized chat timeline rendering
+- backend message schema changes
+- rendering raw assistant HTML
 
 ## Required Read Order
 
@@ -15,12 +18,14 @@ When a new priority is set, list the required documents here in the order agents
 
 1. `docs/agent-work-priority.md`
 2. `docs/chat-message-rendering.md`
-3. `docs/chat-layout-scroll.md`
-4. `docs/mobile-viewport.md`
+3. `docs/chat-message-rendering-test-cases.md`
+4. `docs/chat-layout-scroll.md`
 
 ## Notes
 
 - Keep this file short and task-focused.
 - Move completed milestone details into the relevant domain document.
 - Clear this file when the active priority is complete.
-- Do not implement syntax highlighting and timeline virtualization in the same change unless the user explicitly requests it.
+- Render plain code immediately and enhance with highlighting only after async work completes.
+- Do not highlight inline code or actively streaming assistant code in the first implementation.
+- Keep syntax highlighting and timeline virtualization in separate changes.

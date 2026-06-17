@@ -461,6 +461,43 @@ Expected:
 - highlighted output remains readable in light and dark mode
 - unsupported languages fall back to plain code
 
+## Planned Follow-up Cases
+
+These cases define the expected coverage for future performance work. They are not required for the current plain-code implementation.
+
+### Lazy Syntax Highlighting
+
+Current status: planned.
+
+Automated candidates:
+
+- plain code block fallback renders immediately before highlight work completes
+- fenced code with a known language receives highlighted output after the async highlighter resolves
+- inline code remains plain and does not load or use the highlighter
+- unknown language falls back to plain code while keeping the language label
+- very large code block falls back to plain code according to the configured size guard
+- highlighted output is cached by code, language, and theme so rerendering the same block does not highlight again
+- stale async highlight results are ignored after the code block unmounts or the code text changes
+- copy-code still writes the raw code text, not highlighted markup
+
+Manual QA:
+
+- check highlighted code in light and dark themes
+- verify long highlighted lines still scroll horizontally inside the code block
+- verify streaming assistant code stays readable and does not repeatedly re-highlight while tokens arrive
+- verify changing app font or viewport width does not make the code block jump unexpectedly
+
+### Highlighting With Virtualized Messages
+
+Current status: planned after syntax highlighting.
+
+Expected:
+
+- code blocks outside the mounted viewport do not highlight
+- scrolling a highlighted code block out of view cleans up pending work
+- scrolling back to the same code block can reuse cached highlighted output
+- message height is remeasured after highlight output appears if the virtual timeline needs it
+
 ## Manual QA Checklist
 
 Run manual QA after automated tests pass.
