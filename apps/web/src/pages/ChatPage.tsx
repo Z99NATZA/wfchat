@@ -211,6 +211,7 @@ function ChatPage({
 						companionAvatarUrl={chat.activePersona.avatarUrl}
 						errorMessage={chat.errorMessage}
 						isSending={chat.isSending}
+						theme={theme}
 						bottomClearancePx={messageListBottomClearance}
 						onLoadMarkdownQaMessages={
 							chat.isMarkdownQaEnabled ? chat.loadMarkdownQaMessages : undefined

@@ -445,7 +445,7 @@ Expected:
 
 ### Syntax Highlighting
 
-Current status: deferred.
+Current status: implemented for eligible non-streaming assistant fenced code blocks.
 
 Input:
 
@@ -467,9 +467,9 @@ These cases define the expected coverage for future performance work. They are n
 
 ### Lazy Syntax Highlighting
 
-Current status: planned.
+Current status: implemented.
 
-Automated candidates:
+Automated coverage:
 
 - plain code block fallback renders immediately before highlight work completes
 - fenced code with a known language receives highlighted output after the async highlighter resolves
@@ -477,8 +477,11 @@ Automated candidates:
 - unknown language falls back to plain code while keeping the language label
 - very large code block falls back to plain code according to the configured size guard
 - highlighted output is cached by code, language, and theme so rerendering the same block does not highlight again
-- stale async highlight results are ignored after the code block unmounts or the code text changes
 - copy-code still writes the raw code text, not highlighted markup
+
+Implementation guard:
+
+- stale async highlight results are ignored after the code block unmounts or the code text changes
 
 Manual QA:
 

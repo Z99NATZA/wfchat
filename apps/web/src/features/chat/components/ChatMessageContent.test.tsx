@@ -1,9 +1,17 @@
 /**
  * @vitest-environment happy-dom
  */
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import ChatMessageContent from "@/features/chat/components/ChatMessageContent";
+
+const highlighterMock = vi.hoisted(() => ({
+	canHighlightCode: vi.fn(),
+	getHighlightDebounceMs: vi.fn(),
+	highlightCode: vi.fn()
+}));
+
+vi.mock("@/features/chat/components/codeHighlighter", () => highlighterMock);
 
 describe("ChatMessageContent", () => {
 	beforeEach(() => {
@@ -12,6 +20,17 @@ describe("ChatMessageContent", () => {
 			value: {
 				writeText: vi.fn().mockResolvedValue(undefined)
 			}
+		});
+		highlighterMock.canHighlightCode.mockReturnValue(true);
+		highlighterMock.getHighlightDebounceMs.mockReturnValue(0);
+		highlighterMock.highlightCode.mockResolvedValue({
+			lines: [
+				[
+					{ content: "const", color: "#cf222e" },
+					{ content: ' value = "hello";', color: "#24292f" }
+				],
+				[{ content: "console.log(value);", color: "#0550ae" }]
+			]
 		});
 	});
 
@@ -132,6 +151,72 @@ describe("ChatMessageContent", () => {
 		fireEvent.click(screen.getByRole("button", { name: "Copy code" }));
 
 		expect(navigator.clipboard.writeText).toHaveBeenCalledWith('const value = "hello";\nconsole.log(value);');
+	});
+
+	it("renders plain code immediately before async syntax highlighting completes", async () => {
+		highlighterMock.highlightCode.mockReturnValue(new Promise(() => undefined));
+		const { container } = render(
+			<ChatMessageContent
+				author="companion"
+				text={"```ts\nconst value = \"hello\";\nconsole.log(value);\n```"}
+			/>
+		);
+
+		expect(screen.getByText(/const value/)).toBeTruthy();
+		expect(container.querySelector("code")?.getAttribute("data-markdown-code-highlighted")).toBe("false");
+	});
+
+	it("enhances fenced code blocks with async syntax highlighting", async () => {
+		const { container } = render(
+			<ChatMessageContent
+				author="companion"
+				text={"```ts\nconst value = \"hello\";\nconsole.log(value);\n```"}
+				theme="light"
+			/>
+		);
+
+		await waitFor(() =>
+			expect(container.querySelector("code")?.getAttribute("data-markdown-code-highlighted")).toBe("true")
+		);
+
+		expect(highlighterMock.highlightCode).toHaveBeenCalledWith({
+			code: 'const value = "hello";\nconsole.log(value);',
+			language: "ts",
+			theme: "light"
+		});
+		expect(container.querySelector("code")?.getAttribute("data-markdown-code-highlighted")).toBe("true");
+		expect(container.querySelector("code span")?.getAttribute("style")).toContain("color");
+	});
+
+	it("keeps actively streaming fenced code plain", async () => {
+		render(
+			<ChatMessageContent
+				author="companion"
+				isStreaming
+				text={"```ts\nconst value = \"hello\";\n```"}
+			/>
+		);
+
+		await new Promise((resolve) => window.setTimeout(resolve, 0));
+
+		expect(screen.getByText(/const value/)).toBeTruthy();
+		expect(highlighterMock.highlightCode).not.toHaveBeenCalled();
+	});
+
+	it("keeps code plain when syntax highlighting is not eligible", async () => {
+		highlighterMock.canHighlightCode.mockReturnValue(false);
+		const { container } = render(
+			<ChatMessageContent
+				author="companion"
+				text={"```unknown-language\nhello\n```"}
+			/>
+		);
+
+		await new Promise((resolve) => window.setTimeout(resolve, 0));
+
+		expect(screen.getByText("hello")).toBeTruthy();
+		expect(highlighterMock.highlightCode).not.toHaveBeenCalled();
+		expect(container.querySelector("code")?.getAttribute("data-markdown-code-highlighted")).toBe("false");
 	});
 
 	it("renders GFM tables inside a scroll container", () => {

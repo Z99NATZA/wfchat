@@ -5,6 +5,7 @@ import { useDialog } from "@/components/dialog/DialogProvider";
 import ChatMessageContent from "@/features/chat/components/ChatMessageContent";
 import { useI18n } from "@/i18n";
 import type { ChatMessage } from "@/types/chat";
+import type { Theme } from "@/types/theme";
 import { cn } from "@/utils/classNames";
 import { formatLocalDateKey, formatMessageDateLabel } from "@/utils/date";
 
@@ -16,6 +17,7 @@ type ChatMessageListProps = {
 	isSending?: boolean;
 	bottomClearancePx?: number;
 	onLoadMarkdownQaMessages?: () => void;
+	theme?: Theme;
 };
 
 function ChatMessageList({
@@ -25,7 +27,8 @@ function ChatMessageList({
 	errorMessage,
 	isSending = false,
 	bottomClearancePx = 0,
-	onLoadMarkdownQaMessages
+	onLoadMarkdownQaMessages,
+	theme = "light"
 }: ChatMessageListProps) {
 	const { confirm } = useDialog();
 	const { t } = useI18n();
@@ -212,8 +215,9 @@ function ChatMessageList({
 						const isMenuOpen = activeMessageMenuId === message.id;
 						const didCopyAssistantMessage = copiedAssistantMessageId === message.id;
 						const canCopyAssistantMessage = !isUser && message.text.length > 0;
+						const isStreamingAssistant = isSending && isStreamingAssistantMessage(message);
 						const messageText =
-							isSending && isStreamingAssistantMessage(message) && !message.text
+							isStreamingAssistant && !message.text
 								? t("chat.messageList.thinking", { name: companionName })
 								: message.text;
 
@@ -273,7 +277,12 @@ function ChatMessageList({
 												: "border border-app-border bg-app-panel/92 text-app-text"
 										)}
 									>
-										<ChatMessageContent author={message.author} text={messageText} />
+										<ChatMessageContent
+											author={message.author}
+											isStreaming={isStreamingAssistant}
+											text={messageText}
+											theme={theme}
+										/>
 										<div className="mt-2 flex items-center justify-between gap-3">
 											<p className={cn("text-[11px]", isUser ? "text-white/75 dark:text-muted" : "text-muted")}>
 												{message.time}
