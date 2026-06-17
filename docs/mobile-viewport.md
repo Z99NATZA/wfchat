@@ -90,6 +90,12 @@ Use a base padding plus the safe-area inset. Do not add a fixed large mobile-onl
 
 The header does not need extra browser-chrome compensation for normal browser tabs. If a later PWA/fullscreen scope needs top safe-area support, document it separately.
 
+## Composer Focus Contract
+
+Desktop chat usage should keep the composer efficient for keyboard-heavy workflows. After a message finishes sending, the textarea may be refocused automatically on desktop-like viewports so the user can continue typing without an extra click.
+
+Mobile and touch usage should treat the virtual keyboard as an explicit user action. Do not programmatically refocus the textarea after a send action or after the assistant response completes on mobile-width or coarse-pointer viewports, because that can reopen the keyboard after the user has already shifted attention to the conversation. User-initiated edit actions, such as tapping a quick prompt, may still focus the textarea.
+
 ## PNGTuber Overlay Interaction
 
 Keep the current overlay rules:
@@ -114,6 +120,7 @@ Manual checks:
 - message timeline scrolls
 - composer remains visible when browser chrome is expanded
 - composer remains visible after focusing and blurring the textarea
+- virtual keyboard does not reopen automatically after a send completes on mobile-width or touch viewports
 - latest bubble does not sit under the PNGTuber overlay
 - behavior remains acceptable on desktop width
 

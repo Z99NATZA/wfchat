@@ -21,8 +21,51 @@ vi.mock("@/i18n", () => ({
 describe("ChatComposer", () => {
 	afterEach(() => {
 		cleanup();
-		vi.clearAllMocks();
+		vi.restoreAllMocks();
 	});
+
+	function mockMatchMedia(matches: boolean) {
+		Object.defineProperty(window, "matchMedia", {
+			configurable: true,
+			writable: true,
+			value: vi.fn().mockImplementation((query: string) => ({
+				matches,
+				media: query,
+				onchange: null,
+				addEventListener: vi.fn(),
+				removeEventListener: vi.fn(),
+				addListener: vi.fn(),
+				removeListener: vi.fn(),
+				dispatchEvent: vi.fn()
+			}))
+		});
+	}
+
+	function SendingStateComposer({
+		initialIsSending,
+		onSend = vi.fn()
+	}: {
+		initialIsSending: boolean;
+		onSend?: () => void;
+	}) {
+		const [isSending, setIsSending] = useState(initialIsSending);
+
+		return (
+			<>
+				<button type="button" onClick={() => setIsSending(false)}>
+					Finish sending
+				</button>
+				<ChatComposer
+					draft="Hello"
+					font="inter"
+					companionName="Aiko"
+					onDraftChange={vi.fn()}
+					onSend={onSend}
+					isSending={isSending}
+				/>
+			</>
+		);
+	}
 
 	it("fills the draft when a quick prompt is selected without sending", () => {
 		const onDraftChange = vi.fn();
@@ -87,5 +130,27 @@ describe("ChatComposer", () => {
 		);
 
 		expect((screen.getByRole("button", { name: "Suggest a reply" }) as HTMLButtonElement).disabled).toBe(true);
+	});
+
+	it("returns focus to the textarea after sending on desktop-like viewports", () => {
+		mockMatchMedia(false);
+		const focusSpy = vi.spyOn(HTMLTextAreaElement.prototype, "focus");
+
+		render(<SendingStateComposer initialIsSending />);
+
+		fireEvent.click(screen.getByRole("button", { name: "Finish sending" }));
+
+		expect(focusSpy).toHaveBeenCalledWith({ preventScroll: true });
+	});
+
+	it("does not automatically focus the textarea after sending on mobile or touch viewports", () => {
+		mockMatchMedia(true);
+		const focusSpy = vi.spyOn(HTMLTextAreaElement.prototype, "focus");
+
+		render(<SendingStateComposer initialIsSending />);
+
+		fireEvent.click(screen.getByRole("button", { name: "Finish sending" }));
+
+		expect(focusSpy).not.toHaveBeenCalled();
 	});
 });

@@ -16,6 +16,18 @@ type ChatComposerProps = {
 	isSending?: boolean;
 };
 
+function shouldSkipAutomaticComposerFocus() {
+	if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
+		return false;
+	}
+
+	return window.matchMedia("(max-width: 767px), (pointer: coarse)").matches;
+}
+
+function focusComposerTextArea(textarea: HTMLTextAreaElement | null) {
+	textarea?.focus({ preventScroll: true });
+}
+
 function ChatComposer({
 	draft,
 	font,
@@ -46,7 +58,9 @@ function ChatComposer({
 
 	useEffect(() => {
 		if (wasSendingRef.current && !isSending && !isDisabled) {
-			textareaRef.current?.focus();
+			if (!shouldSkipAutomaticComposerFocus()) {
+				focusComposerTextArea(textareaRef.current);
+			}
 		}
 
 		wasSendingRef.current = isSending;
@@ -56,12 +70,16 @@ function ChatComposer({
 		event.preventDefault();
 
 		if (isSending) {
-			textareaRef.current?.focus();
+			focusComposerTextArea(textareaRef.current);
 			return;
 		}
 
 		onSend();
-		requestAnimationFrame(() => textareaRef.current?.focus());
+		requestAnimationFrame(() => {
+			if (!shouldSkipAutomaticComposerFocus()) {
+				focusComposerTextArea(textareaRef.current);
+			}
+		});
 	}
 
 	function handleDraftKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
@@ -72,12 +90,16 @@ function ChatComposer({
 		event.preventDefault();
 
 		if (isSending) {
-			textareaRef.current?.focus();
+			focusComposerTextArea(textareaRef.current);
 			return;
 		}
 
 		onSend();
-		requestAnimationFrame(() => textareaRef.current?.focus());
+		requestAnimationFrame(() => {
+			if (!shouldSkipAutomaticComposerFocus()) {
+				focusComposerTextArea(textareaRef.current);
+			}
+		});
 	}
 
 	function handleQuickPromptSelect(prompt: string) {
@@ -93,7 +115,7 @@ function ChatComposer({
 				return;
 			}
 
-			textarea.focus();
+			focusComposerTextArea(textarea);
 			textarea.setSelectionRange(prompt.length, prompt.length);
 		});
 	}
