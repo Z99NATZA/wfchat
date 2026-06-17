@@ -52,6 +52,7 @@ type SupportedHighlightLanguage =
 	| "json"
 	| "markdown"
 	| "python"
+	| "rust"
 	| "sql"
 	| "tsx"
 	| "typescript"
@@ -71,6 +72,7 @@ const supportedHighlightLanguages = new Set<SupportedHighlightLanguage>([
 	"json",
 	"markdown",
 	"python",
+	"rust",
 	"sql",
 	"tsx",
 	"typescript",
@@ -173,6 +175,7 @@ async function createHighlighterFactory(): Promise<FineGrainedHighlighterFactory
 			json: () => import("@shikijs/langs/json"),
 			markdown: () => import("@shikijs/langs/markdown"),
 			python: () => import("@shikijs/langs/python"),
+			rust: () => import("@shikijs/langs/rust"),
 			sql: () => import("@shikijs/langs/sql"),
 			tsx: () => import("@shikijs/langs/tsx"),
 			typescript: () => import("@shikijs/langs/typescript"),
@@ -202,6 +205,7 @@ function normalizeLanguage(language?: string): SupportedHighlightLanguage | null
 		jsx: "jsx",
 		md: "markdown",
 		py: "python",
+		rs: "rust",
 		sh: "bash",
 		shell: "bash",
 		shellscript: "bash",

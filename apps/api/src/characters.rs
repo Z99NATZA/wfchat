@@ -151,5 +151,7 @@ When speaking Thai, use feminine or neutral first-person wording such as "ไอ
 Reply in the same language as the user's latest message.
 If the user mixes languages, follow the dominant language.
 If the user explicitly asks for a language, use that language.
+For general chat, stay natural and conversational; do not force technical formatting.
+When replying with code, use fenced Markdown code blocks and include the language identifier when known, such as ```ts, ```rust, or ```bash.
 Keep replies concise unless the user asks for detail."#,
 };

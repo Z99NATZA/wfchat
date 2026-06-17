@@ -182,7 +182,24 @@ Syntax highlighting is treated as a performance-sensitive enhancement:
 - Do not render raw assistant HTML. The implementation uses Shiki token data rendered through React spans rather than `dangerouslySetInnerHTML`.
 - Keep the code block padding, font size, and line height stable before and after highlighting so scroll measurement remains predictable.
 
-The first supported highlighted language set is intentionally small: Bash, CSS, diff, HTML, JavaScript/JSX, JSON, Markdown, Python, SQL, TSX, TypeScript, and YAML. Other languages keep the plain code-block rendering and language label.
+The first supported highlighted language set is intentionally small. Other languages keep the plain code-block rendering and language label.
+
+Supported syntax-highlight language ids:
+
+- `bash`, `sh`, `shell`, `shellscript`
+- `css`
+- `diff`
+- `html`
+- `javascript`, `js`
+- `jsx`
+- `json`
+- `markdown`, `md`
+- `python`, `py`
+- `rust`, `rs`
+- `sql`
+- `tsx`
+- `typescript`, `ts`
+- `yaml`, `yml`
 
 Build note: `react-markdown`, `remark-gfm`, and their Markdown parsing dependencies are split into a dedicated Vite `markdown-renderer` chunk through `apps/web/vite.config.ts`. Syntax highlighting uses fine-grained dynamic imports for Shiki core, the JavaScript regex engine, GitHub light/dark themes, and the supported language grammars. Do not force these Shiki imports into one manual chunk; keeping them split avoids a large first-highlight download. Keep Markdown renderer dependencies frontend-only and update the manual chunk package list if the Markdown renderer dependency graph changes.
 

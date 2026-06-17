@@ -77,6 +77,24 @@ describe("codeHighlighter", () => {
 		);
 	});
 
+	it("supports Rust language aliases", async () => {
+		const { highlightCode } = await import("./codeHighlighter");
+
+		await highlightCode({
+			code: "let value = 1;",
+			language: "rs",
+			theme: "light"
+		});
+
+		expect(shikiMock.codeToTokens).toHaveBeenCalledWith(
+			"let value = 1;",
+			expect.objectContaining({ lang: "rust" })
+		);
+		expect(shikiMock.createFineGrainedHighlighter).toHaveBeenCalledWith(
+			expect.objectContaining({ langs: ["rust"] })
+		);
+	});
+
 	it("falls back to plain code for unknown languages", async () => {
 		const { highlightCode } = await import("./codeHighlighter");
 
