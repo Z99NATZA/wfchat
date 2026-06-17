@@ -15,8 +15,10 @@ Legacy note: older local chat data may contain `default_waifu`. The backend trea
 
 Frontend chat metadata lives in `apps/web/src/features/chat/data/chatFixtures.ts`.
 
+The current Aiko chat avatar asset lives at `apps/web/public/images/aiko-avatar.png`.
 Frontend PNGTuber metadata lives in `apps/web/src/features/avatar/data/aikoPngTuber.ts`.
 The current Aiko expression assets live in `apps/web/public/images/aiko-pngtuber/`.
+Repo-owned character images are served with long-lived immutable caching in Docker. When replacing one, add a new filename and update the matching frontend metadata instead of overwriting the existing file.
 
 Backend character identity and prompt live in `apps/api/src/characters.rs`.
 
