@@ -18,6 +18,7 @@ function PngTuberRenderer({ alt, className, emotion, motionState }: PngTuberRend
 			<img
 				src={emotion.assetUrl}
 				alt={alt}
+				decoding="async"
 				className={cn(
 					"pngtuber-avatar h-full max-h-full w-full object-contain object-bottom",
 					motionState === "thinking" && "pngtuber-avatar--thinking",

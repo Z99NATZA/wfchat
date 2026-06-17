@@ -8,6 +8,7 @@ import { useAuthSession } from "@/hooks/useAuthSession";
 import { useDialog } from "@/components/dialog/DialogProvider";
 import { useI18n } from "@/i18n";
 import { AvatarRuntimeProvider } from "@/features/avatar/runtime/avatarRuntimeStore";
+import { scheduleAikoPngTuberAssetPreload } from "@/features/avatar/renderers/pngtuber/pngTuberAssetPreloader";
 import ChatPage, { type ChatSyncSnapshot } from "@/pages/ChatPage";
 import Model2DPage from "@/pages/Model2DPage";
 import PngTuberPage from "@/pages/PngTuberPage";
@@ -40,6 +41,8 @@ function App() {
 	const handleChatSyncSnapshotChange = useCallback((snapshot: ChatSyncSnapshot | null) => {
 		chatSyncSnapshotRef.current = snapshot;
 	}, []);
+
+	useEffect(() => scheduleAikoPngTuberAssetPreload(), []);
 
 	useEffect(() => {
 		if (!wasAuthenticatedRef.current && auth.isAuthenticated) {

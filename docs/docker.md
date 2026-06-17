@@ -9,6 +9,8 @@ api -> http://localhost:8080
 
 The web image builds `apps/web` and serves the Vite build through nginx.
 
+The nginx config gives built frontend assets long-lived immutable caching. PNGTuber images under `/images/aiko-pngtuber/` also use long-lived immutable caching because the frontend preloads them after app mount and the PNGTuber asset contract requires a new filename when replacing an image. Other `/images/` files keep a conservative `no-cache` policy.
+
 The api image builds `apps/api` and runs the Axum binary.
 
 The api service reads backend-only secrets from `apps/api/.env`.

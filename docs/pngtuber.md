@@ -18,6 +18,7 @@ Implemented:
 - Persona-to-avatar binding config split into a pure helper with Aiko as the only enabled binding.
 - Compact mobile chat overlay behavior using the same visibility, position, and size settings.
 - Renderer-level expression transition polish with reduced-motion support.
+- Non-blocking PNGTuber asset preloading after app mount, so expression changes do not wait for first-use image fetches.
 - Chat SSE lifecycle wired into the PNGTuber bridge so Aiko can enter talking while stream tokens arrive.
 - Provider-native SSE token streaming for OpenAI-compatible providers with an Aiko streaming-safe response guard.
 
@@ -40,6 +41,7 @@ Not implemented:
 - Emotion inference helper: `apps/web/src/features/avatar/runtime/avatarEmotionInference.ts`
 - Chat overlay: `apps/web/src/features/avatar/components/AvatarOverlay.tsx`
 - PNGTuber renderer: `apps/web/src/features/avatar/renderers/pngtuber/PngTuberRenderer.tsx`
+- PNGTuber asset preloader: `apps/web/src/features/avatar/renderers/pngtuber/pngTuberAssetPreloader.ts`
 - Overlay settings store: `apps/web/src/stores/avatarOverlayStore.ts`
 - Shared animation styles: `apps/web/src/styles.css`
 - Public assets: `apps/web/public/images/aiko-pngtuber/`
@@ -111,6 +113,14 @@ Manual motion controls in PNGTuber Studio can preview idle, thinking, and talkin
 The PNGTuber Studio viewport keeps the decorative stage and performer visual non-interactive. The top expression control strip is the interactive layer and must stay above the renderer so emotion buttons remain tappable on small screens.
 
 Expression changes use a short fade/scale transition in `PngTuberRenderer`. Motion loops run on the image element while expression transitions run on the wrapper, so the animations do not override each other's transforms. PNGTuber animations respect reduced-motion preferences.
+
+## Asset Loading And Cache
+
+`App.tsx` schedules `scheduleAikoPngTuberAssetPreload()` after mount. The preloader runs during `requestIdleCallback` when available, or a zero-delay timeout fallback otherwise. It creates `Image` objects with async decoding and does not await the result, so first paint and normal UI interaction are not blocked.
+
+The preloader keeps a session-local set of already requested URLs to avoid duplicate fetches. It requests the neutral expression first, then the remaining Aiko expression PNGs.
+
+The Docker web image serves `/images/aiko-pngtuber/` through nginx with long-lived immutable caching. Keep the asset contract from the asset set section: when replacing a PNGTuber expression image, add a new filename and update `aikoPngTuber.ts` instead of overwriting the existing file. Other `/images/` assets keep the more conservative cache policy.
 
 ## Chat Overlay Settings
 
