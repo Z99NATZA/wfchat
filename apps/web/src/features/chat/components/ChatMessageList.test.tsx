@@ -219,6 +219,28 @@ describe("ChatMessageList streaming state", () => {
 
 		expect(loadMarkdownQaMessages).toHaveBeenCalledTimes(1);
 	});
+
+	it("mounts only the virtualized window for long conversations", () => {
+		const longConversation = Array.from({ length: 80 }, (_, index) =>
+			message(`assistant-${index}`, "companion", `message ${index}`)
+		);
+		const { container } = render(
+			<ChatMessageList
+				messages={longConversation}
+				companionName="Aiko"
+				companionAvatarUrl="/images/aiko-avatar.png"
+			/>
+		);
+
+		const mountedRows = container.querySelectorAll("[data-virtual-message-row]");
+		const virtualList = container.querySelector("[data-virtualized-message-list]") as HTMLDivElement;
+
+		expect(mountedRows.length).toBeGreaterThan(0);
+		expect(mountedRows.length).toBeLessThan(longConversation.length);
+		expect(virtualList.style.height).not.toBe("");
+		expect(screen.getByText("message 0")).toBeTruthy();
+		expect(screen.queryByText("message 79")).toBeNull();
+	});
 });
 
 function message(id: string, author: ChatMessage["author"], text: string): ChatMessage {

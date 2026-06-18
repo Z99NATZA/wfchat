@@ -29,18 +29,18 @@ This document defines the intended scroll behavior for the chat screen in `apps/
 - When the user is away from the bottom, show a `Jump to latest` action at the bottom-right corner.
 - While the user stays away from the bottom, show a badge on the action with the count of newly arrived messages.
 
-## Future Virtualized Timeline
+## Virtualized Timeline
 
-Long chat timelines should eventually use list virtualization/windowing so the UI keeps only messages near the viewport mounted. This is a UI rendering optimization only; message data and backend AI context management are separate concerns.
+Long chat timelines use list virtualization/windowing so the UI keeps only messages near the viewport mounted. This is a UI rendering optimization only; message data and backend AI context management are separate concerns.
 
-Virtualization requirements:
+Current behavior:
 
 - The scrollbar must represent the loaded chat timeline, not only the currently mounted viewport items.
 - Header and composer stay outside the virtualized list.
 - Render only visible messages plus a modest overscan region.
 - Use stable message ids as item keys.
 - Support variable message heights for Markdown, tables, code blocks, and streaming text.
-- Cache measured message heights by message id where useful.
+- Cache measured message heights by message id.
 - Preserve scroll position when older messages are prepended.
 - Keep the existing bottom auto-scroll and `Jump to latest` behavior.
 - Keep PNGTuber bottom clearance as part of the timeline's bottom spacing contract.
