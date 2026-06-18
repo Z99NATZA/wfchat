@@ -46,6 +46,13 @@ Current behavior:
 - Keep PNGTuber bottom clearance as part of the timeline's bottom spacing contract.
 - Unmounted messages must not keep expensive rendering work, highlight effects, observers, or timers alive.
 
+Known performance risks to revisit:
+
+- Streaming assistant messages can trigger frequent `ResizeObserver` callbacks, height state updates, and offset recalculation. Keep unchanged-height guards, and consider `requestAnimationFrame` batching if streaming causes scroll jitter or CPU spikes.
+- Large histories can make per-row lookup costs visible. Avoid repeated O(n) lookups in hot measurement paths; prefer id-indexed maps when profiling shows pressure.
+- Height changes currently rebuild virtual offset arrays through memoized row metrics. Measure rebuild frequency under long conversations and streaming, then consider batched or incremental offset updates if needed.
+- History prepend must preserve the user's anchored viewport. Any future older-message loading flow should verify `scrollTop` compensation against the scroll-height delta.
+
 Planned test and QA coverage:
 
 - long conversations render only visible messages plus overscan, while the scrollbar still represents the loaded timeline
