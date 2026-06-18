@@ -551,12 +551,12 @@ function ChatMessageList({
 					<button
 						type="button"
 						onClick={scrollToLatest}
-						className="pointer-events-auto inline-flex items-center gap-2 rounded-full border border-app-border bg-app-panel/92 px-4 py-2 text-sm font-medium text-app-text shadow-soft transition hover:border-primary hover:text-primary"
+						className="pointer-events-auto inline-flex items-center gap-2 rounded-full border border-app-border bg-app-panel/92 px-4 py-2 text-sm font-medium text-app-text shadow-soft transition hover:border-primary hover:text-primary dark:border-action-border dark:bg-dialog-panel dark:text-app-text dark:hover:border-muted dark:hover:bg-action-hover dark:hover:text-app-text"
 					>
 						<ArrowDown size={16} aria-hidden="true" />
 						{t("chat.messageList.jumpToLatest")}
 						{unseenMessageCount > 0 && (
-							<span className="rounded-full bg-primary px-2 py-0.5 text-xs font-semibold text-white">
+							<span className="rounded-full bg-primary px-2 py-0.5 text-xs font-semibold text-white dark:border dark:border-action-border dark:bg-muted/25 dark:text-app-text">
 								+{unseenMessageCount}
 							</span>
 						)}
