@@ -241,6 +241,40 @@ describe("ChatMessageList streaming state", () => {
 		expect(screen.getByText("message 0")).toBeTruthy();
 		expect(screen.queryByText("message 79")).toBeNull();
 	});
+
+	it("does not pull back to the latest message after the user scrolls upward near the bottom", async () => {
+		const initialMessages = Array.from({ length: 12 }, (_, index) =>
+			message(`assistant-${index}`, "companion", `message ${index}`)
+		);
+		const { container, rerender } = render(
+			<ChatMessageList
+				messages={initialMessages}
+				companionName="Aiko"
+				companionAvatarUrl="/images/aiko-avatar.png"
+			/>
+		);
+		const scrollContainer = container.querySelector(".chat-scroll") as HTMLDivElement;
+
+		Object.defineProperty(scrollContainer, "clientHeight", { configurable: true, value: 500 });
+		Object.defineProperty(scrollContainer, "scrollHeight", { configurable: true, value: 2_000 });
+		scrollContainer.scrollTop = 1_500;
+		fireEvent.scroll(scrollContainer);
+		await new Promise((resolve) => requestAnimationFrame(resolve));
+		vi.mocked(HTMLElement.prototype.scrollTo).mockClear();
+
+		scrollContainer.scrollTop = 1_450;
+		fireEvent.scroll(scrollContainer);
+		rerender(
+			<ChatMessageList
+				messages={[...initialMessages, message("assistant-new", "companion", "new message")]}
+				companionName="Aiko"
+				companionAvatarUrl="/images/aiko-avatar.png"
+			/>
+		);
+		await new Promise((resolve) => requestAnimationFrame(resolve));
+
+		expect(HTMLElement.prototype.scrollTo).not.toHaveBeenCalled();
+	});
 });
 
 function message(id: string, author: ChatMessage["author"], text: string): ChatMessage {

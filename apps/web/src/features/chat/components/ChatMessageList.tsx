@@ -60,6 +60,7 @@ function ChatMessageList({
 	const virtualTimelineRef = useRef<HTMLDivElement>(null);
 	const menuContainerRef = useRef<HTMLDivElement>(null);
 	const shouldStickToBottomRef = useRef(true);
+	const lastScrollTopRef = useRef(0);
 	const previousMessageCountRef = useRef(messages.length);
 	const previousRowIdsRef = useRef<string[]>([]);
 	const rowTopByIdRef = useRef<Map<string, number>>(new Map());
@@ -148,6 +149,7 @@ function ChatMessageList({
 		}
 
 		setScrollTop(container.scrollTop);
+		lastScrollTopRef.current = container.scrollTop;
 		setViewportHeight(container.clientHeight > 0 ? container.clientHeight : DEFAULT_VIEWPORT_HEIGHT);
 		setVirtualTimelineTop(getVirtualTimelineTop(container, virtualTimelineRef.current));
 	}, []);
@@ -165,6 +167,7 @@ function ChatMessageList({
 			}
 
 			const container = scrollContainerRef.current;
+			const hasMeasuredHeight = previousHeight !== undefined;
 			const previousOrEstimatedHeight =
 				previousHeight ??
 				estimateMessageRowHeightFromId(rowId, currentHeights, messageRows);
@@ -173,11 +176,13 @@ function ChatMessageList({
 
 			if (
 				container &&
+				hasMeasuredHeight &&
 				rowTop !== undefined &&
 				rowTop < Math.max(0, container.scrollTop - virtualTimelineTop) &&
 				!shouldStickToBottomRef.current
 			) {
 				container.scrollTop += heightDelta;
+				lastScrollTopRef.current = container.scrollTop;
 				setScrollTop(container.scrollTop);
 			}
 
@@ -186,7 +191,9 @@ function ChatMessageList({
 			return nextHeights;
 		});
 
-		if (shouldStickToBottomRef.current) {
+		const container = scrollContainerRef.current;
+
+		if (container && shouldStickToBottomRef.current && isNearScrollBottom(container, 8)) {
 			scheduleScrollToBottom("auto");
 		}
 	}, [messageRows, scheduleScrollToBottom, virtualTimelineTop]);
@@ -194,7 +201,9 @@ function ChatMessageList({
 	function handleScroll(event: UIEvent<HTMLDivElement>) {
 		const { scrollTop: nextScrollTop, scrollHeight, clientHeight } = event.currentTarget;
 		const distanceFromBottom = scrollHeight - (nextScrollTop + clientHeight);
-		shouldStickToBottomRef.current = distanceFromBottom < 80;
+		const isScrollingUp = nextScrollTop < lastScrollTopRef.current - 1;
+		lastScrollTopRef.current = nextScrollTop;
+		shouldStickToBottomRef.current = isScrollingUp ? false : distanceFromBottom < 80;
 		setScrollTop(nextScrollTop);
 		setViewportHeight(clientHeight > 0 ? clientHeight : DEFAULT_VIEWPORT_HEIGHT);
 		setVirtualTimelineTop(getVirtualTimelineTop(event.currentTarget, virtualTimelineRef.current));
@@ -556,6 +565,10 @@ function ChatMessageList({
 			)}
 		</div>
 	);
+}
+
+function isNearScrollBottom(container: HTMLDivElement, thresholdPx: number): boolean {
+	return container.scrollHeight - (container.scrollTop + container.clientHeight) <= thresholdPx;
 }
 
 function VirtualMessageRow({

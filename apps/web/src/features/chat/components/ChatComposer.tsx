@@ -158,11 +158,14 @@ function ChatComposer({
 					</IconButton>
 					<textarea
 						ref={textareaRef}
+						autoCapitalize="off"
+						autoCorrect="off"
 						className="min-h-11 flex-1 resize-none bg-transparent px-2 py-2.5 text-sm leading-6 outline-none placeholder:text-muted"
 						value={draft}
 						placeholder={t("chat.composer.placeholder", { name: companionName })}
 						rows={1}
 						disabled={isDisabled}
+						spellCheck={false}
 						onChange={(event) => onDraftChange(event.target.value)}
 						onKeyDown={handleDraftKeyDown}
 					/>

@@ -132,6 +132,24 @@ describe("ChatComposer", () => {
 		expect((screen.getByRole("button", { name: "Suggest a reply" }) as HTMLButtonElement).disabled).toBe(true);
 	});
 
+	it("disables browser writing corrections in the message input", () => {
+		render(
+			<ChatComposer
+				draft=""
+				font="inter"
+				companionName="Aiko"
+				onDraftChange={vi.fn()}
+				onSend={vi.fn()}
+			/>
+		);
+
+		const textarea = screen.getByPlaceholderText("Message Aiko") as HTMLTextAreaElement;
+
+		expect(textarea.getAttribute("spellcheck")).toBe("false");
+		expect(textarea.getAttribute("autocorrect")).toBe("off");
+		expect(textarea.getAttribute("autocapitalize")).toBe("off");
+	});
+
 	it("returns focus to the textarea after sending on desktop-like viewports", () => {
 		mockMatchMedia(false);
 		const focusSpy = vi.spyOn(HTMLTextAreaElement.prototype, "focus");
