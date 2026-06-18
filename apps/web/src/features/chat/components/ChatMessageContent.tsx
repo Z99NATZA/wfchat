@@ -4,6 +4,7 @@ import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import {
 	canHighlightCode,
+	getCachedHighlightedCode,
 	getHighlightDebounceMs,
 	highlightCode,
 	type HighlightedCode
@@ -171,15 +172,25 @@ function CodeBlock({
 	theme: Theme;
 }) {
 	const [copyState, setCopyState] = useState<"idle" | "copied">("idle");
-	const [highlightedCode, setHighlightedCode] = useState<HighlightedCode | null>(null);
+	const [highlightedCode, setHighlightedCode] = useState<HighlightedCode | null>(() =>
+		isStreaming ? null : getCachedHighlightedCode({ code, language, theme })
+	);
 	const copyResetTimeoutRef = useRef<number | null>(null);
 
 	useEffect(() => {
-		setHighlightedCode(null);
-
 		if (isStreaming || !canHighlightCode(code, language)) {
+			setHighlightedCode(null);
 			return;
 		}
+
+		const cachedHighlightedCode = getCachedHighlightedCode({ code, language, theme });
+
+		if (cachedHighlightedCode) {
+			setHighlightedCode(cachedHighlightedCode);
+			return;
+		}
+
+		setHighlightedCode(null);
 
 		let isCanceled = false;
 		const highlightTimeoutId = window.setTimeout(() => {

@@ -7,6 +7,7 @@ import ChatMessageContent from "@/features/chat/components/ChatMessageContent";
 
 const highlighterMock = vi.hoisted(() => ({
 	canHighlightCode: vi.fn(),
+	getCachedHighlightedCode: vi.fn(),
 	getHighlightDebounceMs: vi.fn(),
 	highlightCode: vi.fn()
 }));
@@ -22,6 +23,7 @@ describe("ChatMessageContent", () => {
 			}
 		});
 		highlighterMock.canHighlightCode.mockReturnValue(true);
+		highlighterMock.getCachedHighlightedCode.mockReturnValue(null);
 		highlighterMock.getHighlightDebounceMs.mockReturnValue(0);
 		highlighterMock.highlightCode.mockResolvedValue({
 			lines: [
@@ -186,6 +188,29 @@ describe("ChatMessageContent", () => {
 		});
 		expect(container.querySelector("code")?.getAttribute("data-markdown-code-highlighted")).toBe("true");
 		expect(container.querySelector("code span")?.getAttribute("style")).toContain("color");
+	});
+
+	it("renders cached syntax highlighting immediately after remount", async () => {
+		highlighterMock.getCachedHighlightedCode.mockReturnValue({
+			lines: [
+				[
+					{ content: "const", color: "#cf222e" },
+					{ content: " cached = true;", color: "#24292f" }
+				]
+			]
+		});
+		const { container } = render(
+			<ChatMessageContent
+				author="companion"
+				text={"```ts\nconst cached = true;\n```"}
+				theme="light"
+			/>
+		);
+
+		expect(container.querySelector("code")?.getAttribute("data-markdown-code-highlighted")).toBe("true");
+		expect(container.querySelector("code span")?.getAttribute("style")).toContain("color");
+		await new Promise((resolve) => window.setTimeout(resolve, 0));
+		expect(highlighterMock.highlightCode).not.toHaveBeenCalled();
 	});
 
 	it("keeps actively streaming fenced code plain", async () => {

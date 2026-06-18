@@ -178,6 +178,7 @@ Syntax highlighting is treated as a performance-sensitive enhancement:
 - Skip or delay highlighting while an assistant message is actively streaming.
 - Debounce highlight work for changing code content.
 - Cache highlighted output by code, language, and theme.
+- Read cached highlighted output synchronously on code-block mount so virtualized messages that remount after scrolling do not flash back to plain code.
 - Keep a max-size guard for very large code blocks and fall back to plain rendering.
 - Do not render raw assistant HTML. The implementation uses Shiki token data rendered through React spans rather than `dangerouslySetInnerHTML`.
 - Keep the code block padding, font size, and line height stable before and after highlighting so scroll measurement remains predictable.

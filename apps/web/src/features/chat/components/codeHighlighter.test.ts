@@ -127,7 +127,15 @@ describe("codeHighlighter", () => {
 	});
 
 	it("caches highlighted output by code, language, and theme", async () => {
-		const { highlightCode } = await import("./codeHighlighter");
+		const { getCachedHighlightedCode, highlightCode } = await import("./codeHighlighter");
+
+		expect(
+			getCachedHighlightedCode({
+				code: "const enabled = true;",
+				language: "ts",
+				theme: "light"
+			})
+		).toBeNull();
 
 		await highlightCode({
 			code: "const enabled = true;",
@@ -141,5 +149,12 @@ describe("codeHighlighter", () => {
 		});
 
 		expect(shikiMock.codeToTokens).toHaveBeenCalledTimes(1);
+		expect(
+			getCachedHighlightedCode({
+				code: "const enabled = true;",
+				language: "ts",
+				theme: "light"
+			})?.lines[0][0]
+		).toEqual({ content: "const", color: "#cf222e" });
 	});
 });

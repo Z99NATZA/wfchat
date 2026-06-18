@@ -477,6 +477,7 @@ Automated coverage:
 - unknown language falls back to plain code while keeping the language label
 - very large code block falls back to plain code according to the configured size guard
 - highlighted output is cached by code, language, and theme so rerendering the same block does not highlight again
+- code blocks that remount from chat virtualization reuse cached highlighted output immediately instead of flashing back to plain fallback
 - copy-code still writes the raw code text, not highlighted markup
 
 Implementation guard:
@@ -492,7 +493,7 @@ Manual QA:
 
 ### Highlighting With Virtualized Messages
 
-Current status: planned after syntax highlighting.
+Current status: implemented.
 
 Expected:
 
