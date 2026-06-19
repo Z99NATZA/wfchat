@@ -1,53 +1,83 @@
 # Architecture
 
+This file is the entry point for WFChat architecture notes. Keep detailed
+behavior in the focused documents linked below so implementation details do not
+drift across multiple files.
+
 ## Stack Overview
 
 ```text
 frontend: ReactJS + TypeScript in apps/web
 backend: Rust + Axum in apps/api
+database: PostgreSQL
 runtime: Docker Compose for local full-stack runs
 ```
 
-WFChat frontend code is organized around a small feature-first architecture in `apps/web/src`. The application shell stays thin, feature behavior lives inside feature folders, and shared primitives stay isolated.
+## System Shape
 
-## Principles
+WFChat is split into a standalone browser frontend and a standalone HTTP API.
+The frontend talks to the backend through `/api/*` only; provider keys, model
+selection, persistence, auth, and sync ownership stay server-side.
 
-- Keep files readable without forcing excessive jumps.
-- Put feature-specific UI, data, hooks, and services inside the feature boundary.
-- Put reusable UI in `apps/web/src/components`.
-- Put app-wide state helpers in `apps/web/src/stores`.
-- Put browser and infrastructure helpers in `apps/web/src/services`.
-- Put pure helpers in `apps/web/src/utils`.
-- Put cross-feature TypeScript models in `apps/web/src/types`.
+Frontend code is feature-first under `apps/web/src`. App-level wiring stays in
+`app`, route composition stays in `pages`, reusable UI stays in `components`,
+browser infrastructure stays in `services`, persisted app-state helpers stay in
+`stores`, and feature behavior stays inside `features/*`.
+
+Backend code keeps request flows close to their owning route modules. `chat.rs`
+owns chat flow, `auth.rs` owns sessions and login, `memory.rs` owns memory APIs,
+`sync.rs` owns sync APIs, `store.rs` owns PostgreSQL persistence, and `ai/*`
+owns provider adapters.
 
 ## Runtime Flow
 
-1. `apps/web/src/main.tsx` mounts React and imports global styles.
-2. `apps/web/src/app/App.tsx` initializes app-level theme/font state and selects the active app page.
-3. `apps/web/src/layouts/AppLayout.tsx` renders the shared activity bar, page sidebar, header, content, and optional details area.
-4. `apps/web/src/pages/ChatPage.tsx` composes the chat screen.
-5. `apps/web/src/features/chat/hooks/useChatSession.ts` owns the chat screen state and calls the backend chat API.
-6. Feature components render the chat sidebar, header, messages, composer, and details panel.
+```text
+apps/web/src/main.tsx
+  -> apps/web/src/app/App.tsx
+      -> routes in apps/web/src/pages/*
+          -> shared layout in apps/web/src/layouts/AppLayout.tsx
+          -> feature hooks/components in apps/web/src/features/*
 
-App-level navigation is documented in `docs/app-navigation.md`.
-
-## Feature Boundaries
-
-The chat feature owns chat-specific behavior:
-
-- Aiko frontend fixture metadata
-- chat state hook
-- backend chat API service
-- chat-only components
-
-Shared layers should not import from feature components. Feature modules may import shared UI, hooks, utilities, services, and types.
+browser
+  -> /api/*
+      -> apps/api/src/app.rs router
+          -> auth/chat/memory/sync/admin route modules
+          -> apps/api/src/store.rs and apps/api/src/ai/*
+```
 
 ## Dependency Direction
 
-Use this direction for imports:
+Use this direction for frontend imports:
 
 ```text
 app -> pages -> layouts/features -> components/hooks/services/stores/utils/types
 ```
 
-Avoid importing upward. For example, `components/ui` should not import from `features/chat`.
+Avoid importing upward. For example, shared UI in `components/ui` should not
+import from `features/chat`.
+
+Backend route modules should depend on shared state, store, config, and provider
+adapters. Provider adapters should not depend on frontend concepts.
+
+## Detailed Docs
+
+- [Frontend architecture](frontend-architecture.md)
+- [Backend architecture](backend-architecture.md)
+- [State management](state-management.md)
+- [App navigation](app-navigation.md)
+- [Chat sessions](chat-sessions.md)
+- [Chat SSE streaming](chat-sse-streaming.md)
+- [Chat message rendering](chat-message-rendering.md)
+- [Sync system](sync-system.md)
+- [Database schema](database-schema.md)
+- [Memory API](memory.md)
+- [PNGTuber and avatar runtime](pngtuber.md)
+- [Theme system](theme.md)
+- [Mobile viewport](mobile-viewport.md)
+- [Docker runtime](docker.md)
+
+## Maintenance Rule
+
+When behavior changes, update the focused document that owns that behavior
+first. Update this file only when the top-level system shape or document map
+changes.

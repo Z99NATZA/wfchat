@@ -11,9 +11,12 @@ No active scoped agent task.
 When a new priority is set, list the required documents here in the order agents should read them before implementation.
 
 1. `docs/agent-work-priority.md`
+2. `docs/architecture.md`
+3. Domain documents relevant to the scoped task.
 
 ## Notes
 
 - Keep this file short and task-focused.
+- `docs/architecture.md` is an architecture index, not the source of detailed behavior.
 - Move completed milestone details into the relevant domain document.
 - Clear this file when the active priority is complete.
