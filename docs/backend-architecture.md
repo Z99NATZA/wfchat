@@ -8,7 +8,7 @@ The backend is a Rust Axum API in `apps/api`. It is designed to keep common requ
 - API keys stay in backend environment variables only.
 - Guest users can chat without logging in.
 - Registered users can be added later for sync and recovery.
-- Admin-only endpoints own provider, model, and AI profile configuration.
+- Admin-only endpoints are the intended boundary for provider, model, and AI profile configuration. The current admin API exposes read/status endpoints only.
 - Provider adapters can be added without changing the chat UI contract.
 
 ## Request Flow
@@ -65,7 +65,7 @@ This clears message history for the current chat while keeping the chat id and g
 
 `characters.rs` owns character-facing endpoints, the current static character registry, and character-specific system prompts.
 
-`admin.rs` owns admin-only AI profile and provider endpoints.
+`admin.rs` owns admin-only AI profile and provider endpoints. It currently exposes list/status endpoints; write/manage flows are not implemented yet.
 
 `ai/mod.rs` owns provider selection and the shared AI message types.
 
@@ -94,7 +94,7 @@ The current local implementation uses a JSON file store at `DATA_PATH`. Later, a
 ```text
 guest      can chat without login on the same browser/device
 registered can chat and sync across browsers/devices through account-scoped ownership
-admin      can manage AI profiles, provider settings, and models
+admin      planned role for managing AI profiles, provider settings, and models
 ```
 
 Auth uses an HTTP-only session cookie plus the `X-WFChat-Session` header for API ownership resolution. Frontend code should not store API keys or admin secrets.
@@ -118,7 +118,7 @@ Backend routing should use an AI profile:
 character -> ai_profile -> provider/model/settings
 ```
 
-This lets an admin switch OpenAI, LM Studio, xAI, or Claude without changing chat UI code.
+This is the intended path for letting an admin switch OpenAI, LM Studio, xAI, or Claude without changing chat UI code. The current implementation still reads provider and model settings from backend environment configuration.
 
 ## Characters
 

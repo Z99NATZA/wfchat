@@ -27,6 +27,7 @@ import {
 	readChatSessionsCache,
 	readMemoryFactsCache,
 	readMemorySummariesCache,
+	syncLocalDeletesNow,
 	trimQueue,
 	type SyncItem,
 	type SyncQueueOperation
@@ -445,6 +446,47 @@ describe("syncService queue helpers", () => {
 			deleted_at: 300,
 			payload: {}
 		});
+	});
+
+	it("flushes local delete tombstones immediately when possible", async () => {
+		vi.spyOn(Date, "now").mockReturnValue(350_000);
+		vi.spyOn(Math, "random").mockReturnValue(0);
+		window.localStorage.setItem(sessionStorageKey, "session-1");
+		markMemoryFactDeleted("fact-1");
+		markChatMessagesDeleted("chat-1", ["message-1"]);
+		apiClientMock.post
+			.mockResolvedValueOnce({ data: { to_create: 0, to_update: 2, conflicts: 0 } })
+			.mockResolvedValueOnce({
+				data: {
+					operation_id: "sync-350000-0",
+					merged_count: 2,
+					conflict_count: 0,
+					committed_at: 351
+				}
+			});
+
+		await syncLocalDeletesNow();
+
+		expect(apiClientMock.post).toHaveBeenNthCalledWith(
+			1,
+			"/api/sync/preview",
+			{
+				items: expect.arrayContaining([
+					expect.objectContaining({
+						item_id: "memory.fact.fact-1",
+						item_type: "memory_fact",
+						deleted_at: 350
+					}),
+					expect.objectContaining({
+						item_id: "chat.message.chat-1.message-1",
+						item_type: "chat_message",
+						deleted_at: 350
+					})
+				])
+			},
+			{ headers: { "X-WFChat-Session": "session-1" } }
+		);
+		expect(readQueue()).toEqual([]);
 	});
 
 	it("pulls cloud changes into settings and memory/chat caches", async () => {

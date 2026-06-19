@@ -158,6 +158,8 @@
 	"chat.composer.sendMessage": "Send message",
 	"chat.composer.waitBeforeSending": "Wait for {name} to reply before sending again",
 	"chat.session.connectError": "Could not connect to the chat API.",
+	"chat.session.notFound": "This chat is no longer available for the current session.",
+	"chat.session.cachedReadOnly": "This chat is only available from cache. You can read it, but cannot send new messages here.",
 	"chat.session.aiNoResponse": "The AI service did not respond. Check the backend console and API key.",
 	"chat.session.clearConfirmTitle": "Clear chat history?",
 	"chat.session.clearConfirmDesc": "This removes all messages from this chat.",

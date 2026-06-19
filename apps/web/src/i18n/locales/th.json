@@ -158,6 +158,8 @@
 	"chat.composer.sendMessage": "ส่งข้อความ",
 	"chat.composer.waitBeforeSending": "รอให้ {name} ตอบก่อนส่งข้อความถัดไป",
 	"chat.session.connectError": "ไม่สามารถเชื่อมต่อ Chat API ได้",
+	"chat.session.notFound": "แชตนี้ไม่พร้อมใช้งานสำหรับ session ปัจจุบันแล้ว",
+	"chat.session.cachedReadOnly": "แชตนี้มีเฉพาะในแคช คุณอ่านประวัติได้ แต่ส่งข้อความใหม่ในแชตนี้ไม่ได้",
 	"chat.session.aiNoResponse": "บริการ AI ไม่ตอบกลับ ตรวจสอบ backend console และ API key",
 	"chat.session.clearConfirmTitle": "ล้างประวัติแชตใช่ไหม?",
 	"chat.session.clearConfirmDesc": "การกระทำนี้จะลบข้อความทั้งหมดในแชตนี้",

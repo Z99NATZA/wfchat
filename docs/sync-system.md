@@ -38,6 +38,10 @@ The sync system is designed to:
   exists.
 - Automatic app-setting sync for theme and background image changes while
   authenticated.
+- Stale chat cleanup from the chat UI: when a listed chat cannot be loaded from
+  the backend and has no cached messages, the frontend removes it locally,
+  records a chat-session tombstone, and attempts to flush local delete
+  tombstones immediately.
 - Stale pulled setting guard that avoids applying a cloud setting when the
   local `wfchat-sync-meta` timestamp is newer.
 - Uniform pulled setting handling for theme, font, locale, and background image:
@@ -348,6 +352,25 @@ The current enqueue scope is intentionally limited to mounted state:
 - messages for the active chat only
 - locally recorded memory/chat tombstones
 
+### Stale Chat Cleanup
+
+Chat lists merge backend chat sessions with local sync cache. Because chat sync
+is a cache layer and is not materialized into backend `chats`, a synced or
+previously deleted chat can appear locally even though the current backend owner
+cannot load it.
+
+When the user selects a chat and `GET /api/chats/:chat_id` returns not found:
+
+- if cached messages exist, the frontend opens the cached conversation for
+  recovery/readback in read-only mode and disables new message sends for that
+  chat id;
+- if no cached messages exist, the frontend treats the chat as stale, removes it
+  from the visible list, records a `chat_session` tombstone, and attempts to
+  flush local delete tombstones immediately.
+
+If that immediate flush fails, the delete operation remains in the normal sync
+queue/retry path.
+
 ## Queue And Retry
 
 Queue shape:
@@ -420,7 +443,9 @@ are older than existing rows.
 
 Memory/chat tombstones are usually recorded after a successful delete or a
 not-found response. If the API delete fails before local tombstone creation,
-that deletion may not be queued for sync later.
+that deletion may not be queued for sync later. Chat sessions that are detected
+as stale during selection do record a tombstone before attempting immediate
+delete sync.
 
 ### 7. Mounted-state sync can miss older local data
 
@@ -466,6 +491,9 @@ the same timestamp.
 Tombstones exist for memory/chat deletes, but most delete flows create
 tombstones after the API delete succeeds or after a not-found response. A delete
 that fails before local tombstone creation is not yet guaranteed to sync later.
+Stale chat cleanup is stricter: a chat that cannot be loaded from the backend
+and has no cached messages records a tombstone and attempts immediate tombstone
+sync.
 
 ### 7. Test coverage is not complete
 

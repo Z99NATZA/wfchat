@@ -135,6 +135,33 @@ export async function enqueueGuestSyncWithMemory(
 	writeSyncQueue(trimQueue(queue));
 }
 
+export async function syncLocalDeletesNow(): Promise<void> {
+	const items = buildMemorySyncItems([], [], readMemoryDeletesCache());
+	if (items.length === 0) {
+		return;
+	}
+	const queue = compactQueue(readSyncQueue());
+	queue.push({
+		operation_id: `sync-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+		items: compactItems(items),
+		attempt: 0,
+		next_retry_at: 0
+	});
+	writeSyncQueue(trimQueue(queue));
+
+	try {
+		while (hasPendingSyncQueue()) {
+			const result = await flushGuestSyncQueue({ force: true });
+			if (!result) {
+				break;
+			}
+		}
+	} catch (error) {
+		markSyncRetry();
+		throw error;
+	}
+}
+
 export function markMemoryFactDeleted(id: string): void {
 	upsertMemoryDelete({
 		item_id: `memory.fact.${id}`,

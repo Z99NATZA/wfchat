@@ -6,7 +6,9 @@
 
 ## URL behavior
 
-- `/` creates a new chat for the selected persona.
+- `/` redirects to `/chat`.
+- `/chat` opens the chat workspace without creating a backend chat yet.
+- The first sent message creates a backend chat for the selected persona, then navigates to `/chat/:chatId`.
 - `/chat/:chatId` opens that exact chat.
 - Refresh keeps current chat because the URL still contains `chatId`.
 

@@ -174,7 +174,7 @@ function ChatPage({
 						persona={chat.activePersona}
 						theme={theme}
 						font={font}
-						canClearChat={chat.messages.length > 0}
+						canClearChat={!chat.isActiveChatReadOnly && chat.messages.length > 0}
 						isClearing={chat.isClearing}
 						onClearChat={chat.clearChat}
 						onFontChange={onFontChange}
@@ -223,7 +223,7 @@ function ChatPage({
 							font={font}
 							companionName={chat.activePersona.name}
 							quickPrompts={chat.quickPrompts}
-							isDisabled={false}
+							isDisabled={chat.isActiveChatReadOnly}
 							isSending={chat.isSending}
 							onDraftChange={chat.setDraft}
 							onSend={chat.sendMessage}

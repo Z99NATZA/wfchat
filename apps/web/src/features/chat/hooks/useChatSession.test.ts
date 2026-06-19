@@ -11,6 +11,7 @@ import {
 	sendChatMessage,
 	streamChatMessage
 } from "@/features/chat/services/chatApiService";
+import { readChatMessagesCache, syncLocalDeletesNow } from "@/services/syncService";
 
 const mocks = vi.hoisted(() => ({
 	navigate: vi.fn(),
@@ -61,7 +62,8 @@ vi.mock("@/services/syncService", () => ({
 	readChatMessagesCache: vi.fn(() => []),
 	readChatSessionsCache: vi.fn(() => []),
 	readMemoryFactsCache: vi.fn(() => []),
-	readMemorySummariesCache: vi.fn(() => [])
+	readMemorySummariesCache: vi.fn(() => []),
+	syncLocalDeletesNow: vi.fn(() => Promise.resolve())
 }));
 
 vi.mock("@/features/chat/services/chatApiService", () => ({
@@ -268,6 +270,80 @@ describe("useChatSession streaming sendMessage", () => {
 
 		await waitFor(() => expect(mocks.navigate).toHaveBeenCalledWith("/chat"));
 		expect(mocks.getChat).not.toHaveBeenCalled();
+	});
+
+	it("opens cached messages when a selected synced chat is missing from the backend session", async () => {
+		const cachedMessages = [
+			message("cached-user", "user", "cached hello"),
+			message("cached-ai", "companion", "cached reply")
+		];
+		mocks.getChat.mockRejectedValue(new Error("not found"));
+		mocks.isNotFound.mockReturnValue(true);
+		vi.mocked(readChatMessagesCache).mockReturnValue(cachedMessages);
+		const { result } = renderHook(() => useChatSession());
+
+		await act(async () => {
+			await result.current.selectSession("cached-chat");
+		});
+
+		expect(result.current.activeChatId).toBe("cached-chat");
+		expect(result.current.messages).toEqual(cachedMessages);
+		expect(result.current.errorMessage).toBe("chat.session.cachedReadOnly");
+		expect(result.current.isActiveChatReadOnly).toBe(true);
+		expect(mocks.navigate).toHaveBeenCalledWith("/chat/cached-chat");
+	});
+
+	it("does not send messages from a cached read-only chat", async () => {
+		const cachedMessages = [message("cached-ai", "companion", "cached reply")];
+		mocks.getChat.mockRejectedValue(new Error("not found"));
+		mocks.isNotFound.mockReturnValue(true);
+		vi.mocked(readChatMessagesCache).mockReturnValue(cachedMessages);
+		const { result } = renderHook(() => useChatSession());
+
+		await act(async () => {
+			await result.current.selectSession("cached-chat");
+		});
+		mocks.createPersonaChat.mockClear();
+		mocks.streamChatMessage.mockClear();
+		mocks.sendChatMessage.mockClear();
+
+		await act(async () => {
+			result.current.setDraft("try to continue");
+		});
+		await act(async () => {
+			await result.current.sendMessage();
+		});
+
+		expect(result.current.messages).toEqual(cachedMessages);
+		expect(result.current.errorMessage).toBe("chat.session.cachedReadOnly");
+		expect(createPersonaChat).not.toHaveBeenCalled();
+		expect(streamChatMessage).not.toHaveBeenCalled();
+		expect(sendChatMessage).not.toHaveBeenCalled();
+	});
+
+	it("removes a stale selected chat when the backend and cache do not have it", async () => {
+		mocks.listPersonaChats.mockResolvedValue([
+			{
+				id: "stale-chat",
+				characterId: "aiko",
+				createdAt: 1_780_325_300,
+				updatedAt: 1_780_325_400,
+				lastMessage: "gone"
+			}
+		]);
+		mocks.getChat.mockRejectedValue(new Error("not found"));
+		mocks.isNotFound.mockReturnValue(true);
+		vi.mocked(readChatMessagesCache).mockReturnValue([]);
+		const { result } = renderHook(() => useChatSession());
+
+		await waitFor(() => expect(result.current.sessions).toHaveLength(1));
+		await act(async () => {
+			await result.current.selectSession("stale-chat");
+		});
+
+		expect(result.current.sessions).toEqual([]);
+		expect(result.current.errorMessage).toBe("chat.session.notFound");
+		expect(syncLocalDeletesNow).toHaveBeenCalled();
 	});
 });
 

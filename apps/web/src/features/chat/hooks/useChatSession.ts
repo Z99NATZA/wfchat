@@ -29,7 +29,8 @@ import {
 	readChatMessagesCache,
 	readChatSessionsCache,
 	readMemoryFactsCache,
-	readMemorySummariesCache
+	readMemorySummariesCache,
+	syncLocalDeletesNow
 } from "@/services/syncService";
 import { useDialog } from "@/components/dialog/DialogProvider";
 import type { ChatMessage, ChatSessionSummary, MemoryFact, MemorySummary } from "@/types/chat";
@@ -89,6 +90,7 @@ export function useChatSession({ onAvatarChatEvent }: UseChatSessionOptions = {}
 	const [isSavingMemoryFact, setIsSavingMemoryFact] = useState(false);
 	const [isSavingMemorySummary, setIsSavingMemorySummary] = useState(false);
 	const [errorMessage, setErrorMessage] = useState<string | null>(null);
+	const [isActiveChatReadOnly, setIsActiveChatReadOnly] = useState(false);
 	const [refreshVersion, setRefreshVersion] = useState(0);
 	const [routeChatId, setRouteChatId] = useState<string | null>(() =>
 		parseChatIdFromPath(location.pathname)
@@ -141,6 +143,44 @@ export function useChatSession({ onAvatarChatEvent }: UseChatSessionOptions = {}
 		navigate(CHAT_DRAFT_PATH);
 		setRouteChatId(null);
 	}, [navigate]);
+
+	const applyCachedChat = useCallback(
+		(chatId: string) => {
+			const cachedMessages = readChatMessagesCache(chatId);
+			if (cachedMessages.length === 0) {
+				return false;
+			}
+
+			setActiveChatId(chatId);
+			setMessages(cachedMessages);
+			setDraft("");
+			setIsActiveChatReadOnly(true);
+			setErrorMessage(t("chat.session.cachedReadOnly"));
+			setSessions((currentSessions) =>
+				currentSessions.some((session) => session.id === chatId)
+					? currentSessions
+					: [
+							{
+								id: chatId,
+								characterId: selectedPersonaId,
+								createdAt: cachedMessages[0]?.createdAt ?? Date.now() / 1000,
+								updatedAt: cachedMessages.at(-1)?.createdAt ?? Date.now() / 1000,
+								lastMessage: cachedMessages.at(-1)?.text ?? ""
+							},
+							...currentSessions
+						]
+			);
+			return true;
+		},
+		[selectedPersonaId, t]
+	);
+
+	const markChatDeletedAndSync = useCallback((chatId: string) => {
+		markChatSessionDeleted(chatId);
+		void syncLocalDeletesNow().catch(() => {
+			// The delete stays queued locally and will retry through the normal sync path.
+		});
+	}, []);
 
 	useEffect(() => {
 		let isCurrent = true;
@@ -285,6 +325,7 @@ export function useChatSession({ onAvatarChatEvent }: UseChatSessionOptions = {}
 					}
 					setActiveChatId(chat.chatId);
 					setMessages(chat.messages);
+					setIsActiveChatReadOnly(false);
 					setSessions((currentSessions) =>
 						currentSessions.some((session) => session.id === chat.chatId)
 							? currentSessions
@@ -304,16 +345,23 @@ export function useChatSession({ onAvatarChatEvent }: UseChatSessionOptions = {}
 						return;
 					}
 					if (isNotFound(error)) {
+						if (applyCachedChat(routeChatId)) {
+							return;
+						}
 						setActiveChatId(null);
 						setMessages([]);
 						setDraft("");
 						navigateToDraft();
+						setErrorMessage(t("chat.session.notFound"));
 						return;
 					}
 					const cachedMessages = readChatMessagesCache(routeChatId);
 					if (cachedMessages.length > 0) {
 						setActiveChatId(routeChatId);
 						setMessages(cachedMessages);
+						setDraft("");
+						setIsActiveChatReadOnly(true);
+						setErrorMessage(t("chat.session.cachedReadOnly"));
 						return;
 					}
 					setErrorMessage(t("chat.session.connectError"));
@@ -325,6 +373,7 @@ export function useChatSession({ onAvatarChatEvent }: UseChatSessionOptions = {}
 				setActiveChatId(null);
 				setMessages([]);
 				setDraft("");
+				setIsActiveChatReadOnly(false);
 				return;
 			}
 
@@ -332,6 +381,7 @@ export function useChatSession({ onAvatarChatEvent }: UseChatSessionOptions = {}
 				setActiveChatId(null);
 				setMessages([]);
 				setDraft("");
+				setIsActiveChatReadOnly(false);
 				navigateToDraft();
 			}
 		}
@@ -340,7 +390,7 @@ export function useChatSession({ onAvatarChatEvent }: UseChatSessionOptions = {}
 		return () => {
 			isCurrent = false;
 		};
-	}, [location.pathname, navigateToDraft, refreshVersion, routeChatId, selectedPersonaId, t]);
+	}, [applyCachedChat, location.pathname, navigateToDraft, refreshVersion, routeChatId, selectedPersonaId, t]);
 
 	const refreshRemoteState = useCallback(() => {
 		setRefreshVersion((version) => version + 1);
@@ -354,6 +404,7 @@ export function useChatSession({ onAvatarChatEvent }: UseChatSessionOptions = {}
 		setMemoryFacts([]);
 		setMemorySummaries([]);
 		setErrorMessage(null);
+		setIsActiveChatReadOnly(false);
 		navigateToDraft();
 	}, [navigateToDraft]);
 
@@ -366,6 +417,7 @@ export function useChatSession({ onAvatarChatEvent }: UseChatSessionOptions = {}
 		setMessages(MARKDOWN_QA_MESSAGES.map((message) => ({ ...message })));
 		setDraft("");
 		setErrorMessage(null);
+		setIsActiveChatReadOnly(false);
 		setIsSidebarOpen(false);
 	}, [isMarkdownQaEnabled]);
 
@@ -379,6 +431,7 @@ export function useChatSession({ onAvatarChatEvent }: UseChatSessionOptions = {}
 			return;
 		}
 		setErrorMessage(null);
+		setIsActiveChatReadOnly(false);
 		setActiveChatId(null);
 		setMessages([]);
 		setDraft("");
@@ -396,9 +449,24 @@ export function useChatSession({ onAvatarChatEvent }: UseChatSessionOptions = {}
 			const chat = await getChat(sessionId);
 			setActiveChatId(chat.chatId);
 			setMessages(chat.messages);
+			setIsActiveChatReadOnly(false);
 			navigateToChat(chat.chatId);
 			setIsSidebarOpen(false);
-		} catch {
+		} catch (error) {
+			if (isNotFound(error)) {
+				if (applyCachedChat(sessionId)) {
+					navigateToChat(sessionId);
+					setIsSidebarOpen(false);
+					return;
+				}
+
+				setSessions((currentSessions) =>
+					currentSessions.filter((session) => session.id !== sessionId)
+				);
+				markChatDeletedAndSync(sessionId);
+				setErrorMessage(t("chat.session.notFound"));
+				return;
+			}
 			setErrorMessage(t("chat.session.connectError"));
 		}
 	}
@@ -406,7 +474,7 @@ export function useChatSession({ onAvatarChatEvent }: UseChatSessionOptions = {}
 	async function sendMessage() {
 		const trimmedDraft = draft.trim();
 
-		if (!trimmedDraft || isSending || !selectedPersonaId) {
+		if (!trimmedDraft || isSending || !selectedPersonaId || isActiveChatReadOnly) {
 			return;
 		}
 
@@ -486,6 +554,7 @@ export function useChatSession({ onAvatarChatEvent }: UseChatSessionOptions = {}
 			if (!activeChatId) {
 				createdChatId = chatId;
 				setActiveChatId(chatId);
+				setIsActiveChatReadOnly(false);
 				navigateToChat(chatId);
 			}
 
@@ -706,7 +775,7 @@ export function useChatSession({ onAvatarChatEvent }: UseChatSessionOptions = {}
 		}
 
 		async function applyLocalRemoval() {
-			markChatSessionDeleted(sessionId);
+			markChatDeletedAndSync(sessionId);
 			const nextSessions = sessions.filter((session) => session.id !== sessionId);
 			setSessions(nextSessions);
 
@@ -723,6 +792,7 @@ export function useChatSession({ onAvatarChatEvent }: UseChatSessionOptions = {}
 			setActiveChatId(null);
 			setMessages([]);
 			setDraft("");
+			setIsActiveChatReadOnly(false);
 			navigateToDraft();
 		}
 
@@ -746,6 +816,7 @@ export function useChatSession({ onAvatarChatEvent }: UseChatSessionOptions = {}
 		createNewSession,
 		draft,
 		errorMessage,
+		isActiveChatReadOnly,
 		isClearing,
 		isCreatingSession,
 		isSavingMemoryFact,
