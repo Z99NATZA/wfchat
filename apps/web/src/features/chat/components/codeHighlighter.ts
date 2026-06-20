@@ -46,6 +46,7 @@ type SupportedHighlightLanguage =
 	| "bash"
 	| "css"
 	| "diff"
+	| "go"
 	| "html"
 	| "javascript"
 	| "jsx"
@@ -66,6 +67,7 @@ const supportedHighlightLanguages = new Set<SupportedHighlightLanguage>([
 	"bash",
 	"css",
 	"diff",
+	"go",
 	"html",
 	"javascript",
 	"jsx",
@@ -179,6 +181,7 @@ async function createHighlighterFactory(): Promise<FineGrainedHighlighterFactory
 			bash: () => import("@shikijs/langs/bash"),
 			css: () => import("@shikijs/langs/css"),
 			diff: () => import("@shikijs/langs/diff"),
+			go: () => import("@shikijs/langs/go"),
 			html: () => import("@shikijs/langs/html"),
 			javascript: () => import("@shikijs/langs/javascript"),
 			jsx: () => import("@shikijs/langs/jsx"),
@@ -213,6 +216,7 @@ function normalizeLanguage(language?: string): SupportedHighlightLanguage | null
 	const languageAliases: Record<string, SupportedHighlightLanguage> = {
 		js: "javascript",
 		jsx: "jsx",
+		golang: "go",
 		md: "markdown",
 		py: "python",
 		rs: "rust",

@@ -190,6 +190,7 @@ Supported syntax-highlight language ids:
 - `bash`, `sh`, `shell`, `shellscript`
 - `css`
 - `diff`
+- `go`, `golang`
 - `html`
 - `javascript`, `js`
 - `jsx`

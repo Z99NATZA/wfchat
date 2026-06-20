@@ -95,6 +95,24 @@ describe("codeHighlighter", () => {
 		);
 	});
 
+	it("supports Go language aliases", async () => {
+		const { highlightCode } = await import("./codeHighlighter");
+
+		await highlightCode({
+			code: "package main\nfunc main() {}",
+			language: "golang",
+			theme: "light"
+		});
+
+		expect(shikiMock.codeToTokens).toHaveBeenCalledWith(
+			"package main\nfunc main() {}",
+			expect.objectContaining({ lang: "go" })
+		);
+		expect(shikiMock.createFineGrainedHighlighter).toHaveBeenCalledWith(
+			expect.objectContaining({ langs: ["go"] })
+		);
+	});
+
 	it("falls back to plain code for unknown languages", async () => {
 		const { highlightCode } = await import("./codeHighlighter");
 
