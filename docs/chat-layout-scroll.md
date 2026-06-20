@@ -2,6 +2,8 @@
 
 This document defines the intended scroll behavior for the chat screen in `apps/web`.
 
+For prior scroll decisions and regressions, read `docs/behavior-history/chat-scroll.md` after this current contract.
+
 ## Goals
 
 - Prevent page-level scrolling during normal chat usage.

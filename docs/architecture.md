@@ -69,6 +69,7 @@ adapters. Provider adapters should not depend on frontend concepts.
 - [Chat SSE streaming](chat-sse-streaming.md)
 - [Chat message rendering](chat-message-rendering.md)
 - [Sync system](sync-system.md)
+- [Behavior history](behavior-history/README.md)
 - [Database schema](database-schema.md)
 - [Memory API](memory.md)
 - [PNGTuber and avatar runtime](pngtuber.md)
@@ -79,5 +80,6 @@ adapters. Provider adapters should not depend on frontend concepts.
 ## Maintenance Rule
 
 When behavior changes, update the focused document that owns that behavior
-first. Update this file only when the top-level system shape or document map
-changes.
+first. If the change fixes a regression or replaces a previously intentional
+behavior, add a short entry to the matching behavior history file. Update this
+file only when the top-level system shape or document map changes.
