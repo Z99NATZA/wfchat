@@ -275,6 +275,48 @@ describe("ChatMessageList streaming state", () => {
 
 		expect(HTMLElement.prototype.scrollTo).not.toHaveBeenCalled();
 	});
+
+	it("scrolls to the latest message when switching chats after the user scrolled upward", async () => {
+		const firstChatMessages = Array.from({ length: 12 }, (_, index) =>
+			message(`first-${index}`, "companion", `first chat message ${index}`)
+		);
+		const secondChatMessages = Array.from({ length: 12 }, (_, index) =>
+			message(`second-${index}`, "companion", `second chat message ${index}`)
+		);
+		const { container, rerender } = render(
+			<ChatMessageList
+				activeChatId="first-chat"
+				messages={firstChatMessages}
+				companionName="Aiko"
+				companionAvatarUrl="/images/aiko-avatar.png"
+			/>
+		);
+		const scrollContainer = container.querySelector(".chat-scroll") as HTMLDivElement;
+
+		Object.defineProperty(scrollContainer, "clientHeight", { configurable: true, value: 500 });
+		Object.defineProperty(scrollContainer, "scrollHeight", { configurable: true, value: 2_000 });
+		scrollContainer.scrollTop = 1_500;
+		fireEvent.scroll(scrollContainer);
+		await new Promise((resolve) => requestAnimationFrame(resolve));
+		vi.mocked(HTMLElement.prototype.scrollTo).mockClear();
+
+		scrollContainer.scrollTop = 1_100;
+		fireEvent.scroll(scrollContainer);
+		rerender(
+			<ChatMessageList
+				activeChatId="second-chat"
+				messages={secondChatMessages}
+				companionName="Aiko"
+				companionAvatarUrl="/images/aiko-avatar.png"
+			/>
+		);
+		await new Promise((resolve) => requestAnimationFrame(resolve));
+
+		expect(HTMLElement.prototype.scrollTo).toHaveBeenCalledWith({
+			top: scrollContainer.scrollHeight,
+			behavior: "auto"
+		});
+	});
 });
 
 function message(id: string, author: ChatMessage["author"], text: string): ChatMessage {

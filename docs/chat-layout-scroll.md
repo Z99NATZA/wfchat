@@ -26,6 +26,7 @@ This document defines the intended scroll behavior for the chat screen in `apps/
 
 - New assistant/user messages should auto-scroll only when the user is already near the bottom.
 - If the user scrolls up to read history, incoming messages must not force-jump the viewport.
+- Switching the active chat is a navigation boundary. The newly selected chat should reset transient timeline state and scroll directly to the latest loaded message, even if the user had scrolled upward in the previous chat.
 - When the user is away from the bottom, show a `Jump to latest` action at the bottom-right corner.
 - While the user stays away from the bottom, show a badge on the action with the count of newly arrived messages.
 
@@ -41,6 +42,7 @@ Current behavior:
 - Use stable message ids as item keys.
 - Support variable message heights for Markdown, tables, code blocks, and streaming text.
 - Cache measured message heights by message id.
+- Reset measured heights and transient list UI state when the active chat changes so the previous chat's virtualized scroll state cannot pin the next chat away from its latest message.
 - Preserve scroll position when older messages are prepended.
 - Keep the existing bottom auto-scroll and `Jump to latest` behavior.
 - Keep PNGTuber bottom clearance as part of the timeline's bottom spacing contract.
@@ -58,6 +60,7 @@ Planned test and QA coverage:
 - long conversations render only visible messages plus overscan, while the scrollbar still represents the loaded timeline
 - bottom auto-scroll still occurs only when the user is near the latest message
 - incoming messages do not force-jump the viewport when the user is reading history
+- switching chats after the user scrolled upward resets the timeline and scrolls to the latest message in the newly selected chat
 - `Jump to latest` remains visible and returns to the latest message when the user is away from the bottom
 - prepending older messages preserves the user's anchored viewport position
 - variable-height Markdown, tables, code blocks, and streaming text are measured without page-level scroll regressions

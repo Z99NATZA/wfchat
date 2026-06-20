@@ -19,6 +19,7 @@ import { cn } from "@/utils/classNames";
 import { formatLocalDateKey, formatMessageDateLabel } from "@/utils/date";
 
 type ChatMessageListProps = {
+	activeChatId?: string | null;
 	messages: ChatMessage[];
 	companionName: string;
 	companionAvatarUrl: string;
@@ -45,6 +46,7 @@ const MESSAGE_ROW_GAP_PX = 16;
 const VIRTUAL_OVERSCAN_ROWS = 8;
 
 function ChatMessageList({
+	activeChatId = null,
 	messages,
 	companionName,
 	companionAvatarUrl,
@@ -63,6 +65,7 @@ function ChatMessageList({
 	const lastScrollTopRef = useRef(0);
 	const previousMessageCountRef = useRef(messages.length);
 	const previousRowIdsRef = useRef<string[]>([]);
+	const shouldAutoScrollAfterChatChangeRef = useRef(false);
 	const rowTopByIdRef = useRef<Map<string, number>>(new Map());
 	const scrollToBottomFrameRef = useRef<number | null>(null);
 	const [hiddenUserMessageIds, setHiddenUserMessageIds] = useState<Set<string>>(new Set());
@@ -219,6 +222,22 @@ function ChatMessageList({
 	}, [rowMetrics.topById]);
 
 	useLayoutEffect(() => {
+		shouldStickToBottomRef.current = true;
+		shouldAutoScrollAfterChatChangeRef.current = true;
+		lastScrollTopRef.current = 0;
+		previousMessageCountRef.current = messages.length;
+		previousRowIdsRef.current = [];
+		setHiddenUserMessageIds(new Set());
+		setActiveMessageMenuId(null);
+		setCopiedAssistantMessageId(null);
+		setShowJumpToLatest(false);
+		setUnseenMessageCount(0);
+		setMeasuredRowHeights(new Map());
+		setScrollTop(0);
+		scheduleScrollToBottom("auto");
+	}, [activeChatId, scheduleScrollToBottom]);
+
+	useLayoutEffect(() => {
 		const previousRowIds = previousRowIdsRef.current;
 		const nextRowIds = messageRows.map((row) => row.id);
 		const firstPreviousRowId = previousRowIds[0];
@@ -275,7 +294,9 @@ function ChatMessageList({
 			return;
 		}
 
-		scheduleScrollToBottom("smooth");
+		const scrollBehavior = shouldAutoScrollAfterChatChangeRef.current ? "auto" : "smooth";
+		shouldAutoScrollAfterChatChangeRef.current = false;
+		scheduleScrollToBottom(scrollBehavior);
 		setShowJumpToLatest(false);
 		setUnseenMessageCount(0);
 	}, [bottomClearancePx, isSending, messages, rowMetrics.totalHeight, scheduleScrollToBottom]);

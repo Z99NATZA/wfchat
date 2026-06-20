@@ -206,6 +206,7 @@ function ChatPage({
 			<div className="relative flex min-h-0 flex-1 flex-col">
 				<div className="relative z-10 flex min-h-0 flex-1 flex-col">
 					<ChatMessageList
+						activeChatId={chat.activeChatId}
 						messages={chat.messages}
 						companionName={chat.activePersona.name}
 						companionAvatarUrl={chat.activePersona.avatarUrl}
