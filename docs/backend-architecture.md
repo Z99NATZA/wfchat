@@ -36,6 +36,10 @@ React
 
 See `docs/chat-sse-streaming.md` for the completed first-iteration SSE contract.
 
+Future chat voice work should start with assistant text-to-speech playback only.
+See `docs/chat-voice.md`; the backend should own TTS provider credentials and
+must not accept provider names, model names, or API keys from the chat UI.
+
 Clear chat flow:
 
 ```text

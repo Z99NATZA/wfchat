@@ -68,6 +68,7 @@ adapters. Provider adapters should not depend on frontend concepts.
 - [Chat sessions](chat-sessions.md)
 - [Chat SSE streaming](chat-sse-streaming.md)
 - [Chat message rendering](chat-message-rendering.md)
+- [Chat voice](chat-voice.md)
 - [Sync system](sync-system.md)
 - [Behavior history](behavior-history/README.md)
 - [Database schema](database-schema.md)

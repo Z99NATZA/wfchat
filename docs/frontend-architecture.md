@@ -37,6 +37,8 @@ Mobile browser viewport and safe-area scope: `docs/mobile-viewport.md`.
 
 Chat message rendering scope and rich-format rules: `docs/chat-message-rendering.md`.
 
+Chat voice scope starts with AI voice playback only: `docs/chat-voice.md`.
+
 Current chat message rendering:
 
 - User and assistant messages still use `ChatMessage.text` as the only content field.
@@ -65,5 +67,5 @@ App-level persisted settings live behind `apps/web/src/app/AppSettingsProvider.t
 - Use admin screens for AI profile configuration later.
 - Keep `VITE_*` variables limited to non-secret browser configuration.
 - Put reusable browser infrastructure in `apps/web/src/services`.
-- Keep unsupported controls disabled and visually muted. This currently includes attachments, voice input, image prompts, search, notifications, chat modes, response-shape controls, and safety toggles.
+- Keep unsupported controls disabled and visually muted. This currently includes attachments, user voice input, image prompts, search, notifications, chat modes, response-shape controls, and safety toggles.
 - Supported controls currently include theme toggle, settings, send message, quick prompts, and clear chat.
