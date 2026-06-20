@@ -57,12 +57,12 @@ describe("codeHighlighter", () => {
 		});
 		expect(shikiMock.createFineGrainedHighlighter).toHaveBeenCalledWith({
 			langs: ["typescript"],
-			themes: ["github-light", "github-dark"],
+			themes: ["github-light", "one-dark-pro"],
 			warnings: false
 		});
 	});
 
-	it("uses a dark Shiki theme for dark app theme", async () => {
+	it("uses One Dark Pro for dark app theme", async () => {
 		const { highlightCode } = await import("./codeHighlighter");
 
 		await highlightCode({
@@ -73,7 +73,7 @@ describe("codeHighlighter", () => {
 
 		expect(shikiMock.codeToTokens).toHaveBeenCalledWith(
 			expect.any(String),
-			expect.objectContaining({ theme: "github-dark" })
+			expect.objectContaining({ theme: "one-dark-pro" })
 		);
 	});
 

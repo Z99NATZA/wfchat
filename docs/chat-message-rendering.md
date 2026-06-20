@@ -203,7 +203,7 @@ Supported syntax-highlight language ids:
 - `typescript`, `ts`
 - `yaml`, `yml`
 
-Build note: `react-markdown`, `remark-gfm`, and their Markdown parsing dependencies are split into a dedicated Vite `markdown-renderer` chunk through `apps/web/vite.config.ts`. Syntax highlighting uses fine-grained dynamic imports for Shiki core, the JavaScript regex engine, GitHub light/dark themes, and the supported language grammars. Do not force these Shiki imports into one manual chunk; keeping them split avoids a large first-highlight download. Keep Markdown renderer dependencies frontend-only and update the manual chunk package list if the Markdown renderer dependency graph changes.
+Build note: `react-markdown`, `remark-gfm`, and their Markdown parsing dependencies are split into a dedicated Vite `markdown-renderer` chunk through `apps/web/vite.config.ts`. Syntax highlighting uses fine-grained dynamic imports for Shiki core, the JavaScript regex engine, the selected light/dark themes, and the supported language grammars. Do not force these Shiki imports into one manual chunk; keeping them split avoids a large first-highlight download. Keep Markdown renderer dependencies frontend-only and update the manual chunk package list if the Markdown renderer dependency graph changes.
 
 ## Styling Rules
 

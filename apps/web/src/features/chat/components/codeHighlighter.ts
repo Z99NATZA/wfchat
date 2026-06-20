@@ -29,7 +29,7 @@ type ShikiBundleWeb = {
 		code: string,
 		options: {
 			lang: SupportedHighlightLanguage;
-			theme: "github-light" | "github-dark";
+			theme: SupportedHighlightTheme;
 			tokenizeMaxLineLength: number;
 			tokenizeTimeLimit: number;
 		}
@@ -38,7 +38,7 @@ type ShikiBundleWeb = {
 
 type FineGrainedHighlighterFactory = (options: {
 	langs: SupportedHighlightLanguage[];
-	themes: ("github-light" | "github-dark")[];
+	themes: SupportedHighlightTheme[];
 	warnings: boolean;
 }) => Promise<ShikiBundleWeb>;
 
@@ -58,6 +58,13 @@ type SupportedHighlightLanguage =
 	| "tsx"
 	| "typescript"
 	| "yaml";
+
+type SupportedHighlightTheme = "github-light" | "one-dark-pro";
+
+const syntaxHighlightThemeByAppTheme = {
+	light: "github-light",
+	dark: "one-dark-pro"
+} as const satisfies Record<Theme, SupportedHighlightTheme>;
 
 const maxHighlightCodeLength = 20_000;
 const maxHighlightLineLength = 1_000;
@@ -120,7 +127,7 @@ export async function highlightCode({ code, language, theme }: HighlightCodeOpti
 
 	const result = await shiki.codeToTokens(code, {
 		lang: normalizedLanguage,
-		theme: theme === "dark" ? "github-dark" : "github-light",
+		theme: syntaxHighlightThemeByAppTheme[theme],
 		tokenizeMaxLineLength: maxHighlightLineLength,
 		tokenizeTimeLimit: 200
 	});
@@ -157,7 +164,7 @@ async function createHighlighter(language: SupportedHighlightLanguage): Promise<
 
 	return createFineGrainedHighlighter({
 		langs: [language],
-		themes: ["github-light", "github-dark"],
+		themes: Object.values(syntaxHighlightThemeByAppTheme),
 		warnings: false
 	});
 }
@@ -195,8 +202,8 @@ async function createHighlighterFactory(): Promise<FineGrainedHighlighterFactory
 			yaml: () => import("@shikijs/langs/yaml")
 		},
 		themes: {
-			"github-dark": () => import("@shikijs/themes/github-dark"),
-			"github-light": () => import("@shikijs/themes/github-light")
+			"github-light": () => import("@shikijs/themes/github-light"),
+			"one-dark-pro": () => import("@shikijs/themes/one-dark-pro")
 		},
 		engine: () => createJavaScriptRegexEngine()
 	}) as unknown as FineGrainedHighlighterFactory;
