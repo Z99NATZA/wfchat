@@ -44,6 +44,13 @@ Provider requirements:
 
 Unknown provider values also fail at startup.
 
+Voice playback provider requirements:
+
+- `AI_VOICE_PROVIDER=disabled` hides assistant voice playback actions
+- `AI_VOICE_PROVIDER=mock` enables backend-generated mock WAV playback for local UI lifecycle testing
+
+Unknown voice provider values fail at startup. Real TTS providers are not implemented yet.
+
 For local non-Docker browser-side axios calls, use:
 
 ```text

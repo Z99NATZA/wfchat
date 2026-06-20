@@ -272,6 +272,7 @@ mod tests {
             frontend_origin: "http://localhost:5173".to_owned(),
             ai_provider: "mock".to_owned(),
             ai_model: "mock-waifu".to_owned(),
+            ai_voice_provider: "disabled".to_owned(),
             database_url,
             openai_api_key: None,
             openai_base_url: "https://api.openai.com/v1".to_owned(),

@@ -19,6 +19,7 @@ const mocks = vi.hoisted(() => ({
 	t: vi.fn((key: string) => key),
 	confirm: vi.fn(),
 	getChatUiConfig: vi.fn(),
+	getAssistantMessageSpeech: vi.fn(),
 	listPersonaChats: vi.fn(),
 	listMemoryFacts: vi.fn(),
 	listMemorySummaries: vi.fn(),
@@ -76,6 +77,7 @@ vi.mock("@/features/chat/services/chatApiService", () => ({
 	deleteMemorySummary: mocks.deleteMemorySummary,
 	getChat: mocks.getChat,
 	getChatUiConfig: mocks.getChatUiConfig,
+	getAssistantMessageSpeech: mocks.getAssistantMessageSpeech,
 	isNotFound: mocks.isNotFound,
 	listMemoryFacts: mocks.listMemoryFacts,
 	listMemorySummaries: mocks.listMemorySummaries,
@@ -253,6 +255,7 @@ describe("useChatSession streaming sendMessage", () => {
 	it("exposes quick prompts from chat UI config", async () => {
 		mocks.getChatUiConfig.mockResolvedValue({
 			personas: [persona],
+			assistantSpeechEnabled: false,
 			quickPrompts: ["Make it sweeter", "Suggest a reply"]
 		});
 
@@ -261,6 +264,18 @@ describe("useChatSession streaming sendMessage", () => {
 		await waitFor(() =>
 			expect(result.current.quickPrompts).toEqual(["Make it sweeter", "Suggest a reply"])
 		);
+	});
+
+	it("exposes assistant speech capability from chat UI config", async () => {
+		mocks.getChatUiConfig.mockResolvedValue({
+			personas: [persona],
+			assistantSpeechEnabled: true,
+			quickPrompts: []
+		});
+
+		const { result } = renderHook(() => useChatSession());
+
+		await waitFor(() => expect(result.current.isAssistantSpeechEnabled).toBe(true));
 	});
 
 	it("does not load invalid chat route segments as backend chat ids", async () => {

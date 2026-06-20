@@ -46,6 +46,7 @@ Current chat message rendering:
 - Assistant messages render a safe Markdown subset through the frontend renderer.
 - Assistant bubbles are wider than user bubbles to improve readability for structured Markdown such as tables and code blocks.
 - Assistant messages with non-empty text expose a copy action for the raw message text.
+- Assistant messages can expose an AI voice playback action when backend chat UI config reports assistant speech support.
 - Quick prompts from `/api/chat-ui/config` render as chips above the composer. Selecting a chip fills the composer draft and focuses the textarea; it does not auto-send.
 - In development mode or local Docker builds with `VITE_ENABLE_MARKDOWN_QA=true`, `/chat?qa=markdown` exposes a local-only `Load QA` action for Markdown rendering fixtures. Chat route ids must be UUIDs so invalid paths such as `/chat/qa` do not call `/api/chats/:chat_id`.
 - Assistant streaming uses one optimistic local assistant message with id prefix `local-assistant-`.

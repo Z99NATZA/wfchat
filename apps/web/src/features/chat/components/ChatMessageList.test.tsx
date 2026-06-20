@@ -21,6 +21,15 @@ vi.mock("@/i18n", () => ({
 			if (key === "chat.messageList.assistantMessageCopied") {
 				return "Copied";
 			}
+			if (key === "chat.messageList.playAssistantSpeech") {
+				return "Play voice";
+			}
+			if (key === "chat.messageList.stopAssistantSpeech") {
+				return "Stop voice";
+			}
+			if (key === "chat.messageList.retryAssistantSpeech") {
+				return "Retry voice";
+			}
 			if (key === "chat.messageList.loadMarkdownQa") {
 				return "Load QA";
 			}
@@ -175,6 +184,53 @@ describe("ChatMessageList streaming state", () => {
 		);
 
 		expect(screen.queryByRole("button", { name: "Copy message" })).toBeNull();
+	});
+
+	it("shows assistant speech action for persisted assistant messages when enabled", () => {
+		const toggleAssistantSpeech = vi.fn();
+		render(
+			<ChatMessageList
+				messages={[message("assistant-1", "companion", "Hello there")]}
+				companionName="Aiko"
+				companionAvatarUrl="/images/aiko-avatar.png"
+				isAssistantSpeechEnabled
+				onToggleAssistantSpeech={toggleAssistantSpeech}
+			/>
+		);
+
+		fireEvent.click(screen.getByRole("button", { name: "Play voice" }));
+
+		expect(toggleAssistantSpeech).toHaveBeenCalledWith("assistant-1");
+	});
+
+	it("shows stop voice label for the active assistant playback", () => {
+		render(
+			<ChatMessageList
+				messages={[message("assistant-1", "companion", "Hello there")]}
+				companionName="Aiko"
+				companionAvatarUrl="/images/aiko-avatar.png"
+				isAssistantSpeechEnabled
+				assistantSpeechPlayback={{ messageId: "assistant-1", status: "playing" }}
+				onToggleAssistantSpeech={vi.fn()}
+			/>
+		);
+
+		expect(screen.getByRole("button", { name: "Stop voice" })).toBeTruthy();
+	});
+
+	it("does not show assistant speech action for streaming assistant placeholders", () => {
+		render(
+			<ChatMessageList
+				messages={[message("local-assistant-1", "companion", "partial")]}
+				companionName="Aiko"
+				companionAvatarUrl="/images/aiko-avatar.png"
+				isAssistantSpeechEnabled
+				onToggleAssistantSpeech={vi.fn()}
+				isSending
+			/>
+		);
+
+		expect(screen.queryByRole("button", { name: "Play voice" })).toBeNull();
 	});
 
 	it("does not copy generated thinking text from an empty assistant placeholder", () => {

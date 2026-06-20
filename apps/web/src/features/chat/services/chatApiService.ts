@@ -89,6 +89,9 @@ type ApiChatUiPersona = {
 type ApiChatUiConfig = {
 	personas: ApiChatUiPersona[];
 	quick_prompts: string[];
+	voice?: {
+		assistant_speech_enabled?: boolean;
+	};
 };
 
 type ApiMemoryFact = {
@@ -211,10 +214,15 @@ export async function deleteChat(chatId: string): Promise<void> {
 	});
 }
 
-export async function getChatUiConfig(): Promise<{ personas: ChatPersona[]; quickPrompts: string[] }> {
+export async function getChatUiConfig(): Promise<{
+	assistantSpeechEnabled: boolean;
+	personas: ChatPersona[];
+	quickPrompts: string[];
+}> {
 	const response = await apiClient.get<ApiChatUiConfig>("/api/chat-ui/config");
 
 	return {
+		assistantSpeechEnabled: response.data.voice?.assistant_speech_enabled === true,
 		personas: response.data.personas.map((persona) => ({
 			id: persona.id,
 			name: persona.name,
@@ -227,6 +235,28 @@ export async function getChatUiConfig(): Promise<{ personas: ChatPersona[]; quic
 		})),
 		quickPrompts: response.data.quick_prompts
 	};
+}
+
+export async function getAssistantMessageSpeech(
+	chatId: string,
+	messageId: string,
+	options: { signal?: AbortSignal } = {}
+): Promise<Blob> {
+	const sessionId = await ensureGuestSession();
+	const response = await fetch(apiUrl(`/api/chats/${chatId}/messages/${messageId}/speech`), {
+		method: "POST",
+		credentials: "include",
+		headers: {
+			...sessionHeaders(sessionId)
+		},
+		signal: options.signal
+	});
+
+	if (!response.ok) {
+		throw new Error(await readApiError(response));
+	}
+
+	return response.blob();
 }
 
 export async function listMemoryFacts(characterId: string): Promise<MemoryFact[]> {

@@ -7,6 +7,7 @@ pub struct Config {
     pub frontend_origin: String,
     pub ai_provider: String,
     pub ai_model: String,
+    pub ai_voice_provider: String,
     pub database_url: String,
     pub openai_api_key: Option<String>,
     pub openai_base_url: String,
@@ -30,6 +31,7 @@ impl Config {
             ),
             ai_provider: env_value("AI_PROVIDER", "mock"),
             ai_model: env_value("AI_MODEL", "mock-waifu"),
+            ai_voice_provider: env_value("AI_VOICE_PROVIDER", "disabled"),
             database_url: env_value(
                 "DATABASE_URL",
                 "postgres://postgres:postgres@localhost:5432/wfchat",
@@ -96,6 +98,12 @@ impl Config {
             other => Err(format!(
                 "AI_PROVIDER={other} is invalid. Allowed values: mock, openai, xai, lmstudio"
             )),
+        }?;
+        match self.ai_voice_provider.as_str() {
+            "disabled" | "mock" => Ok(()),
+            other => Err(format!(
+                "AI_VOICE_PROVIDER={other} is invalid. Allowed values: disabled, mock"
+            )),
         }
     }
 }
@@ -127,6 +135,7 @@ mod tests {
             frontend_origin: "http://localhost:5173".to_owned(),
             ai_provider: "mock".to_owned(),
             ai_model: "mock-waifu".to_owned(),
+            ai_voice_provider: "disabled".to_owned(),
             database_url: "postgres://postgres:postgres@localhost:5432/wfchat".to_owned(),
             openai_api_key: None,
             openai_base_url: "https://api.openai.com/v1".to_owned(),
@@ -164,5 +173,27 @@ mod tests {
     fn mock_provider_is_valid() {
         let config = base_config();
         assert!(config.validate().is_ok());
+    }
+
+    #[test]
+    fn mock_voice_provider_is_valid() {
+        let mut config = base_config();
+        config.ai_voice_provider = "mock".to_owned();
+
+        assert!(config.validate().is_ok());
+    }
+
+    #[test]
+    fn unknown_voice_provider_is_invalid() {
+        let mut config = base_config();
+        config.ai_voice_provider = "browser".to_owned();
+
+        let error = config
+            .validate()
+            .expect_err("unknown voice provider should fail");
+        assert_eq!(
+            error,
+            "AI_VOICE_PROVIDER=browser is invalid. Allowed values: disabled, mock"
+        );
     }
 }

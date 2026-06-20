@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { CHAT_PERSONAS, MARKDOWN_QA_MESSAGES } from "@/features/chat/data/chatFixtures";
+import { useAssistantSpeechPlayback } from "@/features/chat/hooks/useAssistantSpeechPlayback";
 import { useI18n } from "@/i18n";
 import {
 	clearChatMessages,
@@ -91,10 +92,13 @@ export function useChatSession({ onAvatarChatEvent }: UseChatSessionOptions = {}
 	const [isSavingMemorySummary, setIsSavingMemorySummary] = useState(false);
 	const [errorMessage, setErrorMessage] = useState<string | null>(null);
 	const [isActiveChatReadOnly, setIsActiveChatReadOnly] = useState(false);
+	const [isAssistantSpeechEnabled, setIsAssistantSpeechEnabled] = useState(false);
 	const [refreshVersion, setRefreshVersion] = useState(0);
 	const [routeChatId, setRouteChatId] = useState<string | null>(() =>
 		parseChatIdFromPath(location.pathname)
 	);
+	const { playback: assistantSpeechPlayback, toggleAssistantSpeech } =
+		useAssistantSpeechPlayback(activeChatId);
 
 	const activePersona = useMemo(() => {
 		const firstPersona = personas[0] ?? CHAT_PERSONAS[0];
@@ -193,6 +197,7 @@ export function useChatSession({ onAvatarChatEvent }: UseChatSessionOptions = {}
 
 				setPersonas(config.personas);
 				setQuickPrompts(config.quickPrompts);
+				setIsAssistantSpeechEnabled(config.assistantSpeechEnabled);
 				setSelectedPersonaId((currentId) =>
 					config.personas.some((persona) => persona.id === currentId)
 						? currentId
@@ -206,6 +211,7 @@ export function useChatSession({ onAvatarChatEvent }: UseChatSessionOptions = {}
 
 				setPersonas(CHAT_PERSONAS);
 				setQuickPrompts([]);
+				setIsAssistantSpeechEnabled(false);
 				setSelectedPersonaId((currentId) =>
 					CHAT_PERSONAS.some((persona) => persona.id === currentId)
 						? currentId
@@ -817,6 +823,8 @@ export function useChatSession({ onAvatarChatEvent }: UseChatSessionOptions = {}
 		draft,
 		errorMessage,
 		isActiveChatReadOnly,
+		isAssistantSpeechEnabled,
+		assistantSpeechPlayback,
 		isClearing,
 		isCreatingSession,
 		isSavingMemoryFact,
@@ -839,6 +847,7 @@ export function useChatSession({ onAvatarChatEvent }: UseChatSessionOptions = {}
 		sendMessage,
 		sessions: filteredSessions,
 		setDraft,
+		toggleAssistantSpeech,
 		setChatSearchQuery,
 		saveMemoryFact,
 		saveMemorySummary,

@@ -1,4 +1,4 @@
-import { ArrowDown, Check, Clipboard, Ellipsis, EyeOff, Wand2 } from "lucide-react";
+import { ArrowDown, Check, Clipboard, Ellipsis, EyeOff, LoaderCircle, Volume2, VolumeX, Wand2 } from "lucide-react";
 import {
 	type CSSProperties,
 	type ReactNode,
@@ -14,6 +14,7 @@ import { useDialog } from "@/components/dialog/DialogProvider";
 import ChatMessageContent from "@/features/chat/components/ChatMessageContent";
 import { useI18n } from "@/i18n";
 import type { ChatMessage } from "@/types/chat";
+import type { AssistantSpeechPlaybackState } from "@/features/chat/hooks/useAssistantSpeechPlayback";
 import type { Theme } from "@/types/theme";
 import { cn } from "@/utils/classNames";
 import { formatLocalDateKey, formatMessageDateLabel } from "@/utils/date";
@@ -27,6 +28,9 @@ type ChatMessageListProps = {
 	isSending?: boolean;
 	bottomClearancePx?: number;
 	onLoadMarkdownQaMessages?: () => void;
+	isAssistantSpeechEnabled?: boolean;
+	assistantSpeechPlayback?: AssistantSpeechPlaybackState;
+	onToggleAssistantSpeech?: (messageId: string) => void;
 	theme?: Theme;
 };
 
@@ -54,6 +58,9 @@ function ChatMessageList({
 	isSending = false,
 	bottomClearancePx = 0,
 	onLoadMarkdownQaMessages,
+	isAssistantSpeechEnabled = false,
+	assistantSpeechPlayback,
+	onToggleAssistantSpeech,
 	theme = "light"
 }: ChatMessageListProps) {
 	const { confirm } = useDialog();
@@ -379,6 +386,14 @@ function ChatMessageList({
 		const didCopyAssistantMessage = copiedAssistantMessageId === message.id;
 		const canCopyAssistantMessage = !isUser && message.text.length > 0;
 		const isStreamingAssistant = isSending && isStreamingAssistantMessage(message);
+		const canPlayAssistantSpeech =
+			!isUser &&
+			isAssistantSpeechEnabled &&
+			message.text.length > 0 &&
+			!isStreamingAssistantMessage(message) &&
+			Boolean(onToggleAssistantSpeech);
+		const assistantSpeechStatus =
+			assistantSpeechPlayback?.messageId === message.id ? assistantSpeechPlayback.status : "idle";
 		const messageText =
 			isStreamingAssistant && !message.text
 				? t("chat.messageList.thinking", { name: companionName })
@@ -448,29 +463,49 @@ function ChatMessageList({
 							<p className={cn("text-[11px]", isUser ? "text-white/75 dark:text-muted" : "text-muted")}>
 								{message.time}
 							</p>
-							{canCopyAssistantMessage && (
-								<button
-									type="button"
-									className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted transition hover:bg-app-soft hover:text-app-text focus:outline-none focus:ring-2 focus:ring-primary/30"
-									aria-label={
-										didCopyAssistantMessage
-											? t("chat.messageList.assistantMessageCopied")
-											: t("chat.messageList.copyAssistantMessage")
-									}
-									title={
-										didCopyAssistantMessage
-											? t("chat.messageList.assistantMessageCopied")
-											: t("chat.messageList.copyAssistantMessage")
-									}
-									onClick={() => copyAssistantMessage(message)}
-								>
-									{didCopyAssistantMessage ? (
-										<Check size={14} aria-hidden="true" />
-									) : (
-										<Clipboard size={14} aria-hidden="true" />
-									)}
-								</button>
-							)}
+
+							<div className="flex items-center gap-1 justify-end">
+								{canPlayAssistantSpeech && (
+									<button
+										type="button"
+										className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted transition hover:bg-app-soft hover:text-app-text focus:outline-none focus:ring-2 focus:ring-primary/30"
+										aria-label={assistantSpeechLabel(assistantSpeechStatus, t)}
+										title={assistantSpeechLabel(assistantSpeechStatus, t)}
+										onClick={() => onToggleAssistantSpeech?.(message.id)}
+									>
+										{assistantSpeechStatus === "loading" ? (
+											<LoaderCircle className="animate-spin" size={14} aria-hidden="true" />
+										) : assistantSpeechStatus === "playing" ? (
+											<VolumeX size={14} aria-hidden="true" />
+										) : (
+											<Volume2 size={14} aria-hidden="true" />
+										)}
+									</button>
+								)}
+								{canCopyAssistantMessage && (
+									<button
+										type="button"
+										className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted transition hover:bg-app-soft hover:text-app-text focus:outline-none focus:ring-2 focus:ring-primary/30"
+										aria-label={
+											didCopyAssistantMessage
+												? t("chat.messageList.assistantMessageCopied")
+												: t("chat.messageList.copyAssistantMessage")
+										}
+										title={
+											didCopyAssistantMessage
+												? t("chat.messageList.assistantMessageCopied")
+												: t("chat.messageList.copyAssistantMessage")
+										}
+										onClick={() => copyAssistantMessage(message)}
+									>
+										{didCopyAssistantMessage ? (
+											<Check size={14} aria-hidden="true" />
+										) : (
+											<Clipboard size={14} aria-hidden="true" />
+										)}
+									</button>
+								)}
+							</div>
 						</div>
 					</div>
 				</article>
@@ -586,6 +621,21 @@ function ChatMessageList({
 			)}
 		</div>
 	);
+}
+
+function assistantSpeechLabel(
+	status: AssistantSpeechPlaybackState["status"],
+	t: (key: string) => string
+): string {
+	if (status === "loading" || status === "playing") {
+		return t("chat.messageList.stopAssistantSpeech");
+	}
+
+	if (status === "error") {
+		return t("chat.messageList.retryAssistantSpeech");
+	}
+
+	return t("chat.messageList.playAssistantSpeech");
 }
 
 function isNearScrollBottom(container: HTMLDivElement, thresholdPx: number): boolean {

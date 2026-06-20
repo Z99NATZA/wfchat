@@ -212,6 +212,9 @@ function ChatPage({
 						companionAvatarUrl={chat.activePersona.avatarUrl}
 						errorMessage={chat.errorMessage}
 						isSending={chat.isSending}
+						isAssistantSpeechEnabled={chat.isAssistantSpeechEnabled && !chat.isActiveChatReadOnly}
+						assistantSpeechPlayback={chat.assistantSpeechPlayback}
+						onToggleAssistantSpeech={chat.toggleAssistantSpeech}
 						theme={theme}
 						bottomClearancePx={messageListBottomClearance}
 						onLoadMarkdownQaMessages={

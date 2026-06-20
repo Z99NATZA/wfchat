@@ -3,10 +3,10 @@
 This document scopes voice features for chat. It is not an active work item by
 itself; use it to keep future implementation narrow and staged.
 
-## First Scope: AI Voice Playback Only
+## Current Scope: AI Voice Playback Only
 
-The first voice iteration should add text-to-speech playback for assistant
-messages only.
+The first voice iteration adds text-to-speech playback for assistant messages
+only.
 
 Target behavior:
 
@@ -62,14 +62,13 @@ Voice source rules:
 
 Recommended provider modes:
 
-- `disabled`: voice playback is unavailable and the UI should hide or disable speaker actions.
-- `mock`: backend returns deterministic development/test audio or a controlled mock response so the UI lifecycle can be built without a real provider.
+- `disabled`: voice playback is unavailable and the UI hides speaker actions.
+- `mock`: backend returns deterministic development/test WAV audio so the UI lifecycle can be built without a real provider.
 - `provider`: backend calls a real TTS adapter using server-owned credentials and configuration.
 
-Start with `disabled` and `mock` before adding a real provider. The first useful
-implementation milestone is proving playback lifecycle, cancellation, cleanup,
-and error handling without committing to OpenAI, ElevenLabs, local TTS, or any
-other vendor.
+Current implementation supports `disabled` and `mock` only. Add a real provider
+only after playback lifecycle, cancellation, cleanup, and error handling are
+stable without committing to OpenAI, ElevenLabs, local TTS, or any other vendor.
 
 ## Frontend Contract
 
@@ -94,7 +93,7 @@ Suggested first UI states:
 The backend should own provider credentials, provider selection, request
 validation, and outbound TTS calls.
 
-Potential first endpoint shape:
+Current endpoint:
 
 ```text
 POST /api/chats/:chat_id/messages/:message_id/speech
@@ -107,6 +106,8 @@ Request behavior:
 - Allow speech only for assistant messages with non-empty final text.
 - Use server-side provider/model configuration.
 - Return an audio response with an explicit content type such as `audio/mpeg` or `audio/wav`.
+- With `AI_VOICE_PROVIDER=disabled`, chat UI config reports voice playback as unavailable.
+- With `AI_VOICE_PROVIDER=mock`, the endpoint returns deterministic `audio/wav` mock audio.
 
 Do not accept arbitrary provider names, model names, or API keys from the
 frontend.
@@ -142,6 +143,19 @@ Plan each as a separate scoped change:
 4. User voice input through push-to-talk speech-to-text.
 5. Voice interruption semantics.
 6. Avatar lip sync from playback audio or provider visemes.
+
+## Current Status
+
+Implemented for v1 with:
+
+- backend `AI_VOICE_PROVIDER=disabled|mock`
+- chat UI config capability flag for assistant speech playback
+- `POST /api/chats/:chat_id/messages/:message_id/speech`
+- mock WAV audio generation on the backend
+- frontend assistant message speaker action
+- one active playback at a time
+- loading, playing, stop, retry/error states
+- cleanup on stop, chat navigation, and unmount
 
 ## Documentation Rules
 

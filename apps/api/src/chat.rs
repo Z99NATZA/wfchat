@@ -21,6 +21,7 @@ use crate::{
     error::{AppError, AppResult},
     state::AppState,
     store::{ChatRecord, OwnerScope, StoredMessage},
+    voice::VoiceService,
 };
 
 pub fn router() -> Router<AppState> {
@@ -38,6 +39,10 @@ pub fn router() -> Router<AppState> {
         .route(
             "/chats/{chat_id}/messages/stream",
             axum::routing::post(stream_message),
+        )
+        .route(
+            "/chats/{chat_id}/messages/{message_id}/speech",
+            axum::routing::post(synthesize_message_speech),
         )
 }
 
@@ -106,6 +111,12 @@ struct ChatCompletionContext {
 struct ChatUiConfigResponse {
     personas: Vec<characters::CharacterUiResponse>,
     quick_prompts: Vec<&'static str>,
+    voice: ChatVoiceConfigResponse,
+}
+
+#[derive(Serialize)]
+struct ChatVoiceConfigResponse {
+    assistant_speech_enabled: bool,
 }
 
 async fn list_chats_for_persona(
@@ -129,7 +140,7 @@ async fn list_chats_for_persona(
     Json(chats.into_iter().map(chat_response).collect())
 }
 
-async fn get_chat_ui_config() -> Json<ChatUiConfigResponse> {
+async fn get_chat_ui_config(State(state): State<AppState>) -> Json<ChatUiConfigResponse> {
     Json(ChatUiConfigResponse {
         personas: characters::list_chat_ui_characters(),
         quick_prompts: vec![
@@ -138,6 +149,9 @@ async fn get_chat_ui_config() -> Json<ChatUiConfigResponse> {
             "Suggest a reply",
             "Save this memory",
         ],
+        voice: ChatVoiceConfigResponse {
+            assistant_speech_enabled: state.config.ai_voice_provider == "mock",
+        },
     })
 }
 
@@ -319,6 +333,55 @@ async fn delete_chat(
     }
 
     Ok(Json(json!({ "ok": true })))
+}
+
+async fn synthesize_message_speech(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path((chat_id, message_id)): Path<(Uuid, Uuid)>,
+) -> AppResult<impl IntoResponse> {
+    let session = state
+        .store
+        .ensure_session(session_id_from_headers(&headers))
+        .await;
+    let owner = OwnerScope::from_session(&session);
+    let chat = state
+        .store
+        .get_chat(owner, chat_id)
+        .await
+        .ok_or(AppError::NotFound)?;
+    let message = chat
+        .messages
+        .iter()
+        .find(|message| message.id == message_id)
+        .ok_or(AppError::NotFound)?;
+
+    if message.role != AiRole::Assistant {
+        return Err(AppError::BadRequest(
+            "speech is only available for assistant messages".to_owned(),
+        ));
+    }
+
+    if message.content.trim().is_empty() {
+        return Err(AppError::BadRequest(
+            "speech is only available for non-empty assistant messages".to_owned(),
+        ));
+    }
+
+    let audio = VoiceService::new(&state.config)
+        .synthesize_assistant_speech(&message.content)
+        .await?;
+
+    Ok((
+        [
+            (
+                header::CONTENT_TYPE,
+                HeaderValue::from_static(audio.content_type),
+            ),
+            (header::CACHE_CONTROL, HeaderValue::from_static("no-store")),
+        ],
+        audio.bytes,
+    ))
 }
 
 fn session_id_from_headers(headers: &HeaderMap) -> Option<Uuid> {
@@ -686,7 +749,10 @@ mod tests {
         let events = parse_sse_events(&body);
 
         assert_eq!(
-            events.iter().map(|event| event.0.as_str()).collect::<Vec<_>>(),
+            events
+                .iter()
+                .map(|event| event.0.as_str())
+                .collect::<Vec<_>>(),
             ["message_start", "error"]
         );
         let error_payload = events
@@ -713,6 +779,92 @@ mod tests {
         state.store.delete_chat(owner, chat.id).await;
     }
 
+    #[tokio::test]
+    async fn synthesize_message_speech_endpoint_returns_mock_audio_for_assistant_message() {
+        let Some(state) = test_state().await else {
+            return;
+        };
+        let session = state.store.create_guest_session().await;
+        let owner = OwnerScope::from_session(&session);
+        let chat = state
+            .store
+            .create_chat(owner, "aiko".to_owned(), "aiko_default".to_owned())
+            .await;
+        let user_message = StoredMessage::from_ai_message(AiMessage::user("hello".to_owned()));
+        let assistant_message =
+            StoredMessage::from_ai_message(AiMessage::assistant("hello back".to_owned()));
+        state
+            .store
+            .append_chat_messages(owner, chat.id, user_message, assistant_message.clone())
+            .await
+            .expect("messages should append");
+        let app = build_router(state.clone());
+        let request = Request::builder()
+            .method("POST")
+            .uri(format!(
+                "/api/chats/{}/messages/{}/speech",
+                chat.id, assistant_message.id
+            ))
+            .header("x-wfchat-session", session.id.to_string())
+            .body(Body::empty())
+            .expect("request should build");
+
+        let response = app.oneshot(request).await.expect("request should run");
+
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_header_contains(&response, header::CONTENT_TYPE, "audio/wav");
+        assert_header_contains(&response, header::CACHE_CONTROL, "no-store");
+        let body = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("body should collect");
+        assert!(body.starts_with(b"RIFF"));
+        assert_eq!(&body[8..12], b"WAVE");
+
+        state.store.delete_chat(owner, chat.id).await;
+    }
+
+    #[tokio::test]
+    async fn synthesize_message_speech_endpoint_rejects_user_messages() {
+        let Some(state) = test_state().await else {
+            return;
+        };
+        let session = state.store.create_guest_session().await;
+        let owner = OwnerScope::from_session(&session);
+        let chat = state
+            .store
+            .create_chat(owner, "aiko".to_owned(), "aiko_default".to_owned())
+            .await;
+        let user_message = StoredMessage::from_ai_message(AiMessage::user("hello".to_owned()));
+        let assistant_message =
+            StoredMessage::from_ai_message(AiMessage::assistant("hello back".to_owned()));
+        state
+            .store
+            .append_chat_messages(owner, chat.id, user_message.clone(), assistant_message)
+            .await
+            .expect("messages should append");
+        let app = build_router(state.clone());
+        let request = Request::builder()
+            .method("POST")
+            .uri(format!(
+                "/api/chats/{}/messages/{}/speech",
+                chat.id, user_message.id
+            ))
+            .header("x-wfchat-session", session.id.to_string())
+            .body(Body::empty())
+            .expect("request should build");
+
+        let response = app.oneshot(request).await.expect("request should run");
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        let body = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("body should collect");
+        let body = String::from_utf8(body.to_vec()).expect("body should be utf-8");
+        assert!(body.contains("speech is only available for assistant messages"));
+
+        state.store.delete_chat(owner, chat.id).await;
+    }
+
     async fn test_state() -> Option<AppState> {
         test_state_with_provider("mock").await
     }
@@ -727,6 +879,7 @@ mod tests {
                 frontend_origin: "http://localhost:5173".to_owned(),
                 ai_provider: ai_provider.to_owned(),
                 ai_model: "mock-waifu".to_owned(),
+                ai_voice_provider: "mock".to_owned(),
                 database_url,
                 openai_api_key: None,
                 openai_base_url: "https://api.openai.com/v1".to_owned(),
