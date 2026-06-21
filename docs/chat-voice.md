@@ -144,6 +144,66 @@ Plan each as a separate scoped change:
 5. Voice interruption semantics.
 6. Avatar lip sync from playback audio or provider visemes.
 
+## Recommended Next Work Sequence
+
+Do not implement all voice follow-ups in one large change. Build one scoped
+step at a time and verify the app before moving to the next step. This keeps
+provider configuration, playback behavior, user settings, microphone capture,
+and realtime transport risks separate.
+
+1. Add a real backend TTS provider behind the existing speech endpoint.
+   - Keep the frontend contract unchanged.
+   - Add server-side provider/model/voice configuration.
+   - Validate required provider secrets at API startup.
+   - Test `disabled` and `mock` still work.
+
+2. Add backend tests for real-provider configuration and adapter behavior.
+   - Test invalid provider values.
+   - Test missing required API key/model/voice settings.
+   - Test provider request/response mapping without calling the real network.
+   - Test the speech endpoint still returns explicit audio content type and
+     `Cache-Control: no-store`.
+
+3. Manually verify real TTS playback end to end.
+   - Start the API with the real voice provider enabled.
+   - Send a chat message, wait for the assistant's final persisted response,
+     then click the assistant speaker action.
+   - Confirm playback, stop, retry, provider failure, and chat navigation do
+     not break normal chat.
+
+4. Improve frontend speech failure feedback.
+   - Keep the UI small and local to assistant message actions.
+   - Preserve the existing loading, playing, stop, and retry states.
+   - Avoid moving provider details or API keys into the frontend.
+
+5. Add session-only replay cache for generated speech.
+   - Cache only for the current browser session/page lifetime.
+   - Do not persist generated audio files yet.
+   - Verify replaying the same assistant message does not call TTS again.
+   - Keep cleanup on stop, chat navigation, and unmount.
+
+6. Add a user setting to show or hide assistant voice playback.
+   - Treat this as a frontend preference layered on top of backend capability.
+   - If the backend reports speech unavailable, keep the speaker action hidden
+     regardless of user preference.
+
+7. Add optional auto-play for the latest assistant message.
+   - Keep it opt-in and disabled by default.
+   - Respect browser autoplay policy; manual user interaction may be required
+     before auto-play can work reliably.
+   - Only auto-play final assistant messages, not streaming placeholders.
+
+8. Add push-to-talk speech-to-text as a separate milestone.
+   - Use the disabled microphone composer button as the eventual entry point.
+   - Handle permission denial, recording cancel, upload failure, and
+     transcription failure.
+   - Keep transcription provider credentials server-side.
+
+9. Consider realtime voice only after TTS and push-to-talk STT are stable.
+   - Design this separately from SSE chat streaming.
+   - Prefer WebSocket or WebRTC only when bidirectional low-latency behavior is
+     actually required.
+
 ## Current Status
 
 Implemented for v1 with:
