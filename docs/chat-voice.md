@@ -225,6 +225,7 @@ Implemented for v1 with:
 - frontend assistant message speaker action
 - one active playback at a time
 - loading, playing, stop, retry/error states
+- visible assistant-message-local feedback when speech playback fails
 - cleanup on stop, chat navigation, and unmount
 
 ## Documentation Rules

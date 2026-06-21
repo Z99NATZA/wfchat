@@ -30,6 +30,9 @@ vi.mock("@/i18n", () => ({
 			if (key === "chat.messageList.retryAssistantSpeech") {
 				return "Retry voice";
 			}
+			if (key === "chat.messageList.assistantSpeechFailed") {
+				return "Voice failed";
+			}
 			if (key === "chat.messageList.loadMarkdownQa") {
 				return "Load QA";
 			}
@@ -216,6 +219,26 @@ describe("ChatMessageList streaming state", () => {
 		);
 
 		expect(screen.getByRole("button", { name: "Stop voice" })).toBeTruthy();
+	});
+
+	it("shows visible retry feedback when assistant speech playback fails", () => {
+		const toggleAssistantSpeech = vi.fn();
+		render(
+			<ChatMessageList
+				messages={[message("assistant-1", "companion", "Hello there")]}
+				companionName="Aiko"
+				companionAvatarUrl="/images/aiko-avatar.png"
+				isAssistantSpeechEnabled
+				assistantSpeechPlayback={{ messageId: "assistant-1", status: "error" }}
+				onToggleAssistantSpeech={toggleAssistantSpeech}
+			/>
+		);
+
+		expect(screen.getByRole("status").textContent).toBe("Voice failed");
+
+		fireEvent.click(screen.getByRole("button", { name: "Retry voice" }));
+
+		expect(toggleAssistantSpeech).toHaveBeenCalledWith("assistant-1");
 	});
 
 	it("does not show assistant speech action for streaming assistant placeholders", () => {

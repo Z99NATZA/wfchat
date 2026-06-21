@@ -146,6 +146,7 @@
 	"chat.messageList.playAssistantSpeech": "เล่นเสียง",
 	"chat.messageList.stopAssistantSpeech": "หยุดเสียง",
 	"chat.messageList.retryAssistantSpeech": "ลองเล่นเสียงอีกครั้ง",
+	"chat.messageList.assistantSpeechFailed": "เล่นเสียงไม่สำเร็จ",
 	"chat.messageList.loadMarkdownQa": "โหลด QA",
 	"chat.messageList.thinking": "{name} กำลังคิดคำตอบ...",
 	"chat.messageList.jumpToLatest": "ล่าสุด",

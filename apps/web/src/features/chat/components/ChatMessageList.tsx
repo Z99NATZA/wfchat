@@ -466,21 +466,35 @@ function ChatMessageList({
 
 							<div className="flex items-center gap-1 justify-end">
 								{canPlayAssistantSpeech && (
-									<button
-										type="button"
-										className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted transition hover:bg-app-soft hover:text-app-text focus:outline-none focus:ring-2 focus:ring-primary/30"
-										aria-label={assistantSpeechLabel(assistantSpeechStatus, t)}
-										title={assistantSpeechLabel(assistantSpeechStatus, t)}
-										onClick={() => onToggleAssistantSpeech?.(message.id)}
-									>
-										{assistantSpeechStatus === "loading" ? (
-											<LoaderCircle className="animate-spin" size={14} aria-hidden="true" />
-										) : assistantSpeechStatus === "playing" ? (
-											<VolumeX size={14} aria-hidden="true" />
-										) : (
-											<Volume2 size={14} aria-hidden="true" />
+									<>
+										{assistantSpeechStatus === "error" && (
+											<span
+												className="max-w-28 truncate text-[11px] font-medium text-red-500"
+												role="status"
+											>
+												{t("chat.messageList.assistantSpeechFailed")}
+											</span>
 										)}
-									</button>
+										<button
+											type="button"
+											className={cn(
+												"flex size-7 shrink-0 items-center justify-center rounded-md text-muted transition hover:bg-app-soft hover:text-app-text focus:outline-none focus:ring-2 focus:ring-primary/30",
+												assistantSpeechStatus === "error" &&
+													"text-red-500 hover:text-red-500 focus:ring-red-500/30"
+											)}
+											aria-label={assistantSpeechLabel(assistantSpeechStatus, t)}
+											title={assistantSpeechLabel(assistantSpeechStatus, t)}
+											onClick={() => onToggleAssistantSpeech?.(message.id)}
+										>
+											{assistantSpeechStatus === "loading" ? (
+												<LoaderCircle className="animate-spin" size={14} aria-hidden="true" />
+											) : assistantSpeechStatus === "playing" ? (
+												<VolumeX size={14} aria-hidden="true" />
+											) : (
+												<Volume2 size={14} aria-hidden="true" />
+											)}
+										</button>
+									</>
 								)}
 								{canCopyAssistantMessage && (
 									<button

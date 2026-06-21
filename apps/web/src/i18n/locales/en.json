@@ -146,6 +146,7 @@
 	"chat.messageList.playAssistantSpeech": "Play voice",
 	"chat.messageList.stopAssistantSpeech": "Stop voice",
 	"chat.messageList.retryAssistantSpeech": "Retry voice",
+	"chat.messageList.assistantSpeechFailed": "Voice failed",
 	"chat.messageList.loadMarkdownQa": "Load QA",
 	"chat.messageList.thinking": "{name} is thinking...",
 	"chat.messageList.jumpToLatest": "Jump to latest",
