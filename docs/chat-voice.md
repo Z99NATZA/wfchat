@@ -64,11 +64,9 @@ Recommended provider modes:
 
 - `disabled`: voice playback is unavailable and the UI hides speaker actions.
 - `mock`: backend returns deterministic development/test WAV audio so the UI lifecycle can be built without a real provider.
-- `provider`: backend calls a real TTS adapter using server-owned credentials and configuration.
+- `openai`: backend calls OpenAI text-to-speech using server-owned credentials and configuration.
 
-Current implementation supports `disabled` and `mock` only. Add a real provider
-only after playback lifecycle, cancellation, cleanup, and error handling are
-stable without committing to OpenAI, ElevenLabs, local TTS, or any other vendor.
+Current implementation supports `disabled`, `mock`, and `openai`.
 
 ## Frontend Contract
 
@@ -108,9 +106,19 @@ Request behavior:
 - Return an audio response with an explicit content type such as `audio/mpeg` or `audio/wav`.
 - With `AI_VOICE_PROVIDER=disabled`, chat UI config reports voice playback as unavailable.
 - With `AI_VOICE_PROVIDER=mock`, the endpoint returns deterministic `audio/wav` mock audio.
+- With `AI_VOICE_PROVIDER=openai`, the endpoint calls OpenAI's speech API and returns the configured audio format.
 
 Do not accept arbitrary provider names, model names, or API keys from the
 frontend.
+
+OpenAI voice configuration:
+
+- `OPENAI_API_KEY`: required when `AI_VOICE_PROVIDER=openai`
+- `OPENAI_BASE_URL`: defaults to `https://api.openai.com/v1`
+- `AI_VOICE_MODEL`: defaults to `gpt-4o-mini-tts`
+- `AI_VOICE_ID`: defaults to `marin`
+- `AI_VOICE_FORMAT`: app-supported values are `mp3` and `wav`
+- `AI_VOICE_INSTRUCTIONS`: optional provider-side voice guidance
 
 ## Performance Rules
 
@@ -152,10 +160,10 @@ provider configuration, playback behavior, user settings, microphone capture,
 and realtime transport risks separate.
 
 1. Add a real backend TTS provider behind the existing speech endpoint.
-   - Keep the frontend contract unchanged.
-   - Add server-side provider/model/voice configuration.
-   - Validate required provider secrets at API startup.
-   - Test `disabled` and `mock` still work.
+   - Done for OpenAI with the frontend contract unchanged.
+   - Server-side provider/model/voice configuration is available.
+   - Required provider secrets are validated at API startup.
+   - `disabled` and `mock` remain supported.
 
 2. Add backend tests for real-provider configuration and adapter behavior.
    - Test invalid provider values.
@@ -208,10 +216,12 @@ and realtime transport risks separate.
 
 Implemented for v1 with:
 
-- backend `AI_VOICE_PROVIDER=disabled|mock`
+- backend `AI_VOICE_PROVIDER=disabled|mock|openai`
 - chat UI config capability flag for assistant speech playback
 - `POST /api/chats/:chat_id/messages/:message_id/speech`
 - mock WAV audio generation on the backend
+- OpenAI text-to-speech adapter on the backend
+- server-side voice model, voice id, audio format, and instructions configuration
 - frontend assistant message speaker action
 - one active playback at a time
 - loading, playing, stop, retry/error states

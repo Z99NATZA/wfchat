@@ -8,6 +8,10 @@ pub struct Config {
     pub ai_provider: String,
     pub ai_model: String,
     pub ai_voice_provider: String,
+    pub ai_voice_model: String,
+    pub ai_voice_id: String,
+    pub ai_voice_format: String,
+    pub ai_voice_instructions: Option<String>,
     pub database_url: String,
     pub openai_api_key: Option<String>,
     pub openai_base_url: String,
@@ -32,6 +36,10 @@ impl Config {
             ai_provider: env_value("AI_PROVIDER", "mock"),
             ai_model: env_value("AI_MODEL", "mock-waifu"),
             ai_voice_provider: env_value("AI_VOICE_PROVIDER", "disabled"),
+            ai_voice_model: env_value("AI_VOICE_MODEL", "gpt-4o-mini-tts"),
+            ai_voice_id: env_value("AI_VOICE_ID", "marin"),
+            ai_voice_format: env_value("AI_VOICE_FORMAT", "mp3"),
+            ai_voice_instructions: optional_env_value("AI_VOICE_INSTRUCTIONS"),
             database_url: env_value(
                 "DATABASE_URL",
                 "postgres://postgres:postgres@localhost:5432/wfchat",
@@ -101,8 +109,23 @@ impl Config {
         }?;
         match self.ai_voice_provider.as_str() {
             "disabled" | "mock" => Ok(()),
+            "openai" => {
+                require_non_empty(
+                    self.openai_api_key.as_deref(),
+                    "OPENAI_API_KEY is required when AI_VOICE_PROVIDER=openai",
+                )?;
+                require_non_empty(
+                    Some(self.ai_voice_model.as_str()),
+                    "AI_VOICE_MODEL is required when AI_VOICE_PROVIDER=openai",
+                )?;
+                require_non_empty(
+                    Some(self.ai_voice_id.as_str()),
+                    "AI_VOICE_ID is required when AI_VOICE_PROVIDER=openai",
+                )?;
+                validate_voice_format(&self.ai_voice_format)
+            }
             other => Err(format!(
-                "AI_VOICE_PROVIDER={other} is invalid. Allowed values: disabled, mock"
+                "AI_VOICE_PROVIDER={other} is invalid. Allowed values: disabled, mock, openai"
             )),
         }
     }
@@ -124,6 +147,15 @@ fn require_non_empty(value: Option<&str>, message: &str) -> Result<(), String> {
     }
 }
 
+fn validate_voice_format(format: &str) -> Result<(), String> {
+    match format {
+        "mp3" | "wav" => Ok(()),
+        other => Err(format!(
+            "AI_VOICE_FORMAT={other} is invalid. Allowed values: mp3, wav"
+        )),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::Config;
@@ -136,6 +168,10 @@ mod tests {
             ai_provider: "mock".to_owned(),
             ai_model: "mock-waifu".to_owned(),
             ai_voice_provider: "disabled".to_owned(),
+            ai_voice_model: "gpt-4o-mini-tts".to_owned(),
+            ai_voice_id: "marin".to_owned(),
+            ai_voice_format: "mp3".to_owned(),
+            ai_voice_instructions: None,
             database_url: "postgres://postgres:postgres@localhost:5432/wfchat".to_owned(),
             openai_api_key: None,
             openai_base_url: "https://api.openai.com/v1".to_owned(),
@@ -184,6 +220,52 @@ mod tests {
     }
 
     #[test]
+    fn openai_voice_provider_requires_api_key() {
+        let mut config = base_config();
+        config.ai_voice_provider = "openai".to_owned();
+
+        let error = config
+            .validate()
+            .expect_err("openai voice should require api key");
+        assert_eq!(
+            error,
+            "OPENAI_API_KEY is required when AI_VOICE_PROVIDER=openai"
+        );
+    }
+
+    #[test]
+    fn openai_voice_provider_requires_voice_id() {
+        let mut config = base_config();
+        config.ai_voice_provider = "openai".to_owned();
+        config.openai_api_key = Some("test-key".to_owned());
+        config.ai_voice_id = "".to_owned();
+
+        let error = config
+            .validate()
+            .expect_err("openai voice should require voice id");
+        assert_eq!(
+            error,
+            "AI_VOICE_ID is required when AI_VOICE_PROVIDER=openai"
+        );
+    }
+
+    #[test]
+    fn openai_voice_provider_rejects_unsupported_format() {
+        let mut config = base_config();
+        config.ai_voice_provider = "openai".to_owned();
+        config.openai_api_key = Some("test-key".to_owned());
+        config.ai_voice_format = "pcm".to_owned();
+
+        let error = config
+            .validate()
+            .expect_err("unsupported voice format should fail");
+        assert_eq!(
+            error,
+            "AI_VOICE_FORMAT=pcm is invalid. Allowed values: mp3, wav"
+        );
+    }
+
+    #[test]
     fn unknown_voice_provider_is_invalid() {
         let mut config = base_config();
         config.ai_voice_provider = "browser".to_owned();
@@ -193,7 +275,7 @@ mod tests {
             .expect_err("unknown voice provider should fail");
         assert_eq!(
             error,
-            "AI_VOICE_PROVIDER=browser is invalid. Allowed values: disabled, mock"
+            "AI_VOICE_PROVIDER=browser is invalid. Allowed values: disabled, mock, openai"
         );
     }
 }

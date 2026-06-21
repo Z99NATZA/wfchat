@@ -2,6 +2,8 @@ use crate::{
     config::Config,
     error::{AppError, AppResult},
 };
+use reqwest::Client;
+use serde::Serialize;
 
 #[derive(Debug)]
 pub struct SpeechAudio {
@@ -9,23 +11,23 @@ pub struct SpeechAudio {
     pub bytes: Vec<u8>,
 }
 
-pub struct VoiceService {
-    provider: String,
+pub struct VoiceService<'a> {
+    config: &'a Config,
+    http: &'a Client,
 }
 
-impl VoiceService {
-    pub fn new(config: &Config) -> Self {
-        Self {
-            provider: config.ai_voice_provider.clone(),
-        }
+impl<'a> VoiceService<'a> {
+    pub fn new(config: &'a Config, http: &'a Client) -> Self {
+        Self { config, http }
     }
 
     pub async fn synthesize_assistant_speech(&self, text: &str) -> AppResult<SpeechAudio> {
-        match self.provider.as_str() {
+        match self.config.ai_voice_provider.as_str() {
             "mock" => Ok(SpeechAudio {
                 content_type: "audio/wav",
                 bytes: generate_mock_wav(text),
             }),
+            "openai" => self.synthesize_openai_speech(text).await,
             "disabled" => Err(AppError::BadRequest(
                 "assistant speech playback is disabled".to_owned(),
             )),
@@ -33,6 +35,83 @@ impl VoiceService {
                 "assistant speech playback is not configured".to_owned(),
             )),
         }
+    }
+
+    async fn synthesize_openai_speech(&self, text: &str) -> AppResult<SpeechAudio> {
+        let api_key = self
+            .config
+            .openai_api_key
+            .as_deref()
+            .ok_or_else(|| AppError::Ai("OPENAI_API_KEY is not configured".to_owned()))?;
+        let response_format = self.config.ai_voice_format.as_str();
+        let content_type = voice_content_type(response_format)?;
+        let url = format!(
+            "{}/audio/speech",
+            self.config.openai_base_url.trim_end_matches('/')
+        );
+
+        let response = self
+            .http
+            .post(url)
+            .bearer_auth(api_key)
+            .json(&OpenAiSpeechRequest {
+                model: &self.config.ai_voice_model,
+                input: text,
+                voice: &self.config.ai_voice_id,
+                response_format,
+                instructions: self.config.ai_voice_instructions.as_deref(),
+            })
+            .send()
+            .await
+            .map_err(|error| AppError::Ai(error.to_string()))?;
+
+        let status = response.status();
+        if !status.is_success() {
+            let body = response
+                .text()
+                .await
+                .map_err(|error| AppError::Ai(error.to_string()))?;
+            return Err(AppError::Ai(format!(
+                "voice provider returned {status}: {body}"
+            )));
+        }
+
+        let bytes = response
+            .bytes()
+            .await
+            .map_err(|error| AppError::Ai(error.to_string()))?
+            .to_vec();
+
+        if bytes.is_empty() {
+            return Err(AppError::Ai(
+                "voice provider returned empty audio".to_owned(),
+            ));
+        }
+
+        Ok(SpeechAudio {
+            content_type,
+            bytes,
+        })
+    }
+}
+
+#[derive(Serialize)]
+struct OpenAiSpeechRequest<'a> {
+    model: &'a str,
+    input: &'a str,
+    voice: &'a str,
+    response_format: &'a str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    instructions: Option<&'a str>,
+}
+
+fn voice_content_type(format: &str) -> AppResult<&'static str> {
+    match format {
+        "mp3" => Ok("audio/mpeg"),
+        "wav" => Ok("audio/wav"),
+        other => Err(AppError::BadRequest(format!(
+            "unsupported voice audio format: {other}"
+        ))),
     }
 }
 
@@ -86,6 +165,12 @@ fn stable_text_hash(text: &str) -> u32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::Value;
+    use std::{
+        io::{Read, Write},
+        net::TcpListener,
+        thread,
+    };
 
     fn config_with_voice_provider(provider: &str) -> Config {
         Config {
@@ -95,6 +180,10 @@ mod tests {
             ai_provider: "mock".to_owned(),
             ai_model: "mock-waifu".to_owned(),
             ai_voice_provider: provider.to_owned(),
+            ai_voice_model: "gpt-4o-mini-tts".to_owned(),
+            ai_voice_id: "marin".to_owned(),
+            ai_voice_format: "mp3".to_owned(),
+            ai_voice_instructions: None,
             database_url: "postgres://postgres:postgres@localhost:5432/wfchat".to_owned(),
             openai_api_key: None,
             openai_base_url: "https://api.openai.com/v1".to_owned(),
@@ -110,7 +199,9 @@ mod tests {
 
     #[tokio::test]
     async fn mock_provider_returns_wav_audio() {
-        let service = VoiceService::new(&config_with_voice_provider("mock"));
+        let http = Client::new();
+        let config = config_with_voice_provider("mock");
+        let service = VoiceService::new(&config, &http);
         let audio = service
             .synthesize_assistant_speech("hello")
             .await
@@ -123,7 +214,9 @@ mod tests {
 
     #[tokio::test]
     async fn disabled_provider_rejects_speech() {
-        let service = VoiceService::new(&config_with_voice_provider("disabled"));
+        let http = Client::new();
+        let config = config_with_voice_provider("disabled");
+        let service = VoiceService::new(&config, &http);
         let error = service
             .synthesize_assistant_speech("hello")
             .await
@@ -133,5 +226,168 @@ mod tests {
             error.to_string(),
             "bad request: assistant speech playback is disabled"
         );
+    }
+
+    #[tokio::test]
+    async fn openai_provider_posts_speech_request_and_returns_audio() {
+        let (base_url, request_handle) =
+            one_response_server("HTTP/1.1 200 OK", "Content-Type: audio/mpeg", b"FAKEAUDIO");
+        let http = Client::new();
+        let mut config = config_with_voice_provider("openai");
+        config.openai_api_key = Some("test-key".to_owned());
+        config.openai_base_url = base_url;
+        config.ai_voice_model = "gpt-4o-mini-tts".to_owned();
+        config.ai_voice_id = "marin".to_owned();
+        config.ai_voice_format = "mp3".to_owned();
+        config.ai_voice_instructions = Some("Speak warmly.".to_owned());
+        let service = VoiceService::new(&config, &http);
+
+        let audio = service
+            .synthesize_assistant_speech("hello from Aiko")
+            .await
+            .expect("openai speech should synthesize");
+        let captured = request_handle
+            .join()
+            .expect("mock provider server should capture request");
+        let body: Value =
+            serde_json::from_slice(&captured.body).expect("request body should be json");
+
+        assert_eq!(audio.content_type, "audio/mpeg");
+        assert_eq!(audio.bytes, b"FAKEAUDIO");
+        assert!(captured.head.starts_with("post /audio/speech http/1.1"));
+        assert!(captured.head.contains("authorization: bearer test-key"));
+        assert_eq!(body["model"], "gpt-4o-mini-tts");
+        assert_eq!(body["input"], "hello from Aiko");
+        assert_eq!(body["voice"], "marin");
+        assert_eq!(body["response_format"], "mp3");
+        assert_eq!(body["instructions"], "Speak warmly.");
+    }
+
+    #[tokio::test]
+    async fn openai_provider_maps_wav_content_type() {
+        let (base_url, request_handle) =
+            one_response_server("HTTP/1.1 200 OK", "Content-Type: audio/wav", b"RIFFDATA");
+        let http = Client::new();
+        let mut config = config_with_voice_provider("openai");
+        config.openai_api_key = Some("test-key".to_owned());
+        config.openai_base_url = base_url;
+        config.ai_voice_format = "wav".to_owned();
+        let service = VoiceService::new(&config, &http);
+
+        let audio = service
+            .synthesize_assistant_speech("hello")
+            .await
+            .expect("openai wav speech should synthesize");
+        request_handle
+            .join()
+            .expect("mock provider server should capture request");
+
+        assert_eq!(audio.content_type, "audio/wav");
+        assert_eq!(audio.bytes, b"RIFFDATA");
+    }
+
+    #[tokio::test]
+    async fn openai_provider_returns_provider_errors() {
+        let (base_url, request_handle) = one_response_server(
+            "HTTP/1.1 429 Too Many Requests",
+            "Content-Type: application/json",
+            br#"{"error":{"message":"rate limited"}}"#,
+        );
+        let http = Client::new();
+        let mut config = config_with_voice_provider("openai");
+        config.openai_api_key = Some("test-key".to_owned());
+        config.openai_base_url = base_url;
+        let service = VoiceService::new(&config, &http);
+
+        let error = service
+            .synthesize_assistant_speech("hello")
+            .await
+            .expect_err("provider error should fail");
+        request_handle
+            .join()
+            .expect("mock provider server should capture request");
+
+        assert!(error
+            .to_string()
+            .contains("voice provider returned 429 Too Many Requests"));
+        assert!(error.to_string().contains("rate limited"));
+    }
+
+    struct CapturedRequest {
+        head: String,
+        body: Vec<u8>,
+    }
+
+    fn one_response_server(
+        status_line: &'static str,
+        content_type_header: &'static str,
+        response_body: &'static [u8],
+    ) -> (String, thread::JoinHandle<CapturedRequest>) {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("mock server should bind");
+        let addr = listener
+            .local_addr()
+            .expect("mock server addr should exist");
+        let handle = thread::spawn(move || {
+            let (mut stream, _) = listener.accept().expect("mock server should accept");
+            let mut request_bytes = Vec::new();
+            let mut buffer = [0u8; 4096];
+
+            loop {
+                let read = stream.read(&mut buffer).expect("request should read");
+                if read == 0 {
+                    break;
+                }
+                request_bytes.extend_from_slice(&buffer[..read]);
+                if let Some(header_end) = find_header_end(&request_bytes) {
+                    let head = String::from_utf8_lossy(&request_bytes[..header_end]).to_string();
+                    let content_length = read_content_length(&head);
+                    let body_start = header_end + 4;
+                    let expected_len = body_start + content_length;
+                    while request_bytes.len() < expected_len {
+                        let read = stream.read(&mut buffer).expect("body should read");
+                        if read == 0 {
+                            break;
+                        }
+                        request_bytes.extend_from_slice(&buffer[..read]);
+                    }
+                    let body = request_bytes[body_start..expected_len].to_vec();
+                    let response = format!(
+                        "{status_line}\r\n{content_type_header}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                        response_body.len()
+                    );
+                    stream
+                        .write_all(response.as_bytes())
+                        .expect("response headers should write");
+                    stream
+                        .write_all(response_body)
+                        .expect("response body should write");
+                    return CapturedRequest {
+                        head: head.to_ascii_lowercase(),
+                        body,
+                    };
+                }
+            }
+
+            panic!("mock server did not receive a complete request");
+        });
+
+        (format!("http://{addr}"), handle)
+    }
+
+    fn find_header_end(request_bytes: &[u8]) -> Option<usize> {
+        request_bytes
+            .windows(4)
+            .position(|window| window == b"\r\n\r\n")
+    }
+
+    fn read_content_length(head: &str) -> usize {
+        head.lines()
+            .find_map(|line| {
+                let (name, value) = line.split_once(':')?;
+                name.eq_ignore_ascii_case("content-length")
+                    .then(|| value.trim().parse::<usize>().ok())
+                    .flatten()
+            })
+            .unwrap_or(0)
     }
 }

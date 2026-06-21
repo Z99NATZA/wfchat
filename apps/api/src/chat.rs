@@ -150,7 +150,10 @@ async fn get_chat_ui_config(State(state): State<AppState>) -> Json<ChatUiConfigR
             "Save this memory",
         ],
         voice: ChatVoiceConfigResponse {
-            assistant_speech_enabled: state.config.ai_voice_provider == "mock",
+            assistant_speech_enabled: matches!(
+                state.config.ai_voice_provider.as_str(),
+                "mock" | "openai"
+            ),
         },
     })
 }
@@ -368,7 +371,7 @@ async fn synthesize_message_speech(
         ));
     }
 
-    let audio = VoiceService::new(&state.config)
+    let audio = VoiceService::new(&state.config, &state.http)
         .synthesize_assistant_speech(&message.content)
         .await?;
 
@@ -880,6 +883,10 @@ mod tests {
                 ai_provider: ai_provider.to_owned(),
                 ai_model: "mock-waifu".to_owned(),
                 ai_voice_provider: "mock".to_owned(),
+                ai_voice_model: "gpt-4o-mini-tts".to_owned(),
+                ai_voice_id: "marin".to_owned(),
+                ai_voice_format: "mp3".to_owned(),
+                ai_voice_instructions: None,
                 database_url,
                 openai_api_key: None,
                 openai_base_url: "https://api.openai.com/v1".to_owned(),

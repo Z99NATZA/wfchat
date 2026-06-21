@@ -48,8 +48,13 @@ Voice playback provider requirements:
 
 - `AI_VOICE_PROVIDER=disabled` hides assistant voice playback actions
 - `AI_VOICE_PROVIDER=mock` enables backend-generated mock WAV playback for local UI lifecycle testing
+- `AI_VOICE_PROVIDER=openai` enables OpenAI text-to-speech playback and requires `OPENAI_API_KEY`
+- `AI_VOICE_MODEL` defaults to `gpt-4o-mini-tts`
+- `AI_VOICE_ID` defaults to `marin`
+- `AI_VOICE_FORMAT` supports `mp3` and `wav`
+- `AI_VOICE_INSTRUCTIONS` is optional provider-side voice guidance
 
-Unknown voice provider values fail at startup. Real TTS providers are not implemented yet.
+Unknown voice provider values fail at startup.
 
 For local non-Docker browser-side axios calls, use:
 

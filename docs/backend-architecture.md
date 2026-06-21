@@ -39,6 +39,9 @@ See `docs/chat-sse-streaming.md` for the completed first-iteration SSE contract.
 Chat voice starts with assistant text-to-speech playback only. See
 `docs/chat-voice.md`; the backend owns TTS provider credentials and must not
 accept provider names, model names, or API keys from the chat UI.
+The current real TTS provider mode is `AI_VOICE_PROVIDER=openai`, which calls
+OpenAI's speech API through backend configuration while keeping the frontend
+speech endpoint contract unchanged.
 
 Clear chat flow:
 
