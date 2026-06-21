@@ -168,6 +168,8 @@ and realtime transport risks separate.
    - `disabled` and `mock` remain supported.
 
 2. Add backend tests for real-provider configuration and adapter behavior.
+   - Done for provider configuration validation, OpenAI adapter request/response
+     mapping, provider error handling, and speech endpoint response headers.
    - Test invalid provider values.
    - Test missing required API key/model/voice settings.
    - Test provider request/response mapping without calling the real network.
@@ -175,6 +177,7 @@ and realtime transport risks separate.
      `Cache-Control: no-store`.
 
 3. Manually verify real TTS playback end to end.
+   - Done with `AI_VOICE_PROVIDER=openai` after backend tests passed.
    - Start the API with the real voice provider enabled.
    - Send a chat message, wait for the assistant's final persisted response,
      then click the assistant speaker action.
@@ -207,6 +210,7 @@ and realtime transport risks separate.
      not streaming placeholders.
 
 8. Add push-to-talk speech-to-text as a separate milestone.
+   - This is the next voice milestone after verified assistant TTS playback.
    - Use the disabled microphone composer button as the eventual entry point.
    - Handle permission denial, recording cancel, upload failure, and
      transcription failure.
@@ -235,6 +239,9 @@ Implemented for v1 with:
 - user setting to show or hide assistant speech playback actions
 - optional user setting to auto-play the latest final assistant message
 - cleanup on stop, chat navigation, and unmount
+- backend tests for voice provider configuration, adapter behavior, and speech
+  endpoint headers
+- manually verified OpenAI TTS playback end to end
 
 ## Documentation Rules
 
