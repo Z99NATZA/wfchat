@@ -239,6 +239,7 @@ function App() {
 			font={settings.font}
 			backgroundImageUrl={settings.backgroundImageUrl}
 			isAvatarOverlayVisible={settings.isAvatarOverlayVisible}
+			isAssistantSpeechVisible={settings.isAssistantSpeechVisible}
 			avatarOverlayPosition={settings.avatarOverlayPosition}
 			avatarOverlaySize={settings.avatarOverlaySize}
 			auth={auth}
@@ -312,6 +313,7 @@ function App() {
 				isOpen={isSettingsOpen}
 				backgroundImageUrl={settings.backgroundImageUrl}
 				isAvatarOverlayVisible={settings.isAvatarOverlayVisible}
+				isAssistantSpeechVisible={settings.isAssistantSpeechVisible}
 				avatarOverlayPosition={settings.avatarOverlayPosition}
 				avatarOverlaySize={settings.avatarOverlaySize}
 				onClose={() => setIsSettingsOpen(false)}
@@ -319,6 +321,7 @@ function App() {
 				onAvatarOverlayVisibleChange={settings.setAvatarOverlayVisible}
 				onAvatarOverlayPositionChange={settings.setAvatarOverlayPosition}
 				onAvatarOverlaySizeChange={settings.setAvatarOverlaySize}
+				onAssistantSpeechVisibleChange={settings.setAssistantSpeechVisible}
 			/>
 		</AvatarRuntimeProvider>
 	);

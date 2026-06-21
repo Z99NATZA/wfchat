@@ -1,4 +1,4 @@
-import { Image, ScanFace, X } from "lucide-react";
+import { Image, ScanFace, Volume2, X } from "lucide-react";
 import { type FormEvent, useEffect, useState } from "react";
 import { useDialogBackgroundSurface } from "@/components/dialog/useDialogBackgroundSurface";
 import { useI18n } from "@/i18n";
@@ -9,6 +9,7 @@ type AppSettingsDialogProps = {
 	isOpen: boolean;
 	backgroundImageUrl: string;
 	isAvatarOverlayVisible: boolean;
+	isAssistantSpeechVisible: boolean;
 	avatarOverlayPosition: AvatarOverlayPosition;
 	avatarOverlaySize: AvatarOverlaySize;
 	onClose: () => void;
@@ -16,19 +17,22 @@ type AppSettingsDialogProps = {
 	onAvatarOverlayVisibleChange: (isVisible: boolean) => void;
 	onAvatarOverlayPositionChange: (position: AvatarOverlayPosition) => void;
 	onAvatarOverlaySizeChange: (size: AvatarOverlaySize) => void;
+	onAssistantSpeechVisibleChange: (isVisible: boolean) => void;
 };
 
 function AppSettingsDialog({
 	isOpen,
 	backgroundImageUrl,
 	isAvatarOverlayVisible,
+	isAssistantSpeechVisible,
 	avatarOverlayPosition,
 	avatarOverlaySize,
 	onClose,
 	onUpdateBackgroundImageUrl,
 	onAvatarOverlayVisibleChange,
 	onAvatarOverlayPositionChange,
-	onAvatarOverlaySizeChange
+	onAvatarOverlaySizeChange,
+	onAssistantSpeechVisibleChange
 }: AppSettingsDialogProps) {
 	const { t } = useI18n();
 	const [draftUrl, setDraftUrl] = useState(backgroundImageUrl);
@@ -138,6 +142,23 @@ function AppSettingsDialog({
 					<section className="mt-6 space-y-3 border-t border-dialog-border pt-5">
 						<div className="flex items-center gap-3">
 							<div className="mt-0.5 rounded-xl bg-sky-500/10 p-2 text-sky-600 dark:bg-sky-300/15 dark:text-sky-200">
+								<Volume2 size={18} aria-hidden="true" />
+							</div>
+							<div className="min-w-0 flex-1">
+								<h3 className="text-sm font-semibold text-app-text">
+									{t("settings.assistantSpeech.title")}
+								</h3>
+							</div>
+						</div>
+						<SwitchSetting
+							checked={isAssistantSpeechVisible}
+							label={t("settings.assistantSpeech.showInChat")}
+							onChange={onAssistantSpeechVisibleChange}
+						/>
+					</section>
+					<section className="mt-6 space-y-3 border-t border-dialog-border pt-5">
+						<div className="flex items-center gap-3">
+							<div className="mt-0.5 rounded-xl bg-sky-500/10 p-2 text-sky-600 dark:bg-sky-300/15 dark:text-sky-200">
 								<ScanFace size={18} aria-hidden="true" />
 							</div>
 							<div className="min-w-0 flex-1">
@@ -146,30 +167,11 @@ function AppSettingsDialog({
 								</h3>
 							</div>
 						</div>
-						<button
-							type="button"
-							role="switch"
-							aria-checked={isAvatarOverlayVisible}
-							className="flex w-full items-center justify-between gap-4 rounded-xl border border-dialog-border bg-dialog-soft px-4 py-3 text-left transition hover:border-primary/40 focus:outline-none focus:ring-4 focus:ring-primary/15"
-							onClick={() => onAvatarOverlayVisibleChange(!isAvatarOverlayVisible)}
-						>
-							<span className="text-sm font-semibold text-app-text">
-								{t("settings.avatarOverlay.showInChat")}
-							</span>
-							<span
-								className={`relative h-6 w-11 shrink-0 rounded-full transition ${
-									isAvatarOverlayVisible
-										? "bg-primary dark:bg-muted/35"
-										: "bg-muted/35 dark:bg-primary"
-								}`}
-							>
-								<span
-									className={`absolute top-1 h-4 w-4 rounded-full bg-white shadow transition ${
-										isAvatarOverlayVisible ? "left-6" : "left-1"
-									}`}
-								/>
-							</span>
-						</button>
+						<SwitchSetting
+							checked={isAvatarOverlayVisible}
+							label={t("settings.avatarOverlay.showInChat")}
+							onChange={onAvatarOverlayVisibleChange}
+						/>
 						<SegmentedSetting
 							label={t("settings.avatarOverlay.position")}
 							options={[
@@ -198,6 +200,39 @@ function AppSettingsDialog({
 				</div>
 			</aside>
 		</div>
+	);
+}
+
+function SwitchSetting({
+	checked,
+	label,
+	onChange
+}: {
+	checked: boolean;
+	label: string;
+	onChange: (checked: boolean) => void;
+}) {
+	return (
+		<button
+			type="button"
+			role="switch"
+			aria-checked={checked}
+			className="flex w-full items-center justify-between gap-4 rounded-xl border border-dialog-border bg-dialog-soft px-4 py-3 text-left transition hover:border-primary/40 focus:outline-none focus:ring-4 focus:ring-primary/15"
+			onClick={() => onChange(!checked)}
+		>
+			<span className="text-sm font-semibold text-app-text">{label}</span>
+			<span
+				className={`relative h-6 w-11 shrink-0 rounded-full transition ${
+					checked ? "bg-primary dark:bg-muted/35" : "bg-muted/35 dark:bg-primary"
+				}`}
+			>
+				<span
+					className={`absolute top-1 h-4 w-4 rounded-full bg-white shadow transition ${
+						checked ? "left-6" : "left-1"
+					}`}
+				/>
+			</span>
+		</button>
 	);
 }
 

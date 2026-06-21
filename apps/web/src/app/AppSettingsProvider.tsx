@@ -16,6 +16,10 @@ import {
 	readBackgroundImageUrl,
 	writeBackgroundImageUrl
 } from "@/stores/backgroundStore";
+import {
+	persistAssistantSpeechVisible,
+	readAssistantSpeechVisible
+} from "@/stores/assistantSpeechStore";
 import type { AppFont } from "@/types/font";
 import type { Theme } from "@/types/theme";
 
@@ -26,6 +30,7 @@ type AppSettingsContextValue = {
 	isAvatarOverlayVisible: boolean;
 	avatarOverlayPosition: AvatarOverlayPosition;
 	avatarOverlaySize: AvatarOverlaySize;
+	isAssistantSpeechVisible: boolean;
 	setTheme: (theme: Theme) => void;
 	setFont: (font: AppFont) => void;
 	toggleTheme: () => void;
@@ -33,6 +38,7 @@ type AppSettingsContextValue = {
 	setAvatarOverlayVisible: (isVisible: boolean) => void;
 	setAvatarOverlayPosition: (position: AvatarOverlayPosition) => void;
 	setAvatarOverlaySize: (size: AvatarOverlaySize) => void;
+	setAssistantSpeechVisible: (isVisible: boolean) => void;
 	applyPulledTheme: (theme: Theme) => void;
 	applyPulledFont: (font: AppFont) => void;
 	applyPulledBackgroundImageUrl: (url: string) => void;
@@ -51,6 +57,7 @@ export function AppSettingsProvider({ children }: AppSettingsProviderProps) {
 	const [isAvatarOverlayVisible, setAvatarOverlayVisibleState] = useState(readAvatarOverlayVisible);
 	const [avatarOverlayPosition, setAvatarOverlayPositionState] = useState(readAvatarOverlayPosition);
 	const [avatarOverlaySize, setAvatarOverlaySizeState] = useState(readAvatarOverlaySize);
+	const [isAssistantSpeechVisible, setAssistantSpeechVisibleState] = useState(readAssistantSpeechVisible);
 
 	const setBackgroundImageUrl = useCallback((url: string) => {
 		const nextUrl = url.trim();
@@ -79,6 +86,11 @@ export function AppSettingsProvider({ children }: AppSettingsProviderProps) {
 		setAvatarOverlaySizeState(size);
 	}, []);
 
+	const setAssistantSpeechVisible = useCallback((isVisible: boolean) => {
+		persistAssistantSpeechVisible(isVisible);
+		setAssistantSpeechVisibleState(isVisible);
+	}, []);
+
 	const value = useMemo<AppSettingsContextValue>(
 		() => ({
 			theme,
@@ -87,6 +99,7 @@ export function AppSettingsProvider({ children }: AppSettingsProviderProps) {
 			isAvatarOverlayVisible,
 			avatarOverlayPosition,
 			avatarOverlaySize,
+			isAssistantSpeechVisible,
 			setTheme,
 			setFont,
 			toggleTheme,
@@ -94,6 +107,7 @@ export function AppSettingsProvider({ children }: AppSettingsProviderProps) {
 			setAvatarOverlayVisible,
 			setAvatarOverlayPosition,
 			setAvatarOverlaySize,
+			setAssistantSpeechVisible,
 			applyPulledTheme,
 			applyPulledFont,
 			applyPulledBackgroundImageUrl
@@ -105,6 +119,7 @@ export function AppSettingsProvider({ children }: AppSettingsProviderProps) {
 			isAvatarOverlayVisible,
 			avatarOverlayPosition,
 			avatarOverlaySize,
+			isAssistantSpeechVisible,
 			setTheme,
 			setFont,
 			toggleTheme,
@@ -112,6 +127,7 @@ export function AppSettingsProvider({ children }: AppSettingsProviderProps) {
 			setAvatarOverlayVisible,
 			setAvatarOverlayPosition,
 			setAvatarOverlaySize,
+			setAssistantSpeechVisible,
 			applyPulledTheme,
 			applyPulledFont,
 			applyPulledBackgroundImageUrl

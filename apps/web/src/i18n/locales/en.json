@@ -97,6 +97,8 @@
 	"settings.background.previewAlt": "Background preview",
 	"settings.background.clear": "Clear",
 	"settings.background.apply": "Apply",
+	"settings.assistantSpeech.title": "Assistant voice",
+	"settings.assistantSpeech.showInChat": "Show voice playback",
 	"settings.avatarOverlay.title": "Avatar overlay",
 	"settings.avatarOverlay.showInChat": "Show in chat",
 	"settings.avatarOverlay.position": "Position",

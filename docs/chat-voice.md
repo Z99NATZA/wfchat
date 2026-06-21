@@ -191,8 +191,8 @@ and realtime transport risks separate.
    - Failed and aborted speech requests are not cached.
 
 6. Add a user setting to show or hide assistant voice playback.
-   - Treat this as a frontend preference layered on top of backend capability.
-   - If the backend reports speech unavailable, keep the speaker action hidden
+   - Done as a frontend preference layered on top of backend capability.
+   - If the backend reports speech unavailable, the speaker action stays hidden
      regardless of user preference.
 
 7. Add optional auto-play for the latest assistant message.
@@ -227,6 +227,7 @@ Implemented for v1 with:
 - loading, playing, stop, retry/error states
 - visible assistant-message-local feedback when speech playback fails
 - session-only replay cache for generated speech audio
+- user setting to show or hide assistant speech playback actions
 - cleanup on stop, chat navigation, and unmount
 
 ## Documentation Rules

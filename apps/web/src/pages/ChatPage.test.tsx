@@ -1,0 +1,188 @@
+/**
+ * @vitest-environment happy-dom
+ */
+import { cleanup, render, screen } from "@testing-library/react";
+import type { ReactNode } from "react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import ChatPage from "@/pages/ChatPage";
+
+const mocks = vi.hoisted(() => ({
+	useChatSession: vi.fn(),
+	notifyAvatarChatEvent: vi.fn()
+}));
+
+vi.mock("@/layouts/AppLayout", () => ({
+	default: ({
+		children,
+		details,
+		header,
+		sidebar
+	}: {
+		children: ReactNode;
+		details: ReactNode;
+		header: ReactNode;
+		sidebar: ReactNode;
+	}) => (
+		<div>
+			<div>{sidebar}</div>
+			<div>{header}</div>
+			<div>{details}</div>
+			{children}
+		</div>
+	)
+}));
+
+vi.mock("@/features/avatar/components/AvatarOverlay", () => ({
+	default: () => <div data-testid="avatar-overlay" />
+}));
+
+vi.mock("@/features/avatar/runtime/avatarChatBridge", () => ({
+	useAvatarChatBridge: () => ({
+		notifyAvatarChatEvent: mocks.notifyAvatarChatEvent
+	})
+}));
+
+vi.mock("@/features/chat/hooks/useChatSession", () => ({
+	useChatSession: mocks.useChatSession
+}));
+
+vi.mock("@/features/chat/components/ChatSidebar", () => ({
+	default: () => <div data-testid="chat-sidebar" />
+}));
+
+vi.mock("@/features/chat/components/ChatHeader", () => ({
+	default: () => <div data-testid="chat-header" />
+}));
+
+vi.mock("@/features/chat/components/ChatDetailsPanel", () => ({
+	default: () => <div data-testid="chat-details" />
+}));
+
+vi.mock("@/features/chat/components/ChatComposer", () => ({
+	default: () => <div data-testid="chat-composer" />
+}));
+
+vi.mock("@/features/chat/components/ChatMessageList", () => ({
+	default: ({ isAssistantSpeechEnabled }: { isAssistantSpeechEnabled?: boolean }) => (
+		<div data-assistant-speech-enabled={String(isAssistantSpeechEnabled)} data-testid="chat-message-list" />
+	)
+}));
+
+const auth = {
+	isAuthenticated: false,
+	isLoading: false,
+	hasPendingGuestSync: false,
+	user: null,
+	profileLabel: "Guest",
+	loginGoogleWithIdToken: vi.fn(),
+	logout: vi.fn(),
+	markGuestSyncDone: vi.fn(),
+	updateProfile: vi.fn()
+};
+
+describe("ChatPage assistant speech visibility", () => {
+	afterEach(() => {
+		cleanup();
+		vi.clearAllMocks();
+	});
+
+	it("enables assistant speech actions when backend and user preference both allow it", () => {
+		mocks.useChatSession.mockReturnValue(chatState({ isAssistantSpeechEnabled: true }));
+
+		renderChatPage({ isAssistantSpeechVisible: true });
+
+		expect(screen.getByTestId("chat-message-list").dataset.assistantSpeechEnabled).toBe("true");
+	});
+
+	it("hides assistant speech actions when user preference is disabled", () => {
+		mocks.useChatSession.mockReturnValue(chatState({ isAssistantSpeechEnabled: true }));
+
+		renderChatPage({ isAssistantSpeechVisible: false });
+
+		expect(screen.getByTestId("chat-message-list").dataset.assistantSpeechEnabled).toBe("false");
+	});
+
+	it("hides assistant speech actions when backend speech support is unavailable", () => {
+		mocks.useChatSession.mockReturnValue(chatState({ isAssistantSpeechEnabled: false }));
+
+		renderChatPage({ isAssistantSpeechVisible: true });
+
+		expect(screen.getByTestId("chat-message-list").dataset.assistantSpeechEnabled).toBe("false");
+	});
+});
+
+function renderChatPage({ isAssistantSpeechVisible }: { isAssistantSpeechVisible: boolean }) {
+	return render(
+		<ChatPage
+			activityBar={null}
+			theme="light"
+			font="inter"
+			backgroundImageUrl=""
+			isAvatarOverlayVisible={false}
+			isAssistantSpeechVisible={isAssistantSpeechVisible}
+			avatarOverlayPosition="bottom-right"
+			avatarOverlaySize="small"
+			auth={auth}
+			onFontChange={vi.fn()}
+			onOpenProfile={vi.fn()}
+			onOpenSettings={vi.fn()}
+			onToggleTheme={vi.fn()}
+			onChatSyncSnapshotChange={vi.fn()}
+		/>
+	);
+}
+
+function chatState({ isAssistantSpeechEnabled }: { isAssistantSpeechEnabled: boolean }) {
+	return {
+		activePersona: {
+			id: "aiko",
+			name: "Aiko",
+			title: "Calm anime companion",
+			status: "Online",
+			lastMessage: "Ready",
+			lastActiveAt: "Now",
+			unreadCount: 0,
+			avatarUrl: "/images/aiko-avatar.png"
+		},
+		activeChatId: "chat-1",
+		clearChat: vi.fn(),
+		closeSidebar: vi.fn(),
+		createNewSession: vi.fn(),
+		draft: "",
+		errorMessage: null,
+		isActiveChatReadOnly: false,
+		isAssistantSpeechEnabled,
+		assistantSpeechPlayback: { messageId: null, status: "idle" },
+		isClearing: false,
+		isCreatingSession: false,
+		isSavingMemoryFact: false,
+		isSavingMemorySummary: false,
+		isSidebarOpen: false,
+		isSending: false,
+		memoryFacts: [],
+		memorySummaries: [],
+		messages: [],
+		openSidebar: vi.fn(),
+		quickPrompts: [],
+		refreshRemoteState: vi.fn(),
+		isMarkdownQaEnabled: false,
+		loadMarkdownQaMessages: vi.fn(),
+		resetToDraft: vi.fn(),
+		personas: [],
+		chatSearchQuery: "",
+		selectPersona: vi.fn(),
+		selectSession: vi.fn(),
+		sendMessage: vi.fn(),
+		sessions: [],
+		setDraft: vi.fn(),
+		toggleAssistantSpeech: vi.fn(),
+		setChatSearchQuery: vi.fn(),
+		saveMemoryFact: vi.fn(),
+		saveMemorySummary: vi.fn(),
+		removeMemoryFact: vi.fn(),
+		removeMemorySummary: vi.fn(),
+		editMemoryFact: vi.fn(),
+		editMemorySummary: vi.fn(),
+		removeSession: vi.fn()
+	};
+}

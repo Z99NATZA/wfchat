@@ -97,6 +97,8 @@
 	"settings.background.previewAlt": "ตัวอย่างพื้นหลัง",
 	"settings.background.clear": "ล้าง",
 	"settings.background.apply": "ใช้",
+	"settings.assistantSpeech.title": "เสียงผู้ช่วย",
+	"settings.assistantSpeech.showInChat": "แสดงปุ่มเล่นเสียง",
 	"settings.avatarOverlay.title": "อวาตาร์ในหน้าแชต",
 	"settings.avatarOverlay.showInChat": "แสดงในหน้าแชต",
 	"settings.avatarOverlay.position": "ตำแหน่ง",

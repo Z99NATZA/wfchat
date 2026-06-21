@@ -30,6 +30,7 @@ type ChatPageProps = {
 	font: AppFont;
 	backgroundImageUrl: string;
 	isAvatarOverlayVisible: boolean;
+	isAssistantSpeechVisible: boolean;
 	avatarOverlayPosition: AvatarOverlayPosition;
 	avatarOverlaySize: AvatarOverlaySize;
 	auth: AuthSessionController;
@@ -46,6 +47,7 @@ function ChatPage({
 	font,
 	backgroundImageUrl,
 	isAvatarOverlayVisible,
+	isAssistantSpeechVisible,
 	avatarOverlayPosition,
 	avatarOverlaySize,
 	auth,
@@ -212,7 +214,11 @@ function ChatPage({
 						companionAvatarUrl={chat.activePersona.avatarUrl}
 						errorMessage={chat.errorMessage}
 						isSending={chat.isSending}
-						isAssistantSpeechEnabled={chat.isAssistantSpeechEnabled && !chat.isActiveChatReadOnly}
+						isAssistantSpeechEnabled={
+							chat.isAssistantSpeechEnabled &&
+							isAssistantSpeechVisible &&
+							!chat.isActiveChatReadOnly
+						}
 						assistantSpeechPlayback={chat.assistantSpeechPlayback}
 						onToggleAssistantSpeech={chat.toggleAssistantSpeech}
 						theme={theme}
