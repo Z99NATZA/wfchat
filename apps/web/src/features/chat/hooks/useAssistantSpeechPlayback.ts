@@ -94,6 +94,7 @@ export function useAssistantSpeechPlayback(activeChatId: string | null) {
 						return;
 					}
 
+					resourcesRef.current.token += 1;
 					releaseResources();
 					setPlayback({ messageId: null, status: "idle" });
 				});

@@ -3,8 +3,11 @@
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
+	ASSISTANT_SPEECH_AUTO_PLAY_STORAGE_KEY,
 	ASSISTANT_SPEECH_VISIBLE_STORAGE_KEY,
+	persistAssistantSpeechAutoPlay,
 	persistAssistantSpeechVisible,
+	readAssistantSpeechAutoPlay,
 	readAssistantSpeechVisible
 } from "@/stores/assistantSpeechStore";
 
@@ -32,6 +35,10 @@ describe("assistantSpeechStore", () => {
 		expect(readAssistantSpeechVisible()).toBe(true);
 	});
 
+	it("defaults assistant speech auto-play to disabled", () => {
+		expect(readAssistantSpeechAutoPlay()).toBe(false);
+	});
+
 	it("persists hidden and visible assistant speech preferences", () => {
 		persistAssistantSpeechVisible(false);
 
@@ -42,5 +49,17 @@ describe("assistantSpeechStore", () => {
 
 		expect(window.localStorage.getItem(ASSISTANT_SPEECH_VISIBLE_STORAGE_KEY)).toBe("true");
 		expect(readAssistantSpeechVisible()).toBe(true);
+	});
+
+	it("persists assistant speech auto-play preferences", () => {
+		persistAssistantSpeechAutoPlay(true);
+
+		expect(window.localStorage.getItem(ASSISTANT_SPEECH_AUTO_PLAY_STORAGE_KEY)).toBe("true");
+		expect(readAssistantSpeechAutoPlay()).toBe(true);
+
+		persistAssistantSpeechAutoPlay(false);
+
+		expect(window.localStorage.getItem(ASSISTANT_SPEECH_AUTO_PLAY_STORAGE_KEY)).toBe("false");
+		expect(readAssistantSpeechAutoPlay()).toBe(false);
 	});
 });

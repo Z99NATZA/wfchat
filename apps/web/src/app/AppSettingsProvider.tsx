@@ -17,7 +17,9 @@ import {
 	writeBackgroundImageUrl
 } from "@/stores/backgroundStore";
 import {
+	persistAssistantSpeechAutoPlay,
 	persistAssistantSpeechVisible,
+	readAssistantSpeechAutoPlay,
 	readAssistantSpeechVisible
 } from "@/stores/assistantSpeechStore";
 import type { AppFont } from "@/types/font";
@@ -31,6 +33,7 @@ type AppSettingsContextValue = {
 	avatarOverlayPosition: AvatarOverlayPosition;
 	avatarOverlaySize: AvatarOverlaySize;
 	isAssistantSpeechVisible: boolean;
+	isAssistantSpeechAutoPlayEnabled: boolean;
 	setTheme: (theme: Theme) => void;
 	setFont: (font: AppFont) => void;
 	toggleTheme: () => void;
@@ -39,6 +42,7 @@ type AppSettingsContextValue = {
 	setAvatarOverlayPosition: (position: AvatarOverlayPosition) => void;
 	setAvatarOverlaySize: (size: AvatarOverlaySize) => void;
 	setAssistantSpeechVisible: (isVisible: boolean) => void;
+	setAssistantSpeechAutoPlayEnabled: (isEnabled: boolean) => void;
 	applyPulledTheme: (theme: Theme) => void;
 	applyPulledFont: (font: AppFont) => void;
 	applyPulledBackgroundImageUrl: (url: string) => void;
@@ -58,6 +62,8 @@ export function AppSettingsProvider({ children }: AppSettingsProviderProps) {
 	const [avatarOverlayPosition, setAvatarOverlayPositionState] = useState(readAvatarOverlayPosition);
 	const [avatarOverlaySize, setAvatarOverlaySizeState] = useState(readAvatarOverlaySize);
 	const [isAssistantSpeechVisible, setAssistantSpeechVisibleState] = useState(readAssistantSpeechVisible);
+	const [isAssistantSpeechAutoPlayEnabled, setAssistantSpeechAutoPlayEnabledState] =
+		useState(readAssistantSpeechAutoPlay);
 
 	const setBackgroundImageUrl = useCallback((url: string) => {
 		const nextUrl = url.trim();
@@ -91,6 +97,11 @@ export function AppSettingsProvider({ children }: AppSettingsProviderProps) {
 		setAssistantSpeechVisibleState(isVisible);
 	}, []);
 
+	const setAssistantSpeechAutoPlayEnabled = useCallback((isEnabled: boolean) => {
+		persistAssistantSpeechAutoPlay(isEnabled);
+		setAssistantSpeechAutoPlayEnabledState(isEnabled);
+	}, []);
+
 	const value = useMemo<AppSettingsContextValue>(
 		() => ({
 			theme,
@@ -100,6 +111,7 @@ export function AppSettingsProvider({ children }: AppSettingsProviderProps) {
 			avatarOverlayPosition,
 			avatarOverlaySize,
 			isAssistantSpeechVisible,
+			isAssistantSpeechAutoPlayEnabled,
 			setTheme,
 			setFont,
 			toggleTheme,
@@ -108,6 +120,7 @@ export function AppSettingsProvider({ children }: AppSettingsProviderProps) {
 			setAvatarOverlayPosition,
 			setAvatarOverlaySize,
 			setAssistantSpeechVisible,
+			setAssistantSpeechAutoPlayEnabled,
 			applyPulledTheme,
 			applyPulledFont,
 			applyPulledBackgroundImageUrl
@@ -120,6 +133,7 @@ export function AppSettingsProvider({ children }: AppSettingsProviderProps) {
 			avatarOverlayPosition,
 			avatarOverlaySize,
 			isAssistantSpeechVisible,
+			isAssistantSpeechAutoPlayEnabled,
 			setTheme,
 			setFont,
 			toggleTheme,
@@ -128,6 +142,7 @@ export function AppSettingsProvider({ children }: AppSettingsProviderProps) {
 			setAvatarOverlayPosition,
 			setAvatarOverlaySize,
 			setAssistantSpeechVisible,
+			setAssistantSpeechAutoPlayEnabled,
 			applyPulledTheme,
 			applyPulledFont,
 			applyPulledBackgroundImageUrl

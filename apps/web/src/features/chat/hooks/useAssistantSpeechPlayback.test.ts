@@ -157,4 +157,21 @@ describe("useAssistantSpeechPlayback", () => {
 
 		expect(getAssistantMessageSpeech).toHaveBeenCalledTimes(2);
 	});
+
+	it("does not show an error when cleanup after ended emits an audio error event", async () => {
+		vi.mocked(getAssistantMessageSpeech).mockResolvedValue(new Blob(["audio-one"]));
+		const { result } = renderHook(() => useAssistantSpeechPlayback("chat-1"));
+
+		await act(async () => {
+			result.current.toggleAssistantSpeech("assistant-1");
+		});
+		await waitFor(() => expect(result.current.playback.status).toBe("playing"));
+
+		await act(async () => {
+			audioInstances[0].emit("ended");
+			audioInstances[0].emit("error");
+		});
+
+		expect(result.current.playback).toEqual({ messageId: null, status: "idle" });
+	});
 });

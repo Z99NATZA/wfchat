@@ -13,7 +13,8 @@ Target behavior:
 - Assistant messages can expose a speaker action after the message has final text.
 - The action requests speech audio for that assistant message text.
 - The frontend plays the returned audio and exposes clear loading, playing, stop, and retry states.
-- Playback is user-initiated in the first iteration. Do not auto-play new assistant messages yet.
+- Playback is user-initiated by default. Optional latest-message auto-play is a
+  separate opt-in setting.
 - Voice playback must not change the stored `ChatMessage.text` contract.
 - Voice playback must not block text rendering, message sending, SSE streaming, or chat navigation.
 
@@ -138,6 +139,7 @@ The UI should handle:
 - chat navigation during a pending request
 - audio decode/playback failure
 - message no longer existing or no longer owned by the session
+- cleanup after normal audio completion must not surface as a playback failure
 
 Failures should not alter the message text or break normal chat actions.
 
@@ -196,10 +198,13 @@ and realtime transport risks separate.
      regardless of user preference.
 
 7. Add optional auto-play for the latest assistant message.
-   - Keep it opt-in and disabled by default.
+   - Done as a frontend preference layered on top of backend capability and
+     assistant speech visibility.
+   - It is opt-in and disabled by default.
    - Respect browser autoplay policy; manual user interaction may be required
      before auto-play can work reliably.
-   - Only auto-play final assistant messages, not streaming placeholders.
+   - It runs after sending finishes and only targets final assistant messages,
+     not streaming placeholders.
 
 8. Add push-to-talk speech-to-text as a separate milestone.
    - Use the disabled microphone composer button as the eventual entry point.
@@ -228,6 +233,7 @@ Implemented for v1 with:
 - visible assistant-message-local feedback when speech playback fails
 - session-only replay cache for generated speech audio
 - user setting to show or hide assistant speech playback actions
+- optional user setting to auto-play the latest final assistant message
 - cleanup on stop, chat navigation, and unmount
 
 ## Documentation Rules

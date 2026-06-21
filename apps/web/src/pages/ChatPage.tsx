@@ -31,6 +31,7 @@ type ChatPageProps = {
 	backgroundImageUrl: string;
 	isAvatarOverlayVisible: boolean;
 	isAssistantSpeechVisible: boolean;
+	isAssistantSpeechAutoPlayEnabled: boolean;
 	avatarOverlayPosition: AvatarOverlayPosition;
 	avatarOverlaySize: AvatarOverlaySize;
 	auth: AuthSessionController;
@@ -48,6 +49,7 @@ function ChatPage({
 	backgroundImageUrl,
 	isAvatarOverlayVisible,
 	isAssistantSpeechVisible,
+	isAssistantSpeechAutoPlayEnabled,
 	avatarOverlayPosition,
 	avatarOverlaySize,
 	auth,
@@ -69,6 +71,11 @@ function ChatPage({
 		isAvatarOverlayVisible && avatarOverlayHeight > 0
 			? avatarOverlayHeight + avatarOverlayGap + messageOverlayGap
 			: 0;
+	const isAssistantSpeechActionEnabled =
+		chat.isAssistantSpeechEnabled && isAssistantSpeechVisible && !chat.isActiveChatReadOnly;
+	const latestFinalAssistantMessage = findLatestFinalAssistantMessage(chat.messages);
+	const wasSendingRef = useRef(false);
+	const lastAutoPlayedAssistantMessageIdRef = useRef<string | null>(null);
 
 	useEffect(() => {
 		onChatSyncSnapshotChange({
@@ -150,6 +157,32 @@ function ChatPage({
 		return () => resizeObserver.disconnect();
 	}, [avatarOverlaySize, isAvatarOverlayVisible]);
 
+	useEffect(() => {
+		const didFinishSending = wasSendingRef.current && !chat.isSending;
+		wasSendingRef.current = chat.isSending;
+
+		if (!didFinishSending || !isAssistantSpeechAutoPlayEnabled || !isAssistantSpeechActionEnabled) {
+			return;
+		}
+
+		if (!latestFinalAssistantMessage) {
+			return;
+		}
+
+		if (lastAutoPlayedAssistantMessageIdRef.current === latestFinalAssistantMessage.id) {
+			return;
+		}
+
+		lastAutoPlayedAssistantMessageIdRef.current = latestFinalAssistantMessage.id;
+		chat.toggleAssistantSpeech(latestFinalAssistantMessage.id);
+	}, [
+		chat.isSending,
+		chat.toggleAssistantSpeech,
+		isAssistantSpeechActionEnabled,
+		isAssistantSpeechAutoPlayEnabled,
+		latestFinalAssistantMessage
+	]);
+
 	return (
 		<AppLayout
 				activityBar={activityBar}
@@ -214,11 +247,7 @@ function ChatPage({
 						companionAvatarUrl={chat.activePersona.avatarUrl}
 						errorMessage={chat.errorMessage}
 						isSending={chat.isSending}
-						isAssistantSpeechEnabled={
-							chat.isAssistantSpeechEnabled &&
-							isAssistantSpeechVisible &&
-							!chat.isActiveChatReadOnly
-						}
+						isAssistantSpeechEnabled={isAssistantSpeechActionEnabled}
 						assistantSpeechPlayback={chat.assistantSpeechPlayback}
 						onToggleAssistantSpeech={chat.toggleAssistantSpeech}
 						theme={theme}
@@ -254,3 +283,19 @@ function ChatPage({
 }
 
 export default ChatPage;
+
+function findLatestFinalAssistantMessage(messages: ChatMessage[]) {
+	for (let index = messages.length - 1; index >= 0; index -= 1) {
+		const message = messages[index];
+
+		if (
+			message.author === "companion" &&
+			message.text.trim().length > 0 &&
+			!message.id.startsWith("local-assistant-")
+		) {
+			return message;
+		}
+	}
+
+	return null;
+}

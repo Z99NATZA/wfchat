@@ -10,6 +10,7 @@ type AppSettingsDialogProps = {
 	backgroundImageUrl: string;
 	isAvatarOverlayVisible: boolean;
 	isAssistantSpeechVisible: boolean;
+	isAssistantSpeechAutoPlayEnabled: boolean;
 	avatarOverlayPosition: AvatarOverlayPosition;
 	avatarOverlaySize: AvatarOverlaySize;
 	onClose: () => void;
@@ -18,6 +19,7 @@ type AppSettingsDialogProps = {
 	onAvatarOverlayPositionChange: (position: AvatarOverlayPosition) => void;
 	onAvatarOverlaySizeChange: (size: AvatarOverlaySize) => void;
 	onAssistantSpeechVisibleChange: (isVisible: boolean) => void;
+	onAssistantSpeechAutoPlayEnabledChange: (isEnabled: boolean) => void;
 };
 
 function AppSettingsDialog({
@@ -25,6 +27,7 @@ function AppSettingsDialog({
 	backgroundImageUrl,
 	isAvatarOverlayVisible,
 	isAssistantSpeechVisible,
+	isAssistantSpeechAutoPlayEnabled,
 	avatarOverlayPosition,
 	avatarOverlaySize,
 	onClose,
@@ -32,7 +35,8 @@ function AppSettingsDialog({
 	onAvatarOverlayVisibleChange,
 	onAvatarOverlayPositionChange,
 	onAvatarOverlaySizeChange,
-	onAssistantSpeechVisibleChange
+	onAssistantSpeechVisibleChange,
+	onAssistantSpeechAutoPlayEnabledChange
 }: AppSettingsDialogProps) {
 	const { t } = useI18n();
 	const [draftUrl, setDraftUrl] = useState(backgroundImageUrl);
@@ -154,6 +158,11 @@ function AppSettingsDialog({
 							checked={isAssistantSpeechVisible}
 							label={t("settings.assistantSpeech.showInChat")}
 							onChange={onAssistantSpeechVisibleChange}
+						/>
+						<SwitchSetting
+							checked={isAssistantSpeechAutoPlayEnabled}
+							label={t("settings.assistantSpeech.autoPlayLatest")}
+							onChange={onAssistantSpeechAutoPlayEnabledChange}
 						/>
 					</section>
 					<section className="mt-6 space-y-3 border-t border-dialog-border pt-5">

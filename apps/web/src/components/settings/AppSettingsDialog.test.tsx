@@ -11,6 +11,9 @@ vi.mock("@/i18n", () => ({
 			if (key === "settings.assistantSpeech.showInChat") {
 				return "Show voice playback";
 			}
+			if (key === "settings.assistantSpeech.autoPlayLatest") {
+				return "Auto-play latest reply";
+			}
 			return key;
 		}
 	})
@@ -21,6 +24,7 @@ const baseProps = {
 	backgroundImageUrl: "",
 	isAvatarOverlayVisible: true,
 	isAssistantSpeechVisible: true,
+	isAssistantSpeechAutoPlayEnabled: false,
 	avatarOverlayPosition: "bottom-right" as const,
 	avatarOverlaySize: "small" as const,
 	onClose: vi.fn(),
@@ -28,7 +32,8 @@ const baseProps = {
 	onAvatarOverlayVisibleChange: vi.fn(),
 	onAvatarOverlayPositionChange: vi.fn(),
 	onAvatarOverlaySizeChange: vi.fn(),
-	onAssistantSpeechVisibleChange: vi.fn()
+	onAssistantSpeechVisibleChange: vi.fn(),
+	onAssistantSpeechAutoPlayEnabledChange: vi.fn()
 };
 
 describe("AppSettingsDialog", () => {
@@ -43,5 +48,13 @@ describe("AppSettingsDialog", () => {
 		fireEvent.click(screen.getByRole("switch", { name: "Show voice playback" }));
 
 		expect(baseProps.onAssistantSpeechVisibleChange).toHaveBeenCalledWith(false);
+	});
+
+	it("lets users toggle assistant voice auto-play", () => {
+		render(<AppSettingsDialog {...baseProps} />);
+
+		fireEvent.click(screen.getByRole("switch", { name: "Auto-play latest reply" }));
+
+		expect(baseProps.onAssistantSpeechAutoPlayEnabledChange).toHaveBeenCalledWith(true);
 	});
 });

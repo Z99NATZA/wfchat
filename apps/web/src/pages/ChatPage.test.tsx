@@ -1,7 +1,7 @@
 /**
  * @vitest-environment happy-dom
  */
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import ChatPage from "@/pages/ChatPage";
@@ -109,10 +109,164 @@ describe("ChatPage assistant speech visibility", () => {
 
 		expect(screen.getByTestId("chat-message-list").dataset.assistantSpeechEnabled).toBe("false");
 	});
+
+	it("does not auto-play the latest assistant message when auto-play is disabled", () => {
+		const toggleAssistantSpeech = vi.fn();
+
+		mocks.useChatSession.mockReturnValue(
+			chatState({
+				isAssistantSpeechEnabled: true,
+				isSending: true,
+				toggleAssistantSpeech
+			})
+		);
+
+		const { rerender } = renderChatPage({
+			isAssistantSpeechVisible: true,
+			isAssistantSpeechAutoPlayEnabled: false
+		});
+
+		mocks.useChatSession.mockReturnValue(
+			chatState({
+				isAssistantSpeechEnabled: true,
+				isSending: false,
+				messages: [assistantMessage({ id: "assistant-1", text: "Done." })],
+				toggleAssistantSpeech
+			})
+		);
+
+		rerenderChatPage(rerender, {
+			isAssistantSpeechVisible: true,
+			isAssistantSpeechAutoPlayEnabled: false
+		});
+
+		expect(toggleAssistantSpeech).not.toHaveBeenCalled();
+	});
+
+	it("auto-plays the latest final assistant message when enabled", async () => {
+		const toggleAssistantSpeech = vi.fn();
+
+		mocks.useChatSession.mockReturnValue(
+			chatState({
+				isAssistantSpeechEnabled: true,
+				isSending: true,
+				toggleAssistantSpeech
+			})
+		);
+
+		const { rerender } = renderChatPage({
+			isAssistantSpeechVisible: true,
+			isAssistantSpeechAutoPlayEnabled: true
+		});
+
+		mocks.useChatSession.mockReturnValue(
+			chatState({
+				isAssistantSpeechEnabled: true,
+				isSending: false,
+				messages: [assistantMessage({ id: "assistant-1", text: "Done." })],
+				toggleAssistantSpeech
+			})
+		);
+
+		rerenderChatPage(rerender, {
+			isAssistantSpeechVisible: true,
+			isAssistantSpeechAutoPlayEnabled: true
+		});
+
+		await waitFor(() => expect(toggleAssistantSpeech).toHaveBeenCalledWith("assistant-1"));
+	});
+
+	it("does not auto-play when backend speech support is unavailable", () => {
+		const toggleAssistantSpeech = vi.fn();
+
+		mocks.useChatSession.mockReturnValue(
+			chatState({
+				isAssistantSpeechEnabled: false,
+				isSending: true,
+				toggleAssistantSpeech
+			})
+		);
+
+		const { rerender } = renderChatPage({
+			isAssistantSpeechVisible: true,
+			isAssistantSpeechAutoPlayEnabled: true
+		});
+
+		mocks.useChatSession.mockReturnValue(
+			chatState({
+				isAssistantSpeechEnabled: false,
+				isSending: false,
+				messages: [assistantMessage({ id: "assistant-1", text: "Done." })],
+				toggleAssistantSpeech
+			})
+		);
+
+		rerenderChatPage(rerender, {
+			isAssistantSpeechVisible: true,
+			isAssistantSpeechAutoPlayEnabled: true
+		});
+
+		expect(toggleAssistantSpeech).not.toHaveBeenCalled();
+	});
+
+	it("does not auto-play streaming placeholder assistant messages", () => {
+		const toggleAssistantSpeech = vi.fn();
+
+		mocks.useChatSession.mockReturnValue(
+			chatState({
+				isAssistantSpeechEnabled: true,
+				isSending: true,
+				toggleAssistantSpeech
+			})
+		);
+
+		const { rerender } = renderChatPage({
+			isAssistantSpeechVisible: true,
+			isAssistantSpeechAutoPlayEnabled: true
+		});
+
+		mocks.useChatSession.mockReturnValue(
+			chatState({
+				isAssistantSpeechEnabled: true,
+				isSending: false,
+				messages: [assistantMessage({ id: "local-assistant-1", text: "Streaming..." })],
+				toggleAssistantSpeech
+			})
+		);
+
+		rerenderChatPage(rerender, {
+			isAssistantSpeechVisible: true,
+			isAssistantSpeechAutoPlayEnabled: true
+		});
+
+		expect(toggleAssistantSpeech).not.toHaveBeenCalled();
+	});
 });
 
-function renderChatPage({ isAssistantSpeechVisible }: { isAssistantSpeechVisible: boolean }) {
-	return render(
+type RenderChatPageOptions = {
+	isAssistantSpeechVisible: boolean;
+	isAssistantSpeechAutoPlayEnabled?: boolean;
+};
+
+function renderChatPage({
+	isAssistantSpeechVisible,
+	isAssistantSpeechAutoPlayEnabled = false
+}: RenderChatPageOptions) {
+	return render(chatPageElement({ isAssistantSpeechVisible, isAssistantSpeechAutoPlayEnabled }));
+}
+
+function rerenderChatPage(
+	rerender: ReturnType<typeof render>["rerender"],
+	{ isAssistantSpeechVisible, isAssistantSpeechAutoPlayEnabled = false }: RenderChatPageOptions
+) {
+	rerender(chatPageElement({ isAssistantSpeechVisible, isAssistantSpeechAutoPlayEnabled }));
+}
+
+function chatPageElement({
+	isAssistantSpeechVisible,
+	isAssistantSpeechAutoPlayEnabled
+}: Required<RenderChatPageOptions>) {
+	return (
 		<ChatPage
 			activityBar={null}
 			theme="light"
@@ -120,6 +274,7 @@ function renderChatPage({ isAssistantSpeechVisible }: { isAssistantSpeechVisible
 			backgroundImageUrl=""
 			isAvatarOverlayVisible={false}
 			isAssistantSpeechVisible={isAssistantSpeechVisible}
+			isAssistantSpeechAutoPlayEnabled={isAssistantSpeechAutoPlayEnabled}
 			avatarOverlayPosition="bottom-right"
 			avatarOverlaySize="small"
 			auth={auth}
@@ -132,7 +287,19 @@ function renderChatPage({ isAssistantSpeechVisible }: { isAssistantSpeechVisible
 	);
 }
 
-function chatState({ isAssistantSpeechEnabled }: { isAssistantSpeechEnabled: boolean }) {
+type ChatStateOptions = {
+	isAssistantSpeechEnabled: boolean;
+	isSending?: boolean;
+	messages?: ReturnType<typeof assistantMessage>[];
+	toggleAssistantSpeech?: ReturnType<typeof vi.fn>;
+};
+
+function chatState({
+	isAssistantSpeechEnabled,
+	isSending = false,
+	messages = [],
+	toggleAssistantSpeech = vi.fn()
+}: ChatStateOptions) {
 	return {
 		activePersona: {
 			id: "aiko",
@@ -158,10 +325,10 @@ function chatState({ isAssistantSpeechEnabled }: { isAssistantSpeechEnabled: boo
 		isSavingMemoryFact: false,
 		isSavingMemorySummary: false,
 		isSidebarOpen: false,
-		isSending: false,
+		isSending,
 		memoryFacts: [],
 		memorySummaries: [],
-		messages: [],
+		messages,
 		openSidebar: vi.fn(),
 		quickPrompts: [],
 		refreshRemoteState: vi.fn(),
@@ -175,7 +342,7 @@ function chatState({ isAssistantSpeechEnabled }: { isAssistantSpeechEnabled: boo
 		sendMessage: vi.fn(),
 		sessions: [],
 		setDraft: vi.fn(),
-		toggleAssistantSpeech: vi.fn(),
+		toggleAssistantSpeech,
 		setChatSearchQuery: vi.fn(),
 		saveMemoryFact: vi.fn(),
 		saveMemorySummary: vi.fn(),
@@ -184,5 +351,14 @@ function chatState({ isAssistantSpeechEnabled }: { isAssistantSpeechEnabled: boo
 		editMemoryFact: vi.fn(),
 		editMemorySummary: vi.fn(),
 		removeSession: vi.fn()
+	};
+}
+
+function assistantMessage({ id, text }: { id: string; text: string }) {
+	return {
+		id,
+		author: "companion" as const,
+		text,
+		createdAt: "2026-01-01T00:00:00.000Z"
 	};
 }

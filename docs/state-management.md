@@ -18,16 +18,16 @@ The hook imports chat fixtures and the companion reply service. UI components re
 
 ## App Settings State
 
-Theme, font, locale, background image, assistant speech visibility, avatar
-overlay preferences, auth/profile state, and sync orchestration are app-level
-state.
+Theme, font, locale, background image, assistant speech visibility, assistant
+speech auto-play, avatar overlay preferences, auth/profile state, and sync
+orchestration are app-level state.
 
 - `apps/web/src/app/AppSettingsProvider.tsx` exposes persisted app settings to the app tree.
 - `apps/web/src/hooks/useTheme.ts` exposes React state and actions.
 - `apps/web/src/stores/themeStore.ts` resolves, persists, and applies the theme.
 - `apps/web/src/stores/fontStore.ts` resolves, persists, and applies the font.
 - `apps/web/src/stores/backgroundStore.ts` resolves and persists the background image URL.
-- `apps/web/src/stores/assistantSpeechStore.ts` resolves and persists local assistant speech visibility.
+- `apps/web/src/stores/assistantSpeechStore.ts` resolves and persists local assistant speech visibility and auto-play preferences.
 - `apps/web/src/stores/avatarOverlayStore.ts` resolves and persists local chat overlay preferences.
 - `apps/web/src/services/storageService.ts` wraps browser local storage access.
 

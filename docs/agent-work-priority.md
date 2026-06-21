@@ -11,8 +11,10 @@ No active scoped agent task.
 When a new priority is set, list the required documents here in the order agents should read them before implementation.
 
 1. `docs/agent-work-priority.md`
-2. `docs/architecture.md`
-3. Domain documents relevant to the scoped task.
+
+## Required Outcome
+
+No active required outcome.
 
 ## Notes
 
