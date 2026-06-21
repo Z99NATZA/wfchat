@@ -185,10 +185,10 @@ and realtime transport risks separate.
    - Avoid moving provider details or API keys into the frontend.
 
 5. Add session-only replay cache for generated speech.
-   - Cache only for the current browser session/page lifetime.
-   - Do not persist generated audio files yet.
-   - Verify replaying the same assistant message does not call TTS again.
-   - Keep cleanup on stop, chat navigation, and unmount.
+   - Done with an in-memory frontend cache for the current page/session lifetime.
+   - Generated audio files are not persisted.
+   - Replaying the same assistant message in the same chat reuses cached audio.
+   - Failed and aborted speech requests are not cached.
 
 6. Add a user setting to show or hide assistant voice playback.
    - Treat this as a frontend preference layered on top of backend capability.
@@ -226,6 +226,7 @@ Implemented for v1 with:
 - one active playback at a time
 - loading, playing, stop, retry/error states
 - visible assistant-message-local feedback when speech playback fails
+- session-only replay cache for generated speech audio
 - cleanup on stop, chat navigation, and unmount
 
 ## Documentation Rules

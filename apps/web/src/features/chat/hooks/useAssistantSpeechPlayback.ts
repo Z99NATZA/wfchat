@@ -16,6 +16,7 @@ type PlaybackResources = {
 };
 
 export function useAssistantSpeechPlayback(activeChatId: string | null) {
+	const audioCacheRef = useRef<Map<string, Blob>>(new Map());
 	const resourcesRef = useRef<PlaybackResources>({
 		abortController: null,
 		audio: null,
@@ -54,17 +55,29 @@ export function useAssistantSpeechPlayback(activeChatId: string | null) {
 	const playAssistantSpeech = useCallback(
 		async (chatId: string, messageId: string) => {
 			const nextToken = resourcesRef.current.token + 1;
+			const cacheKey = assistantSpeechCacheKey(chatId, messageId);
 			resourcesRef.current.token = nextToken;
 			releaseResources();
 
-			const abortController = new AbortController();
-			resourcesRef.current.abortController = abortController;
 			setPlayback({ messageId, status: "loading" });
 
 			try {
-				const audioBlob = await getAssistantMessageSpeech(chatId, messageId, {
-					signal: abortController.signal
-				});
+				let audioBlob = audioCacheRef.current.get(cacheKey);
+
+				if (!audioBlob) {
+					const abortController = new AbortController();
+					resourcesRef.current.abortController = abortController;
+					audioBlob = await getAssistantMessageSpeech(chatId, messageId, {
+						signal: abortController.signal
+					});
+
+					if (resourcesRef.current.token !== nextToken) {
+						return;
+					}
+
+					audioCacheRef.current.set(cacheKey, audioBlob);
+					resourcesRef.current.abortController = null;
+				}
 
 				if (resourcesRef.current.token !== nextToken) {
 					return;
@@ -89,6 +102,7 @@ export function useAssistantSpeechPlayback(activeChatId: string | null) {
 						return;
 					}
 
+					audioCacheRef.current.delete(cacheKey);
 					releaseResources();
 					setPlayback({ messageId, status: "error" });
 				});
@@ -103,6 +117,7 @@ export function useAssistantSpeechPlayback(activeChatId: string | null) {
 					return;
 				}
 
+				audioCacheRef.current.delete(cacheKey);
 				releaseResources();
 				if (error instanceof DOMException && error.name === "AbortError") {
 					setPlayback({ messageId: null, status: "idle" });
@@ -145,4 +160,8 @@ export function useAssistantSpeechPlayback(activeChatId: string | null) {
 		stopAssistantSpeech,
 		toggleAssistantSpeech
 	};
+}
+
+function assistantSpeechCacheKey(chatId: string, messageId: string): string {
+	return `${chatId}:${messageId}`;
 }
