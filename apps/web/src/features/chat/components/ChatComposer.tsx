@@ -1,7 +1,8 @@
 import { FormEvent, KeyboardEvent, useEffect, useRef } from "react";
-import { Image, Mic, Paperclip, Send } from "lucide-react";
+import { Image, LoaderCircle, Mic, Paperclip, Send, Square, X } from "lucide-react";
 import { useI18n } from "@/i18n";
 import IconButton from "@/components/ui/IconButton";
+import type { UserSpeechInputState } from "@/features/chat/hooks/useUserSpeechTranscription";
 import type { AppFont } from "@/types/font";
 import { cn } from "@/utils/classNames";
 
@@ -14,6 +15,10 @@ type ChatComposerProps = {
 	onSend: () => void;
 	isDisabled?: boolean;
 	isSending?: boolean;
+	isUserSpeechInputEnabled?: boolean;
+	userSpeechInput?: UserSpeechInputState;
+	onCancelSpeechInput?: () => void;
+	onToggleSpeechInput?: () => void;
 };
 
 function shouldSkipAutomaticComposerFocus() {
@@ -36,7 +41,11 @@ function ChatComposer({
 	onDraftChange,
 	onSend,
 	isDisabled = false,
-	isSending = false
+	isSending = false,
+	isUserSpeechInputEnabled = false,
+	userSpeechInput = { status: "idle" },
+	onCancelSpeechInput,
+	onToggleSpeechInput
 }: ChatComposerProps) {
 	const { t } = useI18n();
 	const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -121,6 +130,10 @@ function ChatComposer({
 	}
 
 	const visibleQuickPrompts = quickPrompts.filter((prompt) => prompt.trim().length > 0);
+	const speechStatus = userSpeechInput.status;
+	const isSpeechInputActive =
+		speechStatus === "requesting" || speechStatus === "recording" || speechStatus === "transcribing";
+	const canUseSpeechInput = isUserSpeechInputEnabled && !isDisabled && !isSending;
 
 	return (
 		<div
@@ -169,9 +182,41 @@ function ChatComposer({
 						onChange={(event) => onDraftChange(event.target.value)}
 						onKeyDown={handleDraftKeyDown}
 					/>
-					<IconButton className="hidden shrink-0 opacity-45 grayscale cursor-not-allowed sm:flex" aria-label={t("chat.composer.voiceMessage")} disabled title={t("common.notSupportedYet")}>
-						<Mic size={18} aria-hidden="true" />
+					<IconButton
+						className={cn(
+							"hidden shrink-0 sm:flex",
+							!canUseSpeechInput && "cursor-not-allowed opacity-45 grayscale",
+							speechStatus === "recording" &&
+								"border-red-300 bg-red-50 text-red-700 hover:bg-red-100"
+						)}
+						aria-label={speechInputLabel(speechStatus, t)}
+						aria-pressed={speechStatus === "recording"}
+						disabled={!canUseSpeechInput || speechStatus === "requesting" || speechStatus === "transcribing"}
+						title={
+							isUserSpeechInputEnabled
+								? speechInputLabel(speechStatus, t)
+								: t("common.notSupportedYet")
+						}
+						onClick={onToggleSpeechInput}
+					>
+						{speechStatus === "requesting" || speechStatus === "transcribing" ? (
+							<LoaderCircle className="animate-spin" size={18} aria-hidden="true" />
+						) : speechStatus === "recording" ? (
+							<Square size={18} aria-hidden="true" />
+						) : (
+							<Mic size={18} aria-hidden="true" />
+						)}
 					</IconButton>
+					{isSpeechInputActive ? (
+						<IconButton
+							className="hidden shrink-0 sm:flex"
+							aria-label={t("chat.composer.cancelVoiceMessage")}
+							title={t("chat.composer.cancelVoiceMessage")}
+							onClick={onCancelSpeechInput}
+						>
+							<X size={18} aria-hidden="true" />
+						</IconButton>
+					) : null}
 					<IconButton className="hidden shrink-0 opacity-45 grayscale cursor-not-allowed sm:flex" aria-label={t("chat.composer.imagePrompt")} disabled title={t("common.notSupportedYet")}>
 						<Image size={18} aria-hidden="true" />
 					</IconButton>
@@ -189,9 +234,69 @@ function ChatComposer({
 						<Send size={18} aria-hidden="true" />
 					</button>
 				</form>
+				{speechStatus !== "idle" ? (
+					<div
+						className={cn(
+							"min-h-5 px-1 text-xs text-muted",
+							speechStatus === "error" && "text-red-600"
+						)}
+						role={speechStatus === "error" ? "alert" : "status"}
+					>
+						<div>{speechInputStatusText(userSpeechInput, t)}</div>
+						{speechStatus === "error" && userSpeechInput.errorDetail ? (
+							<div className="mt-0.5 break-words text-[11px] text-muted">
+								{userSpeechInput.errorDetail}
+							</div>
+						) : null}
+					</div>
+				) : null}
 			</div>
 		</div>
 	);
 }
 
 export default ChatComposer;
+
+function speechInputLabel(status: UserSpeechInputState["status"], t: (key: string) => string): string {
+	if (status === "recording") {
+		return t("chat.composer.stopVoiceMessage");
+	}
+
+	if (status === "error") {
+		return t("chat.composer.retryVoiceMessage");
+	}
+
+	return t("chat.composer.voiceMessage");
+}
+
+function speechInputStatusText(
+	state: UserSpeechInputState,
+	t: (key: string) => string
+): string {
+	const { errorReason, status } = state;
+
+	switch (status) {
+		case "requesting":
+			return t("chat.composer.requestingMicrophone");
+		case "recording":
+			return t("chat.composer.recordingVoiceMessage");
+		case "transcribing":
+			return t("chat.composer.transcribingVoiceMessage");
+		case "error":
+			if (errorReason === "unsupported") {
+				return t("chat.composer.voiceMessageUnsupported");
+			}
+			if (errorReason === "permission") {
+				return t("chat.composer.voiceMessagePermissionFailed");
+			}
+			if (errorReason === "empty") {
+				return t("chat.composer.voiceMessageEmpty");
+			}
+			if (errorReason === "recording") {
+				return t("chat.composer.voiceMessageRecordingFailed");
+			}
+			return t("chat.composer.voiceMessageFailed");
+		default:
+			return "";
+	}
+}

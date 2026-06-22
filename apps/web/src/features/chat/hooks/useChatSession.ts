@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { CHAT_PERSONAS, MARKDOWN_QA_MESSAGES } from "@/features/chat/data/chatFixtures";
 import { useAssistantSpeechPlayback } from "@/features/chat/hooks/useAssistantSpeechPlayback";
+import { useUserSpeechTranscription } from "@/features/chat/hooks/useUserSpeechTranscription";
 import { useI18n } from "@/i18n";
 import {
 	clearChatMessages,
@@ -93,12 +94,21 @@ export function useChatSession({ onAvatarChatEvent }: UseChatSessionOptions = {}
 	const [errorMessage, setErrorMessage] = useState<string | null>(null);
 	const [isActiveChatReadOnly, setIsActiveChatReadOnly] = useState(false);
 	const [isAssistantSpeechEnabled, setIsAssistantSpeechEnabled] = useState(false);
+	const [isUserTranscriptionEnabled, setIsUserTranscriptionEnabled] = useState(false);
 	const [refreshVersion, setRefreshVersion] = useState(0);
 	const [routeChatId, setRouteChatId] = useState<string | null>(() =>
 		parseChatIdFromPath(location.pathname)
 	);
 	const { playback: assistantSpeechPlayback, toggleAssistantSpeech } =
 		useAssistantSpeechPlayback(activeChatId);
+	const applyUserSpeechTranscript = useCallback((text: string) => {
+		setDraft((currentDraft) => mergeDraftWithTranscript(currentDraft, text));
+	}, []);
+	const {
+		cancelSpeechInput: cancelUserSpeechInput,
+		speechInput: userSpeechInput,
+		toggleSpeechInput: toggleUserSpeechInput
+	} = useUserSpeechTranscription(applyUserSpeechTranscript);
 
 	const activePersona = useMemo(() => {
 		const firstPersona = personas[0] ?? CHAT_PERSONAS[0];
@@ -198,6 +208,7 @@ export function useChatSession({ onAvatarChatEvent }: UseChatSessionOptions = {}
 				setPersonas(config.personas);
 				setQuickPrompts(config.quickPrompts);
 				setIsAssistantSpeechEnabled(config.assistantSpeechEnabled);
+				setIsUserTranscriptionEnabled(config.userTranscriptionEnabled);
 				setSelectedPersonaId((currentId) =>
 					config.personas.some((persona) => persona.id === currentId)
 						? currentId
@@ -212,6 +223,7 @@ export function useChatSession({ onAvatarChatEvent }: UseChatSessionOptions = {}
 				setPersonas(CHAT_PERSONAS);
 				setQuickPrompts([]);
 				setIsAssistantSpeechEnabled(false);
+				setIsUserTranscriptionEnabled(false);
 				setSelectedPersonaId((currentId) =>
 					CHAT_PERSONAS.some((persona) => persona.id === currentId)
 						? currentId
@@ -223,6 +235,10 @@ export function useChatSession({ onAvatarChatEvent }: UseChatSessionOptions = {}
 			isCurrent = false;
 		};
 	}, []);
+
+	useEffect(() => {
+		cancelUserSpeechInput();
+	}, [activeChatId, cancelUserSpeechInput]);
 
 	useEffect(() => {
 		let isCurrent = true;
@@ -824,7 +840,9 @@ export function useChatSession({ onAvatarChatEvent }: UseChatSessionOptions = {}
 		errorMessage,
 		isActiveChatReadOnly,
 		isAssistantSpeechEnabled,
+		isUserTranscriptionEnabled,
 		assistantSpeechPlayback,
+		userSpeechInput,
 		isClearing,
 		isCreatingSession,
 		isSavingMemoryFact,
@@ -848,6 +866,8 @@ export function useChatSession({ onAvatarChatEvent }: UseChatSessionOptions = {}
 		sessions: filteredSessions,
 		setDraft,
 		toggleAssistantSpeech,
+		cancelUserSpeechInput,
+		toggleUserSpeechInput,
 		setChatSearchQuery,
 		saveMemoryFact,
 		saveMemorySummary,
@@ -889,6 +909,19 @@ function upsertSentSession(
 		lastMessage
 	};
 	return [nextSession, ...sessions.filter((session) => session.id !== chatId)];
+}
+
+function mergeDraftWithTranscript(currentDraft: string, transcript: string): string {
+	const trimmedTranscript = transcript.trim();
+	if (!trimmedTranscript) {
+		return currentDraft;
+	}
+
+	if (!currentDraft.trim()) {
+		return trimmedTranscript;
+	}
+
+	return /\s$/.test(currentDraft) ? `${currentDraft}${trimmedTranscript}` : `${currentDraft} ${trimmedTranscript}`;
 }
 
 function mergeMemoryFacts(primary: MemoryFact[], secondary: MemoryFact[]): MemoryFact[] {

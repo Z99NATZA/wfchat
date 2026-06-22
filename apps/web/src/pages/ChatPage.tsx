@@ -73,6 +73,7 @@ function ChatPage({
 			: 0;
 	const isAssistantSpeechActionEnabled =
 		chat.isAssistantSpeechEnabled && isAssistantSpeechVisible && !chat.isActiveChatReadOnly;
+	const isUserSpeechInputEnabled = chat.isUserTranscriptionEnabled && !chat.isActiveChatReadOnly;
 	const latestFinalAssistantMessage = findLatestFinalAssistantMessage(chat.messages);
 	const wasSendingRef = useRef(false);
 	const lastAutoPlayedAssistantMessageIdRef = useRef<string | null>(null);
@@ -264,8 +265,12 @@ function ChatPage({
 							quickPrompts={chat.quickPrompts}
 							isDisabled={chat.isActiveChatReadOnly}
 							isSending={chat.isSending}
+							isUserSpeechInputEnabled={isUserSpeechInputEnabled}
+							userSpeechInput={chat.userSpeechInput}
 							onDraftChange={chat.setDraft}
 							onSend={chat.sendMessage}
+							onCancelSpeechInput={chat.cancelUserSpeechInput}
+							onToggleSpeechInput={chat.toggleUserSpeechInput}
 						/>
 					</div>
 				</div>

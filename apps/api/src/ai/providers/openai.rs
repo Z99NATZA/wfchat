@@ -542,10 +542,7 @@ mod tests {
         let mut guard = StreamingResponseGuard::new("aiko_default");
 
         assert_eq!(guard.push_delta("ครั"), None);
-        assert_eq!(
-            guard.push_delta("บนะ สบายดี"),
-            Some("ค่ะนะ สบายดี".to_owned())
-        );
+        assert_eq!(guard.push_delta("บนะ สบายดี"), Some("ค่ะนะ สบายดี".to_owned()));
         assert_eq!(guard.finish(), None);
         assert_eq!(guard.content(), "ค่ะนะ สบายดี");
     }

@@ -2,13 +2,18 @@ use crate::{
     config::Config,
     error::{AppError, AppResult},
 };
-use reqwest::Client;
-use serde::Serialize;
+use reqwest::{multipart, Client};
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug)]
 pub struct SpeechAudio {
     pub content_type: &'static str,
     pub bytes: Vec<u8>,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct SpeechTranscript {
+    pub text: String,
 }
 
 pub struct VoiceService<'a> {
@@ -33,6 +38,35 @@ impl<'a> VoiceService<'a> {
             )),
             _ => Err(AppError::BadRequest(
                 "assistant speech playback is not configured".to_owned(),
+            )),
+        }
+    }
+
+    pub async fn transcribe_user_speech(
+        &self,
+        audio_bytes: Vec<u8>,
+        content_type: Option<&str>,
+        filename: Option<&str>,
+    ) -> AppResult<SpeechTranscript> {
+        if audio_bytes.is_empty() {
+            return Err(AppError::BadRequest(
+                "speech transcription requires a non-empty audio file".to_owned(),
+            ));
+        }
+
+        match self.config.ai_transcription_provider.as_str() {
+            "mock" => Ok(SpeechTranscript {
+                text: "Mock voice transcript".to_owned(),
+            }),
+            "openai" => {
+                self.transcribe_openai_speech(audio_bytes, content_type, filename)
+                    .await
+            }
+            "disabled" => Err(AppError::BadRequest(
+                "user speech transcription is disabled".to_owned(),
+            )),
+            _ => Err(AppError::BadRequest(
+                "user speech transcription is not configured".to_owned(),
             )),
         }
     }
@@ -93,6 +127,79 @@ impl<'a> VoiceService<'a> {
             bytes,
         })
     }
+
+    async fn transcribe_openai_speech(
+        &self,
+        audio_bytes: Vec<u8>,
+        content_type: Option<&str>,
+        filename: Option<&str>,
+    ) -> AppResult<SpeechTranscript> {
+        let api_key = self
+            .config
+            .openai_api_key
+            .as_deref()
+            .ok_or_else(|| AppError::Ai("OPENAI_API_KEY is not configured".to_owned()))?;
+        let url = format!(
+            "{}/audio/transcriptions",
+            self.config.openai_base_url.trim_end_matches('/')
+        );
+        let audio_metadata = TranscriptionAudioMetadata::new(&audio_bytes, content_type, filename);
+        tracing::info!(
+            filename = audio_metadata.filename,
+            original_content_type = audio_metadata.original_content_type,
+            normalized_content_type = audio_metadata.normalized_content_type.unwrap_or(""),
+            byte_len = audio_metadata.byte_len,
+            signature = audio_metadata.signature.as_str(),
+            "sending user speech audio to transcription provider"
+        );
+        let mut file_part =
+            multipart::Part::bytes(audio_bytes).file_name(audio_metadata.filename.to_owned());
+        if let Some(content_type) = audio_metadata.normalized_content_type {
+            file_part = file_part
+                .mime_str(content_type)
+                .map_err(|error| AppError::BadRequest(error.to_string()))?;
+        }
+        let mut form = multipart::Form::new()
+            .part("file", file_part)
+            .text("model", self.config.ai_transcription_model.clone())
+            .text("response_format", "json");
+        if let Some(prompt) = self.config.ai_transcription_prompt.as_deref() {
+            form = form.text("prompt", prompt.to_owned());
+        }
+
+        let response = self
+            .http
+            .post(url)
+            .bearer_auth(api_key)
+            .multipart(form)
+            .send()
+            .await
+            .map_err(|error| AppError::Ai(error.to_string()))?;
+
+        let status = response.status();
+        if !status.is_success() {
+            let body = response
+                .text()
+                .await
+                .map_err(|error| AppError::Ai(error.to_string()))?;
+            return Err(AppError::Ai(format!(
+                "transcription provider returned {status}: {body}; upload metadata: {audio_metadata}"
+            )));
+        }
+
+        let payload = response
+            .json::<OpenAiTranscriptionResponse>()
+            .await
+            .map_err(|error| AppError::Ai(error.to_string()))?;
+        let text = payload.text.trim().to_owned();
+        if text.is_empty() {
+            return Err(AppError::Ai(
+                "transcription provider returned empty text".to_owned(),
+            ));
+        }
+
+        Ok(SpeechTranscript { text })
+    }
 }
 
 #[derive(Serialize)]
@@ -105,6 +212,46 @@ struct OpenAiSpeechRequest<'a> {
     instructions: Option<&'a str>,
 }
 
+#[derive(Deserialize)]
+struct OpenAiTranscriptionResponse {
+    text: String,
+}
+
+#[derive(Debug)]
+struct TranscriptionAudioMetadata<'a> {
+    byte_len: usize,
+    filename: &'a str,
+    original_content_type: &'a str,
+    normalized_content_type: Option<&'static str>,
+    signature: String,
+}
+
+impl<'a> TranscriptionAudioMetadata<'a> {
+    fn new(bytes: &[u8], content_type: Option<&'a str>, filename: Option<&'a str>) -> Self {
+        Self {
+            byte_len: bytes.len(),
+            filename: filename.unwrap_or("speech.webm"),
+            original_content_type: content_type.unwrap_or(""),
+            normalized_content_type: content_type.and_then(normalize_transcription_content_type),
+            signature: audio_signature(bytes),
+        }
+    }
+}
+
+impl std::fmt::Display for TranscriptionAudioMetadata<'_> {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            formatter,
+            "filename={}, content_type={}, normalized_content_type={}, bytes={}, signature={}",
+            self.filename,
+            self.original_content_type,
+            self.normalized_content_type.unwrap_or(""),
+            self.byte_len,
+            self.signature
+        )
+    }
+}
+
 fn voice_content_type(format: &str) -> AppResult<&'static str> {
     match format {
         "mp3" => Ok("audio/mpeg"),
@@ -113,6 +260,34 @@ fn voice_content_type(format: &str) -> AppResult<&'static str> {
             "unsupported voice audio format: {other}"
         ))),
     }
+}
+
+fn normalize_transcription_content_type(content_type: &str) -> Option<&'static str> {
+    match content_type
+        .split(';')
+        .next()
+        .map(str::trim)
+        .unwrap_or_default()
+        .to_ascii_lowercase()
+        .as_str()
+    {
+        "audio/webm" => Some("audio/webm"),
+        "audio/wav" | "audio/x-wav" => Some("audio/wav"),
+        "audio/mpeg" | "audio/mp3" => Some("audio/mpeg"),
+        "audio/mp4" | "audio/x-m4a" => Some("audio/mp4"),
+        "audio/ogg" => Some("audio/ogg"),
+        "audio/flac" => Some("audio/flac"),
+        _ => None,
+    }
+}
+
+fn audio_signature(bytes: &[u8]) -> String {
+    bytes
+        .iter()
+        .take(12)
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<Vec<_>>()
+        .join("")
 }
 
 fn generate_mock_wav(text: &str) -> Vec<u8> {
@@ -184,6 +359,9 @@ mod tests {
             ai_voice_id: "marin".to_owned(),
             ai_voice_format: "mp3".to_owned(),
             ai_voice_instructions: None,
+            ai_transcription_provider: provider.to_owned(),
+            ai_transcription_model: "gpt-4o-mini-transcribe".to_owned(),
+            ai_transcription_prompt: None,
             database_url: "postgres://postgres:postgres@localhost:5432/wfchat".to_owned(),
             openai_api_key: None,
             openai_base_url: "https://api.openai.com/v1".to_owned(),
@@ -225,6 +403,43 @@ mod tests {
         assert_eq!(
             error.to_string(),
             "bad request: assistant speech playback is disabled"
+        );
+    }
+
+    #[tokio::test]
+    async fn mock_provider_returns_text_transcript() {
+        let http = Client::new();
+        let config = config_with_voice_provider("mock");
+        let service = VoiceService::new(&config, &http);
+        let transcript = service
+            .transcribe_user_speech(
+                b"fake-audio".to_vec(),
+                Some("audio/webm"),
+                Some("voice.webm"),
+            )
+            .await
+            .expect("mock transcription should succeed");
+
+        assert_eq!(transcript.text, "Mock voice transcript");
+    }
+
+    #[tokio::test]
+    async fn disabled_provider_rejects_transcription() {
+        let http = Client::new();
+        let config = config_with_voice_provider("disabled");
+        let service = VoiceService::new(&config, &http);
+        let error = service
+            .transcribe_user_speech(
+                b"fake-audio".to_vec(),
+                Some("audio/webm"),
+                Some("voice.webm"),
+            )
+            .await
+            .expect_err("disabled transcription should fail");
+
+        assert_eq!(
+            error.to_string(),
+            "bad request: user speech transcription is disabled"
         );
     }
 
@@ -311,6 +526,95 @@ mod tests {
             .to_string()
             .contains("voice provider returned 429 Too Many Requests"));
         assert!(error.to_string().contains("rate limited"));
+    }
+
+    #[test]
+    fn transcription_content_type_strips_media_recorder_codec_parameter() {
+        assert_eq!(
+            normalize_transcription_content_type("audio/webm;codecs=opus"),
+            Some("audio/webm")
+        );
+        assert_eq!(
+            normalize_transcription_content_type("audio/x-wav"),
+            Some("audio/wav")
+        );
+        assert_eq!(normalize_transcription_content_type("video/webm"), None);
+    }
+
+    #[tokio::test]
+    async fn openai_provider_posts_transcription_request_and_returns_text() {
+        let (base_url, request_handle) = one_response_server(
+            "HTTP/1.1 200 OK",
+            "Content-Type: application/json",
+            br#"{"text":" hello from mic "}"#,
+        );
+        let http = Client::new();
+        let mut config = config_with_voice_provider("openai");
+        config.openai_api_key = Some("test-key".to_owned());
+        config.openai_base_url = base_url;
+        config.ai_transcription_model = "gpt-4o-mini-transcribe".to_owned();
+        config.ai_transcription_prompt = Some("Keep names exact.".to_owned());
+        let service = VoiceService::new(&config, &http);
+
+        let transcript = service
+            .transcribe_user_speech(
+                b"fake-audio".to_vec(),
+                Some("audio/webm;codecs=opus"),
+                Some("voice.webm"),
+            )
+            .await
+            .expect("openai transcription should return text");
+        let captured = request_handle
+            .join()
+            .expect("mock provider server should capture request");
+        let body = String::from_utf8_lossy(&captured.body);
+
+        assert_eq!(transcript.text, "hello from mic");
+        assert!(captured
+            .head
+            .starts_with("post /audio/transcriptions http/1.1"));
+        assert!(captured.head.contains("authorization: bearer test-key"));
+        assert!(body.contains("name=\"model\""));
+        assert!(body.contains("gpt-4o-mini-transcribe"));
+        assert!(body.contains("name=\"response_format\""));
+        assert!(body.contains("json"));
+        assert!(body.contains("name=\"prompt\""));
+        assert!(body.contains("Keep names exact."));
+        assert!(body.contains("name=\"file\"; filename=\"voice.webm\""));
+        assert!(body.contains("Content-Type: audio/webm"));
+        assert!(!body.contains("codecs=opus"));
+        assert!(body.contains("fake-audio"));
+    }
+
+    #[tokio::test]
+    async fn openai_provider_returns_transcription_errors() {
+        let (base_url, request_handle) = one_response_server(
+            "HTTP/1.1 500 Internal Server Error",
+            "Content-Type: application/json",
+            br#"{"error":{"message":"transcription failed"}}"#,
+        );
+        let http = Client::new();
+        let mut config = config_with_voice_provider("openai");
+        config.openai_api_key = Some("test-key".to_owned());
+        config.openai_base_url = base_url;
+        let service = VoiceService::new(&config, &http);
+
+        let error = service
+            .transcribe_user_speech(
+                b"fake-audio".to_vec(),
+                Some("audio/webm"),
+                Some("voice.webm"),
+            )
+            .await
+            .expect_err("provider error should fail");
+        request_handle
+            .join()
+            .expect("mock provider server should capture request");
+
+        assert!(error
+            .to_string()
+            .contains("transcription provider returned 500 Internal Server Error"));
+        assert!(error.to_string().contains("transcription failed"));
     }
 
     struct CapturedRequest {

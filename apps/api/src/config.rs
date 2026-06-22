@@ -12,6 +12,9 @@ pub struct Config {
     pub ai_voice_id: String,
     pub ai_voice_format: String,
     pub ai_voice_instructions: Option<String>,
+    pub ai_transcription_provider: String,
+    pub ai_transcription_model: String,
+    pub ai_transcription_prompt: Option<String>,
     pub database_url: String,
     pub openai_api_key: Option<String>,
     pub openai_base_url: String,
@@ -40,6 +43,9 @@ impl Config {
             ai_voice_id: env_value("AI_VOICE_ID", "marin"),
             ai_voice_format: env_value("AI_VOICE_FORMAT", "mp3"),
             ai_voice_instructions: optional_env_value("AI_VOICE_INSTRUCTIONS"),
+            ai_transcription_provider: env_value("AI_TRANSCRIPTION_PROVIDER", "disabled"),
+            ai_transcription_model: env_value("AI_TRANSCRIPTION_MODEL", "gpt-4o-mini-transcribe"),
+            ai_transcription_prompt: optional_env_value("AI_TRANSCRIPTION_PROMPT"),
             database_url: env_value(
                 "DATABASE_URL",
                 "postgres://postgres:postgres@localhost:5432/wfchat",
@@ -127,6 +133,22 @@ impl Config {
             other => Err(format!(
                 "AI_VOICE_PROVIDER={other} is invalid. Allowed values: disabled, mock, openai"
             )),
+        }?;
+        match self.ai_transcription_provider.as_str() {
+            "disabled" | "mock" => Ok(()),
+            "openai" => {
+                require_non_empty(
+                    self.openai_api_key.as_deref(),
+                    "OPENAI_API_KEY is required when AI_TRANSCRIPTION_PROVIDER=openai",
+                )?;
+                require_non_empty(
+                    Some(self.ai_transcription_model.as_str()),
+                    "AI_TRANSCRIPTION_MODEL is required when AI_TRANSCRIPTION_PROVIDER=openai",
+                )
+            }
+            other => Err(format!(
+                "AI_TRANSCRIPTION_PROVIDER={other} is invalid. Allowed values: disabled, mock, openai"
+            )),
         }
     }
 }
@@ -172,6 +194,9 @@ mod tests {
             ai_voice_id: "marin".to_owned(),
             ai_voice_format: "mp3".to_owned(),
             ai_voice_instructions: None,
+            ai_transcription_provider: "disabled".to_owned(),
+            ai_transcription_model: "gpt-4o-mini-transcribe".to_owned(),
+            ai_transcription_prompt: None,
             database_url: "postgres://postgres:postgres@localhost:5432/wfchat".to_owned(),
             openai_api_key: None,
             openai_base_url: "https://api.openai.com/v1".to_owned(),
@@ -276,6 +301,58 @@ mod tests {
         assert_eq!(
             error,
             "AI_VOICE_PROVIDER=browser is invalid. Allowed values: disabled, mock, openai"
+        );
+    }
+
+    #[test]
+    fn mock_transcription_provider_is_valid() {
+        let mut config = base_config();
+        config.ai_transcription_provider = "mock".to_owned();
+
+        assert!(config.validate().is_ok());
+    }
+
+    #[test]
+    fn openai_transcription_provider_requires_api_key() {
+        let mut config = base_config();
+        config.ai_transcription_provider = "openai".to_owned();
+
+        let error = config
+            .validate()
+            .expect_err("openai transcription should require api key");
+        assert_eq!(
+            error,
+            "OPENAI_API_KEY is required when AI_TRANSCRIPTION_PROVIDER=openai"
+        );
+    }
+
+    #[test]
+    fn openai_transcription_provider_requires_model() {
+        let mut config = base_config();
+        config.ai_transcription_provider = "openai".to_owned();
+        config.openai_api_key = Some("test-key".to_owned());
+        config.ai_transcription_model = "".to_owned();
+
+        let error = config
+            .validate()
+            .expect_err("openai transcription should require model");
+        assert_eq!(
+            error,
+            "AI_TRANSCRIPTION_MODEL is required when AI_TRANSCRIPTION_PROVIDER=openai"
+        );
+    }
+
+    #[test]
+    fn unknown_transcription_provider_is_invalid() {
+        let mut config = base_config();
+        config.ai_transcription_provider = "browser".to_owned();
+
+        let error = config
+            .validate()
+            .expect_err("unknown transcription provider should fail");
+        assert_eq!(
+            error,
+            "AI_TRANSCRIPTION_PROVIDER=browser is invalid. Allowed values: disabled, mock, openai"
         );
     }
 }

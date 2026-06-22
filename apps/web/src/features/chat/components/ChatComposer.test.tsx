@@ -171,4 +171,87 @@ describe("ChatComposer", () => {
 
 		expect(focusSpy).not.toHaveBeenCalled();
 	});
+
+	it("keeps voice input disabled when transcription is unavailable", () => {
+		render(
+			<ChatComposer
+				draft=""
+				font="inter"
+				companionName="Aiko"
+				onDraftChange={vi.fn()}
+				onSend={vi.fn()}
+			/>
+		);
+
+		expect((screen.getByRole("button", { name: "chat.composer.voiceMessage" }) as HTMLButtonElement).disabled).toBe(true);
+	});
+
+	it("starts voice input when transcription is available", () => {
+		const onToggleSpeechInput = vi.fn();
+
+		render(
+			<ChatComposer
+				draft=""
+				font="inter"
+				companionName="Aiko"
+				isUserSpeechInputEnabled
+				onDraftChange={vi.fn()}
+				onSend={vi.fn()}
+				onToggleSpeechInput={onToggleSpeechInput}
+			/>
+		);
+
+		fireEvent.click(screen.getByRole("button", { name: "chat.composer.voiceMessage" }));
+
+		expect(onToggleSpeechInput).toHaveBeenCalledTimes(1);
+	});
+
+	it("shows stop and cancel controls while recording voice input", () => {
+		const onToggleSpeechInput = vi.fn();
+		const onCancelSpeechInput = vi.fn();
+
+		render(
+			<ChatComposer
+				draft=""
+				font="inter"
+				companionName="Aiko"
+				isUserSpeechInputEnabled
+				userSpeechInput={{ status: "recording" }}
+				onDraftChange={vi.fn()}
+				onSend={vi.fn()}
+				onCancelSpeechInput={onCancelSpeechInput}
+				onToggleSpeechInput={onToggleSpeechInput}
+			/>
+		);
+
+		fireEvent.click(screen.getByRole("button", { name: "chat.composer.stopVoiceMessage" }));
+		fireEvent.click(screen.getByRole("button", { name: "chat.composer.cancelVoiceMessage" }));
+
+		expect(screen.getByRole("status").textContent).toBe("chat.composer.recordingVoiceMessage");
+		expect(onToggleSpeechInput).toHaveBeenCalledTimes(1);
+		expect(onCancelSpeechInput).toHaveBeenCalledTimes(1);
+	});
+
+	it("shows a specific microphone permission error", () => {
+		render(
+			<ChatComposer
+				draft=""
+				font="inter"
+				companionName="Aiko"
+				isUserSpeechInputEnabled
+				userSpeechInput={{
+					errorDetail: "NotAllowedError: Permission denied",
+					errorReason: "permission",
+					status: "error"
+				}}
+				onDraftChange={vi.fn()}
+				onSend={vi.fn()}
+			/>
+		);
+
+		expect(screen.getByRole("alert").textContent).toContain(
+			"chat.composer.voiceMessagePermissionFailed"
+		);
+		expect(screen.getByRole("alert").textContent).toContain("NotAllowedError");
+	});
 });

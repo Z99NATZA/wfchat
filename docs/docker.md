@@ -56,6 +56,18 @@ Voice playback provider requirements:
 
 Unknown voice provider values fail at startup.
 
+Voice input transcription provider requirements:
+
+- `AI_TRANSCRIPTION_PROVIDER=disabled` hides the chat composer microphone action
+- `AI_TRANSCRIPTION_PROVIDER=mock` enables backend-generated mock transcripts
+  for local UI lifecycle testing
+- `AI_TRANSCRIPTION_PROVIDER=openai` enables OpenAI speech-to-text and requires
+  `OPENAI_API_KEY`
+- `AI_TRANSCRIPTION_MODEL` defaults to `gpt-4o-mini-transcribe`
+- `AI_TRANSCRIPTION_PROMPT` is optional provider-side transcription guidance
+
+Unknown transcription provider values fail at startup.
+
 For local non-Docker browser-side axios calls, use:
 
 ```text

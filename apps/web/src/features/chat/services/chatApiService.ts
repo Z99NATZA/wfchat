@@ -91,7 +91,12 @@ type ApiChatUiConfig = {
 	quick_prompts: string[];
 	voice?: {
 		assistant_speech_enabled?: boolean;
+		user_transcription_enabled?: boolean;
 	};
+};
+
+type ApiSpeechTranscriptionResponse = {
+	text: string;
 };
 
 type ApiMemoryFact = {
@@ -216,6 +221,7 @@ export async function deleteChat(chatId: string): Promise<void> {
 
 export async function getChatUiConfig(): Promise<{
 	assistantSpeechEnabled: boolean;
+	userTranscriptionEnabled: boolean;
 	personas: ChatPersona[];
 	quickPrompts: string[];
 }> {
@@ -223,6 +229,7 @@ export async function getChatUiConfig(): Promise<{
 
 	return {
 		assistantSpeechEnabled: response.data.voice?.assistant_speech_enabled === true,
+		userTranscriptionEnabled: response.data.voice?.user_transcription_enabled === true,
 		personas: response.data.personas.map((persona) => ({
 			id: persona.id,
 			name: persona.name,
@@ -234,6 +241,46 @@ export async function getChatUiConfig(): Promise<{
 			avatarUrl: persona.avatar_url
 		})),
 		quickPrompts: response.data.quick_prompts
+	};
+}
+
+export async function transcribeUserSpeech(
+	audio: Blob,
+	options: { signal?: AbortSignal } = {}
+): Promise<string> {
+	const sessionId = await ensureGuestSession();
+	const formData = new FormData();
+	const upload = normalizeSpeechAudioForUpload(audio);
+	formData.append("file", upload.audio, upload.filename);
+	const response = await fetch(apiUrl("/api/chat/transcription"), {
+		method: "POST",
+		credentials: "include",
+		headers: {
+			...sessionHeaders(sessionId)
+		},
+		body: formData,
+		signal: options.signal
+	});
+
+	if (!response.ok) {
+		throw new Error(await readApiError(response));
+	}
+
+	const payload = (await response.json()) as ApiSpeechTranscriptionResponse;
+	return payload.text;
+}
+
+export function normalizeSpeechAudioForUpload(audio: Blob): { audio: Blob; filename: string } {
+	const contentType = normalizedSpeechAudioContentType(audio.type);
+	const filename = `voice.${speechAudioExtension(contentType)}`;
+
+	if (!contentType || audio.type === contentType) {
+		return { audio, filename };
+	}
+
+	return {
+		audio: new Blob([audio], { type: contentType }),
+		filename
 	};
 }
 
@@ -511,6 +558,48 @@ function apiUrl(path: string): string {
 	}
 
 	return new URL(path, apiBaseUrl).toString();
+}
+
+function normalizedSpeechAudioContentType(contentType: string): string | undefined {
+	const baseType = contentType.split(";")[0]?.trim().toLowerCase();
+
+	switch (baseType) {
+		case "audio/webm":
+			return "audio/webm";
+		case "audio/wav":
+		case "audio/x-wav":
+			return "audio/wav";
+		case "audio/mpeg":
+		case "audio/mp3":
+			return "audio/mpeg";
+		case "audio/mp4":
+		case "audio/x-m4a":
+			return "audio/mp4";
+		case "audio/ogg":
+			return "audio/ogg";
+		case "audio/flac":
+			return "audio/flac";
+		default:
+			return undefined;
+	}
+}
+
+function speechAudioExtension(contentType: string | undefined): string {
+	switch (contentType) {
+		case "audio/wav":
+			return "wav";
+		case "audio/mpeg":
+			return "mp3";
+		case "audio/mp4":
+			return "m4a";
+		case "audio/ogg":
+			return "ogg";
+		case "audio/flac":
+			return "flac";
+		case "audio/webm":
+		default:
+			return "webm";
+	}
 }
 
 function toMemoryFact(fact: ApiMemoryFact): MemoryFact {

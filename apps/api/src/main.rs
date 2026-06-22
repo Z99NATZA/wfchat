@@ -15,7 +15,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .init();
 
     let config = Config::from_env().map_err(|error| {
-        std::io::Error::new(std::io::ErrorKind::InvalidInput, format!("config error: {error}"))
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            format!("config error: {error}"),
+        )
     })?;
     let addr: SocketAddr = config.bind_addr()?;
     let state = AppState::new(config).await.map_err(|error| {

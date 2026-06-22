@@ -59,7 +59,9 @@ vi.mock("@/features/chat/components/ChatDetailsPanel", () => ({
 }));
 
 vi.mock("@/features/chat/components/ChatComposer", () => ({
-	default: () => <div data-testid="chat-composer" />
+	default: ({ isUserSpeechInputEnabled }: { isUserSpeechInputEnabled?: boolean }) => (
+		<div data-testid="chat-composer" data-user-speech-input-enabled={String(isUserSpeechInputEnabled)} />
+	)
 }));
 
 vi.mock("@/features/chat/components/ChatMessageList", () => ({
@@ -108,6 +110,30 @@ describe("ChatPage assistant speech visibility", () => {
 		renderChatPage({ isAssistantSpeechVisible: true });
 
 		expect(screen.getByTestId("chat-message-list").dataset.assistantSpeechEnabled).toBe("false");
+	});
+
+	it("enables user speech input in the composer when backend support is available", () => {
+		mocks.useChatSession.mockReturnValue(
+			chatState({ isAssistantSpeechEnabled: false, isUserTranscriptionEnabled: true })
+		);
+
+		renderChatPage({ isAssistantSpeechVisible: true });
+
+		expect(screen.getByTestId("chat-composer").dataset.userSpeechInputEnabled).toBe("true");
+	});
+
+	it("hides user speech input in read-only chats", () => {
+		mocks.useChatSession.mockReturnValue(
+			chatState({
+				isAssistantSpeechEnabled: false,
+				isActiveChatReadOnly: true,
+				isUserTranscriptionEnabled: true
+			})
+		);
+
+		renderChatPage({ isAssistantSpeechVisible: true });
+
+		expect(screen.getByTestId("chat-composer").dataset.userSpeechInputEnabled).toBe("false");
 	});
 
 	it("does not auto-play the latest assistant message when auto-play is disabled", () => {
@@ -289,6 +315,8 @@ function chatPageElement({
 
 type ChatStateOptions = {
 	isAssistantSpeechEnabled: boolean;
+	isActiveChatReadOnly?: boolean;
+	isUserTranscriptionEnabled?: boolean;
 	isSending?: boolean;
 	messages?: ReturnType<typeof assistantMessage>[];
 	toggleAssistantSpeech?: ReturnType<typeof vi.fn>;
@@ -296,6 +324,8 @@ type ChatStateOptions = {
 
 function chatState({
 	isAssistantSpeechEnabled,
+	isActiveChatReadOnly = false,
+	isUserTranscriptionEnabled = false,
 	isSending = false,
 	messages = [],
 	toggleAssistantSpeech = vi.fn()
@@ -317,9 +347,11 @@ function chatState({
 		createNewSession: vi.fn(),
 		draft: "",
 		errorMessage: null,
-		isActiveChatReadOnly: false,
+		isActiveChatReadOnly,
 		isAssistantSpeechEnabled,
+		isUserTranscriptionEnabled,
 		assistantSpeechPlayback: { messageId: null, status: "idle" },
+		userSpeechInput: { status: "idle" },
 		isClearing: false,
 		isCreatingSession: false,
 		isSavingMemoryFact: false,
@@ -343,6 +375,8 @@ function chatState({
 		sessions: [],
 		setDraft: vi.fn(),
 		toggleAssistantSpeech,
+		cancelUserSpeechInput: vi.fn(),
+		toggleUserSpeechInput: vi.fn(),
 		setChatSearchQuery: vi.fn(),
 		saveMemoryFact: vi.fn(),
 		saveMemorySummary: vi.fn(),

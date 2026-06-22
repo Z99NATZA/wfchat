@@ -20,6 +20,7 @@ const mocks = vi.hoisted(() => ({
 	confirm: vi.fn(),
 	getChatUiConfig: vi.fn(),
 	getAssistantMessageSpeech: vi.fn(),
+	transcribeUserSpeech: vi.fn(),
 	listPersonaChats: vi.fn(),
 	listMemoryFacts: vi.fn(),
 	listMemorySummaries: vi.fn(),
@@ -78,6 +79,7 @@ vi.mock("@/features/chat/services/chatApiService", () => ({
 	getChat: mocks.getChat,
 	getChatUiConfig: mocks.getChatUiConfig,
 	getAssistantMessageSpeech: mocks.getAssistantMessageSpeech,
+	transcribeUserSpeech: mocks.transcribeUserSpeech,
 	isNotFound: mocks.isNotFound,
 	listMemoryFacts: mocks.listMemoryFacts,
 	listMemorySummaries: mocks.listMemorySummaries,
@@ -105,7 +107,12 @@ describe("useChatSession streaming sendMessage", () => {
 		mocks.location.pathname = "/chat";
 		mocks.location.search = "";
 		mocks.confirm.mockResolvedValue(true);
-		mocks.getChatUiConfig.mockResolvedValue({ personas: [persona], quickPrompts: [] });
+		mocks.getChatUiConfig.mockResolvedValue({
+			personas: [persona],
+			assistantSpeechEnabled: false,
+			userTranscriptionEnabled: false,
+			quickPrompts: []
+		});
 		mocks.listPersonaChats.mockResolvedValue([]);
 		mocks.listMemoryFacts.mockResolvedValue([]);
 		mocks.listMemorySummaries.mockResolvedValue([]);
@@ -256,6 +263,7 @@ describe("useChatSession streaming sendMessage", () => {
 		mocks.getChatUiConfig.mockResolvedValue({
 			personas: [persona],
 			assistantSpeechEnabled: false,
+			userTranscriptionEnabled: false,
 			quickPrompts: ["Make it sweeter", "Suggest a reply"]
 		});
 
@@ -270,12 +278,26 @@ describe("useChatSession streaming sendMessage", () => {
 		mocks.getChatUiConfig.mockResolvedValue({
 			personas: [persona],
 			assistantSpeechEnabled: true,
+			userTranscriptionEnabled: false,
 			quickPrompts: []
 		});
 
 		const { result } = renderHook(() => useChatSession());
 
 		await waitFor(() => expect(result.current.isAssistantSpeechEnabled).toBe(true));
+	});
+
+	it("exposes user speech transcription capability from chat UI config", async () => {
+		mocks.getChatUiConfig.mockResolvedValue({
+			personas: [persona],
+			assistantSpeechEnabled: false,
+			userTranscriptionEnabled: true,
+			quickPrompts: []
+		});
+
+		const { result } = renderHook(() => useChatSession());
+
+		await waitFor(() => expect(result.current.isUserTranscriptionEnabled).toBe(true));
 	});
 
 	it("does not load invalid chat route segments as backend chat ids", async () => {

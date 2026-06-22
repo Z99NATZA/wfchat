@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { createSseEventParser, type ParsedSseEvent } from "@/features/chat/services/chatApiService";
+import {
+	createSseEventParser,
+	normalizeSpeechAudioForUpload,
+	type ParsedSseEvent
+} from "@/features/chat/services/chatApiService";
 
 describe("chat SSE parser", () => {
 	it("parses events split across chunks", () => {
@@ -65,5 +69,26 @@ describe("chat SSE parser", () => {
 				data: "{\"message\":\"failed\"}"
 			}
 		]);
+	});
+});
+
+describe("speech audio upload normalization", () => {
+	it("strips MediaRecorder codec parameters from webm uploads", async () => {
+		const source = new Blob(["fake-audio"], { type: "audio/webm;codecs=opus" });
+
+		const upload = normalizeSpeechAudioForUpload(source);
+
+		expect(upload.filename).toBe("voice.webm");
+		expect(upload.audio.type).toBe("audio/webm");
+		expect(await upload.audio.text()).toBe("fake-audio");
+	});
+
+	it("uses an OpenAI-supported m4a filename for audio/mp4 recordings", () => {
+		const source = new Blob(["fake-audio"], { type: "audio/mp4" });
+
+		const upload = normalizeSpeechAudioForUpload(source);
+
+		expect(upload.filename).toBe("voice.m4a");
+		expect(upload.audio.type).toBe("audio/mp4");
 	});
 });

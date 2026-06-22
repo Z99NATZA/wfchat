@@ -3,12 +3,12 @@
 This document scopes voice features for chat. It is not an active work item by
 itself; use it to keep future implementation narrow and staged.
 
-## Current Scope: AI Voice Playback Only
+## Current Scope: Assistant Playback And Push-To-Talk Input
 
-The first voice iteration adds text-to-speech playback for assistant messages
-only.
+The implemented voice scope covers assistant text-to-speech playback and
+user-initiated push-to-talk speech-to-text input.
 
-Target behavior:
+Assistant playback behavior:
 
 - Assistant messages can expose a speaker action after the message has final text.
 - The action requests speech audio for that assistant message text.
@@ -18,12 +18,24 @@ Target behavior:
 - Voice playback must not change the stored `ChatMessage.text` contract.
 - Voice playback must not block text rendering, message sending, SSE streaming, or chat navigation.
 
-## Explicit Non-Goals For First Scope
+User speech input behavior:
 
-Do not include these in the first voice iteration:
+- The composer can expose a microphone action when backend chat UI config
+  reports speech-to-text support.
+- Recording is user-initiated push-to-talk only.
+- The frontend uploads the completed recording to the backend for
+  transcription.
+- A successful transcript is inserted into the composer draft. It is not stored
+  as a chat message until the user sends it.
+- The frontend exposes clear permission, recording, cancel, transcribing, and
+  retry/error states.
+- Speech-to-text must not block normal typed message entry, sending, SSE
+  streaming, or chat navigation.
 
-- user microphone capture
-- speech-to-text
+## Explicit Non-Goals
+
+Do not include these in the current voice scope:
+
 - always-on voice mode
 - wake words or browser-side voice activity detection
 - realtime voice conversation
@@ -33,7 +45,8 @@ Do not include these in the first voice iteration:
 - persisted audio files or audio history
 - provider/model selection controls in the chat UI
 
-These can be planned as separate follow-up scopes after AI playback is stable.
+These can be planned as separate follow-up scopes after playback and
+push-to-talk input are stable.
 
 ## Recommended Flow
 
@@ -44,6 +57,14 @@ assistant message final text
       -> backend calls configured TTS provider
         <- audio bytes or a short-lived audio response
     -> frontend plays audio
+
+user holds/toggles microphone
+  -> browser records bounded audio after permission grant
+    -> user stops or cancels recording
+      -> frontend uploads completed audio to backend
+        -> backend calls configured transcription provider
+          <- transcript text
+      -> frontend inserts transcript into composer draft
 ```
 
 The frontend should treat audio as derived UI state. The canonical message
@@ -67,7 +88,9 @@ Recommended provider modes:
 - `mock`: backend returns deterministic development/test WAV audio so the UI lifecycle can be built without a real provider.
 - `openai`: backend calls OpenAI text-to-speech using server-owned credentials and configuration.
 
-Current implementation supports `disabled`, `mock`, and `openai`.
+Current playback implementation supports `disabled`, `mock`, and `openai`.
+Current transcription implementation also supports `disabled`, `mock`, and
+`openai`.
 
 ## Frontend Contract
 
@@ -79,6 +102,14 @@ Current implementation supports `disabled`, `mock`, and `openai`.
 - Do not attach audio amplitude, waveform, or lip-sync updates to the chat message render path.
 - Do not auto-scroll the timeline because audio starts or stops.
 - Respect browser autoplay policies by requiring a user gesture for first playback.
+- Keep user recording/transcription state local to the composer or a small
+  feature-local hook.
+- Request microphone access only after a user gesture.
+- Stop microphone tracks on cancel, successful stop, chat navigation, and
+  component unmount.
+- Upload only a completed push-to-talk recording. Do not stream microphone audio
+  in this milestone.
+- Insert transcript text into the composer draft instead of auto-sending it.
 
 Suggested first UI states:
 
@@ -120,6 +151,33 @@ OpenAI voice configuration:
 - `AI_VOICE_ID`: defaults to `marin`
 - `AI_VOICE_FORMAT`: app-supported values are `mp3` and `wav`
 - `AI_VOICE_INSTRUCTIONS`: optional provider-side voice guidance
+
+Current user speech-to-text endpoint:
+
+```text
+POST /api/chat/transcription
+```
+
+Request behavior:
+
+- Verify or create the caller's session.
+- Accept a multipart audio file field named `file` or `audio`.
+- Reject missing, empty, or oversized audio.
+- Use server-side transcription provider/model configuration.
+- Return JSON `{ "text": "..." }` and `Cache-Control: no-store`.
+- With `AI_TRANSCRIPTION_PROVIDER=disabled`, chat UI config reports voice input
+  as unavailable.
+- With `AI_TRANSCRIPTION_PROVIDER=mock`, the endpoint returns deterministic mock
+  transcript text.
+- With `AI_TRANSCRIPTION_PROVIDER=openai`, the endpoint calls OpenAI's
+  transcription API using server-owned credentials and configuration.
+
+OpenAI transcription configuration:
+
+- `OPENAI_API_KEY`: required when `AI_TRANSCRIPTION_PROVIDER=openai`
+- `OPENAI_BASE_URL`: defaults to `https://api.openai.com/v1`
+- `AI_TRANSCRIPTION_MODEL`: defaults to `gpt-4o-mini-transcribe`
+- `AI_TRANSCRIPTION_PROMPT`: optional provider-side transcription guidance
 
 ## Performance Rules
 
@@ -210,8 +268,11 @@ and realtime transport risks separate.
      not streaming placeholders.
 
 8. Add push-to-talk speech-to-text as a separate milestone.
-   - This is the next voice milestone after verified assistant TTS playback.
-   - Use the disabled microphone composer button as the eventual entry point.
+   - Done as the voice milestone after verified assistant TTS playback.
+   - Done with a backend-owned transcription adapter and composer-local
+     recording/transcription UI.
+   - Uses the microphone composer button as the entry point when backend config
+     reports transcription support.
    - Handle permission denial, recording cancel, upload failure, and
      transcription failure.
    - Keep transcription provider credentials server-side.
@@ -242,6 +303,14 @@ Implemented for v1 with:
 - backend tests for voice provider configuration, adapter behavior, and speech
   endpoint headers
 - manually verified OpenAI TTS playback end to end
+- backend `AI_TRANSCRIPTION_PROVIDER=disabled|mock|openai`
+- `POST /api/chat/transcription`
+- OpenAI speech-to-text adapter on the backend
+- server-side transcription model and prompt configuration
+- frontend push-to-talk microphone action in the composer
+- composer-local permission, recording, cancel, transcribing, retry/error, and
+  cleanup states
+- transcript insertion into the composer draft without auto-sending
 
 ## Documentation Rules
 

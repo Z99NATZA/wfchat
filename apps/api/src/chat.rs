@@ -1,5 +1,5 @@
 use axum::{
-    extract::{Path, State},
+    extract::{Multipart, Path, State},
     http::{header, HeaderMap, HeaderName, HeaderValue},
     response::{
         sse::{Event, KeepAlive, Sse},
@@ -15,6 +15,8 @@ use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 use uuid::Uuid;
 
+const MAX_TRANSCRIPTION_AUDIO_BYTES: usize = 25 * 1024 * 1024;
+
 use crate::{
     ai::{AiChatStreamEvent, AiMessage, AiRole, AiService},
     characters,
@@ -27,6 +29,10 @@ use crate::{
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/chat-ui/config", get(get_chat_ui_config))
+        .route(
+            "/chat/transcription",
+            axum::routing::post(transcribe_user_speech),
+        )
         .route(
             "/personas/{persona_id}/chats",
             get(list_chats_for_persona).post(create_chat_for_persona),
@@ -117,6 +123,7 @@ struct ChatUiConfigResponse {
 #[derive(Serialize)]
 struct ChatVoiceConfigResponse {
     assistant_speech_enabled: bool,
+    user_transcription_enabled: bool,
 }
 
 async fn list_chats_for_persona(
@@ -152,6 +159,10 @@ async fn get_chat_ui_config(State(state): State<AppState>) -> Json<ChatUiConfigR
         voice: ChatVoiceConfigResponse {
             assistant_speech_enabled: matches!(
                 state.config.ai_voice_provider.as_str(),
+                "mock" | "openai"
+            ),
+            user_transcription_enabled: matches!(
+                state.config.ai_transcription_provider.as_str(),
                 "mock" | "openai"
             ),
         },
@@ -385,6 +396,91 @@ async fn synthesize_message_speech(
         ],
         audio.bytes,
     ))
+}
+
+#[derive(Serialize)]
+struct TranscribeUserSpeechResponse {
+    text: String,
+}
+
+async fn transcribe_user_speech(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    mut multipart: Multipart,
+) -> AppResult<impl IntoResponse> {
+    let _session = state
+        .store
+        .ensure_session(session_id_from_headers(&headers))
+        .await;
+    let mut audio_bytes = None;
+    let mut content_type = None;
+    let mut filename = None;
+
+    while let Some(field) = multipart
+        .next_field()
+        .await
+        .map_err(|error| AppError::BadRequest(error.to_string()))?
+    {
+        let Some(name) = field.name().map(str::to_owned) else {
+            continue;
+        };
+
+        if name != "file" && name != "audio" {
+            continue;
+        }
+
+        content_type = field.content_type().map(str::to_owned);
+        filename = field.file_name().map(str::to_owned);
+        let bytes = field
+            .bytes()
+            .await
+            .map_err(|error| AppError::BadRequest(error.to_string()))?;
+
+        if bytes.is_empty() {
+            return Err(AppError::BadRequest(
+                "speech transcription requires a non-empty audio file".to_owned(),
+            ));
+        }
+
+        if bytes.len() > MAX_TRANSCRIPTION_AUDIO_BYTES {
+            return Err(AppError::BadRequest(
+                "speech transcription audio is too large".to_owned(),
+            ));
+        }
+
+        audio_bytes = Some(bytes.to_vec());
+        break;
+    }
+
+    let audio_bytes = audio_bytes.ok_or_else(|| {
+        AppError::BadRequest("speech transcription requires an audio file".to_owned())
+    })?;
+    tracing::info!(
+        filename = filename.as_deref().unwrap_or(""),
+        content_type = content_type.as_deref().unwrap_or(""),
+        byte_len = audio_bytes.len(),
+        signature = audio_signature(&audio_bytes),
+        "received user speech transcription audio"
+    );
+    let transcript = VoiceService::new(&state.config, &state.http)
+        .transcribe_user_speech(audio_bytes, content_type.as_deref(), filename.as_deref())
+        .await?;
+
+    Ok((
+        [(header::CACHE_CONTROL, HeaderValue::from_static("no-store"))],
+        Json(TranscribeUserSpeechResponse {
+            text: transcript.text,
+        }),
+    ))
+}
+
+fn audio_signature(bytes: &[u8]) -> String {
+    bytes
+        .iter()
+        .take(12)
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<Vec<_>>()
+        .join("")
 }
 
 fn session_id_from_headers(headers: &HeaderMap) -> Option<Uuid> {
@@ -868,6 +964,63 @@ mod tests {
         state.store.delete_chat(owner, chat.id).await;
     }
 
+    #[tokio::test]
+    async fn transcribe_user_speech_endpoint_returns_mock_transcript() {
+        let Some(state) = test_state().await else {
+            return;
+        };
+        let session = state.store.create_guest_session().await;
+        let app = build_router(state);
+        let boundary = "wfchat-test-boundary";
+        let body = format!(
+            "--{boundary}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"voice.webm\"\r\nContent-Type: audio/webm\r\n\r\nfake-audio\r\n--{boundary}--\r\n"
+        );
+        let request = Request::builder()
+            .method("POST")
+            .uri("/api/chat/transcription")
+            .header(
+                header::CONTENT_TYPE,
+                format!("multipart/form-data; boundary={boundary}"),
+            )
+            .header("x-wfchat-session", session.id.to_string())
+            .body(Body::from(body))
+            .expect("request should build");
+
+        let response = app.oneshot(request).await.expect("request should run");
+
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_header_contains(&response, header::CACHE_CONTROL, "no-store");
+        let body = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("body should collect");
+        let payload: Value =
+            serde_json::from_slice(&body).expect("transcription response should be json");
+        assert_eq!(payload["text"], "Mock voice transcript");
+    }
+
+    #[tokio::test]
+    async fn chat_ui_config_exposes_transcription_capability() {
+        let Some(state) = test_state().await else {
+            return;
+        };
+        let app = build_router(state);
+        let request = Request::builder()
+            .method("GET")
+            .uri("/api/chat-ui/config")
+            .body(Body::empty())
+            .expect("request should build");
+
+        let response = app.oneshot(request).await.expect("request should run");
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("body should collect");
+        let payload: Value = serde_json::from_slice(&body).expect("config should be json");
+        assert_eq!(payload["voice"]["assistant_speech_enabled"], true);
+        assert_eq!(payload["voice"]["user_transcription_enabled"], true);
+    }
+
     async fn test_state() -> Option<AppState> {
         test_state_with_provider("mock").await
     }
@@ -887,6 +1040,9 @@ mod tests {
                 ai_voice_id: "marin".to_owned(),
                 ai_voice_format: "mp3".to_owned(),
                 ai_voice_instructions: None,
+                ai_transcription_provider: "mock".to_owned(),
+                ai_transcription_model: "gpt-4o-mini-transcribe".to_owned(),
+                ai_transcription_prompt: None,
                 database_url,
                 openai_api_key: None,
                 openai_base_url: "https://api.openai.com/v1".to_owned(),

@@ -37,7 +37,8 @@ Mobile browser viewport and safe-area scope: `docs/mobile-viewport.md`.
 
 Chat message rendering scope and rich-format rules: `docs/chat-message-rendering.md`.
 
-Chat voice scope starts with AI voice playback only: `docs/chat-voice.md`.
+Chat voice scope covers assistant voice playback and push-to-talk user speech
+input: `docs/chat-voice.md`.
 
 Current chat message rendering:
 
@@ -47,6 +48,9 @@ Current chat message rendering:
 - Assistant bubbles are wider than user bubbles to improve readability for structured Markdown such as tables and code blocks.
 - Assistant messages with non-empty text expose a copy action for the raw message text.
 - Assistant messages can expose an AI voice playback action when backend chat UI config reports assistant speech support.
+- The composer can expose push-to-talk speech input when backend chat UI config
+  reports user transcription support. Successful transcripts fill the composer
+  draft and are not sent until the user sends the message.
 - Quick prompts from `/api/chat-ui/config` render as chips above the composer. Selecting a chip fills the composer draft and focuses the textarea; it does not auto-send.
 - In development mode or local Docker builds with `VITE_ENABLE_MARKDOWN_QA=true`, `/chat?qa=markdown` exposes a local-only `Load QA` action for Markdown rendering fixtures. Chat route ids must be UUIDs so invalid paths such as `/chat/qa` do not call `/api/chats/:chat_id`.
 - Assistant streaming uses one optimistic local assistant message with id prefix `local-assistant-`.
@@ -68,5 +72,7 @@ App-level persisted settings live behind `apps/web/src/app/AppSettingsProvider.t
 - Use admin screens for AI profile configuration later.
 - Keep `VITE_*` variables limited to non-secret browser configuration.
 - Put reusable browser infrastructure in `apps/web/src/services`.
-- Keep unsupported controls disabled and visually muted. This currently includes attachments, user voice input, image prompts, search, notifications, chat modes, response-shape controls, and safety toggles.
-- Supported controls currently include theme toggle, settings, send message, quick prompts, and clear chat.
+- Keep unsupported controls disabled and visually muted. This currently includes attachments, image prompts, search, notifications, chat modes, response-shape controls, and safety toggles.
+- Supported controls currently include theme toggle, settings, send message,
+  quick prompts, clear chat, assistant speech playback, and push-to-talk speech
+  input when the backend enables them.

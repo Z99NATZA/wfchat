@@ -36,12 +36,17 @@ React
 
 See `docs/chat-sse-streaming.md` for the completed first-iteration SSE contract.
 
-Chat voice starts with assistant text-to-speech playback only. See
-`docs/chat-voice.md`; the backend owns TTS provider credentials and must not
-accept provider names, model names, or API keys from the chat UI.
+Chat voice covers assistant text-to-speech playback and push-to-talk user
+speech-to-text input. See `docs/chat-voice.md`; the backend owns voice provider
+credentials and must not accept provider names, model names, or API keys from
+the chat UI.
 The current real TTS provider mode is `AI_VOICE_PROVIDER=openai`, which calls
 OpenAI's speech API through backend configuration while keeping the frontend
 speech endpoint contract unchanged.
+Push-to-talk user speech-to-text is also backend-owned. The chat UI uploads a
+completed recording to `POST /api/chat/transcription`; provider selection,
+credentials, model selection, and outbound transcription calls stay server-side
+through `AI_TRANSCRIPTION_PROVIDER`.
 
 Clear chat flow:
 
