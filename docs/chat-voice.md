@@ -25,6 +25,9 @@ User speech input behavior:
 - Recording is user-initiated push-to-talk only.
 - The frontend uploads the completed recording to the backend for
   transcription.
+- Browser recordings are flushed in bounded chunks and explicitly flushed again
+  before stop. Header-only or otherwise too-small recordings are rejected in the
+  composer instead of being uploaded for provider transcription.
 - A successful transcript is inserted into the composer draft. It is not stored
   as a chat message until the user sends it.
 - The frontend exposes clear permission, recording, cancel, transcribing, and
@@ -107,6 +110,9 @@ Current transcription implementation also supports `disabled`, `mock`, and
 - Request microphone access only after a user gesture.
 - Stop microphone tracks on cancel, successful stop, chat navigation, and
   component unmount.
+- Use `MediaRecorder` timeslice flushing and `requestData()` before stop so the
+  uploaded blob contains audio frames, not just a WebM header.
+- Do not upload recordings that are too small to contain usable audio.
 - Upload only a completed push-to-talk recording. Do not stream microphone audio
   in this milestone.
 - Insert transcript text into the composer draft instead of auto-sending it.
@@ -163,8 +169,13 @@ Request behavior:
 - Verify or create the caller's session.
 - Accept a multipart audio file field named `file` or `audio`.
 - Reject missing, empty, or oversized audio.
+- Normalize supported audio content types before forwarding to the transcription
+  provider, for example `audio/webm;codecs=opus` to `audio/webm`.
 - Use server-side transcription provider/model configuration.
 - Return JSON `{ "text": "..." }` and `Cache-Control: no-store`.
+- Include safe upload metadata in provider-error diagnostics, such as filename,
+  normalized content type, byte length, and leading-byte signature. Do not log or
+  persist the audio payload.
 - With `AI_TRANSCRIPTION_PROVIDER=disabled`, chat UI config reports voice input
   as unavailable.
 - With `AI_TRANSCRIPTION_PROVIDER=mock`, the endpoint returns deterministic mock
@@ -208,9 +219,8 @@ Plan each as a separate scoped change:
 1. Session-only replay cache for generated audio.
 2. Optional auto-play setting for the latest assistant message.
 3. Streaming TTS after SSE text behavior is stable.
-4. User voice input through push-to-talk speech-to-text.
-5. Voice interruption semantics.
-6. Avatar lip sync from playback audio or provider visemes.
+4. Voice interruption semantics.
+5. Avatar lip sync from playback audio or provider visemes.
 
 ## Recommended Next Work Sequence
 
@@ -276,6 +286,8 @@ and realtime transport risks separate.
    - Handle permission denial, recording cancel, upload failure, and
      transcription failure.
    - Keep transcription provider credentials server-side.
+   - Manually verified end to end with `AI_TRANSCRIPTION_PROVIDER=openai` after
+     correcting local microphone device input.
 
 9. Consider realtime voice only after TTS and push-to-talk STT are stable.
    - Design this separately from SSE chat streaming.
@@ -310,7 +322,12 @@ Implemented for v1 with:
 - frontend push-to-talk microphone action in the composer
 - composer-local permission, recording, cancel, transcribing, retry/error, and
   cleanup states
+- frontend guard against uploading header-only or too-small microphone
+  recordings
+- normalized transcription upload content types for browser-generated audio
+- safe provider-error diagnostics for transcription upload metadata
 - transcript insertion into the composer draft without auto-sending
+- manually verified OpenAI STT end to end with real microphone input
 
 ## Documentation Rules
 
