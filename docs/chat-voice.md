@@ -94,10 +94,96 @@ Recommended provider modes:
 - `disabled`: voice playback is unavailable and the UI hides speaker actions.
 - `mock`: backend returns deterministic development/test WAV audio so the UI lifecycle can be built without a real provider.
 - `openai`: backend calls OpenAI text-to-speech using server-owned credentials and configuration.
+- `voicevox`: planned backend adapter that calls a server-side VOICEVOX Engine
+  instance and returns `audio/wav`.
 
 Current playback implementation supports `disabled`, `mock`, and `openai`.
 Current transcription implementation also supports `disabled`, `mock`, and
 `openai`.
+
+## Planned VOICEVOX Speech Policy
+
+VOICEVOX should be added as a backend-owned voice provider without changing the
+chat UI speech endpoint. The first target behavior is:
+
+- Aiko keeps replying in chat text using the user's language.
+- Assistant message text remains the persisted/displayed `ChatMessage.text`.
+- When the user clicks the speaker action, the backend derives a separate
+  `speech_text` for TTS.
+- For VOICEVOX, `speech_text` can be locked to natural spoken Japanese even
+  when the displayed assistant message is Thai, English, or another language.
+
+Recommended first VOICEVOX configuration:
+
+```text
+AI_VOICE_PROVIDER=voicevox
+AI_VOICE_SPEECH_TEXT_POLICY=japanese_translation
+VOICEVOX_BASE_URL=http://voicevox:50021
+VOICEVOX_SPEAKER_ID=...
+```
+
+Recommended future speech text policies:
+
+- `original`: synthesize the assistant message text exactly as displayed.
+- `japanese_translation`: translate the assistant message into natural spoken
+  Japanese before TTS.
+- `same_language`: synthesize in the assistant message language when the voice
+  provider supports it.
+- `character_default`: use the character's configured voice language, such as
+  Japanese for Aiko.
+- `user_preference`: use a user/app setting layered on top of server and
+  character defaults.
+
+The initial implementation can be server-configured only. Do not add chat UI
+provider, speaker, model, or API key controls. If a user-facing setting is added
+later, expose it as a voice language or speech style preference, not as raw
+provider configuration.
+
+Recommended derived speech flow:
+
+```text
+assistant final text in the user's language
+  -> persisted and displayed unchanged
+  -> user clicks speaker
+    -> backend resolves the assistant message
+    -> backend derives speech_text from AI_VOICE_SPEECH_TEXT_POLICY
+      -> japanese_translation calls a backend translation step
+      -> original uses message.content directly
+    -> backend sends speech_text to the configured TTS provider
+      -> VOICEVOX: POST /audio_query, then POST /synthesis
+    <- frontend receives audio and plays it
+```
+
+Translation rules for `japanese_translation`:
+
+- Translate only for speech generation. Do not alter the stored assistant
+  message.
+- Use natural spoken Japanese suitable for TTS, not a literal word-by-word
+  translation.
+- Preserve names, intent, emotional tone, and Aiko's warm companion style.
+- Return only Japanese speech text from the translation step.
+- Treat Markdown, code blocks, URLs, and tables as spoken content that may need
+  summarizing or cleanup before TTS.
+
+VOICEVOX adapter rules:
+
+- Backend calls VOICEVOX Engine through `VOICEVOX_BASE_URL`.
+- Use `/audio_query?text=...&speaker=...` to create an audio query.
+- Optionally adjust query fields such as speed, pitch, intonation, or volume
+  from server-side config.
+- Use `/synthesis?speaker=...` with the audio query JSON body to generate WAV.
+- Return `audio/wav` through the existing speech endpoint.
+- Keep VOICEVOX network access server-side; the browser should not call
+  VOICEVOX Engine directly.
+
+Future backend cache keys should include the derived speech inputs, for example:
+
+```text
+chat_id + message_id + provider + voice_or_speaker_id + speech_text_policy + source_text_hash
+```
+
+This avoids replaying stale audio if the displayed text, voice provider,
+speaker, or speech policy changes.
 
 ## Frontend Contract
 
@@ -106,10 +192,10 @@ Current transcription implementation also supports `disabled`, `mock`, and
 - Allow only one active assistant playback at a time in the first iteration. Starting another message should stop the current audio.
 - Stop playback on chat navigation or component unmount.
 - Clean up `HTMLAudioElement`, object URLs, abort controllers, and pending requests.
-- For uncached assistant speech, prefer streaming playback with `MediaSource`
-  when the browser and returned audio content type support it.
-- If streaming playback is unavailable, fall back to downloading a Blob and
-  playing it after the response completes.
+- Default assistant speech playback should download a Blob and play it after
+  the response completes because this is the most reliable browser path.
+- `MediaSource` streaming playback is available only as an explicit opt-in
+  experiment through `VITE_ENABLE_STREAMING_SPEECH_PLAYBACK=true`.
 - Keep the existing session-only replay cache behavior. Cache only completed
   successful audio responses; do not cache failed or aborted requests.
 - Do not attach audio amplitude, waveform, or lip-sync updates to the chat message render path.
@@ -158,6 +244,9 @@ Request behavior:
 - With `AI_VOICE_PROVIDER=mock`, the endpoint returns deterministic `audio/wav` mock audio.
 - With `AI_VOICE_PROVIDER=openai`, the endpoint calls OpenAI's speech API and
   streams the configured audio format when possible.
+- With planned `AI_VOICE_PROVIDER=voicevox`, the endpoint should derive
+  `speech_text` according to server-side speech policy, call VOICEVOX Engine,
+  and return `audio/wav`.
 
 Do not accept arbitrary provider names, model names, or API keys from the
 frontend.
@@ -170,6 +259,18 @@ OpenAI voice configuration:
 - `AI_VOICE_ID`: defaults to `marin`
 - `AI_VOICE_FORMAT`: app-supported values are `mp3` and `wav`
 - `AI_VOICE_INSTRUCTIONS`: optional provider-side voice guidance
+
+Planned shared voice text configuration:
+
+- `AI_VOICE_SPEECH_TEXT_POLICY`: defaults to `original`; planned values include
+  `original` and `japanese_translation`
+
+Planned VOICEVOX voice configuration:
+
+- `VOICEVOX_BASE_URL`: required when `AI_VOICE_PROVIDER=voicevox`
+- `VOICEVOX_SPEAKER_ID`: required when `AI_VOICE_PROVIDER=voicevox`
+- Optional future tuning: speed, pitch, intonation, volume, and pre/post
+  phoneme silence scales
 
 Current user speech-to-text endpoint:
 
@@ -236,6 +337,7 @@ Plan each as a separate scoped change:
 2. Optional auto-play setting for the latest assistant message.
 3. Voice interruption semantics.
 4. Avatar lip sync from playback audio or provider visemes.
+5. VOICEVOX provider with Japanese speech text policy.
 
 ## Recommended Next Work Sequence
 
@@ -320,6 +422,17 @@ and realtime transport risks separate.
      falls back to Blob playback when streaming is unavailable.
    - Does not synthesize partial SSE text, add interruption semantics, add
      WebRTC, or add realtime voice conversation.
+
+11. Add VOICEVOX speech output with Japanese speech text policy.
+   - Add `AI_VOICE_PROVIDER=voicevox` behind the existing speech endpoint.
+   - Add `AI_VOICE_SPEECH_TEXT_POLICY=original|japanese_translation`.
+   - Keep displayed assistant text in the user's language.
+   - For `japanese_translation`, derive Japanese `speech_text` only when speech
+     audio is requested.
+   - Call VOICEVOX Engine server-side through `/audio_query` and `/synthesis`.
+   - Return `audio/wav` and preserve existing manual playback, retry, stop, and
+     replay cache behavior.
+   - Do not add provider controls to the normal chat UI in the first pass.
 
 ## Current Status
 
