@@ -13,6 +13,9 @@ Assistant playback behavior:
 - Assistant messages can expose a speaker action after the message has final text.
 - The action requests speech audio for that assistant message text.
 - The frontend plays the returned audio and exposes clear loading, playing, stop, and retry states.
+- For uncached playback, the frontend may stream supported audio responses
+  through `MediaSource` so playback can begin before the full audio response is
+  downloaded.
 - Playback is user-initiated by default. Optional latest-message auto-play is a
   separate opt-in setting.
 - Voice playback must not change the stored `ChatMessage.text` contract.
@@ -43,7 +46,8 @@ Do not include these in the current voice scope:
 - wake words or browser-side voice activity detection
 - realtime voice conversation
 - interrupting an in-flight assistant response with voice
-- streaming TTS chunks during SSE
+- synthesizing or playing TTS from partial in-flight SSE text before the
+  assistant response has final persisted text
 - avatar lip sync or viseme generation
 - persisted audio files or audio history
 - provider/model selection controls in the chat UI
@@ -56,9 +60,9 @@ push-to-talk input are stable.
 ```text
 assistant message final text
   -> user clicks speaker
-    -> frontend requests TTS audio from backend
+    -> frontend requests TTS audio from backend, using streaming playback when supported
       -> backend calls configured TTS provider
-        <- audio bytes or a short-lived audio response
+        <- audio stream, bytes, or a short-lived audio response
     -> frontend plays audio
 
 user holds/toggles microphone
@@ -102,6 +106,12 @@ Current transcription implementation also supports `disabled`, `mock`, and
 - Allow only one active assistant playback at a time in the first iteration. Starting another message should stop the current audio.
 - Stop playback on chat navigation or component unmount.
 - Clean up `HTMLAudioElement`, object URLs, abort controllers, and pending requests.
+- For uncached assistant speech, prefer streaming playback with `MediaSource`
+  when the browser and returned audio content type support it.
+- If streaming playback is unavailable, fall back to downloading a Blob and
+  playing it after the response completes.
+- Keep the existing session-only replay cache behavior. Cache only completed
+  successful audio responses; do not cache failed or aborted requests.
 - Do not attach audio amplitude, waveform, or lip-sync updates to the chat message render path.
 - Do not auto-scroll the timeline because audio starts or stops.
 - Respect browser autoplay policies by requiring a user gesture for first playback.
@@ -142,9 +152,12 @@ Request behavior:
 - Allow speech only for assistant messages with non-empty final text.
 - Use server-side provider/model configuration.
 - Return an audio response with an explicit content type such as `audio/mpeg` or `audio/wav`.
+- The speech endpoint may stream the response body without changing the route,
+  method, ownership checks, or frontend-visible message contract.
 - With `AI_VOICE_PROVIDER=disabled`, chat UI config reports voice playback as unavailable.
 - With `AI_VOICE_PROVIDER=mock`, the endpoint returns deterministic `audio/wav` mock audio.
-- With `AI_VOICE_PROVIDER=openai`, the endpoint calls OpenAI's speech API and returns the configured audio format.
+- With `AI_VOICE_PROVIDER=openai`, the endpoint calls OpenAI's speech API and
+  streams the configured audio format when possible.
 
 Do not accept arbitrary provider names, model names, or API keys from the
 frontend.
@@ -193,10 +206,13 @@ OpenAI transcription configuration:
 ## Performance Rules
 
 - Text rendering must remain immediate. TTS is an optional enhancement after text exists.
+- Streaming TTS must remain separate from SSE text generation. Do not request
+  speech until an assistant message has final text and a stable message id.
 - Do not run audio decoding, waveform analysis, or lip-sync work in the chat render path.
 - Keep generated audio bounded by message length limits or provider limits.
 - Prefer request cancellation when the user stops playback before audio is ready.
-- Add caching only after measuring repeated generation cost. Start with no persistence or session-only frontend reuse.
+- Keep caching session-only and derived from completed successful playback
+  requests.
 
 ## Failure Handling
 
@@ -218,9 +234,8 @@ Plan each as a separate scoped change:
 
 1. Session-only replay cache for generated audio.
 2. Optional auto-play setting for the latest assistant message.
-3. Streaming TTS after SSE text behavior is stable.
-4. Voice interruption semantics.
-5. Avatar lip sync from playback audio or provider visemes.
+3. Voice interruption semantics.
+4. Avatar lip sync from playback audio or provider visemes.
 
 ## Recommended Next Work Sequence
 
@@ -294,6 +309,18 @@ and realtime transport risks separate.
    - Prefer WebSocket or WebRTC only when bidirectional low-latency behavior is
      actually required.
 
+10. Add streaming TTS playback after SSE text behavior is stable.
+   - Done as a playback transport change after the SSE text lifecycle was
+     already documented as implemented.
+   - Keeps the existing speech endpoint, message id contract, manual playback
+     controls, session-only replay cache, and push-to-talk STT behavior.
+   - Backend streams OpenAI speech responses through the existing route when
+     possible; mock audio remains deterministic WAV bytes.
+   - Frontend uses `MediaSource` for supported uncached audio responses and
+     falls back to Blob playback when streaming is unavailable.
+   - Does not synthesize partial SSE text, add interruption semantics, add
+     WebRTC, or add realtime voice conversation.
+
 ## Current Status
 
 Implemented for v1 with:
@@ -303,10 +330,14 @@ Implemented for v1 with:
 - `POST /api/chats/:chat_id/messages/:message_id/speech`
 - mock WAV audio generation on the backend
 - OpenAI text-to-speech adapter on the backend
+- streaming response body support for OpenAI text-to-speech on the existing
+  speech endpoint
 - server-side voice model, voice id, audio format, and instructions configuration
 - frontend assistant message speaker action
 - one active playback at a time
 - loading, playing, stop, retry/error states
+- frontend streaming playback for uncached supported audio through
+  `MediaSource`, with Blob playback fallback
 - visible assistant-message-local feedback when speech playback fails
 - session-only replay cache for generated speech audio
 - user setting to show or hide assistant speech playback actions

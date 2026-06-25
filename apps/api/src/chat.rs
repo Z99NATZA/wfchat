@@ -23,7 +23,7 @@ use crate::{
     error::{AppError, AppResult},
     state::AppState,
     store::{ChatRecord, OwnerScope, StoredMessage},
-    voice::VoiceService,
+    voice::{SpeechAudioStreamBody, VoiceService},
 };
 
 pub fn router() -> Router<AppState> {
@@ -383,8 +383,12 @@ async fn synthesize_message_speech(
     }
 
     let audio = VoiceService::new(&state.config, &state.http)
-        .synthesize_assistant_speech(&message.content)
+        .stream_assistant_speech(&message.content)
         .await?;
+    let body = match audio.body {
+        SpeechAudioStreamBody::Bytes(bytes) => axum::body::Body::from(bytes),
+        SpeechAudioStreamBody::Stream(stream) => axum::body::Body::from_stream(stream),
+    };
 
     Ok((
         [
@@ -394,7 +398,7 @@ async fn synthesize_message_speech(
             ),
             (header::CACHE_CONTROL, HeaderValue::from_static("no-store")),
         ],
-        audio.bytes,
+        body,
     ))
 }
 

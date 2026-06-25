@@ -289,6 +289,15 @@ export async function getAssistantMessageSpeech(
 	messageId: string,
 	options: { signal?: AbortSignal } = {}
 ): Promise<Blob> {
+	const response = await fetchAssistantMessageSpeech(chatId, messageId, options);
+	return response.blob();
+}
+
+export async function fetchAssistantMessageSpeech(
+	chatId: string,
+	messageId: string,
+	options: { signal?: AbortSignal } = {}
+): Promise<Response> {
 	const sessionId = await ensureGuestSession();
 	const response = await fetch(apiUrl(`/api/chats/${chatId}/messages/${messageId}/speech`), {
 		method: "POST",
@@ -303,7 +312,7 @@ export async function getAssistantMessageSpeech(
 		throw new Error(await readApiError(response));
 	}
 
-	return response.blob();
+	return response;
 }
 
 export async function listMemoryFacts(characterId: string): Promise<MemoryFact[]> {

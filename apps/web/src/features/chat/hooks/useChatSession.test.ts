@@ -1,8 +1,8 @@
 /**
  * @vitest-environment happy-dom
  */
-import { act, renderHook, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ChatMessage, ChatPersona } from "@/types/chat";
 import { useChatSession, type ChatSessionAvatarEvent } from "@/features/chat/hooks/useChatSession";
 import {
@@ -19,6 +19,7 @@ const mocks = vi.hoisted(() => ({
 	t: vi.fn((key: string) => key),
 	confirm: vi.fn(),
 	getChatUiConfig: vi.fn(),
+	fetchAssistantMessageSpeech: vi.fn(),
 	getAssistantMessageSpeech: vi.fn(),
 	transcribeUserSpeech: vi.fn(),
 	listPersonaChats: vi.fn(),
@@ -78,6 +79,7 @@ vi.mock("@/features/chat/services/chatApiService", () => ({
 	deleteMemorySummary: mocks.deleteMemorySummary,
 	getChat: mocks.getChat,
 	getChatUiConfig: mocks.getChatUiConfig,
+	fetchAssistantMessageSpeech: mocks.fetchAssistantMessageSpeech,
 	getAssistantMessageSpeech: mocks.getAssistantMessageSpeech,
 	transcribeUserSpeech: mocks.transcribeUserSpeech,
 	isNotFound: mocks.isNotFound,
@@ -119,6 +121,10 @@ describe("useChatSession streaming sendMessage", () => {
 		mocks.createPersonaChat.mockResolvedValue({ chatId: "chat-1", messages: [] });
 		mocks.deleteChat.mockResolvedValue(undefined);
 		mocks.isNotFound.mockReturnValue(false);
+	});
+
+	afterEach(() => {
+		cleanup();
 	});
 
 	it("appends streaming tokens into one optimistic assistant message and replaces with server messages on done", async () => {

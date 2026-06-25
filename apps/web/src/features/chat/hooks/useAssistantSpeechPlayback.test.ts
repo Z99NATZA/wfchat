@@ -3,10 +3,14 @@
  */
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { getAssistantMessageSpeech } from "@/features/chat/services/chatApiService";
+import {
+	fetchAssistantMessageSpeech,
+	getAssistantMessageSpeech
+} from "@/features/chat/services/chatApiService";
 import { useAssistantSpeechPlayback } from "@/features/chat/hooks/useAssistantSpeechPlayback";
 
 vi.mock("@/features/chat/services/chatApiService", () => ({
+	fetchAssistantMessageSpeech: vi.fn(),
 	getAssistantMessageSpeech: vi.fn()
 }));
 
@@ -72,6 +76,66 @@ describe("useAssistantSpeechPlayback", () => {
 		expect(getAssistantMessageSpeech).toHaveBeenCalledTimes(1);
 		expect(audioInstances).toHaveLength(2);
 		expect(URL.createObjectURL).toHaveBeenCalledTimes(2);
+	});
+
+	it("streams uncached speech audio through MediaSource when supported", async () => {
+		class MockSourceBuffer extends EventTarget {
+			updating = false;
+
+			appendBuffer(_chunk: Uint8Array) {
+				this.updating = true;
+				queueMicrotask(() => {
+					this.updating = false;
+					this.dispatchEvent(new Event("updateend"));
+				});
+			}
+		}
+		class MockMediaSource extends EventTarget {
+			static isTypeSupported = vi.fn((contentType: string) => contentType === "audio/mpeg");
+			readyState: "closed" | "open" | "ended" = "closed";
+			sourceBuffer = new MockSourceBuffer();
+
+			constructor() {
+				super();
+				queueMicrotask(() => {
+					this.readyState = "open";
+					this.dispatchEvent(new Event("sourceopen"));
+				});
+			}
+
+			addSourceBuffer() {
+				return this.sourceBuffer;
+			}
+
+			endOfStream() {
+				this.readyState = "ended";
+			}
+		}
+		vi.stubGlobal("MediaSource", MockMediaSource);
+		vi.mocked(fetchAssistantMessageSpeech).mockResolvedValue(
+			new Response(new Blob(["audio-one"], { type: "audio/mpeg" }), {
+				headers: { "Content-Type": "audio/mpeg" }
+			})
+		);
+		const { result } = renderHook(() => useAssistantSpeechPlayback("chat-1"));
+
+		await act(async () => {
+			result.current.toggleAssistantSpeech("assistant-1");
+		});
+		await waitFor(() => expect(result.current.playback.status).toBe("playing"));
+		await waitFor(() => expect(fetchAssistantMessageSpeech).toHaveBeenCalledTimes(1));
+
+		await act(async () => {
+			result.current.stopAssistantSpeech();
+		});
+		await act(async () => {
+			result.current.toggleAssistantSpeech("assistant-1");
+		});
+		await waitFor(() => expect(result.current.playback.status).toBe("playing"));
+
+		expect(fetchAssistantMessageSpeech).toHaveBeenCalledTimes(1);
+		expect(getAssistantMessageSpeech).not.toHaveBeenCalled();
+		expect(audioInstances).toHaveLength(2);
 	});
 
 	it("does not reuse cached speech audio across different chats", async () => {

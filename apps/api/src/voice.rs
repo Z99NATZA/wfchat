@@ -2,13 +2,29 @@ use crate::{
     config::Config,
     error::{AppError, AppResult},
 };
+use axum::body::Bytes;
 use reqwest::{multipart, Client};
 use serde::{Deserialize, Serialize};
+use std::pin::Pin;
+use tokio_stream::Stream;
 
 #[derive(Debug)]
 pub struct SpeechAudio {
     pub content_type: &'static str,
     pub bytes: Vec<u8>,
+}
+
+pub type SpeechAudioByteStream =
+    Pin<Box<dyn Stream<Item = Result<Bytes, reqwest::Error>> + Send + 'static>>;
+
+pub enum SpeechAudioStreamBody {
+    Bytes(Vec<u8>),
+    Stream(SpeechAudioByteStream),
+}
+
+pub struct SpeechAudioStream {
+    pub content_type: &'static str,
+    pub body: SpeechAudioStreamBody,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -33,6 +49,22 @@ impl<'a> VoiceService<'a> {
                 bytes: generate_mock_wav(text),
             }),
             "openai" => self.synthesize_openai_speech(text).await,
+            "disabled" => Err(AppError::BadRequest(
+                "assistant speech playback is disabled".to_owned(),
+            )),
+            _ => Err(AppError::BadRequest(
+                "assistant speech playback is not configured".to_owned(),
+            )),
+        }
+    }
+
+    pub async fn stream_assistant_speech(&self, text: &str) -> AppResult<SpeechAudioStream> {
+        match self.config.ai_voice_provider.as_str() {
+            "mock" => Ok(SpeechAudioStream {
+                content_type: "audio/wav",
+                body: SpeechAudioStreamBody::Bytes(generate_mock_wav(text)),
+            }),
+            "openai" => self.stream_openai_speech(text).await,
             "disabled" => Err(AppError::BadRequest(
                 "assistant speech playback is disabled".to_owned(),
             )),
@@ -72,6 +104,38 @@ impl<'a> VoiceService<'a> {
     }
 
     async fn synthesize_openai_speech(&self, text: &str) -> AppResult<SpeechAudio> {
+        let (content_type, response) = self.send_openai_speech_request(text).await?;
+        let bytes = response
+            .bytes()
+            .await
+            .map_err(|error| AppError::Ai(error.to_string()))?
+            .to_vec();
+
+        if bytes.is_empty() {
+            return Err(AppError::Ai(
+                "voice provider returned empty audio".to_owned(),
+            ));
+        }
+
+        Ok(SpeechAudio {
+            content_type,
+            bytes,
+        })
+    }
+
+    async fn stream_openai_speech(&self, text: &str) -> AppResult<SpeechAudioStream> {
+        let (content_type, response) = self.send_openai_speech_request(text).await?;
+
+        Ok(SpeechAudioStream {
+            content_type,
+            body: SpeechAudioStreamBody::Stream(Box::pin(response.bytes_stream())),
+        })
+    }
+
+    async fn send_openai_speech_request(
+        &self,
+        text: &str,
+    ) -> AppResult<(&'static str, reqwest::Response)> {
         let api_key = self
             .config
             .openai_api_key
@@ -110,22 +174,7 @@ impl<'a> VoiceService<'a> {
             )));
         }
 
-        let bytes = response
-            .bytes()
-            .await
-            .map_err(|error| AppError::Ai(error.to_string()))?
-            .to_vec();
-
-        if bytes.is_empty() {
-            return Err(AppError::Ai(
-                "voice provider returned empty audio".to_owned(),
-            ));
-        }
-
-        Ok(SpeechAudio {
-            content_type,
-            bytes,
-        })
+        Ok((content_type, response))
     }
 
     async fn transcribe_openai_speech(
