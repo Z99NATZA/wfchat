@@ -176,6 +176,18 @@ VOICEVOX adapter rules:
 - Keep VOICEVOX network access server-side; the browser should not call
   VOICEVOX Engine directly.
 
+VOICEVOX attribution rules:
+
+- VOICEVOX usage requires attribution/credit, not a payment credit.
+- Check the selected character or voice library terms before release because
+  each voice can have additional usage requirements.
+- The chat timeline does not need a persistent credit label under every message.
+- Prefer an app-level Credits/About page or a Settings credits section.
+- A minimal credit line should identify both VOICEVOX and the selected voice,
+  for example `VOICEVOX: <character name>`.
+- If the app later exports or shares generated audio/video, include the
+  required VOICEVOX and character credit with that output or its description.
+
 Future backend cache keys should include the derived speech inputs, for example:
 
 ```text
