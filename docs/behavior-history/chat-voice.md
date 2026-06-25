@@ -1,5 +1,72 @@
 # Chat Voice Behavior History
 
+## 2026-06-25 - Gate MediaSource speech streaming behind an opt-in flag
+
+Status: Active
+
+Previous behavior:
+- The default uncached assistant speech path attempted `MediaSource` streaming
+  playback when the browser reported support.
+
+Problem observed:
+- In the first chat of a browser session, the first speaker click could fetch
+  speech successfully with `200 OK` but remain silent. Clicking the same
+  message again played from the completed Blob cache.
+
+Decision:
+- Keep backend streaming support on the existing speech endpoint.
+- Use the stable Blob playback path by default on the frontend.
+- Leave the `MediaSource` streaming playback path available only when
+  `VITE_ENABLE_STREAMING_SPEECH_PLAYBACK=true` is explicitly enabled.
+
+Why:
+- Voice v1 should prioritize reliable manual playback over lower first-byte
+  playback latency. A first-click silent playback is worse than waiting for the
+  Blob response to complete.
+
+Regression guard:
+- `apps/web/src/features/chat/hooks/useAssistantSpeechPlayback.test.ts` covers
+  default Blob playback even when `MediaSource` exists.
+
+Related implementation:
+- `apps/web/src/features/chat/hooks/useAssistantSpeechPlayback.ts`
+
+## 2026-06-25 - Pre-arm streaming speech playback on click
+
+Status: Active
+
+Previous behavior:
+- The streaming speech playback path waited for the speech fetch response before
+  calling `HTMLAudioElement.play()`.
+
+Problem observed:
+- On the first assistant response in a newly created chat, the speech request
+  could return `200 OK` but produce no audible playback. Later speech playback
+  attempts in the same session worked.
+
+Decision:
+- For the `MediaSource` streaming path, create the audio element and call
+  `play()` immediately from the speaker-button click path, before awaiting the
+  speech request.
+- Keep the visible state as `loading` until the first audio bytes are appended
+  and playback is actually ready.
+- Preserve Blob fallback and session-only replay cache behavior.
+
+Why:
+- Some browsers require media playback to be initiated while the user's click
+  activation is still current. Waiting for the network response can lose that
+  activation on the first uncached playback.
+
+Regression guard:
+- `apps/web/src/features/chat/hooks/useAssistantSpeechPlayback.test.ts` verifies
+  `play()` is called before the speech request resolves.
+
+Related current contract:
+- `docs/chat-voice.md`
+
+Related implementation:
+- `apps/web/src/features/chat/hooks/useAssistantSpeechPlayback.ts`
+
 ## 2026-06-25 - Stream uncached assistant speech playback when supported
 
 Status: Active

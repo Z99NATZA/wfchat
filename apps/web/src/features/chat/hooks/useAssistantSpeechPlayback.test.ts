@@ -40,6 +40,45 @@ class MockAudio {
 
 const audioInstances: MockAudio[] = [];
 
+class MockSourceBuffer extends EventTarget {
+	updating = false;
+
+	appendBuffer(_chunk: ArrayBuffer) {
+		this.updating = true;
+		queueMicrotask(() => {
+			this.updating = false;
+			this.dispatchEvent(new Event("updateend"));
+		});
+	}
+}
+
+class MockMediaSource extends EventTarget {
+	static isTypeSupported = vi.fn((contentType: string) => contentType === "audio/mpeg");
+	readyState: "closed" | "open" | "ended" = "closed";
+	sourceBuffer = new MockSourceBuffer();
+
+	constructor() {
+		super();
+		queueMicrotask(() => {
+			this.readyState = "open";
+			this.dispatchEvent(new Event("sourceopen"));
+		});
+	}
+
+	addSourceBuffer() {
+		return this.sourceBuffer;
+	}
+
+	endOfStream() {
+		this.readyState = "ended";
+	}
+}
+
+function stubMediaSource() {
+	MockMediaSource.isTypeSupported.mockClear();
+	vi.stubGlobal("MediaSource", MockMediaSource);
+}
+
 describe("useAssistantSpeechPlayback", () => {
 	beforeEach(() => {
 		audioInstances.length = 0;
@@ -54,6 +93,7 @@ describe("useAssistantSpeechPlayback", () => {
 	afterEach(() => {
 		vi.restoreAllMocks();
 		vi.unstubAllGlobals();
+		vi.unstubAllEnvs();
 	});
 
 	it("reuses cached speech audio when replaying the same assistant message", async () => {
@@ -79,39 +119,8 @@ describe("useAssistantSpeechPlayback", () => {
 	});
 
 	it("streams uncached speech audio through MediaSource when supported", async () => {
-		class MockSourceBuffer extends EventTarget {
-			updating = false;
-
-			appendBuffer(_chunk: Uint8Array) {
-				this.updating = true;
-				queueMicrotask(() => {
-					this.updating = false;
-					this.dispatchEvent(new Event("updateend"));
-				});
-			}
-		}
-		class MockMediaSource extends EventTarget {
-			static isTypeSupported = vi.fn((contentType: string) => contentType === "audio/mpeg");
-			readyState: "closed" | "open" | "ended" = "closed";
-			sourceBuffer = new MockSourceBuffer();
-
-			constructor() {
-				super();
-				queueMicrotask(() => {
-					this.readyState = "open";
-					this.dispatchEvent(new Event("sourceopen"));
-				});
-			}
-
-			addSourceBuffer() {
-				return this.sourceBuffer;
-			}
-
-			endOfStream() {
-				this.readyState = "ended";
-			}
-		}
-		vi.stubGlobal("MediaSource", MockMediaSource);
+		vi.stubEnv("VITE_ENABLE_STREAMING_SPEECH_PLAYBACK", "true");
+		stubMediaSource();
 		vi.mocked(fetchAssistantMessageSpeech).mockResolvedValue(
 			new Response(new Blob(["audio-one"], { type: "audio/mpeg" }), {
 				headers: { "Content-Type": "audio/mpeg" }
@@ -136,6 +145,39 @@ describe("useAssistantSpeechPlayback", () => {
 		expect(fetchAssistantMessageSpeech).toHaveBeenCalledTimes(1);
 		expect(getAssistantMessageSpeech).not.toHaveBeenCalled();
 		expect(audioInstances).toHaveLength(2);
+	});
+
+	it("starts MediaSource playback before the speech request resolves", async () => {
+		vi.stubEnv("VITE_ENABLE_STREAMING_SPEECH_PLAYBACK", "true");
+		stubMediaSource();
+		vi.mocked(fetchAssistantMessageSpeech).mockReturnValue(new Promise<Response>(() => undefined));
+		const { result } = renderHook(() => useAssistantSpeechPlayback("chat-1"));
+
+		await act(async () => {
+			result.current.toggleAssistantSpeech("assistant-1");
+			await Promise.resolve();
+		});
+
+		expect(fetchAssistantMessageSpeech).toHaveBeenCalledTimes(1);
+		expect(audioInstances).toHaveLength(1);
+		expect(audioInstances[0].play).toHaveBeenCalledTimes(1);
+		expect(result.current.playback).toEqual({ messageId: "assistant-1", status: "loading" });
+	});
+
+	it("uses Blob playback by default even when MediaSource exists", async () => {
+		stubMediaSource();
+		vi.mocked(getAssistantMessageSpeech).mockResolvedValue(new Blob(["audio-one"]));
+		const { result } = renderHook(() => useAssistantSpeechPlayback("chat-1"));
+
+		await act(async () => {
+			result.current.toggleAssistantSpeech("assistant-1");
+		});
+		await waitFor(() => expect(result.current.playback.status).toBe("playing"));
+
+		expect(fetchAssistantMessageSpeech).not.toHaveBeenCalled();
+		expect(getAssistantMessageSpeech).toHaveBeenCalledTimes(1);
+		expect(audioInstances).toHaveLength(1);
+		expect(audioInstances[0].play).toHaveBeenCalledTimes(1);
 	});
 
 	it("does not reuse cached speech audio across different chats", async () => {

@@ -126,6 +126,7 @@ export function useAssistantSpeechPlayback(activeChatId: string | null) {
 							messageId,
 							playBlob,
 							registerAudio,
+							releaseResources,
 							setPlaying: () => {
 								if (resourcesRef.current.token === nextToken) {
 									setPlayback({ messageId, status: "playing" });
@@ -222,6 +223,7 @@ type StreamAndPlayAssistantSpeechOptions = {
 		cacheKey: string,
 		token: number
 	) => void;
+	releaseResources: () => void;
 	setPlaying: () => void;
 	token: number;
 };
@@ -233,22 +235,27 @@ async function streamAndPlayAssistantSpeech({
 	messageId,
 	playBlob,
 	registerAudio,
+	releaseResources,
 	setPlaying,
 	token
 }: StreamAndPlayAssistantSpeechOptions): Promise<Blob> {
+	const mediaSource = new MediaSource();
+	const objectUrl = URL.createObjectURL(mediaSource);
+	const audio = new Audio(objectUrl);
+	registerAudio(audio, objectUrl, messageId, cacheKey, token);
+	const armedPlayback = audio.play().then(
+		() => undefined,
+		(error: unknown) => error
+	);
 	const response = await fetchAssistantMessageSpeech(chatId, messageId, { signal: abortSignal });
 	const contentType = normalizedAudioContentType(response.headers.get("Content-Type"));
 
 	if (!response.body || !contentType || !canUseMediaSource(contentType)) {
 		const audioBlob = await response.blob();
+		releaseResources();
 		await playBlob(audioBlob, messageId, cacheKey, token);
 		return audioBlob;
 	}
-
-	const mediaSource = new MediaSource();
-	const objectUrl = URL.createObjectURL(mediaSource);
-	const audio = new Audio(objectUrl);
-	registerAudio(audio, objectUrl, messageId, cacheKey, token);
 
 	await waitForMediaSourceOpen(mediaSource, abortSignal);
 	const sourceBuffer = mediaSource.addSourceBuffer(contentType);
@@ -273,7 +280,10 @@ async function streamAndPlayAssistantSpeech({
 
 			if (!didStartPlayback) {
 				didStartPlayback = true;
-				await audio.play();
+				const playbackError = await armedPlayback;
+				if (playbackError) {
+					throw playbackError;
+				}
 				setPlaying();
 			}
 		}
@@ -291,7 +301,10 @@ async function streamAndPlayAssistantSpeech({
 }
 
 function canAttemptMediaSourcePlayback(): boolean {
-	return typeof MediaSource !== "undefined";
+	return (
+		import.meta.env.VITE_ENABLE_STREAMING_SPEECH_PLAYBACK === "true" &&
+		typeof MediaSource !== "undefined"
+	);
 }
 
 function canUseMediaSource(contentType: string): boolean {
