@@ -45,6 +45,9 @@ OpenAI's speech API, and `AI_VOICE_PROVIDER=voicevox`, which calls a
 server-side VOICEVOX Engine through `/audio_query` and `/synthesis`. Both use
 backend configuration while keeping the frontend speech endpoint contract
 unchanged.
+The same chat UI config can expose non-secret voice credit text, such as a
+VOICEVOX attribution line, but not provider controls, speaker id controls,
+model controls, or API keys.
 Push-to-talk user speech-to-text is also backend-owned. The chat UI uploads a
 completed recording to `POST /api/chat/transcription`; provider selection,
 credentials, model selection, and outbound transcription calls stay server-side

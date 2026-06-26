@@ -14,6 +14,9 @@ vi.mock("@/i18n", () => ({
 			if (key === "settings.assistantSpeech.autoPlayLatest") {
 				return "Auto-play latest reply";
 			}
+			if (key === "settings.assistantSpeech.credits") {
+				return "Credits";
+			}
 			return key;
 		}
 	})
@@ -22,6 +25,7 @@ vi.mock("@/i18n", () => ({
 const baseProps = {
 	isOpen: true,
 	backgroundImageUrl: "",
+	voiceCredits: [],
 	isAvatarOverlayVisible: true,
 	isAssistantSpeechVisible: true,
 	isAssistantSpeechAutoPlayEnabled: false,
@@ -56,5 +60,19 @@ describe("AppSettingsDialog", () => {
 		fireEvent.click(screen.getByRole("switch", { name: "Auto-play latest reply" }));
 
 		expect(baseProps.onAssistantSpeechAutoPlayEnabledChange).toHaveBeenCalledWith(true);
+	});
+
+	it("shows configured voice credits without adding controls", () => {
+		render(
+			<AppSettingsDialog
+				{...baseProps}
+				voiceCredits={[{ text: "VOICEVOX: Test Speaker" }]}
+			/>
+		);
+
+		expect(screen.getByText("Credits")).toBeTruthy();
+		expect(screen.getByText("VOICEVOX: Test Speaker")).toBeTruthy();
+		expect(screen.queryByLabelText(/provider/i)).toBeNull();
+		expect(screen.queryByLabelText(/speaker/i)).toBeNull();
 	});
 });

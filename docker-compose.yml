@@ -30,6 +30,7 @@ services:
       DATABASE_URL: postgres://postgres:postgres@postgres:5432/wfchat
       VOICEVOX_BASE_URL: ${VOICEVOX_BASE_URL:-http://voicevox:50021}
       VOICEVOX_SPEAKER_ID: ${VOICEVOX_SPEAKER_ID:-1}
+      VOICEVOX_CREDIT: ${VOICEVOX_CREDIT:-VOICEVOX speaker 1}
     ports:
       - "8080:8080"
     depends_on:

@@ -10,6 +10,7 @@ import { useI18n } from "@/i18n";
 import { AvatarRuntimeProvider } from "@/features/avatar/runtime/avatarRuntimeStore";
 import { scheduleAikoPngTuberAssetPreload } from "@/features/avatar/renderers/pngtuber/pngTuberAssetPreloader";
 import ChatPage, { type ChatSyncSnapshot } from "@/pages/ChatPage";
+import { getChatUiConfig, type VoiceCredit } from "@/features/chat/services/chatApiService";
 import Model2DPage from "@/pages/Model2DPage";
 import PngTuberPage from "@/pages/PngTuberPage";
 import {
@@ -32,6 +33,7 @@ function App() {
 	const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 	const [isSyncing, setIsSyncing] = useState(false);
 	const [syncError, setSyncError] = useState<string | null>(null);
+	const [voiceCredits, setVoiceCredits] = useState<VoiceCredit[]>([]);
 	const chatSyncSnapshotRef = useRef<ChatSyncSnapshot | null>(null);
 	const wasAuthenticatedRef = useRef(auth.isAuthenticated);
 	const activityBar = <ActivityBar />;
@@ -43,6 +45,26 @@ function App() {
 	}, []);
 
 	useEffect(() => scheduleAikoPngTuberAssetPreload(), []);
+
+	useEffect(() => {
+		let isCurrent = true;
+
+		getChatUiConfig()
+			.then((config) => {
+				if (isCurrent) {
+					setVoiceCredits(config.voiceCredits);
+				}
+			})
+			.catch(() => {
+				if (isCurrent) {
+					setVoiceCredits([]);
+				}
+			});
+
+		return () => {
+			isCurrent = false;
+		};
+	}, []);
 
 	useEffect(() => {
 		if (!wasAuthenticatedRef.current && auth.isAuthenticated) {
@@ -313,6 +335,7 @@ function App() {
 			<AppSettingsDialog
 				isOpen={isSettingsOpen}
 				backgroundImageUrl={settings.backgroundImageUrl}
+				voiceCredits={voiceCredits}
 				isAvatarOverlayVisible={settings.isAvatarOverlayVisible}
 				isAssistantSpeechVisible={settings.isAssistantSpeechVisible}
 				isAssistantSpeechAutoPlayEnabled={settings.isAssistantSpeechAutoPlayEnabled}

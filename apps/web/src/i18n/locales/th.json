@@ -100,6 +100,7 @@
 	"settings.assistantSpeech.title": "เสียง Aiko",
 	"settings.assistantSpeech.showInChat": "แสดงปุ่มเล่นเสียง",
 	"settings.assistantSpeech.autoPlayLatest": "เล่นเสียงคำตอบล่าสุดอัตโนมัติ",
+	"settings.assistantSpeech.credits": "เครดิตเสียง",
 	"settings.avatarOverlay.title": "อวาตาร์ในหน้าแชต",
 	"settings.avatarOverlay.showInChat": "แสดงในหน้าแชต",
 	"settings.avatarOverlay.position": "ตำแหน่ง",

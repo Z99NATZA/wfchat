@@ -55,6 +55,9 @@ Voice playback provider requirements:
 - `AI_VOICE_FORMAT` supports `mp3` and `wav`
 - `AI_VOICE_INSTRUCTIONS` is optional provider-side voice guidance
 - `AI_VOICE_SPEECH_TEXT_POLICY` supports `original` and `japanese_translation`
+- `VOICEVOX_CREDIT` is optional non-secret attribution text shown in Settings
+  when `AI_VOICE_PROVIDER=voicevox`; set it to the credit required by the
+  selected VOICEVOX voice library, for example `VOICEVOX: <speaker name>`
 - In Docker Compose, the API defaults `VOICEVOX_BASE_URL` to `http://voicevox:50021` and starts a `voicevox` service from `voicevox/voicevox_engine:cpu-ubuntu20.04-latest`
 
 Unknown voice provider values fail at startup.

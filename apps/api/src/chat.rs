@@ -124,6 +124,12 @@ struct ChatUiConfigResponse {
 struct ChatVoiceConfigResponse {
     assistant_speech_enabled: bool,
     user_transcription_enabled: bool,
+    credits: Vec<ChatVoiceCreditResponse>,
+}
+
+#[derive(Serialize)]
+struct ChatVoiceCreditResponse {
+    text: String,
 }
 
 async fn list_chats_for_persona(
@@ -165,8 +171,25 @@ async fn get_chat_ui_config(State(state): State<AppState>) -> Json<ChatUiConfigR
                 state.config.ai_transcription_provider.as_str(),
                 "mock" | "openai"
             ),
+            credits: chat_voice_credits(&state.config),
         },
     })
+}
+
+fn chat_voice_credits(config: &crate::config::Config) -> Vec<ChatVoiceCreditResponse> {
+    if config.ai_voice_provider != "voicevox" {
+        return Vec::new();
+    }
+
+    let text = config
+        .voicevox_credit
+        .as_deref()
+        .map(str::trim)
+        .filter(|credit| !credit.is_empty())
+        .map(str::to_owned)
+        .unwrap_or_else(|| format!("VOICEVOX speaker {}", config.voicevox_speaker_id));
+
+    vec![ChatVoiceCreditResponse { text }]
 }
 
 async fn create_chat_for_persona(
@@ -1023,6 +1046,42 @@ mod tests {
         let payload: Value = serde_json::from_slice(&body).expect("config should be json");
         assert_eq!(payload["voice"]["assistant_speech_enabled"], true);
         assert_eq!(payload["voice"]["user_transcription_enabled"], true);
+        assert_eq!(
+            payload["voice"]["credits"].as_array().map(Vec::len),
+            Some(0)
+        );
+    }
+
+    #[tokio::test]
+    async fn chat_ui_config_exposes_voicevox_credit_without_provider_controls() {
+        let Some(mut state) = test_state().await else {
+            return;
+        };
+        state.config.ai_voice_provider = "voicevox".to_owned();
+        state.config.voicevox_speaker_id = "3".to_owned();
+        state.config.voicevox_credit = Some("VOICEVOX: Test Speaker".to_owned());
+        let app = build_router(state);
+        let request = Request::builder()
+            .method("GET")
+            .uri("/api/chat-ui/config")
+            .body(Body::empty())
+            .expect("request should build");
+
+        let response = app.oneshot(request).await.expect("request should run");
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("body should collect");
+        let payload: Value = serde_json::from_slice(&body).expect("config should be json");
+        assert_eq!(
+            payload["voice"]["credits"][0]["text"].as_str(),
+            Some("VOICEVOX: Test Speaker")
+        );
+        assert!(payload["voice"].get("provider").is_none());
+        assert!(payload["voice"].get("speaker_id").is_none());
+        assert!(payload["voice"].get("model").is_none());
+        assert!(payload["voice"].get("api_key").is_none());
     }
 
     async fn test_state() -> Option<AppState> {
@@ -1059,6 +1118,7 @@ mod tests {
                 xai_model: "grok-3-mini".to_owned(),
                 voicevox_base_url: "http://localhost:50021".to_owned(),
                 voicevox_speaker_id: "".to_owned(),
+                voicevox_credit: None,
                 google_client_id: None,
             },
             http: Client::new(),

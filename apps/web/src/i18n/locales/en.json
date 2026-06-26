@@ -100,6 +100,7 @@
 	"settings.assistantSpeech.title": "Assistant voice",
 	"settings.assistantSpeech.showInChat": "Show voice playback",
 	"settings.assistantSpeech.autoPlayLatest": "Auto-play latest reply",
+	"settings.assistantSpeech.credits": "Credits",
 	"settings.avatarOverlay.title": "Avatar overlay",
 	"settings.avatarOverlay.showInChat": "Show in chat",
 	"settings.avatarOverlay.position": "Position",

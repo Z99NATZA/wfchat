@@ -1,5 +1,40 @@
 # Chat Voice Behavior History
 
+## 2026-06-26 - Show VOICEVOX attribution in app settings
+
+Status: Active
+
+Previous behavior:
+- VOICEVOX attribution requirements were documented but not surfaced in the app
+  UI.
+
+Decision:
+- Add backend-owned non-secret `VOICEVOX_CREDIT` metadata.
+- Expose only voice credit text through `/api/chat-ui/config`; do not expose
+  provider controls, speaker id controls, model controls, or API keys.
+- Show configured voice credits in the app Settings assistant voice section,
+  not under every chat message.
+
+Why:
+- VOICEVOX requires attribution, and Settings is an app-level place that does
+  not clutter the chat timeline.
+- Keeping this as backend-owned metadata preserves the normal chat UI boundary.
+
+Regression guard:
+- `apps/api/src/chat.rs` covers VOICEVOX credit metadata and absence of raw
+  provider control fields.
+- `apps/web/src/components/settings/AppSettingsDialog.test.tsx` covers credit
+  rendering without controls.
+
+Related current contract:
+- `docs/chat-voice.md`
+
+Related implementation:
+- `apps/api/src/chat.rs`
+- `apps/api/src/config.rs`
+- `apps/web/src/app/App.tsx`
+- `apps/web/src/components/settings/AppSettingsDialog.tsx`
+
 ## 2026-06-26 - Fail VOICEVOX speech when generated audio would be silent
 
 Status: Active

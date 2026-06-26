@@ -92,10 +92,17 @@ type ApiChatUiConfig = {
 	voice?: {
 		assistant_speech_enabled?: boolean;
 		user_transcription_enabled?: boolean;
+		credits?: Array<{
+			text?: string;
+		}>;
 	};
 };
 
 type ApiSpeechTranscriptionResponse = {
+	text: string;
+};
+
+export type VoiceCredit = {
 	text: string;
 };
 
@@ -222,6 +229,7 @@ export async function deleteChat(chatId: string): Promise<void> {
 export async function getChatUiConfig(): Promise<{
 	assistantSpeechEnabled: boolean;
 	userTranscriptionEnabled: boolean;
+	voiceCredits: VoiceCredit[];
 	personas: ChatPersona[];
 	quickPrompts: string[];
 }> {
@@ -230,6 +238,9 @@ export async function getChatUiConfig(): Promise<{
 	return {
 		assistantSpeechEnabled: response.data.voice?.assistant_speech_enabled === true,
 		userTranscriptionEnabled: response.data.voice?.user_transcription_enabled === true,
+		voiceCredits: (response.data.voice?.credits ?? [])
+			.map((credit) => ({ text: credit.text?.trim() ?? "" }))
+			.filter((credit) => credit.text.length > 0),
 		personas: response.data.personas.map((persona) => ({
 			id: persona.id,
 			name: persona.name,

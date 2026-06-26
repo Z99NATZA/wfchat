@@ -27,6 +27,7 @@ pub struct Config {
     pub xai_model: String,
     pub voicevox_base_url: String,
     pub voicevox_speaker_id: String,
+    pub voicevox_credit: Option<String>,
     pub google_client_id: Option<String>,
 }
 
@@ -64,6 +65,7 @@ impl Config {
             xai_model: env_value("XAI_MODEL", "grok-3-mini"),
             voicevox_base_url: env_value("VOICEVOX_BASE_URL", "http://localhost:50021"),
             voicevox_speaker_id: env_value("VOICEVOX_SPEAKER_ID", ""),
+            voicevox_credit: optional_env_value("VOICEVOX_CREDIT"),
             google_client_id: optional_env_value("GOOGLE_CLIENT_ID"),
         };
 
@@ -235,6 +237,7 @@ mod tests {
             xai_model: "grok-3-mini".to_owned(),
             voicevox_base_url: "http://localhost:50021".to_owned(),
             voicevox_speaker_id: "".to_owned(),
+            voicevox_credit: None,
             google_client_id: None,
         }
     }

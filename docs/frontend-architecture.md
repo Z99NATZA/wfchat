@@ -48,6 +48,8 @@ Current chat message rendering:
 - Assistant bubbles are wider than user bubbles to improve readability for structured Markdown such as tables and code blocks.
 - Assistant messages with non-empty text expose a copy action for the raw message text.
 - Assistant messages can expose an AI voice playback action when backend chat UI config reports assistant speech support.
+- App Settings can show backend-provided non-secret voice credit text, such as
+  VOICEVOX attribution, without exposing provider controls.
 - The composer can expose push-to-talk speech input when backend chat UI config
   reports user transcription support. Successful transcripts fill the composer
   draft and are not sent until the user sends the message.

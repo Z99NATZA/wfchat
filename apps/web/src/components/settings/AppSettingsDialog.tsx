@@ -8,6 +8,7 @@ import type { AvatarOverlayPosition, AvatarOverlaySize } from "@/stores/avatarOv
 type AppSettingsDialogProps = {
 	isOpen: boolean;
 	backgroundImageUrl: string;
+	voiceCredits: Array<{ text: string }>;
 	isAvatarOverlayVisible: boolean;
 	isAssistantSpeechVisible: boolean;
 	isAssistantSpeechAutoPlayEnabled: boolean;
@@ -25,6 +26,7 @@ type AppSettingsDialogProps = {
 function AppSettingsDialog({
 	isOpen,
 	backgroundImageUrl,
+	voiceCredits,
 	isAvatarOverlayVisible,
 	isAssistantSpeechVisible,
 	isAssistantSpeechAutoPlayEnabled,
@@ -164,6 +166,20 @@ function AppSettingsDialog({
 							label={t("settings.assistantSpeech.autoPlayLatest")}
 							onChange={onAssistantSpeechAutoPlayEnabledChange}
 						/>
+						{voiceCredits.length > 0 ? (
+							<div className="rounded-xl border border-dialog-border bg-dialog-soft px-4 py-3">
+								<p className="text-xs font-semibold text-muted">
+									{t("settings.assistantSpeech.credits")}
+								</p>
+								<ul className="mt-2 space-y-1">
+									{voiceCredits.map((credit) => (
+										<li key={credit.text} className="text-sm font-semibold text-app-text">
+											{credit.text}
+										</li>
+									))}
+								</ul>
+							</div>
+						) : null}
 					</section>
 					<section className="mt-6 space-y-3 border-t border-dialog-border pt-5">
 						<div className="flex items-center gap-3">

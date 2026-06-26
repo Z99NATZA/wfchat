@@ -292,6 +292,7 @@ mod tests {
             xai_model: "grok-3-mini".to_owned(),
             voicevox_base_url: "http://localhost:50021".to_owned(),
             voicevox_speaker_id: "".to_owned(),
+            voicevox_credit: None,
             google_client_id: None,
         })
         .await

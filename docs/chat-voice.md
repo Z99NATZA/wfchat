@@ -194,6 +194,9 @@ VOICEVOX attribution rules:
 - Prefer an app-level Credits/About page or a Settings credits section.
 - A minimal credit line should identify both VOICEVOX and the selected voice,
   for example `VOICEVOX: <character name>`.
+- `VOICEVOX_CREDIT` can configure the non-secret credit line that the backend
+  exposes to the frontend. If it is unset, local development falls back to a
+  speaker-id based credit line until the selected voice name is configured.
 - If the app later exports or shares generated audio/video, include the
   required VOICEVOX and character credit with that output or its description.
 
@@ -291,6 +294,8 @@ VOICEVOX voice configuration:
 
 - `VOICEVOX_BASE_URL`: required when `AI_VOICE_PROVIDER=voicevox`
 - `VOICEVOX_SPEAKER_ID`: required when `AI_VOICE_PROVIDER=voicevox`
+- `VOICEVOX_CREDIT`: optional non-secret credit line shown in Settings, such as
+  `VOICEVOX: <character name>`
 - Optional future tuning: speed, pitch, intonation, volume, and pre/post
   phoneme silence scales
 
@@ -473,6 +478,7 @@ Implemented for v1 with:
 - server-side VOICEVOX base URL and speaker id configuration
 - server-side `AI_VOICE_SPEECH_TEXT_POLICY=original|japanese_translation`
 - frontend assistant message speaker action
+- app-level Settings voice credits for VOICEVOX attribution
 - one active playback at a time
 - loading, playing, stop, retry/error states
 - frontend streaming playback for uncached supported audio through
