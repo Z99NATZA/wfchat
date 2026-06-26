@@ -249,6 +249,7 @@ impl<'a> VoiceService<'a> {
 
     async fn synthesize_voicevox_speech(&self, text: &str) -> AppResult<SpeechAudio> {
         let audio_query = self.send_voicevox_audio_query_request(text).await?;
+        validate_voicevox_audio_query(&audio_query)?;
         let bytes = self
             .send_voicevox_synthesis_request(audio_query)
             .await?
@@ -257,11 +258,7 @@ impl<'a> VoiceService<'a> {
             .map_err(|error| AppError::Ai(error.to_string()))?
             .to_vec();
 
-        if bytes.is_empty() {
-            return Err(AppError::Ai(
-                "VOICEVOX Engine returned empty audio".to_owned(),
-            ));
-        }
+        validate_voicevox_wav_audio(&bytes)?;
 
         Ok(SpeechAudio {
             content_type: "audio/wav",
@@ -572,6 +569,98 @@ fn audio_signature(bytes: &[u8]) -> String {
         .join("")
 }
 
+fn validate_voicevox_audio_query(audio_query: &Value) -> AppResult<()> {
+    if voicevox_audio_query_has_speakable_mora(audio_query) {
+        return Ok(());
+    }
+
+    Err(AppError::Ai(
+        "VOICEVOX Engine did not return speakable phonemes for speech text; use AI_VOICE_SPEECH_TEXT_POLICY=japanese_translation for non-Japanese replies".to_owned(),
+    ))
+}
+
+fn voicevox_audio_query_has_speakable_mora(audio_query: &Value) -> bool {
+    audio_query
+        .get("accent_phrases")
+        .and_then(Value::as_array)
+        .map(|accent_phrases| {
+            accent_phrases.iter().any(|accent_phrase| {
+                accent_phrase
+                    .get("moras")
+                    .and_then(Value::as_array)
+                    .map(|moras| moras.iter().any(voicevox_mora_has_sound))
+                    .unwrap_or(false)
+            })
+        })
+        .unwrap_or(false)
+}
+
+fn voicevox_mora_has_sound(mora: &Value) -> bool {
+    ["text", "consonant", "vowel"].iter().any(|field| {
+        mora.get(field)
+            .and_then(Value::as_str)
+            .map(|value| !value.trim().is_empty())
+            .unwrap_or(false)
+    })
+}
+
+fn validate_voicevox_wav_audio(bytes: &[u8]) -> AppResult<()> {
+    if bytes.is_empty() {
+        return Err(AppError::Ai(
+            "VOICEVOX Engine returned empty audio".to_owned(),
+        ));
+    }
+
+    if !bytes.starts_with(b"RIFF") || bytes.get(8..12) != Some(b"WAVE".as_slice()) {
+        return Err(AppError::Ai(
+            "VOICEVOX Engine returned invalid WAV audio".to_owned(),
+        ));
+    }
+
+    let data = wav_data_chunk(bytes).ok_or_else(|| {
+        AppError::Ai("VOICEVOX Engine returned WAV audio without a data chunk".to_owned())
+    })?;
+    if data.is_empty() {
+        return Err(AppError::Ai(
+            "VOICEVOX Engine returned WAV audio without samples".to_owned(),
+        ));
+    }
+
+    if data.iter().all(|byte| *byte == 0) {
+        return Err(AppError::Ai(
+            "VOICEVOX Engine returned silent WAV audio".to_owned(),
+        ));
+    }
+
+    Ok(())
+}
+
+fn wav_data_chunk(bytes: &[u8]) -> Option<&[u8]> {
+    if bytes.len() < 12 {
+        return None;
+    }
+
+    let mut index = 12usize;
+    while index.checked_add(8)? <= bytes.len() {
+        let chunk_id = bytes.get(index..index + 4)?;
+        let size_bytes = bytes.get(index + 4..index + 8)?;
+        let chunk_size =
+            u32::from_le_bytes([size_bytes[0], size_bytes[1], size_bytes[2], size_bytes[3]])
+                as usize;
+        let data_start = index + 8;
+        let data_end = data_start.checked_add(chunk_size)?;
+        if data_end > bytes.len() {
+            return None;
+        }
+        if chunk_id == b"data" {
+            return bytes.get(data_start..data_end);
+        }
+        index = data_end + (chunk_size % 2);
+    }
+
+    None
+}
+
 fn generate_mock_wav(text: &str) -> Vec<u8> {
     const SAMPLE_RATE: u32 = 8_000;
     const CHANNELS: u16 = 1;
@@ -868,7 +957,9 @@ mod tests {
 
     #[tokio::test]
     async fn voicevox_provider_calls_audio_query_then_synthesis_and_returns_wav() {
-        let (base_url, request_handle) = voicevox_response_server();
+        let wav = generate_mock_wav("voicevox");
+        let (base_url, request_handle) =
+            voicevox_response_server_with(VOICEVOX_AUDIO_QUERY_WITH_MORA, wav.clone());
         let http = Client::new();
         let mut config = config_with_voice_provider("voicevox");
         config.voicevox_base_url = base_url;
@@ -886,14 +977,73 @@ mod tests {
             serde_json::from_slice(&captured[1].body).expect("synthesis body should be json");
 
         assert_eq!(audio.content_type, "audio/wav");
-        assert_eq!(audio.bytes, b"RIFFVOICEVOX");
+        assert_eq!(audio.bytes, wav);
         assert!(captured[0]
             .head
             .starts_with("post /audio_query?text=hello&speaker=3 http/1.1"));
         assert!(captured[1]
             .head
             .starts_with("post /synthesis?speaker=3 http/1.1"));
-        assert_eq!(synthesis_body["accent_phrases"], Value::Array(vec![]));
+        assert_eq!(
+            synthesis_body["accent_phrases"][0]["moras"][0]["text"],
+            "コ"
+        );
+    }
+
+    #[tokio::test]
+    async fn voicevox_provider_rejects_audio_query_without_speakable_moras() {
+        let (base_url, request_handle) = one_response_server(
+            "HTTP/1.1 200 OK",
+            "Content-Type: application/json",
+            br#"{"accent_phrases":[]}"#,
+        );
+        let http = Client::new();
+        let mut config = config_with_voice_provider("voicevox");
+        config.voicevox_base_url = base_url;
+        config.voicevox_speaker_id = "3".to_owned();
+        let service = VoiceService::new(&config, &http);
+
+        let error = service
+            .synthesize_assistant_speech("hello")
+            .await
+            .expect_err("voicevox audio query without moras should fail");
+        let captured = request_handle
+            .join()
+            .expect("mock voicevox server should capture request");
+
+        assert!(captured
+            .head
+            .starts_with("post /audio_query?text=hello&speaker=3 http/1.1"));
+        assert!(error
+            .to_string()
+            .contains("VOICEVOX Engine did not return speakable phonemes"));
+        assert!(error
+            .to_string()
+            .contains("AI_VOICE_SPEECH_TEXT_POLICY=japanese_translation"));
+    }
+
+    #[tokio::test]
+    async fn voicevox_provider_rejects_silent_wav_audio() {
+        let (base_url, request_handle) =
+            voicevox_response_server_with(VOICEVOX_AUDIO_QUERY_WITH_MORA, generate_silent_wav());
+        let http = Client::new();
+        let mut config = config_with_voice_provider("voicevox");
+        config.voicevox_base_url = base_url;
+        config.voicevox_speaker_id = "3".to_owned();
+        let service = VoiceService::new(&config, &http);
+
+        let error = service
+            .synthesize_assistant_speech("hello")
+            .await
+            .expect_err("voicevox silent wav should fail");
+        let captured = request_handle
+            .join()
+            .expect("mock voicevox server should capture requests");
+
+        assert_eq!(captured.len(), 2);
+        assert!(error
+            .to_string()
+            .contains("VOICEVOX Engine returned silent WAV audio"));
     }
 
     #[test]
@@ -1046,18 +1196,21 @@ mod tests {
         (format!("http://{addr}"), handle)
     }
 
-    fn voicevox_response_server() -> (String, thread::JoinHandle<Vec<CapturedRequest>>) {
+    const VOICEVOX_AUDIO_QUERY_WITH_MORA: &[u8] =
+        br#"{"accent_phrases":[{"moras":[{"text":"\u30b3","consonant":"k","vowel":"o"}]}]}"#;
+
+    fn voicevox_response_server_with(
+        audio_query_body: &'static [u8],
+        synthesis_body: Vec<u8>,
+    ) -> (String, thread::JoinHandle<Vec<CapturedRequest>>) {
         let listener = TcpListener::bind("127.0.0.1:0").expect("mock server should bind");
         let addr = listener
             .local_addr()
             .expect("mock server addr should exist");
         let handle = thread::spawn(move || {
-            let responses: [(&str, &[u8]); 2] = [
-                (
-                    "Content-Type: application/json",
-                    br#"{"accent_phrases":[]}"#,
-                ),
-                ("Content-Type: audio/wav", b"RIFFVOICEVOX"),
+            let responses: [(&str, Vec<u8>); 2] = [
+                ("Content-Type: application/json", audio_query_body.to_vec()),
+                ("Content-Type: audio/wav", synthesis_body),
             ];
             let mut captured = Vec::new();
 
@@ -1072,7 +1225,7 @@ mod tests {
                     .write_all(response.as_bytes())
                     .expect("response headers should write");
                 stream
-                    .write_all(response_body)
+                    .write_all(&response_body)
                     .expect("response body should write");
                 captured.push(request);
             }
@@ -1081,6 +1234,21 @@ mod tests {
         });
 
         (format!("http://{addr}"), handle)
+    }
+
+    fn generate_silent_wav() -> Vec<u8> {
+        let mut wav = generate_mock_wav("silent");
+        if let Some(data_start) = wav
+            .windows(4)
+            .position(|window| window == b"data")
+            .map(|index| index + 8)
+        {
+            for byte in &mut wav[data_start..] {
+                *byte = 0;
+            }
+        }
+
+        wav
     }
 
     fn read_captured_request(stream: &mut std::net::TcpStream) -> CapturedRequest {

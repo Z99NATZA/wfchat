@@ -1,5 +1,44 @@
 # Chat Voice Behavior History
 
+## 2026-06-26 - Fail VOICEVOX speech when generated audio would be silent
+
+Status: Active
+
+Previous behavior:
+- VOICEVOX could return `200 OK` from `/audio_query` and `/synthesis` even when
+  non-Japanese `speech_text` produced no usable phonemes.
+- The speech endpoint could then return a successful `audio/wav` response that
+  the browser played as silence and cached for the page session.
+
+Problem observed:
+- With `AI_VOICE_SPEECH_TEXT_POLICY=original`, Thai assistant text sent
+  directly to VOICEVOX produced `No phoneme` warnings and silent playback.
+
+Decision:
+- Validate VOICEVOX `audio_query` before synthesis. An audio query without
+  speakable moras is a provider failure.
+- Validate synthesized WAV responses before returning them. Empty, invalid,
+  sample-less, or fully silent WAV payloads are provider failures.
+- Keep frontend behavior unchanged: provider failures enter the existing
+  assistant-message retry/error state and are not added to the session replay
+  cache.
+
+Why:
+- A visible retry/error state is more actionable than a successful silent Blob.
+- `AI_VOICE_SPEECH_TEXT_POLICY=japanese_translation` remains the recommended
+  VOICEVOX configuration for Thai, English, and other non-Japanese displayed
+  replies.
+
+Regression guard:
+- `apps/api/src/voice.rs` covers VOICEVOX audio queries without moras and
+  silent WAV payloads.
+
+Related current contract:
+- `docs/chat-voice.md`
+
+Related implementation:
+- `apps/api/src/voice.rs`
+
 ## 2026-06-26 - Add backend VOICEVOX speech with Japanese speech text policy
 
 Status: Active

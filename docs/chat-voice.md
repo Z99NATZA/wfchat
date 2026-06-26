@@ -170,9 +170,17 @@ VOICEVOX adapter rules:
 
 - Backend calls VOICEVOX Engine through `VOICEVOX_BASE_URL`.
 - Use `/audio_query?text=...&speaker=...` to create an audio query.
+- Treat an `audio_query` without speakable moras as a provider failure instead
+  of returning a successful silent audio response. This most often means
+  `AI_VOICE_SPEECH_TEXT_POLICY=original` sent non-Japanese text to VOICEVOX;
+  use `japanese_translation` for Thai, English, and other non-Japanese chat
+  replies.
 - Optionally adjust query fields such as speed, pitch, intonation, or volume
   from server-side config.
 - Use `/synthesis?speaker=...` with the audio query JSON body to generate WAV.
+- Validate the synthesized WAV before returning it. Empty, invalid, sample-less,
+  or fully silent WAV payloads are provider failures and should enter the
+  frontend retry/error path, not the session replay cache.
 - Return `audio/wav` through the existing speech endpoint.
 - Keep VOICEVOX network access server-side; the browser should not call
   VOICEVOX Engine directly.
@@ -259,7 +267,8 @@ Request behavior:
   streams the configured audio format when possible.
 - With `AI_VOICE_PROVIDER=voicevox`, the endpoint derives `speech_text`
   according to server-side speech policy, calls VOICEVOX Engine, and returns
-  `audio/wav`.
+  `audio/wav`. If VOICEVOX cannot derive speakable phonemes or returns unusable
+  WAV audio, the endpoint returns a provider error instead of a silent success.
 
 Do not accept arbitrary provider names, model names, or API keys from the
 frontend.
