@@ -49,10 +49,13 @@ Voice playback provider requirements:
 - `AI_VOICE_PROVIDER=disabled` hides assistant voice playback actions
 - `AI_VOICE_PROVIDER=mock` enables backend-generated mock WAV playback for local UI lifecycle testing
 - `AI_VOICE_PROVIDER=openai` enables OpenAI text-to-speech playback and requires `OPENAI_API_KEY`
+- `AI_VOICE_PROVIDER=voicevox` enables server-side VOICEVOX Engine text-to-speech playback and requires `VOICEVOX_BASE_URL` plus `VOICEVOX_SPEAKER_ID`
 - `AI_VOICE_MODEL` defaults to `gpt-4o-mini-tts`
 - `AI_VOICE_ID` defaults to `marin`
 - `AI_VOICE_FORMAT` supports `mp3` and `wav`
 - `AI_VOICE_INSTRUCTIONS` is optional provider-side voice guidance
+- `AI_VOICE_SPEECH_TEXT_POLICY` supports `original` and `japanese_translation`
+- In Docker Compose, the API defaults `VOICEVOX_BASE_URL` to `http://voicevox:50021` and starts a `voicevox` service from `voicevox/voicevox_engine:cpu-ubuntu20.04-latest`
 
 Unknown voice provider values fail at startup.
 

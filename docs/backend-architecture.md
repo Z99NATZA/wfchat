@@ -40,9 +40,11 @@ Chat voice covers assistant text-to-speech playback and push-to-talk user
 speech-to-text input. See `docs/chat-voice.md`; the backend owns voice provider
 credentials and must not accept provider names, model names, or API keys from
 the chat UI.
-The current real TTS provider mode is `AI_VOICE_PROVIDER=openai`, which calls
-OpenAI's speech API through backend configuration while keeping the frontend
-speech endpoint contract unchanged.
+The current real TTS provider modes are `AI_VOICE_PROVIDER=openai`, which calls
+OpenAI's speech API, and `AI_VOICE_PROVIDER=voicevox`, which calls a
+server-side VOICEVOX Engine through `/audio_query` and `/synthesis`. Both use
+backend configuration while keeping the frontend speech endpoint contract
+unchanged.
 Push-to-talk user speech-to-text is also backend-owned. The chat UI uploads a
 completed recording to `POST /api/chat/transcription`; provider selection,
 credentials, model selection, and outbound transcription calls stay server-side

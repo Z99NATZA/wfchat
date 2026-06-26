@@ -28,6 +28,8 @@ services:
       FRONTEND_ORIGIN: http://${WFCHAT_PUBLIC_HOST:-localhost}:5173
       FRONTEND_ORIGINS: http://localhost:5173,http://${WFCHAT_PUBLIC_HOST:-localhost}:5173
       DATABASE_URL: postgres://postgres:postgres@postgres:5432/wfchat
+      VOICEVOX_BASE_URL: ${VOICEVOX_BASE_URL:-http://voicevox:50021}
+      VOICEVOX_SPEAKER_ID: ${VOICEVOX_SPEAKER_ID:-1}
     ports:
       - "8080:8080"
     depends_on:
@@ -35,6 +37,14 @@ services:
         condition: service_healthy
       db-init:
         condition: service_completed_successfully
+      voicevox:
+        condition: service_started
+    restart: unless-stopped
+
+  voicevox:
+    image: voicevox/voicevox_engine:cpu-ubuntu20.04-latest
+    ports:
+      - "50021:50021"
     restart: unless-stopped
 
   db-init:

@@ -12,6 +12,7 @@ pub struct Config {
     pub ai_voice_id: String,
     pub ai_voice_format: String,
     pub ai_voice_instructions: Option<String>,
+    pub ai_voice_speech_text_policy: String,
     pub ai_transcription_provider: String,
     pub ai_transcription_model: String,
     pub ai_transcription_prompt: Option<String>,
@@ -24,6 +25,8 @@ pub struct Config {
     pub xai_api_key: Option<String>,
     pub xai_base_url: String,
     pub xai_model: String,
+    pub voicevox_base_url: String,
+    pub voicevox_speaker_id: String,
     pub google_client_id: Option<String>,
 }
 
@@ -43,6 +46,7 @@ impl Config {
             ai_voice_id: env_value("AI_VOICE_ID", "marin"),
             ai_voice_format: env_value("AI_VOICE_FORMAT", "mp3"),
             ai_voice_instructions: optional_env_value("AI_VOICE_INSTRUCTIONS"),
+            ai_voice_speech_text_policy: env_value("AI_VOICE_SPEECH_TEXT_POLICY", "original"),
             ai_transcription_provider: env_value("AI_TRANSCRIPTION_PROVIDER", "disabled"),
             ai_transcription_model: env_value("AI_TRANSCRIPTION_MODEL", "gpt-4o-mini-transcribe"),
             ai_transcription_prompt: optional_env_value("AI_TRANSCRIPTION_PROMPT"),
@@ -58,6 +62,8 @@ impl Config {
             xai_api_key: optional_env_value("XAI_API_KEY"),
             xai_base_url: env_value("XAI_BASE_URL", "https://api.x.ai/v1"),
             xai_model: env_value("XAI_MODEL", "grok-3-mini"),
+            voicevox_base_url: env_value("VOICEVOX_BASE_URL", "http://localhost:50021"),
+            voicevox_speaker_id: env_value("VOICEVOX_SPEAKER_ID", ""),
             google_client_id: optional_env_value("GOOGLE_CLIENT_ID"),
         };
 
@@ -113,6 +119,7 @@ impl Config {
                 "AI_PROVIDER={other} is invalid. Allowed values: mock, openai, xai, lmstudio"
             )),
         }?;
+        validate_voice_speech_text_policy(&self.ai_voice_speech_text_policy)?;
         match self.ai_voice_provider.as_str() {
             "disabled" | "mock" => Ok(()),
             "openai" => {
@@ -130,8 +137,18 @@ impl Config {
                 )?;
                 validate_voice_format(&self.ai_voice_format)
             }
+            "voicevox" => {
+                require_non_empty(
+                    Some(self.voicevox_base_url.as_str()),
+                    "VOICEVOX_BASE_URL is required when AI_VOICE_PROVIDER=voicevox",
+                )?;
+                require_non_empty(
+                    Some(self.voicevox_speaker_id.as_str()),
+                    "VOICEVOX_SPEAKER_ID is required when AI_VOICE_PROVIDER=voicevox",
+                )
+            }
             other => Err(format!(
-                "AI_VOICE_PROVIDER={other} is invalid. Allowed values: disabled, mock, openai"
+                "AI_VOICE_PROVIDER={other} is invalid. Allowed values: disabled, mock, openai, voicevox"
             )),
         }?;
         match self.ai_transcription_provider.as_str() {
@@ -178,6 +195,15 @@ fn validate_voice_format(format: &str) -> Result<(), String> {
     }
 }
 
+fn validate_voice_speech_text_policy(policy: &str) -> Result<(), String> {
+    match policy {
+        "original" | "japanese_translation" => Ok(()),
+        other => Err(format!(
+            "AI_VOICE_SPEECH_TEXT_POLICY={other} is invalid. Allowed values: original, japanese_translation"
+        )),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::Config;
@@ -194,6 +220,7 @@ mod tests {
             ai_voice_id: "marin".to_owned(),
             ai_voice_format: "mp3".to_owned(),
             ai_voice_instructions: None,
+            ai_voice_speech_text_policy: "original".to_owned(),
             ai_transcription_provider: "disabled".to_owned(),
             ai_transcription_model: "gpt-4o-mini-transcribe".to_owned(),
             ai_transcription_prompt: None,
@@ -206,6 +233,8 @@ mod tests {
             xai_api_key: None,
             xai_base_url: "https://api.x.ai/v1".to_owned(),
             xai_model: "grok-3-mini".to_owned(),
+            voicevox_base_url: "http://localhost:50021".to_owned(),
+            voicevox_speaker_id: "".to_owned(),
             google_client_id: None,
         }
     }
@@ -291,6 +320,52 @@ mod tests {
     }
 
     #[test]
+    fn voicevox_voice_provider_requires_speaker_id() {
+        let mut config = base_config();
+        config.ai_voice_provider = "voicevox".to_owned();
+
+        let error = config
+            .validate()
+            .expect_err("voicevox voice should require speaker id");
+        assert_eq!(
+            error,
+            "VOICEVOX_SPEAKER_ID is required when AI_VOICE_PROVIDER=voicevox"
+        );
+    }
+
+    #[test]
+    fn voicevox_voice_provider_is_valid_with_base_url_and_speaker_id() {
+        let mut config = base_config();
+        config.ai_voice_provider = "voicevox".to_owned();
+        config.voicevox_base_url = "http://voicevox:50021".to_owned();
+        config.voicevox_speaker_id = "1".to_owned();
+
+        assert!(config.validate().is_ok());
+    }
+
+    #[test]
+    fn voice_speech_text_policy_accepts_japanese_translation() {
+        let mut config = base_config();
+        config.ai_voice_speech_text_policy = "japanese_translation".to_owned();
+
+        assert!(config.validate().is_ok());
+    }
+
+    #[test]
+    fn unknown_voice_speech_text_policy_is_invalid() {
+        let mut config = base_config();
+        config.ai_voice_speech_text_policy = "same_language".to_owned();
+
+        let error = config
+            .validate()
+            .expect_err("unknown speech text policy should fail");
+        assert_eq!(
+            error,
+            "AI_VOICE_SPEECH_TEXT_POLICY=same_language is invalid. Allowed values: original, japanese_translation"
+        );
+    }
+
+    #[test]
     fn unknown_voice_provider_is_invalid() {
         let mut config = base_config();
         config.ai_voice_provider = "browser".to_owned();
@@ -300,7 +375,7 @@ mod tests {
             .expect_err("unknown voice provider should fail");
         assert_eq!(
             error,
-            "AI_VOICE_PROVIDER=browser is invalid. Allowed values: disabled, mock, openai"
+            "AI_VOICE_PROVIDER=browser is invalid. Allowed values: disabled, mock, openai, voicevox"
         );
     }
 

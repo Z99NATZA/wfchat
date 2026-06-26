@@ -94,17 +94,18 @@ Recommended provider modes:
 - `disabled`: voice playback is unavailable and the UI hides speaker actions.
 - `mock`: backend returns deterministic development/test WAV audio so the UI lifecycle can be built without a real provider.
 - `openai`: backend calls OpenAI text-to-speech using server-owned credentials and configuration.
-- `voicevox`: planned backend adapter that calls a server-side VOICEVOX Engine
+- `voicevox`: backend adapter that calls a server-side VOICEVOX Engine
   instance and returns `audio/wav`.
 
-Current playback implementation supports `disabled`, `mock`, and `openai`.
+Current playback implementation supports `disabled`, `mock`, `openai`, and
+`voicevox`.
 Current transcription implementation also supports `disabled`, `mock`, and
 `openai`.
 
-## Planned VOICEVOX Speech Policy
+## VOICEVOX Speech Policy
 
-VOICEVOX should be added as a backend-owned voice provider without changing the
-chat UI speech endpoint. The first target behavior is:
+VOICEVOX is implemented as a backend-owned voice provider without changing the
+chat UI speech endpoint. The current behavior is:
 
 - Aiko keeps replying in chat text using the user's language.
 - Assistant message text remains the persisted/displayed `ChatMessage.text`.
@@ -113,7 +114,7 @@ chat UI speech endpoint. The first target behavior is:
 - For VOICEVOX, `speech_text` can be locked to natural spoken Japanese even
   when the displayed assistant message is Thai, English, or another language.
 
-Recommended first VOICEVOX configuration:
+Recommended VOICEVOX configuration:
 
 ```text
 AI_VOICE_PROVIDER=voicevox
@@ -256,9 +257,9 @@ Request behavior:
 - With `AI_VOICE_PROVIDER=mock`, the endpoint returns deterministic `audio/wav` mock audio.
 - With `AI_VOICE_PROVIDER=openai`, the endpoint calls OpenAI's speech API and
   streams the configured audio format when possible.
-- With planned `AI_VOICE_PROVIDER=voicevox`, the endpoint should derive
-  `speech_text` according to server-side speech policy, call VOICEVOX Engine,
-  and return `audio/wav`.
+- With `AI_VOICE_PROVIDER=voicevox`, the endpoint derives `speech_text`
+  according to server-side speech policy, calls VOICEVOX Engine, and returns
+  `audio/wav`.
 
 Do not accept arbitrary provider names, model names, or API keys from the
 frontend.
@@ -272,12 +273,12 @@ OpenAI voice configuration:
 - `AI_VOICE_FORMAT`: app-supported values are `mp3` and `wav`
 - `AI_VOICE_INSTRUCTIONS`: optional provider-side voice guidance
 
-Planned shared voice text configuration:
+Shared voice text configuration:
 
-- `AI_VOICE_SPEECH_TEXT_POLICY`: defaults to `original`; planned values include
-  `original` and `japanese_translation`
+- `AI_VOICE_SPEECH_TEXT_POLICY`: defaults to `original`; values are `original`
+  and `japanese_translation`
 
-Planned VOICEVOX voice configuration:
+VOICEVOX voice configuration:
 
 - `VOICEVOX_BASE_URL`: required when `AI_VOICE_PROVIDER=voicevox`
 - `VOICEVOX_SPEAKER_ID`: required when `AI_VOICE_PROVIDER=voicevox`
@@ -436,28 +437,32 @@ and realtime transport risks separate.
      WebRTC, or add realtime voice conversation.
 
 11. Add VOICEVOX speech output with Japanese speech text policy.
-   - Add `AI_VOICE_PROVIDER=voicevox` behind the existing speech endpoint.
-   - Add `AI_VOICE_SPEECH_TEXT_POLICY=original|japanese_translation`.
-   - Keep displayed assistant text in the user's language.
-   - For `japanese_translation`, derive Japanese `speech_text` only when speech
-     audio is requested.
-   - Call VOICEVOX Engine server-side through `/audio_query` and `/synthesis`.
-   - Return `audio/wav` and preserve existing manual playback, retry, stop, and
-     replay cache behavior.
-   - Do not add provider controls to the normal chat UI in the first pass.
+   - Done with `AI_VOICE_PROVIDER=voicevox` behind the existing speech endpoint.
+   - Done with `AI_VOICE_SPEECH_TEXT_POLICY=original|japanese_translation`.
+   - Displayed assistant text remains in the user's language.
+   - For `japanese_translation`, Japanese `speech_text` is derived only when
+     speech audio is requested.
+   - The backend calls VOICEVOX Engine server-side through `/audio_query` and
+     `/synthesis`.
+   - The endpoint returns `audio/wav` and preserves existing manual playback,
+     retry, stop, and replay cache behavior.
+   - Provider controls are not exposed in the normal chat UI.
 
 ## Current Status
 
 Implemented for v1 with:
 
-- backend `AI_VOICE_PROVIDER=disabled|mock|openai`
+- backend `AI_VOICE_PROVIDER=disabled|mock|openai|voicevox`
 - chat UI config capability flag for assistant speech playback
 - `POST /api/chats/:chat_id/messages/:message_id/speech`
 - mock WAV audio generation on the backend
 - OpenAI text-to-speech adapter on the backend
+- VOICEVOX text-to-speech adapter on the backend
 - streaming response body support for OpenAI text-to-speech on the existing
   speech endpoint
 - server-side voice model, voice id, audio format, and instructions configuration
+- server-side VOICEVOX base URL and speaker id configuration
+- server-side `AI_VOICE_SPEECH_TEXT_POLICY=original|japanese_translation`
 - frontend assistant message speaker action
 - one active playback at a time
 - loading, playing, stop, retry/error states

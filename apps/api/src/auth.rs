@@ -340,6 +340,7 @@ mod tests {
             ai_voice_id: "marin".to_owned(),
             ai_voice_format: "mp3".to_owned(),
             ai_voice_instructions: None,
+            ai_voice_speech_text_policy: "original".to_owned(),
             ai_transcription_provider: "disabled".to_owned(),
             ai_transcription_model: "gpt-4o-mini-transcribe".to_owned(),
             ai_transcription_prompt: None,
@@ -352,6 +353,8 @@ mod tests {
             xai_api_key: None,
             xai_base_url: "https://api.x.ai/v1".to_owned(),
             xai_model: "grok-3-mini".to_owned(),
+            voicevox_base_url: "http://localhost:50021".to_owned(),
+            voicevox_speaker_id: "".to_owned(),
             google_client_id,
         })
         .await

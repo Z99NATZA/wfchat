@@ -5,6 +5,7 @@ use crate::{
 use axum::body::Bytes;
 use reqwest::{multipart, Client};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use std::pin::Pin;
 use tokio_stream::Stream;
 
@@ -43,12 +44,15 @@ impl<'a> VoiceService<'a> {
     }
 
     pub async fn synthesize_assistant_speech(&self, text: &str) -> AppResult<SpeechAudio> {
+        self.ensure_assistant_speech_provider_enabled()?;
+        let speech_text = self.derive_speech_text(text).await?;
         match self.config.ai_voice_provider.as_str() {
             "mock" => Ok(SpeechAudio {
                 content_type: "audio/wav",
-                bytes: generate_mock_wav(text),
+                bytes: generate_mock_wav(&speech_text),
             }),
-            "openai" => self.synthesize_openai_speech(text).await,
+            "openai" => self.synthesize_openai_speech(&speech_text).await,
+            "voicevox" => self.synthesize_voicevox_speech(&speech_text).await,
             "disabled" => Err(AppError::BadRequest(
                 "assistant speech playback is disabled".to_owned(),
             )),
@@ -59,12 +63,21 @@ impl<'a> VoiceService<'a> {
     }
 
     pub async fn stream_assistant_speech(&self, text: &str) -> AppResult<SpeechAudioStream> {
+        self.ensure_assistant_speech_provider_enabled()?;
+        let speech_text = self.derive_speech_text(text).await?;
         match self.config.ai_voice_provider.as_str() {
             "mock" => Ok(SpeechAudioStream {
                 content_type: "audio/wav",
-                body: SpeechAudioStreamBody::Bytes(generate_mock_wav(text)),
+                body: SpeechAudioStreamBody::Bytes(generate_mock_wav(&speech_text)),
             }),
-            "openai" => self.stream_openai_speech(text).await,
+            "openai" => self.stream_openai_speech(&speech_text).await,
+            "voicevox" => {
+                let audio = self.synthesize_voicevox_speech(&speech_text).await?;
+                Ok(SpeechAudioStream {
+                    content_type: audio.content_type,
+                    body: SpeechAudioStreamBody::Bytes(audio.bytes),
+                })
+            }
             "disabled" => Err(AppError::BadRequest(
                 "assistant speech playback is disabled".to_owned(),
             )),
@@ -72,6 +85,108 @@ impl<'a> VoiceService<'a> {
                 "assistant speech playback is not configured".to_owned(),
             )),
         }
+    }
+
+    fn ensure_assistant_speech_provider_enabled(&self) -> AppResult<()> {
+        match self.config.ai_voice_provider.as_str() {
+            "mock" | "openai" | "voicevox" => Ok(()),
+            "disabled" => Err(AppError::BadRequest(
+                "assistant speech playback is disabled".to_owned(),
+            )),
+            _ => Err(AppError::BadRequest(
+                "assistant speech playback is not configured".to_owned(),
+            )),
+        }
+    }
+
+    async fn derive_speech_text(&self, text: &str) -> AppResult<String> {
+        match self.config.ai_voice_speech_text_policy.as_str() {
+            "original" => Ok(text.to_owned()),
+            "japanese_translation" => self.translate_speech_text_to_japanese(text).await,
+            other => Err(AppError::BadRequest(format!(
+                "unsupported voice speech text policy: {other}"
+            ))),
+        }
+    }
+
+    async fn translate_speech_text_to_japanese(&self, text: &str) -> AppResult<String> {
+        if self.config.ai_provider == "mock" {
+            return Ok("音声用の日本語テキストです。".to_owned());
+        }
+
+        let (base_url, api_key, model) = match self.config.ai_provider.as_str() {
+            "openai" => (
+                self.config.openai_base_url.as_str(),
+                self.config.openai_api_key.as_deref(),
+                self.config.openai_model.as_str(),
+            ),
+            "lmstudio" => (
+                self.config.lmstudio_base_url.as_str(),
+                None,
+                self.config.lmstudio_model.as_str(),
+            ),
+            "xai" => (
+                self.config.xai_base_url.as_str(),
+                self.config.xai_api_key.as_deref(),
+                self.config.xai_model.as_str(),
+            ),
+            other => {
+                return Err(AppError::BadRequest(format!(
+                    "voice japanese_translation is not supported with AI_PROVIDER={other}"
+                )))
+            }
+        };
+        let url = format!("{}/chat/completions", base_url.trim_end_matches('/'));
+        let mut request = self.http.post(url);
+        if let Some(api_key) = api_key {
+            request = request.bearer_auth(api_key);
+        }
+
+        let response = request
+            .json(&SpeechTextTranslationRequest {
+                model,
+                messages: vec![
+                    TranslationMessage {
+                        role: "system",
+                        content: JAPANESE_SPEECH_TEXT_TRANSLATION_PROMPT,
+                    },
+                    TranslationMessage {
+                        role: "user",
+                        content: text,
+                    },
+                ],
+                temperature: 0.2,
+                stream: false,
+            })
+            .send()
+            .await
+            .map_err(|error| AppError::Ai(error.to_string()))?;
+
+        let status = response.status();
+        let body = response
+            .text()
+            .await
+            .map_err(|error| AppError::Ai(error.to_string()))?;
+        if !status.is_success() {
+            return Err(AppError::Ai(format!(
+                "speech text translation provider returned {status}: {body}"
+            )));
+        }
+
+        let payload: SpeechTextTranslationResponse =
+            serde_json::from_str(&body).map_err(|error| AppError::Ai(error.to_string()))?;
+        let translated = payload
+            .choices
+            .into_iter()
+            .next()
+            .and_then(|choice| choice.message.content)
+            .map(|content| content.trim().to_owned())
+            .filter(|content| !content.is_empty())
+            .ok_or_else(|| {
+                AppError::Ai("speech text translation provider returned empty text".to_owned())
+            })?;
+
+        Ok(translated)
     }
 
     pub async fn transcribe_user_speech(
@@ -130,6 +245,89 @@ impl<'a> VoiceService<'a> {
             content_type,
             body: SpeechAudioStreamBody::Stream(Box::pin(response.bytes_stream())),
         })
+    }
+
+    async fn synthesize_voicevox_speech(&self, text: &str) -> AppResult<SpeechAudio> {
+        let audio_query = self.send_voicevox_audio_query_request(text).await?;
+        let bytes = self
+            .send_voicevox_synthesis_request(audio_query)
+            .await?
+            .bytes()
+            .await
+            .map_err(|error| AppError::Ai(error.to_string()))?
+            .to_vec();
+
+        if bytes.is_empty() {
+            return Err(AppError::Ai(
+                "VOICEVOX Engine returned empty audio".to_owned(),
+            ));
+        }
+
+        Ok(SpeechAudio {
+            content_type: "audio/wav",
+            bytes,
+        })
+    }
+
+    async fn send_voicevox_audio_query_request(&self, text: &str) -> AppResult<Value> {
+        let url = format!(
+            "{}/audio_query",
+            self.config.voicevox_base_url.trim_end_matches('/')
+        );
+        let response = self
+            .http
+            .post(url)
+            .query(&[
+                ("text", text),
+                ("speaker", self.config.voicevox_speaker_id.as_str()),
+            ])
+            .send()
+            .await
+            .map_err(|error| AppError::Ai(error.to_string()))?;
+
+        let status = response.status();
+        let body = response
+            .text()
+            .await
+            .map_err(|error| AppError::Ai(error.to_string()))?;
+        if !status.is_success() {
+            return Err(AppError::Ai(format!(
+                "VOICEVOX Engine audio_query returned {status}: {body}"
+            )));
+        }
+
+        serde_json::from_str(&body).map_err(|error| AppError::Ai(error.to_string()))
+    }
+
+    async fn send_voicevox_synthesis_request(
+        &self,
+        audio_query: Value,
+    ) -> AppResult<reqwest::Response> {
+        let url = format!(
+            "{}/synthesis",
+            self.config.voicevox_base_url.trim_end_matches('/')
+        );
+        let response = self
+            .http
+            .post(url)
+            .query(&[("speaker", self.config.voicevox_speaker_id.as_str())])
+            .json(&audio_query)
+            .send()
+            .await
+            .map_err(|error| AppError::Ai(error.to_string()))?;
+
+        let status = response.status();
+        if !status.is_success() {
+            let body = response
+                .text()
+                .await
+                .map_err(|error| AppError::Ai(error.to_string()))?;
+            return Err(AppError::Ai(format!(
+                "VOICEVOX Engine synthesis returned {status}: {body}"
+            )));
+        }
+
+        Ok(response)
     }
 
     async fn send_openai_speech_request(
@@ -259,6 +457,41 @@ struct OpenAiSpeechRequest<'a> {
     response_format: &'a str,
     #[serde(skip_serializing_if = "Option::is_none")]
     instructions: Option<&'a str>,
+}
+
+const JAPANESE_SPEECH_TEXT_TRANSLATION_PROMPT: &str = "\
+Translate the user's assistant message into natural spoken Japanese for text-to-speech. \
+Keep names, intent, emotional tone, and Aiko's warm companion style. \
+Summarize or clean up Markdown, code blocks, URLs, and tables when needed for speech. \
+Return only the Japanese speech text.";
+
+#[derive(Serialize)]
+struct SpeechTextTranslationRequest<'a> {
+    model: &'a str,
+    messages: Vec<TranslationMessage<'a>>,
+    temperature: f32,
+    stream: bool,
+}
+
+#[derive(Serialize)]
+struct TranslationMessage<'a> {
+    role: &'a str,
+    content: &'a str,
+}
+
+#[derive(Deserialize)]
+struct SpeechTextTranslationResponse {
+    choices: Vec<SpeechTextTranslationChoice>,
+}
+
+#[derive(Deserialize)]
+struct SpeechTextTranslationChoice {
+    message: SpeechTextTranslationMessage,
+}
+
+#[derive(Deserialize)]
+struct SpeechTextTranslationMessage {
+    content: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -408,6 +641,7 @@ mod tests {
             ai_voice_id: "marin".to_owned(),
             ai_voice_format: "mp3".to_owned(),
             ai_voice_instructions: None,
+            ai_voice_speech_text_policy: "original".to_owned(),
             ai_transcription_provider: provider.to_owned(),
             ai_transcription_model: "gpt-4o-mini-transcribe".to_owned(),
             ai_transcription_prompt: None,
@@ -420,6 +654,8 @@ mod tests {
             xai_api_key: None,
             xai_base_url: "https://api.x.ai/v1".to_owned(),
             xai_model: "grok-3-mini".to_owned(),
+            voicevox_base_url: "http://localhost:50021".to_owned(),
+            voicevox_speaker_id: "".to_owned(),
             google_client_id: None,
         }
     }
@@ -453,6 +689,21 @@ mod tests {
             error.to_string(),
             "bad request: assistant speech playback is disabled"
         );
+    }
+
+    #[tokio::test]
+    async fn mock_japanese_translation_policy_derives_separate_speech_text() {
+        let http = Client::new();
+        let mut config = config_with_voice_provider("mock");
+        config.ai_voice_speech_text_policy = "japanese_translation".to_owned();
+        let service = VoiceService::new(&config, &http);
+
+        let speech_text = service
+            .derive_speech_text("hello in the displayed chat language")
+            .await
+            .expect("mock speech text translation should succeed");
+
+        assert_eq!(speech_text, "音声用の日本語テキストです。");
     }
 
     #[tokio::test]
@@ -575,6 +826,74 @@ mod tests {
             .to_string()
             .contains("voice provider returned 429 Too Many Requests"));
         assert!(error.to_string().contains("rate limited"));
+    }
+
+    #[tokio::test]
+    async fn japanese_translation_policy_calls_configured_chat_provider() {
+        let (base_url, request_handle) = one_response_server(
+            "HTTP/1.1 200 OK",
+            "Content-Type: application/json",
+            br#"{"choices":[{"message":{"content":" \u3053\u3093\u306b\u3061\u306f\u3001\u30a2\u30a4\u30b3\u3067\u3059\u3002 "}}]}"#,
+        );
+        let http = Client::new();
+        let mut config = config_with_voice_provider("mock");
+        config.ai_voice_speech_text_policy = "japanese_translation".to_owned();
+        config.ai_provider = "openai".to_owned();
+        config.openai_api_key = Some("test-key".to_owned());
+        config.openai_base_url = base_url;
+        config.openai_model = "gpt-4.1-mini".to_owned();
+        let service = VoiceService::new(&config, &http);
+
+        let speech_text = service
+            .derive_speech_text("Hello, this stays displayed in English.")
+            .await
+            .expect("speech text translation should succeed");
+        let captured = request_handle
+            .join()
+            .expect("mock provider server should capture request");
+        let body: Value =
+            serde_json::from_slice(&captured.body).expect("request body should be json");
+
+        assert_eq!(speech_text, "こんにちは、アイコです。");
+        assert!(captured.head.starts_with("post /chat/completions http/1.1"));
+        assert!(captured.head.contains("authorization: bearer test-key"));
+        assert_eq!(body["model"], "gpt-4.1-mini");
+        assert_eq!(body["stream"], false);
+        assert_eq!(body["messages"][1]["role"], "user");
+        assert_eq!(
+            body["messages"][1]["content"],
+            "Hello, this stays displayed in English."
+        );
+    }
+
+    #[tokio::test]
+    async fn voicevox_provider_calls_audio_query_then_synthesis_and_returns_wav() {
+        let (base_url, request_handle) = voicevox_response_server();
+        let http = Client::new();
+        let mut config = config_with_voice_provider("voicevox");
+        config.voicevox_base_url = base_url;
+        config.voicevox_speaker_id = "3".to_owned();
+        let service = VoiceService::new(&config, &http);
+
+        let audio = service
+            .synthesize_assistant_speech("hello")
+            .await
+            .expect("voicevox speech should synthesize");
+        let captured = request_handle
+            .join()
+            .expect("mock voicevox server should capture requests");
+        let synthesis_body: Value =
+            serde_json::from_slice(&captured[1].body).expect("synthesis body should be json");
+
+        assert_eq!(audio.content_type, "audio/wav");
+        assert_eq!(audio.bytes, b"RIFFVOICEVOX");
+        assert!(captured[0]
+            .head
+            .starts_with("post /audio_query?text=hello&speaker=3 http/1.1"));
+        assert!(captured[1]
+            .head
+            .starts_with("post /synthesis?speaker=3 http/1.1"));
+        assert_eq!(synthesis_body["accent_phrases"], Value::Array(vec![]));
     }
 
     #[test]
@@ -725,6 +1044,76 @@ mod tests {
         });
 
         (format!("http://{addr}"), handle)
+    }
+
+    fn voicevox_response_server() -> (String, thread::JoinHandle<Vec<CapturedRequest>>) {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("mock server should bind");
+        let addr = listener
+            .local_addr()
+            .expect("mock server addr should exist");
+        let handle = thread::spawn(move || {
+            let responses: [(&str, &[u8]); 2] = [
+                (
+                    "Content-Type: application/json",
+                    br#"{"accent_phrases":[]}"#,
+                ),
+                ("Content-Type: audio/wav", b"RIFFVOICEVOX"),
+            ];
+            let mut captured = Vec::new();
+
+            for (content_type_header, response_body) in responses {
+                let (mut stream, _) = listener.accept().expect("mock server should accept");
+                let request = read_captured_request(&mut stream);
+                let response = format!(
+                    "HTTP/1.1 200 OK\r\n{content_type_header}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                    response_body.len()
+                );
+                stream
+                    .write_all(response.as_bytes())
+                    .expect("response headers should write");
+                stream
+                    .write_all(response_body)
+                    .expect("response body should write");
+                captured.push(request);
+            }
+
+            captured
+        });
+
+        (format!("http://{addr}"), handle)
+    }
+
+    fn read_captured_request(stream: &mut std::net::TcpStream) -> CapturedRequest {
+        let mut request_bytes = Vec::new();
+        let mut buffer = [0u8; 4096];
+
+        loop {
+            let read = stream.read(&mut buffer).expect("request should read");
+            if read == 0 {
+                break;
+            }
+            request_bytes.extend_from_slice(&buffer[..read]);
+            if let Some(header_end) = find_header_end(&request_bytes) {
+                let head = String::from_utf8_lossy(&request_bytes[..header_end]).to_string();
+                let content_length = read_content_length(&head);
+                let body_start = header_end + 4;
+                let expected_len = body_start + content_length;
+                while request_bytes.len() < expected_len {
+                    let read = stream.read(&mut buffer).expect("body should read");
+                    if read == 0 {
+                        break;
+                    }
+                    request_bytes.extend_from_slice(&buffer[..read]);
+                }
+                let body = request_bytes[body_start..expected_len].to_vec();
+                return CapturedRequest {
+                    head: head.to_ascii_lowercase(),
+                    body,
+                };
+            }
+        }
+
+        panic!("mock server did not receive a complete request");
     }
 
     fn find_header_end(request_bytes: &[u8]) -> Option<usize> {

@@ -1,5 +1,43 @@
 # Chat Voice Behavior History
 
+## 2026-06-26 - Add backend VOICEVOX speech with Japanese speech text policy
+
+Status: Active
+
+Previous behavior:
+- Assistant speech playback supported `disabled`, `mock`, and `openai`.
+- The speech endpoint synthesized the displayed assistant message text directly.
+
+Decision:
+- Add `AI_VOICE_PROVIDER=voicevox` behind the existing speech endpoint.
+- Keep the chat UI provider-agnostic; normal chat screens still do not expose
+  provider, speaker id, model, or API key controls.
+- Add `AI_VOICE_SPEECH_TEXT_POLICY=original|japanese_translation`.
+- For `japanese_translation`, derive Japanese `speech_text` only when speech is
+  requested, then pass that derived text to the configured TTS provider.
+- Call VOICEVOX Engine server-side through `/audio_query` and `/synthesis` and
+  return `audio/wav`.
+
+Why:
+- Aiko can keep text replies in the user's language while voice playback uses
+  natural spoken Japanese for VOICEVOX.
+- The existing manual playback, stop/retry states, session-only replay cache,
+  and push-to-talk STT contract stay unchanged.
+
+Regression guard:
+- `apps/api/src/config.rs` validates the new provider and speech text policy.
+- `apps/api/src/voice.rs` covers VOICEVOX request mapping and speech text
+  translation policy without calling a real provider.
+
+Related current contract:
+- `docs/chat-voice.md`
+
+Related implementation:
+- `apps/api/src/voice.rs`
+- `apps/api/src/config.rs`
+- `apps/api/src/chat.rs`
+- `docker-compose.yml`
+
 ## 2026-06-25 - Gate MediaSource speech streaming behind an opt-in flag
 
 Status: Active
