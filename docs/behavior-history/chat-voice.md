@@ -1,5 +1,40 @@
 # Chat Voice Behavior History
 
+## 2026-06-26 - Add server-side VOICEVOX tuning configuration
+
+Status: Active
+
+Previous behavior:
+- VOICEVOX used the `audio_query` JSON returned by the engine without applying
+  app-level tuning overrides.
+- Tuning was documented only as optional future work.
+
+Decision:
+- Add optional backend-owned env configuration for VOICEVOX speed, pitch,
+  intonation, volume, and pre/post phoneme silence scales.
+- Apply only configured tuning values to the VOICEVOX `audio_query` JSON before
+  calling `/synthesis`.
+- Keep tuning out of the normal chat UI along with provider, speaker, model,
+  and API key controls.
+
+Why:
+- VOICEVOX voices often need small server-side adjustments to fit the app
+  character, but exposing raw provider controls in chat would break the existing
+  provider boundary.
+
+Regression guard:
+- `apps/api/src/config.rs` validates optional numeric tuning config.
+- `apps/api/src/voice.rs` covers both default no-tuning behavior and configured
+  tuning values in the synthesis request body.
+
+Related current contract:
+- `docs/chat-voice.md`
+
+Related implementation:
+- `apps/api/src/config.rs`
+- `apps/api/src/voice.rs`
+- `docker-compose.yml`
+
 ## 2026-06-26 - Show VOICEVOX attribution in app settings
 
 Status: Active

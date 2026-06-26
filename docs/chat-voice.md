@@ -121,6 +121,12 @@ AI_VOICE_PROVIDER=voicevox
 AI_VOICE_SPEECH_TEXT_POLICY=japanese_translation
 VOICEVOX_BASE_URL=http://voicevox:50021
 VOICEVOX_SPEAKER_ID=...
+VOICEVOX_SPEED_SCALE=        # optional
+VOICEVOX_PITCH_SCALE=        # optional
+VOICEVOX_INTONATION_SCALE=   # optional
+VOICEVOX_VOLUME_SCALE=       # optional
+VOICEVOX_PRE_PHONEME_LENGTH= # optional
+VOICEVOX_POST_PHONEME_LENGTH=# optional
 ```
 
 Recommended future speech text policies:
@@ -175,8 +181,9 @@ VOICEVOX adapter rules:
   `AI_VOICE_SPEECH_TEXT_POLICY=original` sent non-Japanese text to VOICEVOX;
   use `japanese_translation` for Thai, English, and other non-Japanese chat
   replies.
-- Optionally adjust query fields such as speed, pitch, intonation, or volume
-  from server-side config.
+- Apply optional server-side tuning fields to the `audio_query` before
+  synthesis when configured. Supported fields are speed, pitch, intonation,
+  volume, and pre/post phoneme silence scales.
 - Use `/synthesis?speaker=...` with the audio query JSON body to generate WAV.
 - Validate the synthesized WAV before returning it. Empty, invalid, sample-less,
   or fully silent WAV payloads are provider failures and should enter the
@@ -296,8 +303,11 @@ VOICEVOX voice configuration:
 - `VOICEVOX_SPEAKER_ID`: required when `AI_VOICE_PROVIDER=voicevox`
 - `VOICEVOX_CREDIT`: optional non-secret credit line shown in Settings, such as
   `VOICEVOX: <character name>`
-- Optional future tuning: speed, pitch, intonation, volume, and pre/post
-  phoneme silence scales
+- Optional tuning values are applied to `audio_query` before synthesis:
+  `VOICEVOX_SPEED_SCALE`, `VOICEVOX_PITCH_SCALE`,
+  `VOICEVOX_INTONATION_SCALE`, `VOICEVOX_VOLUME_SCALE`,
+  `VOICEVOX_PRE_PHONEME_LENGTH`, and `VOICEVOX_POST_PHONEME_LENGTH`.
+  All must be numeric; all except pitch must be non-negative.
 
 Current user speech-to-text endpoint:
 
@@ -476,6 +486,8 @@ Implemented for v1 with:
   speech endpoint
 - server-side voice model, voice id, audio format, and instructions configuration
 - server-side VOICEVOX base URL and speaker id configuration
+- server-side VOICEVOX tuning configuration for speed, pitch, intonation,
+  volume, and pre/post phoneme silence scales
 - server-side `AI_VOICE_SPEECH_TEXT_POLICY=original|japanese_translation`
 - frontend assistant message speaker action
 - app-level Settings voice credits for VOICEVOX attribution

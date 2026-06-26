@@ -248,8 +248,9 @@ impl<'a> VoiceService<'a> {
     }
 
     async fn synthesize_voicevox_speech(&self, text: &str) -> AppResult<SpeechAudio> {
-        let audio_query = self.send_voicevox_audio_query_request(text).await?;
+        let mut audio_query = self.send_voicevox_audio_query_request(text).await?;
         validate_voicevox_audio_query(&audio_query)?;
+        apply_voicevox_tuning(self.config, &mut audio_query)?;
         let bytes = self
             .send_voicevox_synthesis_request(audio_query)
             .await?
@@ -579,6 +580,40 @@ fn validate_voicevox_audio_query(audio_query: &Value) -> AppResult<()> {
     ))
 }
 
+fn apply_voicevox_tuning(config: &Config, audio_query: &mut Value) -> AppResult<()> {
+    let tuning_values = [
+        ("speedScale", config.voicevox_speed_scale),
+        ("pitchScale", config.voicevox_pitch_scale),
+        ("intonationScale", config.voicevox_intonation_scale),
+        ("volumeScale", config.voicevox_volume_scale),
+        ("prePhonemeLength", config.voicevox_pre_phoneme_length),
+        ("postPhonemeLength", config.voicevox_post_phoneme_length),
+    ];
+
+    if tuning_values
+        .iter()
+        .all(|(_, value)| value.as_ref().is_none())
+    {
+        return Ok(());
+    }
+
+    let object = audio_query.as_object_mut().ok_or_else(|| {
+        AppError::Ai("VOICEVOX Engine returned non-object audio_query JSON".to_owned())
+    })?;
+    for (field, value) in tuning_values {
+        if let Some(value) = value {
+            let number = serde_json::Number::from_f64(value as f64).ok_or_else(|| {
+                AppError::Ai(format!(
+                    "configured VOICEVOX tuning value for {field} is not finite"
+                ))
+            })?;
+            object.insert(field.to_owned(), Value::Number(number));
+        }
+    }
+
+    Ok(())
+}
+
 fn voicevox_audio_query_has_speakable_mora(audio_query: &Value) -> bool {
     audio_query
         .get("accent_phrases")
@@ -746,6 +781,12 @@ mod tests {
             voicevox_base_url: "http://localhost:50021".to_owned(),
             voicevox_speaker_id: "".to_owned(),
             voicevox_credit: None,
+            voicevox_speed_scale: None,
+            voicevox_pitch_scale: None,
+            voicevox_intonation_scale: None,
+            voicevox_volume_scale: None,
+            voicevox_pre_phoneme_length: None,
+            voicevox_post_phoneme_length: None,
             google_client_id: None,
         }
     }
@@ -989,6 +1030,47 @@ mod tests {
             synthesis_body["accent_phrases"][0]["moras"][0]["text"],
             "コ"
         );
+        assert!(synthesis_body.get("speedScale").is_none());
+        assert!(synthesis_body.get("pitchScale").is_none());
+        assert!(synthesis_body.get("intonationScale").is_none());
+        assert!(synthesis_body.get("volumeScale").is_none());
+        assert!(synthesis_body.get("prePhonemeLength").is_none());
+        assert!(synthesis_body.get("postPhonemeLength").is_none());
+    }
+
+    #[tokio::test]
+    async fn voicevox_provider_applies_configured_audio_query_tuning() {
+        let wav = generate_mock_wav("voicevox");
+        let (base_url, request_handle) =
+            voicevox_response_server_with(VOICEVOX_AUDIO_QUERY_WITH_MORA, wav);
+        let http = Client::new();
+        let mut config = config_with_voice_provider("voicevox");
+        config.voicevox_base_url = base_url;
+        config.voicevox_speaker_id = "3".to_owned();
+        config.voicevox_speed_scale = Some(1.1);
+        config.voicevox_pitch_scale = Some(-0.03);
+        config.voicevox_intonation_scale = Some(1.2);
+        config.voicevox_volume_scale = Some(0.9);
+        config.voicevox_pre_phoneme_length = Some(0.05);
+        config.voicevox_post_phoneme_length = Some(0.08);
+        let service = VoiceService::new(&config, &http);
+
+        service
+            .synthesize_assistant_speech("hello")
+            .await
+            .expect("voicevox speech should synthesize");
+        let captured = request_handle
+            .join()
+            .expect("mock voicevox server should capture requests");
+        let synthesis_body: Value =
+            serde_json::from_slice(&captured[1].body).expect("synthesis body should be json");
+
+        assert_json_f32(&synthesis_body, "speedScale", 1.1);
+        assert_json_f32(&synthesis_body, "pitchScale", -0.03);
+        assert_json_f32(&synthesis_body, "intonationScale", 1.2);
+        assert_json_f32(&synthesis_body, "volumeScale", 0.9);
+        assert_json_f32(&synthesis_body, "prePhonemeLength", 0.05);
+        assert_json_f32(&synthesis_body, "postPhonemeLength", 0.08);
     }
 
     #[tokio::test]
@@ -1300,5 +1382,15 @@ mod tests {
                     .flatten()
             })
             .unwrap_or(0)
+    }
+
+    fn assert_json_f32(payload: &Value, field: &str, expected: f32) {
+        let actual = payload[field]
+            .as_f64()
+            .unwrap_or_else(|| panic!("{field} should be a number"));
+        assert!(
+            (actual - expected as f64).abs() < 0.000_001,
+            "{field} expected {expected}, got {actual}"
+        );
     }
 }

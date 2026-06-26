@@ -48,6 +48,9 @@ unchanged.
 The same chat UI config can expose non-secret voice credit text, such as a
 VOICEVOX attribution line, but not provider controls, speaker id controls,
 model controls, or API keys.
+VOICEVOX tuning values such as speed, pitch, intonation, volume, and phoneme
+silence scales are also backend-owned environment configuration and are not
+normal chat UI controls.
 Push-to-talk user speech-to-text is also backend-owned. The chat UI uploads a
 completed recording to `POST /api/chat/transcription`; provider selection,
 credentials, model selection, and outbound transcription calls stay server-side

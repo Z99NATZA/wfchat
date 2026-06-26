@@ -50,6 +50,9 @@ Current chat message rendering:
 - Assistant messages can expose an AI voice playback action when backend chat UI config reports assistant speech support.
 - App Settings can show backend-provided non-secret voice credit text, such as
   VOICEVOX attribution, without exposing provider controls.
+- VOICEVOX tuning stays backend-owned; the normal chat UI does not expose
+  speed, pitch, intonation, volume, speaker, provider, model, or API key
+  controls.
 - The composer can expose push-to-talk speech input when backend chat UI config
   reports user transcription support. Successful transcripts fill the composer
   draft and are not sent until the user sends the message.

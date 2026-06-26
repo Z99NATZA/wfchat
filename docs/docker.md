@@ -58,6 +58,12 @@ Voice playback provider requirements:
 - `VOICEVOX_CREDIT` is optional non-secret attribution text shown in Settings
   when `AI_VOICE_PROVIDER=voicevox`; set it to the credit required by the
   selected VOICEVOX voice library, for example `VOICEVOX: <speaker name>`
+- Optional VOICEVOX tuning env values are backend-owned and applied to the
+  `/audio_query` JSON before synthesis when set: `VOICEVOX_SPEED_SCALE`,
+  `VOICEVOX_PITCH_SCALE`, `VOICEVOX_INTONATION_SCALE`,
+  `VOICEVOX_VOLUME_SCALE`, `VOICEVOX_PRE_PHONEME_LENGTH`, and
+  `VOICEVOX_POST_PHONEME_LENGTH`. Values must be numeric; all except pitch
+  must be non-negative.
 - In Docker Compose, the API defaults `VOICEVOX_BASE_URL` to `http://voicevox:50021` and starts a `voicevox` service from `voicevox/voicevox_engine:cpu-ubuntu20.04-latest`
 
 Unknown voice provider values fail at startup.

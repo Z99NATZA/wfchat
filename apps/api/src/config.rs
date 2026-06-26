@@ -28,6 +28,12 @@ pub struct Config {
     pub voicevox_base_url: String,
     pub voicevox_speaker_id: String,
     pub voicevox_credit: Option<String>,
+    pub voicevox_speed_scale: Option<f32>,
+    pub voicevox_pitch_scale: Option<f32>,
+    pub voicevox_intonation_scale: Option<f32>,
+    pub voicevox_volume_scale: Option<f32>,
+    pub voicevox_pre_phoneme_length: Option<f32>,
+    pub voicevox_post_phoneme_length: Option<f32>,
     pub google_client_id: Option<String>,
 }
 
@@ -66,6 +72,12 @@ impl Config {
             voicevox_base_url: env_value("VOICEVOX_BASE_URL", "http://localhost:50021"),
             voicevox_speaker_id: env_value("VOICEVOX_SPEAKER_ID", ""),
             voicevox_credit: optional_env_value("VOICEVOX_CREDIT"),
+            voicevox_speed_scale: optional_f32_env_value("VOICEVOX_SPEED_SCALE")?,
+            voicevox_pitch_scale: optional_f32_env_value("VOICEVOX_PITCH_SCALE")?,
+            voicevox_intonation_scale: optional_f32_env_value("VOICEVOX_INTONATION_SCALE")?,
+            voicevox_volume_scale: optional_f32_env_value("VOICEVOX_VOLUME_SCALE")?,
+            voicevox_pre_phoneme_length: optional_f32_env_value("VOICEVOX_PRE_PHONEME_LENGTH")?,
+            voicevox_post_phoneme_length: optional_f32_env_value("VOICEVOX_POST_PHONEME_LENGTH")?,
             google_client_id: optional_env_value("GOOGLE_CLIENT_ID"),
         };
 
@@ -147,6 +159,30 @@ impl Config {
                 require_non_empty(
                     Some(self.voicevox_speaker_id.as_str()),
                     "VOICEVOX_SPEAKER_ID is required when AI_VOICE_PROVIDER=voicevox",
+                )?;
+                validate_finite_f32(
+                    self.voicevox_pitch_scale,
+                    "VOICEVOX_PITCH_SCALE must be a finite number",
+                )?;
+                validate_non_negative_f32(
+                    self.voicevox_speed_scale,
+                    "VOICEVOX_SPEED_SCALE must be a non-negative number",
+                )?;
+                validate_non_negative_f32(
+                    self.voicevox_intonation_scale,
+                    "VOICEVOX_INTONATION_SCALE must be a non-negative number",
+                )?;
+                validate_non_negative_f32(
+                    self.voicevox_volume_scale,
+                    "VOICEVOX_VOLUME_SCALE must be a non-negative number",
+                )?;
+                validate_non_negative_f32(
+                    self.voicevox_pre_phoneme_length,
+                    "VOICEVOX_PRE_PHONEME_LENGTH must be a non-negative number",
+                )?;
+                validate_non_negative_f32(
+                    self.voicevox_post_phoneme_length,
+                    "VOICEVOX_POST_PHONEME_LENGTH must be a non-negative number",
                 )
             }
             other => Err(format!(
@@ -180,6 +216,21 @@ fn optional_env_value(key: &str) -> Option<String> {
     env::var(key).ok().filter(|value| !value.trim().is_empty())
 }
 
+fn optional_f32_env_value(key: &str) -> Result<Option<f32>, String> {
+    let Some(value) = optional_env_value(key) else {
+        return Ok(None);
+    };
+    let parsed = value
+        .trim()
+        .parse::<f32>()
+        .map_err(|_| format!("{key} must be a number"))?;
+    if parsed.is_finite() {
+        Ok(Some(parsed))
+    } else {
+        Err(format!("{key} must be a finite number"))
+    }
+}
+
 fn require_non_empty(value: Option<&str>, message: &str) -> Result<(), String> {
     if value.map(|v| !v.trim().is_empty()).unwrap_or(false) {
         Ok(())
@@ -203,6 +254,25 @@ fn validate_voice_speech_text_policy(policy: &str) -> Result<(), String> {
         other => Err(format!(
             "AI_VOICE_SPEECH_TEXT_POLICY={other} is invalid. Allowed values: original, japanese_translation"
         )),
+    }
+}
+
+fn validate_non_negative_f32(value: Option<f32>, message: &str) -> Result<(), String> {
+    if value
+        .map(|value| value.is_finite() && value >= 0.0)
+        .unwrap_or(true)
+    {
+        Ok(())
+    } else {
+        Err(message.to_owned())
+    }
+}
+
+fn validate_finite_f32(value: Option<f32>, message: &str) -> Result<(), String> {
+    if value.map(f32::is_finite).unwrap_or(true) {
+        Ok(())
+    } else {
+        Err(message.to_owned())
     }
 }
 
@@ -238,6 +308,12 @@ mod tests {
             voicevox_base_url: "http://localhost:50021".to_owned(),
             voicevox_speaker_id: "".to_owned(),
             voicevox_credit: None,
+            voicevox_speed_scale: None,
+            voicevox_pitch_scale: None,
+            voicevox_intonation_scale: None,
+            voicevox_volume_scale: None,
+            voicevox_pre_phoneme_length: None,
+            voicevox_post_phoneme_length: None,
             google_client_id: None,
         }
     }
@@ -344,6 +420,36 @@ mod tests {
         config.voicevox_speaker_id = "1".to_owned();
 
         assert!(config.validate().is_ok());
+    }
+
+    #[test]
+    fn voicevox_voice_provider_accepts_tuning_config() {
+        let mut config = base_config();
+        config.ai_voice_provider = "voicevox".to_owned();
+        config.voicevox_base_url = "http://voicevox:50021".to_owned();
+        config.voicevox_speaker_id = "1".to_owned();
+        config.voicevox_speed_scale = Some(1.1);
+        config.voicevox_pitch_scale = Some(-0.03);
+        config.voicevox_intonation_scale = Some(1.2);
+        config.voicevox_volume_scale = Some(0.9);
+        config.voicevox_pre_phoneme_length = Some(0.05);
+        config.voicevox_post_phoneme_length = Some(0.08);
+
+        assert!(config.validate().is_ok());
+    }
+
+    #[test]
+    fn voicevox_voice_provider_rejects_negative_non_pitch_tuning() {
+        let mut config = base_config();
+        config.ai_voice_provider = "voicevox".to_owned();
+        config.voicevox_base_url = "http://voicevox:50021".to_owned();
+        config.voicevox_speaker_id = "1".to_owned();
+        config.voicevox_speed_scale = Some(-1.0);
+
+        let error = config
+            .validate()
+            .expect_err("negative speed scale should fail");
+        assert_eq!(error, "VOICEVOX_SPEED_SCALE must be a non-negative number");
     }
 
     #[test]

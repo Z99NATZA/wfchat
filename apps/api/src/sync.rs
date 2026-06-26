@@ -293,6 +293,12 @@ mod tests {
             voicevox_base_url: "http://localhost:50021".to_owned(),
             voicevox_speaker_id: "".to_owned(),
             voicevox_credit: None,
+            voicevox_speed_scale: None,
+            voicevox_pitch_scale: None,
+            voicevox_intonation_scale: None,
+            voicevox_volume_scale: None,
+            voicevox_pre_phoneme_length: None,
+            voicevox_post_phoneme_length: None,
             google_client_id: None,
         })
         .await
