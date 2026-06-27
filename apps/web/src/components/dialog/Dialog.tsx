@@ -105,7 +105,7 @@ function Dialog({
 				aria-modal="true"
 				aria-labelledby="wfchat-dialog-title"
 				aria-describedby={description ? "wfchat-dialog-description" : undefined}
-				className="relative w-full max-w-md overflow-hidden rounded-xl border border-dialog-border bg-dialog-panel text-app-text shadow-soft"
+				className="relative w-full max-w-md overflow-hidden rounded-xl border border-dialog-border bg-dialog-soft text-app-text shadow-soft"
 				style={{
 					transform: `translate(${offset.x}px, ${offset.y}px)`
 				}}
@@ -140,7 +140,9 @@ function Dialog({
 					</p>
 				)}
 				{content && <div className="px-5 pt-4">{content}</div>}
-				<div className="flex justify-end gap-2 px-5 py-5">{actions}</div>
+				<div className="flex justify-end gap-2 px-5 py-5">
+					{actions}
+				</div>
 			</section>
 		</div>,
 		document.body

@@ -201,7 +201,7 @@ function ChatSidebar({
 									<Ellipsis size={14} aria-hidden="true" />
 								</button>
 								{isMenuOpen && (
-					<div className="absolute right-1.5 top-9 z-20 min-w-36 rounded-lg border border-app-border bg-app-panel/82 p-1 shadow-soft">
+									<div className="absolute right-1.5 top-9 z-20 min-w-36 rounded-lg border border-app-border bg-app-panel/82 p-1 shadow-soft">
 										<button
 											type="button"
 											onClick={async () => {

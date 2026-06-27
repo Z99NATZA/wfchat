@@ -38,7 +38,7 @@ function ConfirmDialog({
 				<>
 					<button
 						type="button"
-						className="rounded-lg border border-dialog-border bg-dialog-soft px-4 py-2 text-sm font-medium text-app-text transition hover:border-primary hover:text-primary dark:hover:border-action-border dark:hover:bg-dialog-panel dark:hover:text-app-text"
+						className="rounded-lg border border-dialog-border bg-dialog-soft/65 px-4 py-2 text-sm font-medium text-muted transition hover:border-app-border hover:bg-app-soft hover:text-app-text focus:outline-none focus:ring-2 focus:ring-primary/20 dark:border-dialog-border/80 dark:bg-dialog-soft/70 dark:hover:border-action-border/70 dark:hover:bg-dialog-panel dark:hover:text-app-text dark:focus:ring-action-ring/25"
 						onClick={onCancel}
 					>
 						{cancelLabel ?? t("common.cancel")}
@@ -46,10 +46,10 @@ function ConfirmDialog({
 					<button
 						type="button"
 						className={cn(
-							"rounded-lg px-4 py-2 text-sm font-medium transition",
+							"rounded-lg border px-4 py-2 text-sm font-medium transition focus:outline-none focus:ring-2",
 							isDestructive
-								? "border border-red-400/25 bg-red-500/10 text-red-500 hover:border-red-400/50 hover:bg-red-500/15 dark:border-red-300/35 dark:bg-red-500/15 dark:text-red-200 dark:hover:border-red-300/60 dark:hover:bg-red-500/25 dark:hover:text-red-100"
-								: "bg-primary text-white hover:bg-primary-600 dark:border dark:border-action-border dark:bg-action dark:text-action-text dark:hover:bg-action-hover dark:hover:text-app-text"
+								? "border-red-200/80 bg-red-50/75 text-red-600 hover:border-red-300/80 hover:bg-red-100/80 hover:text-red-700 focus:ring-red-500/15 dark:border-red-400/25 dark:bg-red-500/10 dark:text-red-500 dark:hover:border-red-400/50 dark:hover:bg-red-500/15 dark:hover:text-red-500 dark:focus:ring-red-500/15"
+								: "border-action-border/75 bg-action text-action-text hover:border-primary hover:bg-action-hover dark:border-action-border dark:bg-action dark:hover:bg-action-hover dark:hover:text-app-text focus:ring-action-ring/25"
 						)}
 						onClick={onConfirm}
 					>
