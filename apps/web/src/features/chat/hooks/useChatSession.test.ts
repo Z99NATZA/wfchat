@@ -103,9 +103,66 @@ const persona: ChatPersona = {
 	avatarUrl: "/images/aiko-avatar.png"
 };
 
+class MockAudio {
+	src: string;
+	play = vi.fn(() => Promise.resolve());
+	pause = vi.fn();
+
+	constructor(src: string) {
+		this.src = src;
+		audioInstances.push(this);
+	}
+
+	addEventListener() {
+		// Playback event behavior is covered by useAssistantSpeechPlayback tests.
+	}
+}
+
+const audioInstances: MockAudio[] = [];
+
+class FakeMediaRecorder extends EventTarget {
+	static isTypeSupported = vi.fn(() => true);
+	mimeType = "audio/webm";
+	state: RecordingState = "inactive";
+
+	start() {
+		this.state = "recording";
+	}
+
+	requestData() {
+		// No-op for session-level interruption tests.
+	}
+
+	stop() {
+		this.state = "inactive";
+		this.dispatchEvent(new Event("stop"));
+	}
+}
+
+function installAssistantPlaybackMocks() {
+	audioInstances.length = 0;
+	vi.stubGlobal("Audio", MockAudio);
+	vi.spyOn(URL, "createObjectURL").mockImplementation((object) => `blob:${object instanceof Blob ? object.size : 0}`);
+	vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => undefined);
+	mocks.getAssistantMessageSpeech.mockResolvedValue(new Blob(["audio-one"]));
+}
+
+function installMicrophoneMocks() {
+	vi.stubGlobal("MediaRecorder", FakeMediaRecorder);
+	Object.defineProperty(navigator, "mediaDevices", {
+		configurable: true,
+		value: {
+			getUserMedia: vi.fn(async () => ({
+				getTracks: () => [{ stop: vi.fn() }]
+			}))
+		}
+	});
+}
+
 describe("useChatSession streaming sendMessage", () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
+		audioInstances.length = 0;
 		mocks.location.pathname = "/chat";
 		mocks.location.search = "";
 		mocks.confirm.mockResolvedValue(true);
@@ -125,6 +182,8 @@ describe("useChatSession streaming sendMessage", () => {
 
 	afterEach(() => {
 		cleanup();
+		vi.unstubAllGlobals();
+		vi.restoreAllMocks();
 	});
 
 	it("appends streaming tokens into one optimistic assistant message and replaces with server messages on done", async () => {
@@ -304,6 +363,109 @@ describe("useChatSession streaming sendMessage", () => {
 		const { result } = renderHook(() => useChatSession());
 
 		await waitFor(() => expect(result.current.isUserTranscriptionEnabled).toBe(true));
+	});
+
+	it("stops assistant playback when starting user speech input", async () => {
+		installAssistantPlaybackMocks();
+		installMicrophoneMocks();
+		mocks.getChat.mockResolvedValue({
+			chatId: "chat-1",
+			messages: [message("assistant-1", "companion", "hello")]
+		});
+		const { result } = renderHook(() => useChatSession());
+
+		await act(async () => {
+			await result.current.selectSession("chat-1");
+		});
+		await act(async () => {
+			result.current.toggleAssistantSpeech("assistant-1");
+		});
+		await waitFor(() => expect(result.current.assistantSpeechPlayback.status).toBe("playing"));
+
+		act(() => {
+			result.current.toggleUserSpeechInput();
+		});
+
+		await waitFor(() => expect(result.current.userSpeechInput.status).toBe("recording"));
+		expect(audioInstances[0].pause).toHaveBeenCalledTimes(1);
+		expect(result.current.assistantSpeechPlayback).toEqual({ messageId: null, status: "idle" });
+	});
+
+	it("stops assistant playback and cancels speech input when sending a message", async () => {
+		installAssistantPlaybackMocks();
+		installMicrophoneMocks();
+		const serverMessages = [
+			message("server-user", "user", "next"),
+			message("server-ai", "companion", "reply")
+		];
+		mocks.getChat.mockResolvedValue({
+			chatId: "chat-1",
+			messages: [message("assistant-1", "companion", "hello")]
+		});
+		mocks.streamChatMessage.mockImplementation(async (_chatId, _content, handlers) => {
+			handlers.onStart?.({ chatId: "chat-1", personaId: "aiko" });
+			handlers.onDone?.({
+				chatId: "chat-1",
+				userMessage: serverMessages[0],
+				assistantMessage: serverMessages[1],
+				messages: serverMessages
+			});
+		});
+		const { result } = renderHook(() => useChatSession());
+
+		await act(async () => {
+			await result.current.selectSession("chat-1");
+		});
+		await act(async () => {
+			result.current.toggleAssistantSpeech("assistant-1");
+		});
+		await waitFor(() => expect(result.current.assistantSpeechPlayback.status).toBe("playing"));
+		act(() => {
+			result.current.toggleUserSpeechInput();
+		});
+		await waitFor(() => expect(result.current.userSpeechInput.status).toBe("recording"));
+		await act(async () => {
+			result.current.setDraft("next");
+		});
+
+		await act(async () => {
+			await result.current.sendMessage();
+		});
+
+		expect(audioInstances[0].pause).toHaveBeenCalled();
+		expect(result.current.userSpeechInput.status).toBe("idle");
+		expect(result.current.messages).toEqual(serverMessages);
+	});
+
+	it("stops assistant playback and cancels speech input when clearing chat", async () => {
+		installAssistantPlaybackMocks();
+		installMicrophoneMocks();
+		mocks.getChat.mockResolvedValue({
+			chatId: "chat-1",
+			messages: [message("assistant-1", "companion", "hello")]
+		});
+		mocks.clearChatMessages.mockResolvedValue([]);
+		const { result } = renderHook(() => useChatSession());
+
+		await act(async () => {
+			await result.current.selectSession("chat-1");
+		});
+		await act(async () => {
+			result.current.toggleAssistantSpeech("assistant-1");
+		});
+		await waitFor(() => expect(result.current.assistantSpeechPlayback.status).toBe("playing"));
+		act(() => {
+			result.current.toggleUserSpeechInput();
+		});
+		await waitFor(() => expect(result.current.userSpeechInput.status).toBe("recording"));
+
+		await act(async () => {
+			await result.current.clearChat();
+		});
+
+		expect(audioInstances[0].pause).toHaveBeenCalled();
+		expect(result.current.userSpeechInput.status).toBe("idle");
+		expect(result.current.messages).toEqual([]);
 	});
 
 	it("does not load invalid chat route segments as backend chat ids", async () => {

@@ -33,6 +33,10 @@ class FakeMediaRecorder extends EventTarget {
 		this.state = "recording";
 	}
 
+	requestData() {
+		// The final stop event supplies the deterministic test chunk.
+	}
+
 	stop() {
 		if (this.state === "inactive") {
 			return;
@@ -48,6 +52,14 @@ class FakeMediaRecorder extends EventTarget {
 	}
 }
 
+function createFakeMediaStream() {
+	const stop = vi.fn();
+	stoppedTracks.push(stop);
+	return {
+		getTracks: () => [{ stop }]
+	} as unknown as MediaStream;
+}
+
 describe("useUserSpeechTranscription", () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
@@ -57,13 +69,7 @@ describe("useUserSpeechTranscription", () => {
 		Object.defineProperty(navigator, "mediaDevices", {
 			configurable: true,
 			value: {
-				getUserMedia: vi.fn(async () => {
-					const stop = vi.fn();
-					stoppedTracks.push(stop);
-					return {
-						getTracks: () => [{ stop }]
-					} as unknown as MediaStream;
-				})
+				getUserMedia: vi.fn(async () => createFakeMediaStream())
 			}
 		});
 	});
@@ -136,6 +142,50 @@ describe("useUserSpeechTranscription", () => {
 		expect(transcribeUserSpeech).not.toHaveBeenCalled();
 		expect(onTranscript).not.toHaveBeenCalled();
 		expect(stoppedTracks[0]).toHaveBeenCalled();
+	});
+
+	it("does not start multiple recordings while microphone access is pending", async () => {
+		let resolveStream: ((stream: MediaStream) => void) | undefined;
+		vi.mocked(navigator.mediaDevices.getUserMedia).mockReturnValue(
+			new Promise<MediaStream>((resolve) => {
+				resolveStream = resolve;
+			})
+		);
+		const { result } = renderHook(() => useUserSpeechTranscription(vi.fn()));
+
+		act(() => {
+			result.current.toggleSpeechInput();
+			result.current.toggleSpeechInput();
+		});
+
+		expect(navigator.mediaDevices.getUserMedia).toHaveBeenCalledTimes(1);
+
+		await act(async () => {
+			resolveStream?.(createFakeMediaStream());
+			await Promise.resolve();
+		});
+		await waitFor(() => expect(result.current.speechInput.status).toBe("recording"));
+	});
+
+	it("does not start a new recording while transcription is in flight", async () => {
+		vi.mocked(transcribeUserSpeech).mockReturnValue(new Promise<string>(() => undefined));
+		const { result } = renderHook(() => useUserSpeechTranscription(vi.fn()));
+
+		act(() => {
+			result.current.toggleSpeechInput();
+		});
+		await waitFor(() => expect(result.current.speechInput.status).toBe("recording"));
+
+		act(() => {
+			result.current.toggleSpeechInput();
+		});
+		await waitFor(() => expect(result.current.speechInput.status).toBe("transcribing"));
+
+		act(() => {
+			result.current.toggleSpeechInput();
+		});
+
+		expect(navigator.mediaDevices.getUserMedia).toHaveBeenCalledTimes(1);
 	});
 
 	it("shows an error when microphone permission fails", async () => {

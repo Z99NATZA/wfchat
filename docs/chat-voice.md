@@ -38,6 +38,26 @@ User speech input behavior:
 - Speech-to-text must not block normal typed message entry, sending, SSE
   streaming, or chat navigation.
 
+Interruption behavior:
+
+- Assistant playback and push-to-talk input are mutually exclusive at the chat
+  UI orchestration layer.
+- Starting push-to-talk microphone input stops any current assistant playback
+  before microphone permission or recording work continues.
+- Sending a new message stops any current assistant playback and cancels any
+  active push-to-talk request, recording, or transcription so stale transcript
+  results cannot rewrite the next composer draft.
+- Clearing the current chat after confirmation stops assistant playback and
+  cancels any active push-to-talk flow before the delete request is applied.
+- Changing chat context, including selecting another chat, creating a draft
+  chat, switching persona, loading local markdown QA messages, navigating away,
+  or unmounting chat voice UI, stops playback and releases microphone resources.
+- Push-to-talk start is ignored while microphone permission is already
+  requesting, recording is active, or transcription is already in flight.
+- Stopping a recording requests a final data flush and transcribes exactly that
+  completed recording. Canceling a recording or transcription invalidates the
+  active token and aborts pending upload work.
+
 ## Explicit Non-Goals
 
 Do not include these in the current voice scope:
@@ -243,6 +263,9 @@ speaker, or speech policy changes.
 - Upload only a completed push-to-talk recording. Do not stream microphone audio
   in this milestone.
 - Insert transcript text into the composer draft instead of auto-sending it.
+- Coordinate voice interruption from the chat session boundary: assistant
+  playback owns audio cleanup, push-to-talk owns microphone/upload cleanup, and
+  chat actions call those local cleanup APIs before changing message context.
 
 Suggested first UI states:
 
@@ -373,6 +396,8 @@ Plan each as a separate scoped change:
 1. Session-only replay cache for generated audio.
 2. Optional auto-play setting for the latest assistant message.
 3. Voice interruption semantics.
+   - Done for assistant playback, push-to-talk input, send, clear, chat context
+     changes, and unmount cleanup.
 4. Avatar lip sync from playback audio or provider visemes.
 5. VOICEVOX provider with Japanese speech text policy.
 
@@ -510,6 +535,8 @@ Implemented for v1 with:
 - frontend push-to-talk microphone action in the composer
 - composer-local permission, recording, cancel, transcribing, retry/error, and
   cleanup states
+- voice interruption semantics for assistant playback, push-to-talk input,
+  message send, clear chat, chat context changes, and unmount cleanup
 - frontend guard against uploading header-only or too-small microphone
   recordings
 - normalized transcription upload content types for browser-generated audio

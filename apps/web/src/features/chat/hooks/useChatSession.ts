@@ -99,16 +99,26 @@ export function useChatSession({ onAvatarChatEvent }: UseChatSessionOptions = {}
 	const [routeChatId, setRouteChatId] = useState<string | null>(() =>
 		parseChatIdFromPath(location.pathname)
 	);
-	const { playback: assistantSpeechPlayback, toggleAssistantSpeech } =
-		useAssistantSpeechPlayback(activeChatId);
+	const {
+		playback: assistantSpeechPlayback,
+		stopAssistantSpeech,
+		toggleAssistantSpeech
+	} = useAssistantSpeechPlayback(activeChatId);
 	const applyUserSpeechTranscript = useCallback((text: string) => {
 		setDraft((currentDraft) => mergeDraftWithTranscript(currentDraft, text));
 	}, []);
 	const {
 		cancelSpeechInput: cancelUserSpeechInput,
 		speechInput: userSpeechInput,
-		toggleSpeechInput: toggleUserSpeechInput
+		toggleSpeechInput: toggleUserSpeechInputBase
 	} = useUserSpeechTranscription(applyUserSpeechTranscript);
+	const toggleUserSpeechInput = useCallback(() => {
+		if (userSpeechInput.status === "idle" || userSpeechInput.status === "error") {
+			stopAssistantSpeech();
+		}
+
+		toggleUserSpeechInputBase();
+	}, [stopAssistantSpeech, toggleUserSpeechInputBase, userSpeechInput.status]);
 
 	const activePersona = useMemo(() => {
 		const firstPersona = personas[0] ?? CHAT_PERSONAS[0];
@@ -419,6 +429,8 @@ export function useChatSession({ onAvatarChatEvent }: UseChatSessionOptions = {}
 	}, []);
 
 	const resetToDraft = useCallback(() => {
+		stopAssistantSpeech();
+		cancelUserSpeechInput();
 		setActiveChatId(null);
 		setMessages([]);
 		setDraft("");
@@ -428,22 +440,26 @@ export function useChatSession({ onAvatarChatEvent }: UseChatSessionOptions = {}
 		setErrorMessage(null);
 		setIsActiveChatReadOnly(false);
 		navigateToDraft();
-	}, [navigateToDraft]);
+	}, [cancelUserSpeechInput, navigateToDraft, stopAssistantSpeech]);
 
 	const loadMarkdownQaMessages = useCallback(() => {
 		if (!isMarkdownQaEnabled) {
 			return;
 		}
 
+		stopAssistantSpeech();
+		cancelUserSpeechInput();
 		setActiveChatId(null);
 		setMessages(MARKDOWN_QA_MESSAGES.map((message) => ({ ...message })));
 		setDraft("");
 		setErrorMessage(null);
 		setIsActiveChatReadOnly(false);
 		setIsSidebarOpen(false);
-	}, [isMarkdownQaEnabled]);
+	}, [cancelUserSpeechInput, isMarkdownQaEnabled, stopAssistantSpeech]);
 
 	function selectPersona(personaId: string) {
+		stopAssistantSpeech();
+		cancelUserSpeechInput();
 		setSelectedPersonaId(personaId);
 		setIsSidebarOpen(false);
 	}
@@ -452,6 +468,8 @@ export function useChatSession({ onAvatarChatEvent }: UseChatSessionOptions = {}
 		if (!selectedPersonaId || isCreatingSession) {
 			return;
 		}
+		stopAssistantSpeech();
+		cancelUserSpeechInput();
 		setErrorMessage(null);
 		setIsActiveChatReadOnly(false);
 		setActiveChatId(null);
@@ -466,6 +484,8 @@ export function useChatSession({ onAvatarChatEvent }: UseChatSessionOptions = {}
 			return;
 		}
 
+		stopAssistantSpeech();
+		cancelUserSpeechInput();
 		setErrorMessage(null);
 		try {
 			const chat = await getChat(sessionId);
@@ -500,6 +520,8 @@ export function useChatSession({ onAvatarChatEvent }: UseChatSessionOptions = {}
 			return;
 		}
 
+		stopAssistantSpeech();
+		cancelUserSpeechInput();
 		const createdAt = Math.floor(Date.now() / 1000);
 		const timestamp = formatMessageTime(new Date(createdAt * 1000));
 		const optimisticMessage: ChatMessage = {
@@ -667,6 +689,8 @@ export function useChatSession({ onAvatarChatEvent }: UseChatSessionOptions = {}
 			return;
 		}
 
+		stopAssistantSpeech();
+		cancelUserSpeechInput();
 		setIsClearing(true);
 		setErrorMessage(null);
 

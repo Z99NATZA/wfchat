@@ -39,6 +39,12 @@ export function useUserSpeechTranscription(onTranscript: (text: string) => void)
 		token: 0
 	});
 	const [speechInput, setSpeechInput] = useState<UserSpeechInputState>({ status: "idle" });
+	const speechInputStatusRef = useRef<UserSpeechInputStatus>("idle");
+
+	const setSpeechInputState = useCallback((nextSpeechInput: UserSpeechInputState) => {
+		speechInputStatusRef.current = nextSpeechInput.status;
+		setSpeechInput(nextSpeechInput);
+	}, []);
 
 	const releaseStream = useCallback(() => {
 		const resources = resourcesRef.current;
@@ -61,8 +67,8 @@ export function useUserSpeechTranscription(onTranscript: (text: string) => void)
 		}
 
 		releaseStream();
-		setSpeechInput({ status: "idle" });
-	}, [releaseStream]);
+		setSpeechInputState({ status: "idle" });
+	}, [releaseStream, setSpeechInputState]);
 
 	const handleRecordingStopped = useCallback(
 		async (token: number, recorder: MediaRecorder) => {
@@ -77,11 +83,11 @@ export function useUserSpeechTranscription(onTranscript: (text: string) => void)
 			releaseStream();
 
 			if (chunks.length === 0 || audio.size < MIN_TRANSCRIPTION_AUDIO_BYTES) {
-				setSpeechInput({ errorReason: "empty", status: "error" });
+				setSpeechInputState({ errorReason: "empty", status: "error" });
 				return;
 			}
 
-			setSpeechInput({ status: "transcribing" });
+			setSpeechInputState({ status: "transcribing" });
 			const abortController = new AbortController();
 			resourcesRef.current.abortController = abortController;
 
@@ -96,7 +102,7 @@ export function useUserSpeechTranscription(onTranscript: (text: string) => void)
 
 				resourcesRef.current.abortController = null;
 				onTranscript(text);
-				setSpeechInput({ status: "idle" });
+				setSpeechInputState({ status: "idle" });
 			} catch (error) {
 				if (resourcesRef.current.token !== token) {
 					return;
@@ -104,23 +110,24 @@ export function useUserSpeechTranscription(onTranscript: (text: string) => void)
 
 				resourcesRef.current.abortController = null;
 				if (error instanceof DOMException && error.name === "AbortError") {
-					setSpeechInput({ status: "idle" });
+					setSpeechInputState({ status: "idle" });
 					return;
 				}
 
 				const errorDetail = describeSpeechInputError(error);
 				console.warn("Voice transcription failed", error);
-				setSpeechInput({ errorDetail, errorReason: "transcription", status: "error" });
+				setSpeechInputState({ errorDetail, errorReason: "transcription", status: "error" });
 			}
 		},
-		[onTranscript, releaseStream]
+		[onTranscript, releaseStream, setSpeechInputState]
 	);
 
 	const startSpeechInput = useCallback(async () => {
+		const currentStatus = speechInputStatusRef.current;
 		if (
-			speechInput.status === "requesting" ||
-			speechInput.status === "recording" ||
-			speechInput.status === "transcribing"
+			currentStatus === "requesting" ||
+			currentStatus === "recording" ||
+			currentStatus === "transcribing"
 		) {
 			return;
 		}
@@ -130,7 +137,7 @@ export function useUserSpeechTranscription(onTranscript: (text: string) => void)
 			!navigator.mediaDevices?.getUserMedia ||
 			typeof MediaRecorder === "undefined"
 		) {
-			setSpeechInput({ errorReason: "unsupported", status: "error" });
+			setSpeechInputState({ errorReason: "unsupported", status: "error" });
 			return;
 		}
 
@@ -138,7 +145,7 @@ export function useUserSpeechTranscription(onTranscript: (text: string) => void)
 		resourcesRef.current.token = nextToken;
 		resourcesRef.current.shouldTranscribe = false;
 		resourcesRef.current.chunks = [];
-		setSpeechInput({ status: "requesting" });
+		setSpeechInputState({ status: "requesting" });
 
 		try {
 			const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -166,7 +173,7 @@ export function useUserSpeechTranscription(onTranscript: (text: string) => void)
 
 				resourcesRef.current.token += 1;
 				releaseStream();
-				setSpeechInput({
+				setSpeechInputState({
 					errorDetail: "MediaRecorder emitted an error event",
 					errorReason: "recording",
 					status: "error"
@@ -177,16 +184,16 @@ export function useUserSpeechTranscription(onTranscript: (text: string) => void)
 			});
 
 			recorder.start(RECORDING_TIMESLICE_MS);
-			setSpeechInput({ status: "recording" });
+			setSpeechInputState({ status: "recording" });
 		} catch (error) {
 			if (resourcesRef.current.token === nextToken) {
 				releaseStream();
 				const errorDetail = describeSpeechInputError(error);
 				console.warn("Microphone permission or device access failed", error);
-				setSpeechInput({ errorDetail, errorReason: "permission", status: "error" });
+				setSpeechInputState({ errorDetail, errorReason: "permission", status: "error" });
 			}
 		}
-	}, [handleRecordingStopped, releaseStream, speechInput.status]);
+	}, [handleRecordingStopped, releaseStream, setSpeechInputState]);
 
 	const stopAndTranscribeSpeechInput = useCallback(() => {
 		const resources = resourcesRef.current;
@@ -195,27 +202,28 @@ export function useUserSpeechTranscription(onTranscript: (text: string) => void)
 		}
 
 		resources.shouldTranscribe = true;
-		setSpeechInput({ status: "transcribing" });
+		setSpeechInputState({ status: "transcribing" });
 		try {
 			resources.recorder.requestData();
 		} catch {
 			// Some browser implementations reject requestData close to stop; stop still flushes final data.
 		}
 		resources.recorder.stop();
-	}, []);
+	}, [setSpeechInputState]);
 
 	const toggleSpeechInput = useCallback(() => {
-		if (speechInput.status === "recording") {
+		const currentStatus = speechInputStatusRef.current;
+		if (currentStatus === "recording") {
 			stopAndTranscribeSpeechInput();
 			return;
 		}
 
-		if (speechInput.status === "requesting" || speechInput.status === "transcribing") {
+		if (currentStatus === "requesting" || currentStatus === "transcribing") {
 			return;
 		}
 
 		void startSpeechInput();
-	}, [speechInput.status, startSpeechInput, stopAndTranscribeSpeechInput]);
+	}, [startSpeechInput, stopAndTranscribeSpeechInput]);
 
 	useEffect(() => cancelSpeechInput, [cancelSpeechInput]);
 

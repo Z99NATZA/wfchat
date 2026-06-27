@@ -1,5 +1,45 @@
 # Chat Voice Behavior History
 
+## 2026-06-27 - Define chat voice interruption semantics
+
+Status: Active
+
+Previous behavior:
+- Assistant playback could continue while the user started push-to-talk input,
+  sent a new message, or cleared the chat.
+- Push-to-talk had UI guards for requesting and transcribing states, but rapid
+  repeated toggles could still rely on React render timing.
+
+Decision:
+- Stop assistant playback before starting push-to-talk microphone input.
+- Stop assistant playback and cancel active push-to-talk work when sending a new
+  message, clearing chat after confirmation, or changing chat context.
+- Keep assistant playback cleanup in the playback hook and microphone/upload
+  cleanup in the transcription hook; orchestrate the interruption calls from
+  the chat session hook.
+- Track push-to-talk status in a ref as well as React state so repeated toggles
+  during requesting, recording, or transcribing cannot start overlapping
+  recordings.
+
+Why:
+- Voice UI should have one active foreground audio action at a time.
+- New chat actions should not leave stale playback or delayed transcription
+  results attached to a changed conversation or composer draft.
+
+Regression guard:
+- `apps/web/src/features/chat/hooks/useChatSession.test.ts` covers interruption
+  for starting push-to-talk, sending a message, and clearing chat.
+- `apps/web/src/features/chat/hooks/useUserSpeechTranscription.test.ts` covers
+  ignored repeated starts while microphone permission or transcription is in
+  flight.
+
+Related current contract:
+- `docs/chat-voice.md`
+
+Related implementation:
+- `apps/web/src/features/chat/hooks/useChatSession.ts`
+- `apps/web/src/features/chat/hooks/useUserSpeechTranscription.ts`
+
 ## 2026-06-26 - Add server-side VOICEVOX tuning configuration
 
 Status: Active
