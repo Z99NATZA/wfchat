@@ -18,13 +18,17 @@ cd wfchat
 # 'npm run init' creates or updates local env files from the example files.
 npm run init 
 
-# .env
-# VITE_GOOGLE_CLIENT_ID=
-# WFCHAT_PUBLIC_HOST=localhost
+# root .env values used by Docker Compose
+# VITE_GOOGLE_CLIENT_ID=        # optional Google sign-in client id for the web build
+# WFCHAT_PUBLIC_HOST=localhost  # set to this machine's LAN IP for phone/LAN testing
+# VOICEVOX_SPEAKER_ID=23        # VOICEVOX speaker/style id used by the API container
 
-# apps/api/.env
-# OPENAI_API_KEY=
-# GOOGLE_CLIENT_ID=
+# apps/api/.env values used by the API
+# OPENAI_API_KEY=               # required when AI_PROVIDER=openai or AI_TRANSCRIPTION_PROVIDER=openai
+# GOOGLE_CLIENT_ID=             # optional Google sign-in client id for auth verification
+# AI_PROVIDER=openai
+# AI_VOICE_PROVIDER=voicevox
+# AI_TRANSCRIPTION_PROVIDER=openai
 
 # start
 docker compose up -d --build
