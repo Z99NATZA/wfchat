@@ -12,6 +12,7 @@ import {
 } from "react";
 import { useDialog } from "@/components/dialog/DialogProvider";
 import Button from "@/components/ui/Button";
+import IconButton from "@/components/ui/IconButton";
 import ChatMessageContent from "@/features/chat/components/ChatMessageContent";
 import { useI18n } from "@/i18n";
 import type { ChatMessage } from "@/types/chat";
@@ -412,24 +413,24 @@ function ChatMessageList({
 					)}
 					{isUser && (
 						<div className="relative w-8 shrink-0 self-end" ref={isMenuOpen ? menuContainerRef : null}>
-							<button
-								type="button"
+							<IconButton
+								size="xs"
+								variant={isMenuOpen ? "selected" : "ghost"}
 								onClick={() =>
 									setActiveMessageMenuId((currentId) =>
 										currentId === message.id ? null : message.id
 									)
 								}
 								className={cn(
-									"ml-auto flex size-7 items-center justify-center rounded-md text-muted transition focus:outline-none focus:ring-2 focus:ring-primary/35",
-									isMenuOpen
-										? "bg-app-soft text-app-text"
-										: "opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100 hover:bg-app-soft hover:text-app-text"
+									"ml-auto",
+									!isMenuOpen &&
+										"opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100"
 								)}
 								aria-label={t("chat.messageList.openMessageActions")}
 								aria-expanded={isMenuOpen}
 							>
 								<Ellipsis size={14} aria-hidden="true" />
-							</button>
+							</IconButton>
 							{isMenuOpen && (
 								<div className="absolute bottom-8 left-0 z-20 min-w-44 rounded-lg border border-app-border bg-app-panel/92 p-1 text-app-text shadow-soft">
 									<Button
@@ -478,13 +479,9 @@ function ChatMessageList({
 												{t("chat.messageList.assistantSpeechFailed")}
 											</span>
 										)}
-										<button
-											type="button"
-											className={cn(
-												"flex size-7 shrink-0 items-center justify-center rounded-md text-muted transition hover:bg-app-soft hover:text-app-text focus:outline-none focus:ring-2 focus:ring-primary/30",
-												assistantSpeechStatus === "error" &&
-													"text-red-500 hover:text-red-500 focus:ring-red-500/30"
-											)}
+										<IconButton
+											size="xs"
+											variant={assistantSpeechStatus === "error" ? "danger" : "ghost"}
 											aria-label={assistantSpeechLabel(assistantSpeechStatus, t)}
 											title={assistantSpeechLabel(assistantSpeechStatus, t)}
 											onClick={() => onToggleAssistantSpeech?.(message.id)}
@@ -496,13 +493,13 @@ function ChatMessageList({
 											) : (
 												<Volume2 size={14} aria-hidden="true" />
 											)}
-										</button>
+										</IconButton>
 									</>
 								)}
 								{canCopyAssistantMessage && (
-									<button
-										type="button"
-										className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted transition hover:bg-app-soft hover:text-app-text focus:outline-none focus:ring-2 focus:ring-primary/30"
+									<IconButton
+										size="xs"
+										variant="ghost"
 										aria-label={
 											didCopyAssistantMessage
 												? t("chat.messageList.assistantMessageCopied")
@@ -520,7 +517,7 @@ function ChatMessageList({
 										) : (
 											<Clipboard size={14} aria-hidden="true" />
 										)}
-									</button>
+									</IconButton>
 								)}
 							</div>
 						</div>

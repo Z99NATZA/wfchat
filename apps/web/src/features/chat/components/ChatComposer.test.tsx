@@ -234,7 +234,7 @@ describe("ChatComposer", () => {
 		expect(status.textContent).toBe("0:00");
 		expect(status.textContent).not.toContain("chat.composer.recordingVoiceMessage");
 		expect(screen.getByTestId("chat-composer-recording-timer")).toBeTruthy();
-		expect(screen.getByTestId("chat-composer-speech-cancel").className).toContain("size-8");
+		expect(screen.getByTestId("chat-composer-speech-cancel").className).toContain("icon-button--sm");
 		expect(onToggleSpeechInput).toHaveBeenCalledTimes(1);
 		expect(onCancelSpeechInput).toHaveBeenCalledTimes(1);
 	});

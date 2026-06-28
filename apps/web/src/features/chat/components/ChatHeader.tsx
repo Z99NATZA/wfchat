@@ -28,9 +28,6 @@ type ChatHeaderProps = {
 	onOpenSettings: () => void;
 };
 
-const dangerButtonClassName =
-	"border-red-400/25 bg-red-500/10 text-red-500 hover:border-red-400/50 hover:bg-red-500/15 hover:text-red-500 focus:ring-red-500/15";
-
 function ChatHeader({
 	persona,
 	theme,
@@ -61,7 +58,7 @@ function ChatHeader({
 	};
 	const clearChatAction = (
 		<IconButton
-			className={dangerButtonClassName}
+			variant="danger"
 			aria-label={t("chat.header.clearChat")}
 			disabled={!canClearChat || isClearing}
 			title={canClearChat ? t("chat.header.clearChat") : t("chat.header.noMessagesToClear")}
@@ -89,7 +86,7 @@ function ChatHeader({
 					{...controlProps}
 					leadingActions={
 						<IconButton
-							className="hidden cursor-not-allowed opacity-45 grayscale md:flex"
+							className="hidden md:flex"
 							aria-label={t("chat.header.notifications")}
 							disabled
 							title={t("common.notSupportedYet")}

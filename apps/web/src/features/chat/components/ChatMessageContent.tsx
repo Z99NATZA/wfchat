@@ -2,6 +2,7 @@ import { Check, Clipboard } from "lucide-react";
 import { Fragment, useEffect, useRef, useState } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
+import IconButton from "@/components/ui/IconButton";
 import {
 	canHighlightCode,
 	getCachedHighlightedCode,
@@ -238,14 +239,14 @@ function CodeBlock({
 				<span className="min-w-0 truncate font-mono text-[11px] font-medium uppercase tracking-normal text-muted">
 					{language ?? "code"}
 				</span>
-				<button
-					type="button"
-					className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted transition hover:bg-app-panel/70 hover:text-app-text focus:outline-none focus:ring-2 focus:ring-primary/30"
+				<IconButton
+					size="xs"
+					variant="ghost"
 					aria-label={copyState === "copied" ? "Code copied" : "Copy code"}
 					onClick={copyCode}
 				>
 					{copyState === "copied" ? <Check size={14} aria-hidden="true" /> : <Clipboard size={14} aria-hidden="true" />}
-				</button>
+				</IconButton>
 			</div>
 			<pre className="max-w-full overflow-x-auto p-3 text-xs leading-5">
 				<code className="font-mono" data-markdown-code-highlighted={highlightedCode ? "true" : "false"}>

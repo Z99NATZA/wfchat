@@ -1,6 +1,7 @@
 import { PointerEvent, ReactNode, useEffect, useRef, useState } from "react";
 import { X } from "lucide-react";
 import { createPortal } from "react-dom";
+import IconButton from "@/components/ui/IconButton";
 
 type DialogProps = {
 	isOpen: boolean;
@@ -124,15 +125,16 @@ function Dialog({
 					<h2 id="wfchat-dialog-title" className="text-base font-semibold">
 						{title}
 					</h2>
-					<button
-						type="button"
+					<IconButton
+						size="sm"
+						variant="ghostDanger"
 						onPointerDown={(event) => event.stopPropagation()}
 						onClick={onClose}
-						className="absolute right-3 top-3 flex size-8 items-center justify-center rounded-md text-red-500/70 transition hover:bg-red-500/10 hover:text-red-500 focus:outline-none focus:ring-2 focus:ring-red-500/30"
+						className="absolute right-3 top-3"
 						aria-label="Close dialog"
 					>
 						<X size={16} aria-hidden="true" />
-					</button>
+					</IconButton>
 				</div>
 				{description && (
 					<p id="wfchat-dialog-description" className="px-5 pt-4 text-sm leading-6 text-muted">

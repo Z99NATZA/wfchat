@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { Ellipsis, Languages, Pencil, Sparkles, Trash2 } from "lucide-react";
 import Button from "@/components/ui/Button";
+import IconButton from "@/components/ui/IconButton";
 import { useI18n } from "@/i18n";
 import type { ChatPersona, MemoryFact, MemorySummary } from "@/types/chat";
 
@@ -214,14 +215,14 @@ function ChatDetailsPanel({
 										<p className="text-xs leading-5 text-app-text">{fact.content}</p>
 									)}
 								</div>
-								<button
-									type="button"
+								<IconButton
+									size="xs"
+									variant="ghost"
 									onClick={() => setOpenFactMenuId((current) => (current === fact.id ? null : fact.id))}
-									className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted transition hover:bg-app-panel hover:text-app-text"
 									aria-label={t("chat.details.memoryActions")}
 								>
 									<Ellipsis size={14} aria-hidden="true" />
-								</button>
+								</IconButton>
 								{openFactMenuId === fact.id && (
 									<div className="absolute right-2 top-10 z-10 min-w-32 rounded-md border border-app-border bg-app-panel/82 p-1 shadow-soft">
 										<Button
@@ -316,16 +317,16 @@ function ChatDetailsPanel({
 										<p className="text-xs leading-5 text-app-text">{summary.summary}</p>
 									)}
 								</div>
-								<button
-									type="button"
+								<IconButton
+									size="xs"
+									variant="ghost"
 									onClick={() =>
 										setOpenSummaryMenuId((current) => (current === summary.id ? null : summary.id))
 									}
-									className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted transition hover:bg-app-panel hover:text-app-text"
 									aria-label={t("chat.details.memoryActions")}
 								>
 									<Ellipsis size={14} aria-hidden="true" />
-								</button>
+								</IconButton>
 								{openSummaryMenuId === summary.id && (
 									<div className="absolute right-2 top-10 z-10 min-w-32 rounded-md border border-app-border bg-app-panel/82 p-1 shadow-soft">
 										<Button

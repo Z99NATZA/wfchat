@@ -22,12 +22,8 @@ type AppHeaderDesktopControlsProps = AppHeaderControlProps & {
 	trailingActions?: ReactNode;
 };
 
-const themeButtonClassName =
-	"hover:border-action-border hover:bg-action hover:text-action-text focus:ring-action-ring/25";
 const headerFieldClassName =
 	"dark:hover:border-action-border dark:focus-within:border-action-border dark:focus-within:ring-action-ring/25";
-const headerIconHoverClassName =
-	"dark:hover:border-action-border dark:hover:bg-action-hover dark:hover:text-app-text dark:focus-visible:ring-action-ring/25";
 
 export function AppHeaderDesktopControls({
 	theme,
@@ -81,7 +77,7 @@ export function AppHeaderDesktopControls({
 					))}
 				</select>
 			</label>
-			<IconButton className={themeButtonClassName} onClick={onToggleTheme} aria-label={nextThemeLabel}>
+			<IconButton onClick={onToggleTheme} aria-label={nextThemeLabel}>
 				{theme === "dark" ? <Sun size={18} aria-hidden="true" /> : <Moon size={18} aria-hidden="true" />}
 			</IconButton>
 			{trailingActions}
@@ -160,7 +156,7 @@ export function AppHeaderMobileControls({
 				<IconButton aria-label={t("chat.header.settings")} onClick={onOpenSettings}>
 					<Settings size={18} aria-hidden="true" />
 				</IconButton>
-				<IconButton className={themeButtonClassName} onClick={onToggleTheme} aria-label={nextThemeLabel}>
+				<IconButton onClick={onToggleTheme} aria-label={nextThemeLabel}>
 					{theme === "dark" ? <Sun size={18} aria-hidden="true" /> : <Moon size={18} aria-hidden="true" />}
 				</IconButton>
 				{actions}
@@ -177,9 +173,8 @@ type ProfileButtonProps = {
 
 function ProfileButton({ avatarUrl, hasAttentionBadge, onOpenProfile }: ProfileButtonProps) {
 	return (
-		<button
-			type="button"
-			className={`relative inline-flex h-10 w-10 items-center justify-center overflow-hidden rounded-lg border border-app-border bg-app-soft text-xs font-semibold text-app-text transition hover:border-primary hover:text-primary ${headerIconHoverClassName}`}
+		<IconButton
+			className="relative overflow-hidden text-xs font-semibold text-app-text"
 			onClick={onOpenProfile}
 		>
 			{avatarUrl ? (
@@ -193,6 +188,6 @@ function ProfileButton({ avatarUrl, hasAttentionBadge, onOpenProfile }: ProfileB
 					aria-hidden="true"
 				/>
 			)}
-		</button>
+		</IconButton>
 	);
 }

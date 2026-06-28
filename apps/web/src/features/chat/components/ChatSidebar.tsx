@@ -186,8 +186,9 @@ function ChatSidebar({
 										</span>
 									</span>
 								</Button>
-								<button
-									type="button"
+								<IconButton
+									size="xs"
+									variant={isMenuOpen ? "selected" : "ghost"}
 									aria-label={t("chat.sidebar.chatActions")}
 									onClick={() =>
 										setActiveSessionMenuId((currentId) =>
@@ -195,14 +196,14 @@ function ChatSidebar({
 										)
 									}
 									className={cn(
-										"absolute right-1.5 top-1.5 flex size-7 items-center justify-center rounded-md text-muted transition hover:bg-app-panel hover:text-app-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
+										"absolute right-1.5 top-1.5",
 										isMenuOpen
 											? "opacity-100"
 											: "opacity-100 lg:opacity-0 lg:group-hover:opacity-100 lg:group-focus-within:opacity-100"
 									)}
 								>
 									<Ellipsis size={14} aria-hidden="true" />
-								</button>
+								</IconButton>
 								{isMenuOpen && (
 									<div className="absolute right-1.5 top-9 z-20 min-w-36 rounded-lg border border-app-border bg-app-panel/82 p-1 shadow-soft">
 										<Button

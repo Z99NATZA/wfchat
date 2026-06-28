@@ -1,6 +1,7 @@
 import GoogleSignInButton from "@/components/auth/GoogleSignInButton";
 import { useDialogBackgroundSurface } from "@/components/dialog/useDialogBackgroundSurface";
 import Button from "@/components/ui/Button";
+import IconButton from "@/components/ui/IconButton";
 import { useI18n } from "@/i18n";
 import { CheckCircle2, LogOut, Mail, RefreshCw, User, X } from "lucide-react";
 import { type FormEvent, useEffect, useMemo, useState } from "react";
@@ -111,14 +112,14 @@ function AuthProfileDialog({
 						</h2>
 						{!isAuthenticated && <p className="mt-1 text-sm text-muted">{t("auth.profile.guestDescription")}</p>}
 					</div>
-					<button
-						type="button"
-						className="rounded-full bg-primary p-2 text-white transition hover:bg-primary-600 focus:outline-none focus:ring-4 focus:ring-primary/15"
+					<IconButton
+						variant="ghostDanger"
+						size="sm"
 						aria-label={t("auth.profile.close")}
 						onClick={onClose}
 					>
 						<X size={18} aria-hidden="true" />
-					</button>
+					</IconButton>
 				</header>
 
 				<div className="flex-1 space-y-4 overflow-y-auto px-5 py-4">

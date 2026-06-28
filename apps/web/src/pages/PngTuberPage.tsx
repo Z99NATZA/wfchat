@@ -30,7 +30,6 @@ import {
 	UserRound
 } from "lucide-react";
 import { useI18n } from "@/i18n";
-import { cn } from "@/utils/classNames";
 
 type PngTuberPageProps = {
 	activityBar: ReactNode;
@@ -43,9 +42,6 @@ const pngTuberAssets = [
 	{ nameKey: "pngtuber.assets.expressionSet", statusKey: "pngtuber.assets.ready", active: false },
 	{ nameKey: "pngtuber.assets.aiStateBridge", statusKey: "pngtuber.assets.markerOnly", active: false }
 ];
-
-const darkAppControlHoverClassName =
-	"dark:hover:border-action-border dark:hover:bg-action-hover dark:hover:text-app-text dark:focus-visible:ring-action-ring/25";
 
 const pngTuberMotionControls: Array<{
 	id: AvatarMotionState;
@@ -98,36 +94,28 @@ function PngTuberPage({ activityBar, backgroundImageUrl, headerControls }: PngTu
 								const isActive = motionState === control.id;
 
 								return (
-									<button
+									<IconButton
 										key={control.id}
-										type="button"
-										className={cn(
-											"flex size-7 items-center justify-center rounded-md text-muted transition hover:text-primary focus:outline-none focus:ring-2 focus:ring-primary/25",
-											darkAppControlHoverClassName,
-											isActive && "bg-app-panel text-app-text shadow-soft"
-										)}
+										size="xs"
+										variant={isActive ? "selected" : "ghost"}
 										aria-label={t(control.labelKey)}
 										title={t(control.labelKey)}
 										aria-pressed={isActive}
 										onClick={() => setMotionState(control.id)}
 									>
 										<Icon size={15} aria-hidden="true" />
-									</button>
+									</IconButton>
 								);
 							})}
 						</div>
-						<button
-							type="button"
-							className={cn(
-								"flex size-8 items-center justify-center rounded-lg border border-app-border bg-app-soft text-muted transition hover:border-primary hover:text-primary",
-								darkAppControlHoverClassName
-							)}
+						<IconButton
+							size="sm"
 							aria-label={t("pngtuber.viewport.expressionTool")}
 							title={t("pngtuber.viewport.expressionTool")}
 							onClick={handleCycleExpression}
 						>
 							<Sparkles size={16} aria-hidden="true" />
-						</button>
+						</IconButton>
 					</div>
 				</div>
 
@@ -161,16 +149,8 @@ function PngTuberPage({ activityBar, backgroundImageUrl, headerControls }: PngTu
 						{AIKO_PNGTUBER_EMOTIONS.map((emotion) => (
 							<Button
 								key={emotion.id}
-								variant="chip"
+								variant={emotion.id === activeEmotionId ? "selected" : "ghost"}
 								size="sm"
-								className={cn(
-									emotion.id === activeEmotionId
-										? "border-app-border bg-app-panel/92 text-muted hover:border-app-border"
-										: cn(
-												"border-transparent text-muted hover:border-app-border hover:bg-app-soft",
-												darkAppControlHoverClassName
-											)
-								)}
 								aria-pressed={emotion.id === activeEmotionId}
 								onClick={() => setExpression(emotion.id)}
 							>
@@ -271,7 +251,7 @@ function PngTuberHeader({ controls }: PngTuberHeaderProps) {
 	const { t } = useI18n();
 	const notificationPlaceholder = (
 		<IconButton
-			className="hidden cursor-not-allowed opacity-45 grayscale md:flex"
+			className="hidden md:flex"
 			aria-label={t("chat.header.notifications")}
 			disabled
 			title={t("common.notSupportedYet")}
@@ -281,7 +261,7 @@ function PngTuberHeader({ controls }: PngTuberHeaderProps) {
 	);
 	const deletePlaceholder = (
 		<IconButton
-			className="cursor-not-allowed border-red-400/25 bg-red-500/10 text-red-500 opacity-45 grayscale"
+			variant="danger"
 			aria-label={t("pngtuber.header.deleteDisabled")}
 			disabled
 			title={t("pngtuber.header.deleteDisabled")}
@@ -352,22 +332,14 @@ type ToolButtonProps = {
 
 function ToolButton({ icon: Icon, label, active = false }: ToolButtonProps) {
 	return (
-		<button
-			type="button"
-			className={cn(
-				"flex h-10 items-center justify-center rounded-lg border text-muted transition",
-				active
-					? "border-primary bg-app-soft text-primary dark:border-action-border dark:bg-action-hover dark:text-app-text"
-					: cn(
-							"border-app-border bg-app-soft/30 hover:border-primary/30 hover:bg-primary/10 hover:text-app-text",
-							darkAppControlHoverClassName
-						)
-			)}
+		<IconButton
+			variant={active ? "selected" : "default"}
+			fullWidth
 			aria-label={label}
 			title={label}
 		>
 			<Icon size={17} aria-hidden="true" />
-		</button>
+		</IconButton>
 	);
 }
 

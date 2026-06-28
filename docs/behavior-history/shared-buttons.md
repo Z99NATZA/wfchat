@@ -34,3 +34,35 @@ Related current contract:
 Related implementation:
 - `apps/web/src/components/ui/Button.tsx`
 - `apps/web/src/styles.css`
+
+## 2026-06-28 - Centralize icon-only buttons
+
+Status: Active
+
+Previous behavior:
+- Icon-only buttons used a mix of `IconButton` plus feature-local class strings and raw `<button>` elements.
+- Delete, settings, code-copy, message actions, drawer close, composer send, and avatar toolbar controls each carried their own color, hover, focus, size, or disabled classes.
+
+Problem observed:
+- Icon controls could drift from the header-bar settings/delete visual behavior and require per-feature dark-mode fixes.
+
+Decision:
+- Icon-only controls should use `IconButton` from `apps/web/src/components/ui/IconButton.tsx`.
+- Icon color, border, size, hover, focus, disabled, and dark-mode behavior should come from shared `.icon-button` classes in `apps/web/src/styles.css`.
+- Use `variant`, `size`, and `fullWidth` for visual differences; keep `className` limited to layout and responsive visibility.
+- Raw `<button>` remains acceptable for non-control backdrops and component implementation internals.
+
+Why:
+- Keeping icon-only controls on the same component preserves the header-bar visual behavior while allowing context-specific variants such as `danger`, `ghost`, `ghostDanger`, `selected`, and `action`.
+
+Regression guard:
+- Run the web build after changing icon variants or token mappings.
+- Manually check header settings/delete, composer send, message copy, drawer close, and small menu icons in light and dark mode after token changes.
+
+Related current contract:
+- `docs/components.md`
+- `docs/theme.md`
+
+Related implementation:
+- `apps/web/src/components/ui/IconButton.tsx`
+- `apps/web/src/styles.css`

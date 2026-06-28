@@ -5,7 +5,6 @@ import Button from "@/components/ui/Button";
 import IconButton from "@/components/ui/IconButton";
 import type { UserSpeechInputState } from "@/features/chat/hooks/useUserSpeechTranscription";
 import type { AppFont } from "@/types/font";
-import { cn } from "@/utils/classNames";
 
 type ChatComposerProps = {
 	draft: string;
@@ -183,7 +182,7 @@ function ChatComposer({
 					className="flex items-center gap-2 rounded-lg border border-app-border bg-app-soft/82 p-2 shadow-soft focus-within:border-primary focus-within:ring-4 focus-within:ring-primary/15"
 					onSubmit={handleSubmit}
 				>
-					<IconButton className="shrink-0 opacity-45 grayscale cursor-not-allowed" aria-label={t("chat.composer.attachFile")} disabled title={t("common.notSupportedYet")}>
+					<IconButton className="shrink-0" aria-label={t("chat.composer.attachFile")} disabled title={t("common.notSupportedYet")}>
 						<Paperclip size={18} aria-hidden="true" />
 					</IconButton>
 					<textarea
@@ -232,24 +231,21 @@ function ChatComposer({
 						</span>
 					) : null}
 					{isSpeechInputActive ? (
-						<button
-							type="button"
-							className="hidden size-8 shrink-0 items-center justify-center rounded-md text-muted transition hover:bg-app-panel hover:text-red-600 focus:outline-none focus:ring-2 focus:ring-primary/20 sm:flex"
+						<IconButton
+							size="sm"
+							variant="ghost"
+							className="hidden sm:flex"
 							aria-label={t("chat.composer.cancelVoiceMessage")}
 							data-testid="chat-composer-speech-cancel"
 							title={t("chat.composer.cancelVoiceMessage")}
 							onClick={onCancelSpeechInput}
 						>
 							<X size={14} aria-hidden="true" />
-						</button>
+						</IconButton>
 					) : null}
 					<IconButton
-						className={cn(
-							"hidden shrink-0 sm:flex",
-							!canUseSpeechInput && "cursor-not-allowed opacity-45 grayscale",
-							speechStatus === "recording" &&
-								"border-red-300 bg-red-50 text-red-700 hover:bg-red-100"
-						)}
+						className="hidden sm:flex"
+						variant={speechStatus === "recording" ? "danger" : "default"}
 						aria-label={speechInputLabel(speechStatus, t)}
 						aria-pressed={speechStatus === "recording"}
 						disabled={!canUseSpeechInput || speechStatus === "requesting" || speechStatus === "transcribing"}
@@ -268,12 +264,13 @@ function ChatComposer({
 							<Mic size={18} aria-hidden="true" />
 						)}
 					</IconButton>
-					<IconButton className="hidden shrink-0 opacity-45 grayscale cursor-not-allowed sm:flex" aria-label={t("chat.composer.imagePrompt")} disabled title={t("common.notSupportedYet")}>
+					<IconButton className="hidden sm:flex" aria-label={t("chat.composer.imagePrompt")} disabled title={t("common.notSupportedYet")}>
 						<Image size={18} aria-hidden="true" />
 					</IconButton>
-					<button
+					<IconButton
 						type="submit"
-						className="flex size-11 shrink-0 items-center justify-center rounded-lg border border-action-border bg-action text-action-text shadow-soft transition hover:bg-action-hover focus:outline-none focus:ring-4 focus:ring-action-ring/25 disabled:cursor-not-allowed disabled:border-app-border disabled:bg-app-border disabled:text-muted disabled:opacity-60 disabled:shadow-none"
+						size="lg"
+						variant="action"
 						aria-label={isSending ? t("chat.composer.waitingForResponse") : t("chat.composer.sendMessage")}
 						disabled={isDisabled || isSending || !draft.trim()}
 						title={
@@ -283,7 +280,7 @@ function ChatComposer({
 						}
 					>
 						<Send size={18} aria-hidden="true" />
-					</button>
+					</IconButton>
 				</form>
 			</div>
 		</div>

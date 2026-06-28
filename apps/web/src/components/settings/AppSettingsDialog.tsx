@@ -2,6 +2,7 @@ import { Image, ScanFace, Volume2, X } from "lucide-react";
 import { type FormEvent, useEffect, useState } from "react";
 import { useDialogBackgroundSurface } from "@/components/dialog/useDialogBackgroundSurface";
 import Button from "@/components/ui/Button";
+import IconButton from "@/components/ui/IconButton";
 import { useI18n } from "@/i18n";
 import type { AvatarOverlayPosition, AvatarOverlaySize } from "@/stores/avatarOverlayStore";
 
@@ -85,14 +86,14 @@ function AppSettingsDialog({
 					<div>
 						<h2 className="text-xl font-semibold text-app-text">{t("settings.title")}</h2>
 					</div>
-					<button
-						type="button"
-						className="rounded-full bg-primary p-2 text-white transition hover:bg-primary-600 focus:outline-none focus:ring-4 focus:ring-primary/15"
+					<IconButton
+						variant="ghostDanger"
+						size="sm"
 						aria-label={t("settings.close")}
 						onClick={onClose}
 					>
 						<X size={18} aria-hidden="true" />
-					</button>
+					</IconButton>
 				</header>
 
 				<div className="chat-scroll flex-1 overflow-y-auto px-5 py-4">

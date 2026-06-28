@@ -55,7 +55,7 @@ function AppHeaderBar({
 						</IconButton>
 					)}
 					<IconButton
-						className="hidden cursor-not-allowed opacity-45 grayscale md:flex"
+						className="hidden md:flex"
 						aria-label={t("chat.header.back")}
 						disabled
 						title={t("common.notSupportedYet")}

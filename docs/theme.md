@@ -256,13 +256,21 @@ Do not use `bg-app-panel/62`, `bg-app-panel/82`, or `bg-app-soft/82` inside moda
 
 For header and app-toolbar controls that use `hover:border-primary` or `hover:text-primary`, add dark-mode hover overrides. In dark mode `primary` is intentionally close to the app shell color, so using it as hover text can make icons disappear.
 
-Recommended app-control hover pattern:
+Use `IconButton` for icon-only app controls. The component owns the hover,
+focus, disabled, and dark-mode classes:
 
 ```tsx
-<button className="border border-app-border bg-app-soft text-muted hover:border-primary hover:text-primary dark:hover:border-action-border dark:hover:bg-action-hover dark:hover:text-app-text">
+<IconButton aria-label="Settings">
 	...
-</button>
+</IconButton>
+<IconButton variant="danger" aria-label="Delete">
+	...
+</IconButton>
 ```
+
+Do not add raw icon-button color, border, hover, or dark-mode classes in feature
+components. Use `variant`, `size`, and `fullWidth`; reserve `className` for
+layout or responsive visibility.
 
 For select-like toolbar fields, keep the text stable and only make the border/ring readable:
 
@@ -353,6 +361,7 @@ Do:
 - Prefer `bg-app-panel/92` for chat bubbles and floating message controls.
 - Prefer `bg-app-soft` or `bg-app-soft/82` for nested controls inside those surfaces.
 - Use `Button` for non-icon text buttons instead of repeating button padding, border, focus, and dark-mode classes inline.
+- Use `IconButton` for icon-only buttons instead of repeating icon size, border, hover, focus, disabled, and dark-mode classes inline.
 
 Do not:
 
@@ -365,6 +374,7 @@ Do not:
 - Make text itself transparent to create visual softness.
 - Use one opacity value everywhere. Shells, nested controls, chat cards, and dialogs have different jobs.
 - Add new one-off text button class strings in feature components when an existing `Button` prop or variant covers the intent.
+- Add new one-off icon button class strings in feature components when an existing `IconButton` prop or variant covers the intent.
 
 ## Adding A New Component
 

@@ -7,7 +7,6 @@ import {
 import Button from "@/components/ui/Button";
 import IconButton from "@/components/ui/IconButton";
 import AppLayout from "@/layouts/AppLayout";
-import { cn } from "@/utils/classNames";
 import { useI18n } from "@/i18n";
 import {
 	Bell,
@@ -28,9 +27,6 @@ type Model2DPageProps = {
 	backgroundImageUrl: string;
 	headerControls: AppHeaderControlProps;
 };
-
-const darkAppControlHoverClassName =
-	"dark:hover:border-action-border dark:hover:bg-action-hover dark:hover:text-app-text dark:focus-visible:ring-action-ring/25";
 
 const modelAssets = [
 	{ nameKey: "model2d.assets.aikoLive2D", statusKey: "model2d.assets.rigPending", active: true },
@@ -151,7 +147,7 @@ function Model2DHeader({ controls }: Model2DHeaderProps) {
 	const { t } = useI18n();
 	const notificationPlaceholder = (
 		<IconButton
-			className="hidden cursor-not-allowed opacity-45 grayscale md:flex"
+			className="hidden md:flex"
 			aria-label={t("chat.header.notifications")}
 			disabled
 			title={t("common.notSupportedYet")}
@@ -161,7 +157,7 @@ function Model2DHeader({ controls }: Model2DHeaderProps) {
 	);
 	const deletePlaceholder = (
 		<IconButton
-			className="cursor-not-allowed border-red-400/25 bg-red-500/10 text-red-500 opacity-45 grayscale"
+			variant="danger"
 			aria-label={t("model2d.header.deleteDisabled")}
 			disabled
 			title={t("model2d.header.deleteDisabled")}
@@ -228,22 +224,14 @@ type ToolButtonProps = {
 
 function ToolButton({ icon: Icon, label, active = false }: ToolButtonProps) {
 	return (
-		<button
-			type="button"
-			className={cn(
-				"flex h-10 items-center justify-center rounded-lg border text-muted transition",
-				active
-					? "border-primary bg-app-soft text-primary dark:border-action-border dark:bg-action-hover dark:text-app-text"
-					: cn(
-							"border-app-border bg-app-soft/30 hover:border-primary/30 hover:bg-primary/10 hover:text-app-text",
-							darkAppControlHoverClassName
-						)
-			)}
+		<IconButton
+			variant={active ? "selected" : "default"}
+			fullWidth
 			aria-label={label}
 			title={label}
 		>
 			<Icon size={17} aria-hidden="true" />
-		</button>
+		</IconButton>
 	);
 }
 

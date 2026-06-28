@@ -7,7 +7,7 @@ Shared UI lives in `apps/web/src/components/ui`.
 Current shared components:
 
 - `Button`: shared non-icon command button styling for ordinary app and dialog actions.
-- `IconButton`: consistent icon-only button styling and accessibility defaults.
+- `IconButton`: shared icon-only button styling, sizing, visual variants, disabled state, and accessibility defaults.
 - `StatusDot`: small presence indicator used by chat headers.
 
 Dialog primitives live in `apps/web/src/components/dialog`.
@@ -33,7 +33,17 @@ Use `Button` for every non-icon button that contains visible text, with or witho
 <Button variant="ghostDestructive" size="menu" align="start" fullWidth>Delete chat</Button>
 ```
 
-Menu items, row selectors, segmented options, and switch rows should still use `Button` when they are implemented as text buttons. Use `variant`, `size`, `align`, `surface`, and `fullWidth` rather than one-off padding, border, hover, or dark-mode class strings. Use `IconButton` for icon-only controls.
+Menu items, row selectors, segmented options, and switch rows should still use `Button` when they are implemented as text buttons. Use `variant`, `size`, `align`, `surface`, and `fullWidth` rather than one-off padding, border, hover, or dark-mode class strings.
+
+Use `IconButton` for every icon-only control. Pick variants and sizes instead of adding one-off color, border, hover, focus, or disabled classes:
+
+```tsx
+<IconButton aria-label="Settings"><Settings size={18} /></IconButton>
+<IconButton variant="danger" aria-label="Delete"><Trash2 size={18} /></IconButton>
+<IconButton variant="ghost" size="xs" aria-label="More"><Ellipsis size={14} /></IconButton>
+```
+
+`IconButton` `className` should be limited to layout or visibility concerns such as `hidden`, `lg:hidden`, `absolute`, or `shrink-0`.
 
 ## Feature Components
 

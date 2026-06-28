@@ -214,11 +214,67 @@
 	}
 
 	.icon-button {
-		@apply flex size-10 items-center justify-center rounded-lg border border-app-border bg-app-soft text-muted transition hover:border-primary hover:text-primary focus:outline-none focus:ring-4 focus:ring-primary/15 dark:hover:border-action-border dark:hover:bg-action-hover dark:hover:text-app-text dark:focus:ring-action-ring/25;
+		@apply inline-flex shrink-0 items-center justify-center border transition focus:outline-none disabled:cursor-not-allowed disabled:opacity-60 disabled:grayscale;
+	}
+
+	.icon-button--xs {
+		@apply size-7 rounded-md;
+	}
+
+	.icon-button--sm {
+		@apply size-8 rounded-md;
+	}
+
+	.icon-button--md {
+		@apply size-10 rounded-lg;
+	}
+
+	.icon-button--lg {
+		@apply size-11 rounded-lg;
+	}
+
+	.icon-button--full {
+		@apply w-full;
+	}
+
+	.icon-button--default {
+		@apply border-app-border bg-app-soft text-muted hover:border-primary hover:text-primary focus:ring-4 focus:ring-primary/15 dark:hover:border-action-border dark:hover:bg-action-hover dark:hover:text-app-text dark:focus:ring-action-ring/25;
+	}
+
+	.icon-button--action {
+		@apply border-app-border bg-app-soft text-muted hover:border-action-border hover:bg-action hover:text-action-text focus:ring-4 focus:ring-action-ring/25 dark:hover:bg-action-hover dark:hover:text-app-text;
+	}
+
+	.icon-button--danger {
+		@apply border-red-400/25 bg-red-500/10 text-red-500 hover:border-red-400/50 hover:bg-red-500/15 focus:ring-4 focus:ring-red-500/15;
+	}
+
+	.icon-button--ghost {
+		@apply border-transparent bg-transparent text-muted hover:border-app-border hover:bg-app-soft hover:text-app-text focus:ring-2 focus:ring-primary/30 dark:hover:border-action-border dark:hover:bg-action-hover dark:hover:text-app-text dark:focus:ring-action-ring/25;
+	}
+
+	.icon-button--ghostDanger {
+		@apply border-transparent bg-transparent text-red-500/70 hover:border-red-400/25 hover:bg-red-500/10 hover:text-red-500 focus:ring-2 focus:ring-red-500/30;
+	}
+
+	.icon-button--selected {
+		@apply border-primary bg-app-soft text-primary focus:ring-2 focus:ring-primary/25 dark:border-action-border dark:bg-action-hover dark:text-app-text dark:focus:ring-action-ring/25;
 	}
 
 	.icon-button:disabled {
-		@apply cursor-not-allowed border-app-border text-muted/50 opacity-60 grayscale hover:border-app-border hover:text-muted/50 focus:ring-0;
+		@apply focus:ring-0;
+	}
+
+	.icon-button--default:disabled,
+	.icon-button--action:disabled,
+	.icon-button--ghost:disabled,
+	.icon-button--selected:disabled {
+		@apply border-app-border bg-app-soft text-muted/50 hover:border-app-border hover:bg-app-soft hover:text-muted/50;
+	}
+
+	.icon-button--danger:disabled,
+	.icon-button--ghostDanger:disabled {
+		@apply hover:border-red-400/25 hover:bg-red-500/10 hover:text-red-500;
 	}
 
 	.button {
