@@ -21,6 +21,7 @@ vi.mock("@/i18n", () => ({
 describe("ChatComposer", () => {
 	afterEach(() => {
 		cleanup();
+		vi.useRealTimers();
 		vi.restoreAllMocks();
 	});
 
@@ -206,9 +207,11 @@ describe("ChatComposer", () => {
 		expect(onToggleSpeechInput).toHaveBeenCalledTimes(1);
 	});
 
-	it("shows stop and cancel controls while recording voice input", () => {
+	it("shows stop, cancel, and compact elapsed recording feedback while recording voice input", () => {
 		const onToggleSpeechInput = vi.fn();
 		const onCancelSpeechInput = vi.fn();
+		vi.useFakeTimers();
+		vi.setSystemTime(new Date("2026-06-28T00:00:00.000Z"));
 
 		render(
 			<ChatComposer
@@ -227,9 +230,31 @@ describe("ChatComposer", () => {
 		fireEvent.click(screen.getByRole("button", { name: "chat.composer.stopVoiceMessage" }));
 		fireEvent.click(screen.getByRole("button", { name: "chat.composer.cancelVoiceMessage" }));
 
-		expect(screen.getByRole("status").textContent).toBe("chat.composer.recordingVoiceMessage");
+		const status = screen.getByRole("status", { name: "chat.composer.recordingVoiceMessage" });
+		expect(status.textContent).toBe("0:00");
+		expect(status.textContent).not.toContain("chat.composer.recordingVoiceMessage");
+		expect(screen.getByTestId("chat-composer-recording-timer")).toBeTruthy();
+		expect(screen.getByTestId("chat-composer-speech-cancel").className).toContain("size-8");
 		expect(onToggleSpeechInput).toHaveBeenCalledTimes(1);
 		expect(onCancelSpeechInput).toHaveBeenCalledTimes(1);
+	});
+
+	it("does not render extra speech status or cancel controls when voice input is idle", () => {
+		render(
+			<ChatComposer
+				draft=""
+				font="inter"
+				companionName="Aiko"
+				isUserSpeechInputEnabled
+				onDraftChange={vi.fn()}
+				onSend={vi.fn()}
+			/>
+		);
+
+		expect(screen.queryByTestId("chat-composer-recording-timer")).toBeNull();
+		expect(screen.queryByTestId("chat-composer-speech-cancel")).toBeNull();
+		expect(screen.queryByRole("status")).toBeNull();
+		expect(screen.queryByRole("button", { name: "chat.composer.cancelVoiceMessage" })).toBeNull();
 	});
 
 	it("shows a specific microphone permission error", () => {
@@ -249,9 +274,9 @@ describe("ChatComposer", () => {
 			/>
 		);
 
-		expect(screen.getByRole("alert").textContent).toContain(
-			"chat.composer.voiceMessagePermissionFailed"
-		);
-		expect(screen.getByRole("alert").textContent).toContain("NotAllowedError");
+		const alert = screen.getByRole("alert");
+
+		expect(alert.textContent).toContain("chat.composer.voiceMessagePermissionFailed");
+		expect(alert.getAttribute("aria-label")).toContain("NotAllowedError");
 	});
 });

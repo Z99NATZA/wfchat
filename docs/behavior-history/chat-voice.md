@@ -2,7 +2,7 @@
 
 ## 2026-06-28 - Keep push-to-talk recording UI layout-stable
 
-Status: Planned
+Status: Active
 
 Previous behavior:
 - The composer could show an inline recording label while push-to-talk was
@@ -12,11 +12,10 @@ Previous behavior:
 
 Decision:
 - Keep visible recording feedback, but make it minimal and layout-stable.
-- Prefer a red microphone/recording indicator plus elapsed time, such as
-  `● 00:05`, over a full inline label.
-- Keep the composer height and control positions stable across recording state
-  changes by using reserved space, icon/color changes, or an overlay/absolute
-  positioned status.
+- Keep recording feedback inside the composer input row instead of adding a
+  separate status row below the input.
+- While recording, render compact controls in the order `time`, small `cancel`,
+  `microphone`, `image`, `send`.
 - Preserve accessibility with an accessible label for the recording state even
   when the visible UI is compact.
 
@@ -26,11 +25,16 @@ Why:
   makes the input feel unstable.
 
 Regression guard:
-- Add or update frontend tests when implemented to verify the recording state
-  renders without changing the composer layout contract.
+- `apps/web/src/features/chat/components/ChatComposer.test.tsx` verifies compact
+  elapsed recording feedback, the small inline cancel control, and no extra
+  idle speech status row.
 
 Related current contract:
 - `docs/chat-voice.md`
+
+Related implementation:
+- `apps/web/src/features/chat/components/ChatComposer.tsx`
+- `apps/web/src/features/chat/components/ChatComposer.test.tsx`
 
 ## 2026-06-27 - Define chat voice interruption semantics
 

@@ -1,4 +1,4 @@
-import { FormEvent, KeyboardEvent, useEffect, useRef } from "react";
+import { FormEvent, KeyboardEvent, useEffect, useRef, useState } from "react";
 import { Image, LoaderCircle, Mic, Paperclip, Send, Square, X } from "lucide-react";
 import { useI18n } from "@/i18n";
 import IconButton from "@/components/ui/IconButton";
@@ -50,6 +50,7 @@ function ChatComposer({
 	const { t } = useI18n();
 	const textareaRef = useRef<HTMLTextAreaElement>(null);
 	const wasSendingRef = useRef(false);
+	const [recordingElapsedSeconds, setRecordingElapsedSeconds] = useState(0);
 
 	useEffect(() => {
 		const textarea = textareaRef.current;
@@ -74,6 +75,23 @@ function ChatComposer({
 
 		wasSendingRef.current = isSending;
 	}, [isDisabled, isSending]);
+
+	useEffect(() => {
+		if (userSpeechInput.status !== "recording") {
+			setRecordingElapsedSeconds(0);
+			return;
+		}
+
+		const startedAt = Date.now();
+		const updateElapsedSeconds = () => {
+			setRecordingElapsedSeconds(Math.floor((Date.now() - startedAt) / 1000));
+		};
+
+		updateElapsedSeconds();
+		const intervalId = window.setInterval(updateElapsedSeconds, 1000);
+
+		return () => window.clearInterval(intervalId);
+	}, [userSpeechInput.status]);
 
 	function handleSubmit(event: FormEvent<HTMLFormElement>) {
 		event.preventDefault();
@@ -134,6 +152,7 @@ function ChatComposer({
 	const isSpeechInputActive =
 		speechStatus === "requesting" || speechStatus === "recording" || speechStatus === "transcribing";
 	const canUseSpeechInput = isUserSpeechInputEnabled && !isDisabled && !isSending;
+	const speechStatusText = speechInputStatusText(userSpeechInput, t);
 
 	return (
 		<div
@@ -163,7 +182,7 @@ function ChatComposer({
 					</div>
 				) : null}
 				<form
-					className="flex items-end gap-2 rounded-lg border border-app-border bg-app-soft/82 p-2 shadow-soft focus-within:border-primary focus-within:ring-4 focus-within:ring-primary/15"
+					className="flex items-center gap-2 rounded-lg border border-app-border bg-app-soft/82 p-2 shadow-soft focus-within:border-primary focus-within:ring-4 focus-within:ring-primary/15"
 					onSubmit={handleSubmit}
 				>
 					<IconButton className="shrink-0 opacity-45 grayscale cursor-not-allowed" aria-label={t("chat.composer.attachFile")} disabled title={t("common.notSupportedYet")}>
@@ -182,6 +201,50 @@ function ChatComposer({
 						onChange={(event) => onDraftChange(event.target.value)}
 						onKeyDown={handleDraftKeyDown}
 					/>
+					{speechStatus === "recording" ? (
+						<span
+							className="hidden h-8 shrink-0 items-center rounded-md px-1.5 font-mono text-xs tabular-nums text-red-600 sm:flex"
+							role="status"
+							aria-label={speechStatusText}
+							aria-live="polite"
+							data-testid="chat-composer-recording-timer"
+						>
+							{formatElapsedTime(recordingElapsedSeconds)}
+						</span>
+					) : speechStatus === "error" ? (
+						<span
+							className="hidden max-w-36 shrink truncate text-xs text-red-600 sm:block"
+							role="alert"
+							aria-label={
+								userSpeechInput.errorDetail
+									? `${speechStatusText}: ${userSpeechInput.errorDetail}`
+									: speechStatusText
+							}
+							title={
+								userSpeechInput.errorDetail
+									? `${speechStatusText}: ${userSpeechInput.errorDetail}`
+									: speechStatusText
+							}
+						>
+							{speechStatusText}
+						</span>
+					) : speechStatus !== "idle" ? (
+						<span className="sr-only" role="status" aria-live="polite">
+							{speechStatusText}
+						</span>
+					) : null}
+					{isSpeechInputActive ? (
+						<button
+							type="button"
+							className="hidden size-8 shrink-0 items-center justify-center rounded-md text-muted transition hover:bg-app-panel hover:text-red-600 focus:outline-none focus:ring-2 focus:ring-primary/20 sm:flex"
+							aria-label={t("chat.composer.cancelVoiceMessage")}
+							data-testid="chat-composer-speech-cancel"
+							title={t("chat.composer.cancelVoiceMessage")}
+							onClick={onCancelSpeechInput}
+						>
+							<X size={14} aria-hidden="true" />
+						</button>
+					) : null}
 					<IconButton
 						className={cn(
 							"hidden shrink-0 sm:flex",
@@ -207,16 +270,6 @@ function ChatComposer({
 							<Mic size={18} aria-hidden="true" />
 						)}
 					</IconButton>
-					{isSpeechInputActive ? (
-						<IconButton
-							className="hidden shrink-0 sm:flex"
-							aria-label={t("chat.composer.cancelVoiceMessage")}
-							title={t("chat.composer.cancelVoiceMessage")}
-							onClick={onCancelSpeechInput}
-						>
-							<X size={18} aria-hidden="true" />
-						</IconButton>
-					) : null}
 					<IconButton className="hidden shrink-0 opacity-45 grayscale cursor-not-allowed sm:flex" aria-label={t("chat.composer.imagePrompt")} disabled title={t("common.notSupportedYet")}>
 						<Image size={18} aria-hidden="true" />
 					</IconButton>
@@ -234,22 +287,6 @@ function ChatComposer({
 						<Send size={18} aria-hidden="true" />
 					</button>
 				</form>
-				{speechStatus !== "idle" ? (
-					<div
-						className={cn(
-							"min-h-5 px-1 text-xs text-muted",
-							speechStatus === "error" && "text-red-600"
-						)}
-						role={speechStatus === "error" ? "alert" : "status"}
-					>
-						<div>{speechInputStatusText(userSpeechInput, t)}</div>
-						{speechStatus === "error" && userSpeechInput.errorDetail ? (
-							<div className="mt-0.5 break-words text-[11px] text-muted">
-								{userSpeechInput.errorDetail}
-							</div>
-						) : null}
-					</div>
-				) : null}
 			</div>
 		</div>
 	);
@@ -299,4 +336,11 @@ function speechInputStatusText(
 		default:
 			return "";
 	}
+}
+
+function formatElapsedTime(totalSeconds: number): string {
+	const minutes = Math.floor(totalSeconds / 60);
+	const seconds = totalSeconds % 60;
+
+	return `${minutes}:${seconds.toString().padStart(2, "0")}`;
 }
