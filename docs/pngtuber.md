@@ -25,6 +25,7 @@ Implemented:
 Not implemented:
 
 - Live2D model loading, physics, motion priority, lip-sync, or runtime package.
+- Audio waveform, amplitude, phoneme, or viseme-driven PNGTuber lip sync.
 - Additional non-Aiko persona assets and bindings.
 - User-uploaded/custom PNG asset management.
 
@@ -106,6 +107,15 @@ assistant_replied -> inferred expression + talking, then idle
 assistant_error   -> sad + idle
 ```
 
+Planned assistant speech playback motion mapping:
+
+```text
+assistant_speech_loading -> current/inferred expression + thinking
+assistant_speech_playing -> inferred expression + talking
+assistant_speech_stopped -> current expression + idle
+assistant_speech_error   -> sad or current expression + idle
+```
+
 Expression inference currently lives in `avatarEmotionInference.ts` as a small keyword heuristic. It maps only to known expressions: `neutral`, `happy`, `shy`, `sad`, and `surprised`. If no rule matches, it defaults to `neutral`.
 
 Manual motion controls in PNGTuber Studio can preview idle, thinking, and talking. They update the shared runtime, so the chat overlay reflects the same selected motion while the app remains mounted.
@@ -113,6 +123,32 @@ Manual motion controls in PNGTuber Studio can preview idle, thinking, and talkin
 The PNGTuber Studio viewport keeps the decorative stage and performer visual non-interactive. The top expression control strip is the interactive layer and must stay above the renderer so emotion buttons remain tappable on small screens.
 
 Expression changes use a short fade/scale transition in `PngTuberRenderer`. Motion loops run on the image element while expression transitions run on the wrapper, so the animations do not override each other's transforms. PNGTuber animations respect reduced-motion preferences.
+
+## Assistant Speech Playback Motion
+
+Assistant text-to-speech playback should use the existing semantic avatar
+runtime instead of audio analysis. When the chat UI plays a finalized assistant
+message, the chat session boundary can notify the avatar bridge that speech is
+loading, playing, stopped, or failed. The renderer then uses the existing
+`thinking`, `talking`, and `idle` motion classes.
+
+Keep this scope narrow:
+
+- Drive motion from playback lifecycle state, not from waveform or amplitude.
+- Use `talking` only while audio playback is actually active.
+- Use `thinking` only while the speech request is loading or waiting to begin.
+- Return to `idle` on natural audio end, stop, error, interruption, chat change,
+  persona change, clear chat, navigation, or unmount.
+- Infer expression from the played assistant message text when available.
+- Do not add mouth-shape PNG assets, viseme mappings, Web Audio analysis, or
+  backend speech metadata in this scope.
+- Do not make `PngTuberRenderer` depend on chat, speech, provider, or audio
+  APIs. It should continue to receive only resolved emotion and semantic motion
+  state.
+
+This work is separate from real lip sync. Real lip sync should wait until there
+are mouth-shape assets, provider visemes, or a Live2D runtime that can represent
+mouth movement cleanly.
 
 ## Asset Loading And Cache
 

@@ -8,11 +8,20 @@ itself; use it to keep future implementation narrow and staged.
 The implemented voice scope covers assistant text-to-speech playback and
 user-initiated push-to-talk speech-to-text input.
 
+Planned avatar extension: assistant speech can drive the semantic PNGTuber
+motion state while audio playback is active. This is a small UI bridge from
+playback lifecycle to avatar runtime state, not audio analysis or lip sync.
+
 Assistant playback behavior:
 
 - Assistant messages can expose a speaker action after the message has final text.
 - The action requests speech audio for that assistant message text.
 - The frontend plays the returned audio and exposes clear loading, playing, stop, and retry states.
+- If the active assistant message belongs to an avatar-bound persona, speech
+  playback may set the PNGTuber to `thinking` while loading and `talking` while
+  audio is audibly playing.
+- Speech playback must return the PNGTuber to `idle` when playback ends, is
+  stopped, errors, is interrupted, or chat context changes.
 - For uncached playback, the frontend may stream supported audio responses
   through `MediaSource` so playback can begin before the full audio response is
   downloaded.
@@ -71,9 +80,53 @@ Do not include these in the current voice scope:
 - avatar lip sync or viseme generation
 - persisted audio files or audio history
 - provider/model selection controls in the chat UI
+- waveform, amplitude, phoneme, or viseme analysis for assistant playback
+- mouth-shape asset switching during assistant playback
 
 These can be planned as separate follow-up scopes after playback and
 push-to-talk input are stable.
+
+## Assistant Speech Avatar Motion
+
+This scope is only a semantic motion bridge:
+
+```text
+assistant speech loading -> avatar motionState: thinking
+assistant speech playing -> avatar motionState: talking
+assistant speech idle/error/stopped/interrupted -> avatar motionState: idle
+```
+
+Implementation rules:
+
+- Keep `useAssistantSpeechPlayback` focused on audio lifecycle and resource
+  cleanup. It should not import avatar runtime code.
+- Let the chat session boundary translate playback state into avatar events,
+  because it already knows the active persona, message list, current chat id,
+  and interruption lifecycle.
+- Route avatar updates through `avatarChatBridge.ts` or an equivalent
+  avatar-runtime bridge. Do not make chat message rendering import PNGTuber
+  renderer details.
+- Use existing semantic runtime state: `motionState: "thinking" | "talking" |
+  "idle"` and existing expression inference from the played assistant message
+  text when available.
+- Keep updates coarse. State should change only when playback enters loading,
+  playing, idle, stopped, or error states.
+- Do not decode audio, poll playback amplitude, inspect waveform data, request
+  provider visemes, or drive React state per animation frame.
+- Do not change backend speech endpoints, provider configuration, generated
+  audio format, message persistence, or `ChatMessage.text`.
+- Do not require the chat overlay to be visible. The avatar runtime can still
+  update while the overlay is hidden.
+
+Expected failure behavior:
+
+- If speech loading fails, return the avatar to `idle` or the existing error
+  expression path without leaving `talking` active.
+- If the user stops playback, sends another message, starts push-to-talk,
+  changes chat, changes persona, clears chat, or navigates away, stop playback
+  and return avatar motion to `idle`.
+- If the assistant speech is replayed from the session-only audio cache, it
+  should still drive `talking` while the cached audio plays.
 
 ## Recommended Flow
 
@@ -250,6 +303,8 @@ speaker, or speech policy changes.
 - Keep the existing session-only replay cache behavior. Cache only completed
   successful audio responses; do not cache failed or aborted requests.
 - Do not attach audio amplitude, waveform, or lip-sync updates to the chat message render path.
+- Speech playback may drive only coarse avatar runtime events from the chat
+  session boundary.
 - Do not auto-scroll the timeline because audio starts or stops.
 - Respect browser autoplay policies by requiring a user gesture for first playback.
 - Keep user recording/transcription state local to the composer or a small
@@ -398,8 +453,9 @@ Plan each as a separate scoped change:
 3. Voice interruption semantics.
    - Done for assistant playback, push-to-talk input, send, clear, chat context
      changes, and unmount cleanup.
-4. Avatar lip sync from playback audio or provider visemes.
-5. VOICEVOX provider with Japanese speech text policy.
+4. Assistant speech playback can drive PNGTuber semantic motion.
+5. Avatar lip sync from playback audio or provider visemes.
+6. VOICEVOX provider with Japanese speech text policy.
 
 ## Recommended Next Work Sequence
 
@@ -496,6 +552,18 @@ and realtime transport risks separate.
    - The endpoint returns `audio/wav` and preserves existing manual playback,
      retry, stop, and replay cache behavior.
    - Provider controls are not exposed in the normal chat UI.
+
+12. Add assistant speech playback motion for PNGTuber.
+   - Drive only coarse semantic avatar runtime state from speech playback
+     lifecycle.
+   - Use `thinking` while speech audio is loading and `talking` while audio is
+     playing.
+   - Return to `idle` on end, stop, error, interruption, chat change, persona
+     change, navigation, and unmount.
+   - Keep the audio hook independent from avatar runtime code; route updates
+     through the chat session boundary and avatar bridge.
+   - Do not add waveform, amplitude, phoneme, viseme, mouth-shape asset, or
+     backend speech metadata work in this step.
 
 ## Current Status
 
