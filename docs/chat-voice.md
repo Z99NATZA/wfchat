@@ -44,6 +44,11 @@ User speech input behavior:
   as a chat message until the user sends it.
 - The frontend exposes clear permission, recording, cancel, transcribing, and
   retry/error states.
+- Recording feedback should be minimal and layout-stable. Prefer a red
+  microphone/recording indicator with elapsed time, such as `● 00:05`, over a
+  full inline label that changes composer height or shifts nearby controls.
+- Do not remove visible recording feedback entirely; keep a clear visual state
+  and accessible label such as `aria-label="Recording"` for screen readers.
 - Speech-to-text must not block normal typed message entry, sending, SSE
   streaming, or chat navigation.
 
@@ -309,6 +314,10 @@ speaker, or speech policy changes.
 - Respect browser autoplay policies by requiring a user gesture for first playback.
 - Keep user recording/transcription state local to the composer or a small
   feature-local hook.
+- Keep the composer height and control positions stable across idle,
+  permission, recording, cancel, transcribing, retry, and error states. Use
+  reserved space, icon/color changes, elapsed time, or an overlay/absolute
+  positioned status instead of inserting inline text that causes layout reflow.
 - Request microphone access only after a user gesture.
 - Stop microphone tracks on cancel, successful stop, chat navigation, and
   component unmount.

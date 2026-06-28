@@ -1,5 +1,37 @@
 # Chat Voice Behavior History
 
+## 2026-06-28 - Keep push-to-talk recording UI layout-stable
+
+Status: Planned
+
+Previous behavior:
+- The composer could show an inline recording label while push-to-talk was
+  active.
+- That label could change the chat input height or shift nearby controls when
+  recording started.
+
+Decision:
+- Keep visible recording feedback, but make it minimal and layout-stable.
+- Prefer a red microphone/recording indicator plus elapsed time, such as
+  `● 00:05`, over a full inline label.
+- Keep the composer height and control positions stable across recording state
+  changes by using reserved space, icon/color changes, or an overlay/absolute
+  positioned status.
+- Preserve accessibility with an accessible label for the recording state even
+  when the visible UI is compact.
+
+Why:
+- Users need clear confirmation that microphone recording is active.
+- The chat composer should not jump or reflow when recording starts because it
+  makes the input feel unstable.
+
+Regression guard:
+- Add or update frontend tests when implemented to verify the recording state
+  renders without changing the composer layout contract.
+
+Related current contract:
+- `docs/chat-voice.md`
+
 ## 2026-06-27 - Define chat voice interruption semantics
 
 Status: Active
