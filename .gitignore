@@ -7,6 +7,7 @@ apps/api/data
 .env.*
 !.env.example
 npm-debug.log*
+.codex-*.log
 Dockerfile.*
 .VSCodeCounter/
 me/
