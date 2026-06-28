@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { CHAT_PERSONAS, MARKDOWN_QA_MESSAGES } from "@/features/chat/data/chatFixtures";
 import { useAssistantSpeechPlayback } from "@/features/chat/hooks/useAssistantSpeechPlayback";
@@ -63,10 +63,20 @@ export type ChatSessionAvatarEvent =
 	| { type: "assistant_waiting"; chatId: string | null; personaId: string }
 	| { type: "assistant_streaming"; chatId: string; personaId: string }
 	| { type: "assistant_replied"; chatId: string; personaId: string; text: string }
-	| { type: "assistant_error"; chatId: string | null; personaId: string };
+	| { type: "assistant_error"; chatId: string | null; personaId: string }
+	| { type: "assistant_speech_loading"; chatId: string | null; personaId: string; text: string }
+	| { type: "assistant_speech_playing"; chatId: string | null; personaId: string; text: string }
+	| { type: "assistant_speech_stopped"; chatId: string | null; personaId: string }
+	| { type: "assistant_speech_error"; chatId: string | null; personaId: string };
 
 type UseChatSessionOptions = {
 	onAvatarChatEvent?: (event: ChatSessionAvatarEvent) => void;
+};
+
+type ActiveAssistantSpeechAvatarState = {
+	chatId: string | null;
+	messageId: string;
+	personaId: string;
 };
 
 export function useChatSession({ onAvatarChatEvent }: UseChatSessionOptions = {}) {
@@ -99,6 +109,8 @@ export function useChatSession({ onAvatarChatEvent }: UseChatSessionOptions = {}
 	const [routeChatId, setRouteChatId] = useState<string | null>(() =>
 		parseChatIdFromPath(location.pathname)
 	);
+	const activeAssistantSpeechAvatarRef = useRef<ActiveAssistantSpeechAvatarState | null>(null);
+	const assistantSpeechAvatarEventKeyRef = useRef<string | null>(null);
 	const {
 		playback: assistantSpeechPlayback,
 		stopAssistantSpeech,
@@ -249,6 +261,82 @@ export function useChatSession({ onAvatarChatEvent }: UseChatSessionOptions = {}
 	useEffect(() => {
 		cancelUserSpeechInput();
 	}, [activeChatId, cancelUserSpeechInput]);
+
+	useEffect(() => {
+		if (!onAvatarChatEvent || !selectedPersonaId) {
+			return;
+		}
+
+		const { messageId, status } = assistantSpeechPlayback;
+		const speechMessage = messageId
+			? messages.find((message) => message.id === messageId && message.author === "companion")
+			: undefined;
+		const speechText = speechMessage?.text ?? "";
+
+		if ((status === "loading" || status === "playing") && messageId) {
+			const eventKey = `${status}:${activeChatId ?? ""}:${selectedPersonaId}:${messageId}:${speechText}`;
+			if (assistantSpeechAvatarEventKeyRef.current === eventKey) {
+				return;
+			}
+
+			activeAssistantSpeechAvatarRef.current = {
+				chatId: activeChatId,
+				messageId,
+				personaId: selectedPersonaId
+			};
+			assistantSpeechAvatarEventKeyRef.current = eventKey;
+			onAvatarChatEvent({
+				type: status === "loading" ? "assistant_speech_loading" : "assistant_speech_playing",
+				chatId: activeChatId,
+				personaId: selectedPersonaId,
+				text: speechText
+			});
+			return;
+		}
+
+		if (status === "error") {
+			const activeSpeechAvatar = activeAssistantSpeechAvatarRef.current;
+			if (!activeSpeechAvatar && !messageId) {
+				return;
+			}
+
+			const eventKey = `error:${activeChatId ?? ""}:${selectedPersonaId}:${messageId ?? ""}`;
+			if (assistantSpeechAvatarEventKeyRef.current === eventKey) {
+				return;
+			}
+
+			activeAssistantSpeechAvatarRef.current = null;
+			assistantSpeechAvatarEventKeyRef.current = eventKey;
+			onAvatarChatEvent({
+				type: "assistant_speech_error",
+				chatId: activeSpeechAvatar?.chatId ?? activeChatId,
+				personaId: activeSpeechAvatar?.personaId ?? selectedPersonaId
+			});
+			return;
+		}
+
+		if (status === "idle") {
+			const activeSpeechAvatar = activeAssistantSpeechAvatarRef.current;
+			if (!activeSpeechAvatar) {
+				assistantSpeechAvatarEventKeyRef.current = null;
+				return;
+			}
+
+			activeAssistantSpeechAvatarRef.current = null;
+			assistantSpeechAvatarEventKeyRef.current = null;
+			onAvatarChatEvent({
+				type: "assistant_speech_stopped",
+				chatId: activeSpeechAvatar.chatId,
+				personaId: activeSpeechAvatar.personaId
+			});
+		}
+	}, [
+		activeChatId,
+		assistantSpeechPlayback,
+		messages,
+		onAvatarChatEvent,
+		selectedPersonaId
+	]);
 
 	useEffect(() => {
 		let isCurrent = true;

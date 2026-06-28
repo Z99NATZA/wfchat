@@ -8,8 +8,8 @@ itself; use it to keep future implementation narrow and staged.
 The implemented voice scope covers assistant text-to-speech playback and
 user-initiated push-to-talk speech-to-text input.
 
-Planned avatar extension: assistant speech can drive the semantic PNGTuber
-motion state while audio playback is active. This is a small UI bridge from
+Assistant speech can drive the semantic PNGTuber motion state while audio
+playback is active. This is a small UI bridge from
 playback lifecycle to avatar runtime state, not audio analysis or lip sync.
 
 Assistant playback behavior:
@@ -454,6 +454,9 @@ Plan each as a separate scoped change:
    - Done for assistant playback, push-to-talk input, send, clear, chat context
      changes, and unmount cleanup.
 4. Assistant speech playback can drive PNGTuber semantic motion.
+   - Done for loading, playing, stopped, and error playback lifecycle states.
+   - Done through the chat session boundary and avatar bridge without importing
+     avatar runtime code into the audio hook.
 5. Avatar lip sync from playback audio or provider visemes.
 6. VOICEVOX provider with Japanese speech text policy.
 
@@ -554,15 +557,15 @@ and realtime transport risks separate.
    - Provider controls are not exposed in the normal chat UI.
 
 12. Add assistant speech playback motion for PNGTuber.
-   - Drive only coarse semantic avatar runtime state from speech playback
+   - Done with coarse semantic avatar runtime state from speech playback
      lifecycle.
-   - Use `thinking` while speech audio is loading and `talking` while audio is
+   - Done using `thinking` while speech audio is loading and `talking` while audio is
      playing.
-   - Return to `idle` on end, stop, error, interruption, chat change, persona
+   - Done returning to `idle` on end, stop, error, interruption, chat change, persona
      change, navigation, and unmount.
-   - Keep the audio hook independent from avatar runtime code; route updates
+   - Done keeping the audio hook independent from avatar runtime code; route updates
      through the chat session boundary and avatar bridge.
-   - Do not add waveform, amplitude, phoneme, viseme, mouth-shape asset, or
+   - Did not add waveform, amplitude, phoneme, viseme, mouth-shape asset, or
      backend speech metadata work in this step.
 
 ## Current Status
@@ -593,6 +596,8 @@ Implemented for v1 with:
 - user setting to show or hide assistant speech playback actions
 - optional user setting to auto-play the latest final assistant message
 - cleanup on stop, chat navigation, and unmount
+- assistant speech playback motion bridge for PNGTuber loading, playing,
+  stopped, and error states
 - backend tests for voice provider configuration, adapter behavior, and speech
   endpoint headers
 - manually verified OpenAI TTS playback end to end

@@ -9,7 +9,11 @@ export type ChatAvatarEvent =
 	| { type: "assistant_waiting"; chatId: string | null; personaId: string }
 	| { type: "assistant_streaming"; chatId: string; personaId: string }
 	| { type: "assistant_replied"; chatId: string; personaId: string; text: string }
-	| { type: "assistant_error"; chatId: string | null; personaId: string };
+	| { type: "assistant_error"; chatId: string | null; personaId: string }
+	| { type: "assistant_speech_loading"; chatId: string | null; personaId: string; text: string }
+	| { type: "assistant_speech_playing"; chatId: string | null; personaId: string; text: string }
+	| { type: "assistant_speech_stopped"; chatId: string | null; personaId: string }
+	| { type: "assistant_speech_error"; chatId: string | null; personaId: string };
 
 const TALKING_PREVIEW_MS = 1600;
 
@@ -73,6 +77,43 @@ export function useAvatarChatBridge() {
 					}, TALKING_PREVIEW_MS);
 					return;
 				case "assistant_error":
+					updateRuntimeState({
+						avatarId: binding.avatarId,
+						rendererKind: binding.rendererKind,
+						expressionId: binding.errorExpressionId,
+						motionState: "idle",
+						drivenBy: "chat-bridge"
+					});
+					return;
+				case "assistant_speech_loading":
+					updateRuntimeState({
+						avatarId: binding.avatarId,
+						rendererKind: binding.rendererKind,
+						expressionId: event.text.trim()
+							? inferExpressionIdFromText(event.text)
+							: binding.defaultExpressionId,
+						motionState: "thinking",
+						drivenBy: "chat-bridge"
+					});
+					return;
+				case "assistant_speech_playing":
+					updateRuntimeState({
+						avatarId: binding.avatarId,
+						rendererKind: binding.rendererKind,
+						expressionId: inferExpressionIdFromText(event.text),
+						motionState: "talking",
+						drivenBy: "chat-bridge"
+					});
+					return;
+				case "assistant_speech_stopped":
+					updateRuntimeState({
+						avatarId: binding.avatarId,
+						rendererKind: binding.rendererKind,
+						motionState: "idle",
+						drivenBy: "chat-bridge"
+					});
+					return;
+				case "assistant_speech_error":
 					updateRuntimeState({
 						avatarId: binding.avatarId,
 						rendererKind: binding.rendererKind,

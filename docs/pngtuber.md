@@ -20,6 +20,9 @@ Implemented:
 - Renderer-level expression transition polish with reduced-motion support.
 - Non-blocking PNGTuber asset preloading after app mount, so expression changes do not wait for first-use image fetches.
 - Chat SSE lifecycle wired into the PNGTuber bridge so Aiko can enter talking while stream tokens arrive.
+- Assistant speech playback lifecycle wired into the PNGTuber bridge so Aiko
+  can enter thinking while speech loads, talking while audio plays, and idle
+  when playback stops or fails.
 - Provider-native SSE token streaming for OpenAI-compatible providers with an Aiko streaming-safe response guard.
 
 Not implemented:
@@ -107,7 +110,7 @@ assistant_replied -> inferred expression + talking, then idle
 assistant_error   -> sad + idle
 ```
 
-Planned assistant speech playback motion mapping:
+Assistant speech playback motion mapping:
 
 ```text
 assistant_speech_loading -> current/inferred expression + thinking

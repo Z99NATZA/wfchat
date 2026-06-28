@@ -352,6 +352,108 @@ describe("useChatSession streaming sendMessage", () => {
 		await waitFor(() => expect(result.current.isAssistantSpeechEnabled).toBe(true));
 	});
 
+	it("notifies avatar motion events while assistant speech loads, plays, and stops", async () => {
+		installAssistantPlaybackMocks();
+		const avatarEvents: ChatSessionAvatarEvent[] = [];
+		let resolveSpeech: ((audio: Blob) => void) | undefined;
+		mocks.getAssistantMessageSpeech.mockReturnValue(
+			new Promise<Blob>((resolve) => {
+				resolveSpeech = resolve;
+			})
+		);
+		mocks.getChat.mockResolvedValue({
+			chatId: "chat-1",
+			messages: [message("assistant-1", "companion", "ขอบคุณมากนะ")]
+		});
+		const { result } = renderHook(() =>
+			useChatSession({ onAvatarChatEvent: (event) => avatarEvents.push(event) })
+		);
+
+		await act(async () => {
+			await result.current.selectSession("chat-1");
+		});
+		await act(async () => {
+			result.current.toggleAssistantSpeech("assistant-1");
+		});
+
+		await waitFor(() => expect(result.current.assistantSpeechPlayback.status).toBe("loading"));
+		expect(avatarEvents).toEqual([
+			{
+				type: "assistant_speech_loading",
+				chatId: "chat-1",
+				personaId: "aiko",
+				text: "ขอบคุณมากนะ"
+			}
+		]);
+
+		await act(async () => {
+			resolveSpeech?.(new Blob(["audio-one"]));
+			await Promise.resolve();
+		});
+
+		await waitFor(() => expect(result.current.assistantSpeechPlayback.status).toBe("playing"));
+		expect(avatarEvents).toEqual([
+			{
+				type: "assistant_speech_loading",
+				chatId: "chat-1",
+				personaId: "aiko",
+				text: "ขอบคุณมากนะ"
+			},
+			{
+				type: "assistant_speech_playing",
+				chatId: "chat-1",
+				personaId: "aiko",
+				text: "ขอบคุณมากนะ"
+			}
+		]);
+
+		act(() => {
+			result.current.toggleAssistantSpeech("assistant-1");
+		});
+
+		await waitFor(() => expect(result.current.assistantSpeechPlayback.status).toBe("idle"));
+		expect(avatarEvents).toEqual([
+			{
+				type: "assistant_speech_loading",
+				chatId: "chat-1",
+				personaId: "aiko",
+				text: "ขอบคุณมากนะ"
+			},
+			{
+				type: "assistant_speech_playing",
+				chatId: "chat-1",
+				personaId: "aiko",
+				text: "ขอบคุณมากนะ"
+			},
+			{ type: "assistant_speech_stopped", chatId: "chat-1", personaId: "aiko" }
+		]);
+	});
+
+	it("notifies avatar motion errors when assistant speech playback fails", async () => {
+		installAssistantPlaybackMocks();
+		const avatarEvents: ChatSessionAvatarEvent[] = [];
+		mocks.getAssistantMessageSpeech.mockRejectedValue(new Error("speech failed"));
+		mocks.getChat.mockResolvedValue({
+			chatId: "chat-1",
+			messages: [message("assistant-1", "companion", "hello")]
+		});
+		const { result } = renderHook(() =>
+			useChatSession({ onAvatarChatEvent: (event) => avatarEvents.push(event) })
+		);
+
+		await act(async () => {
+			await result.current.selectSession("chat-1");
+		});
+		await act(async () => {
+			result.current.toggleAssistantSpeech("assistant-1");
+		});
+
+		await waitFor(() => expect(result.current.assistantSpeechPlayback.status).toBe("error"));
+		expect(avatarEvents).toEqual([
+			{ type: "assistant_speech_error", chatId: "chat-1", personaId: "aiko" }
+		]);
+	});
+
 	it("exposes user speech transcription capability from chat UI config", async () => {
 		mocks.getChatUiConfig.mockResolvedValue({
 			personas: [persona],
