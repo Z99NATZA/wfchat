@@ -1,6 +1,7 @@
 import { createContext, ReactNode, useCallback, useContext, useMemo, useState } from "react";
 import ConfirmDialog from "@/components/dialog/ConfirmDialog";
 import Dialog from "@/components/dialog/Dialog";
+import Button from "@/components/ui/Button";
 import { useI18n } from "@/i18n";
 
 type ConfirmOptions = {
@@ -152,13 +153,13 @@ function DialogProvider({ children }: DialogProviderProps) {
 				description={alertState?.description}
 				onClose={closeAlert}
 				actions={
-					<button
-						type="button"
-						className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white transition hover:bg-primary-600"
+					<Button
+						surface="dialog"
+						variant="secondary"
 						onClick={closeAlert}
 					>
 						{alertState?.confirmLabel ?? t("common.ok")}
-					</button>
+					</Button>
 				}
 			/>
 			<Dialog
@@ -175,20 +176,19 @@ function DialogProvider({ children }: DialogProviderProps) {
 				}
 				actions={
 					<div className="flex items-center gap-2">
-						<button
-							type="button"
-							className="rounded-lg border border-dialog-border bg-dialog-soft px-4 py-2 text-sm font-medium text-app-text transition hover:border-primary hover:text-primary"
+						<Button
+							surface="dialog"
+							variant="secondary"
 							onClick={() => closeCustom(undefined)}
 						>
 							{customDialogState?.cancelLabel ?? t("common.cancel")}
-						</button>
-						<button
-							type="button"
-							className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white transition hover:bg-primary-600"
+						</Button>
+						<Button
+							variant="primary"
 							onClick={() => closeCustom(undefined)}
 						>
 							{customDialogState?.confirmLabel ?? t("common.done")}
-						</button>
+						</Button>
 					</div>
 				}
 			/>

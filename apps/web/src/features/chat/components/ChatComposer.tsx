@@ -1,6 +1,7 @@
 import { FormEvent, KeyboardEvent, useEffect, useRef, useState } from "react";
 import { Image, LoaderCircle, Mic, Paperclip, Send, Square, X } from "lucide-react";
 import { useI18n } from "@/i18n";
+import Button from "@/components/ui/Button";
 import IconButton from "@/components/ui/IconButton";
 import type { UserSpeechInputState } from "@/features/chat/hooks/useUserSpeechTranscription";
 import type { AppFont } from "@/types/font";
@@ -165,19 +166,16 @@ function ChatComposer({
 						aria-label={t("chat.composer.quickPrompts")}
 					>
 						{visibleQuickPrompts.map((prompt) => (
-							<button
+							<Button
 								key={prompt}
-								type="button"
-								className={cn(
-									"shrink-0 rounded-full border border-app-border bg-app-soft/76 px-3 py-1.5 text-xs font-medium text-app-text shadow-soft transition hover:border-primary/50 hover:bg-app-panel/86 focus:outline-none focus:ring-2 focus:ring-primary/25",
-									(isDisabled || isSending) &&
-										"cursor-not-allowed opacity-50 hover:border-app-border hover:bg-app-soft/76"
-								)}
+								variant="chip"
+								size="xs"
+								shape="pill"
 								disabled={isDisabled || isSending}
 								onClick={() => handleQuickPromptSelect(prompt)}
 							>
 								{prompt}
-							</button>
+							</Button>
 						))}
 					</div>
 				) : null}

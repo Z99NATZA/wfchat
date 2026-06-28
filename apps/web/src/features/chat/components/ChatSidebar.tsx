@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Ellipsis, MessageCircle, Plus, Search, Sparkles, Trash2, X } from "lucide-react";
+import Button from "@/components/ui/Button";
 import IconButton from "@/components/ui/IconButton";
 import { useI18n } from "@/i18n";
 import type { ChatPersona, ChatSessionSummary } from "@/types/chat";
@@ -147,15 +148,15 @@ function ChatSidebar({
 
 				<div className="flex items-center justify-between px-4 pt-3">
 					<p className="text-xs font-semibold uppercase tracking-wide text-muted">{t("chat.sidebar.chats")}</p>
-					<button
-						type="button"
+					<Button
 						onClick={onCreateSession}
 						disabled={isCreatingSession}
-						className="inline-flex h-8 items-center gap-1 rounded-lg border border-action-border bg-action px-2 text-xs font-semibold text-action-text transition hover:border-primary hover:bg-action-hover focus:outline-none focus:ring-2 focus:ring-action-ring/25 disabled:cursor-not-allowed disabled:border-app-border disabled:bg-app-border disabled:text-muted disabled:opacity-60 dark:hover:border-muted"
+						variant="action"
+						size="sm"
 					>
 						<Plus size={14} aria-hidden="true" />
 						{t("chat.sidebar.newChat")}
-					</button>
+					</Button>
 				</div>
 				<div className="flex-1 space-y-1 overflow-y-auto px-3 py-3">
 					{sessions.map((session) => {

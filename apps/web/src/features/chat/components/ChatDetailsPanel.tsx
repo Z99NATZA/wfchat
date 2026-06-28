@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { Ellipsis, Languages, Pencil, Sparkles, Trash2 } from "lucide-react";
+import Button from "@/components/ui/Button";
 import { useI18n } from "@/i18n";
 import type { ChatPersona, MemoryFact, MemorySummary } from "@/types/chat";
 
@@ -172,13 +173,14 @@ function ChatDetailsPanel({
 							placeholder={t("chat.details.memoryPlaceholder", { name: persona.name })}
 							className="h-9 min-w-0 flex-1 rounded-lg border border-app-border bg-app-soft px-3 text-sm text-app-text outline-none focus:border-primary"
 						/>
-						<button
+						<Button
 							type="submit"
 							disabled={!memoryDraft.trim() || isSavingMemoryFact}
-							className="h-9 shrink-0 rounded-lg bg-primary px-3 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
+							variant="primary"
+							size="sm"
 						>
 							{t("chat.details.memorySave")}
-						</button>
+						</Button>
 					</form>
 					<div className="mt-3 space-y-2">
 						{memoryFacts.slice(0, 8).map((fact) => (
@@ -192,20 +194,20 @@ function ChatDetailsPanel({
 												className="h-8 w-full rounded-md border border-app-border bg-app-panel px-2 text-xs text-app-text outline-none focus:border-primary"
 											/>
 											<div className="flex gap-2">
-												<button
-													type="button"
+												<Button
 													onClick={() => void handleSaveFactEdit(fact.id)}
-													className="h-7 rounded-md bg-primary px-2 text-xs font-semibold text-white"
+													variant="primary"
+													size="xs"
 												>
 													{t("chat.details.memorySave")}
-												</button>
-												<button
-													type="button"
+												</Button>
+												<Button
 													onClick={() => setEditingFactId(null)}
-													className="h-7 rounded-md border border-app-border px-2 text-xs text-muted"
+													variant="secondary"
+													size="xs"
 												>
 													{t("common.cancel")}
-												</button>
+												</Button>
 											</div>
 										</div>
 									) : (
@@ -269,13 +271,14 @@ function ChatDetailsPanel({
 							placeholder={t("chat.details.memorySummaryPlaceholder")}
 							className="h-9 min-w-0 flex-1 rounded-lg border border-app-border bg-app-soft px-3 text-sm text-app-text outline-none focus:border-primary"
 						/>
-						<button
+						<Button
 							type="submit"
 							disabled={!summaryDraft.trim() || isSavingMemorySummary}
-							className="h-9 shrink-0 rounded-lg bg-primary px-3 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
+							variant="primary"
+							size="sm"
 						>
 							{t("chat.details.memorySave")}
-						</button>
+						</Button>
 					</form>
 					<div className="mt-3 space-y-2">
 						{memorySummaries.slice(0, 6).map((summary) => (
@@ -289,20 +292,20 @@ function ChatDetailsPanel({
 												className="h-8 w-full rounded-md border border-app-border bg-app-panel px-2 text-xs text-app-text outline-none focus:border-primary"
 											/>
 											<div className="flex gap-2">
-												<button
-													type="button"
+												<Button
 													onClick={() => void handleSaveSummaryEdit(summary.id)}
-													className="h-7 rounded-md bg-primary px-2 text-xs font-semibold text-white"
+													variant="primary"
+													size="xs"
 												>
 													{t("chat.details.memorySave")}
-												</button>
-												<button
-													type="button"
+												</Button>
+												<Button
 													onClick={() => setEditingSummaryId(null)}
-													className="h-7 rounded-md border border-app-border px-2 text-xs text-muted"
+													variant="secondary"
+													size="xs"
 												>
 													{t("common.cancel")}
-												</button>
+												</Button>
 											</div>
 										</div>
 									) : (

@@ -11,6 +11,7 @@ import {
 	useState
 } from "react";
 import { useDialog } from "@/components/dialog/DialogProvider";
+import Button from "@/components/ui/Button";
 import ChatMessageContent from "@/features/chat/components/ChatMessageContent";
 import { useI18n } from "@/i18n";
 import type { ChatMessage } from "@/types/chat";
@@ -548,13 +549,13 @@ function ChatMessageList({
 					</div>
 					<p className="min-w-0 flex-1">{t("chat.messageList.banner", { name: companionName })}</p>
 					{onLoadMarkdownQaMessages && (
-						<button
-							type="button"
-							className="shrink-0 rounded-md border border-app-border bg-app-soft px-3 py-1.5 text-xs font-medium text-app-text transition hover:border-primary hover:text-primary dark:hover:border-action-border dark:hover:bg-action-hover dark:hover:text-app-text"
+						<Button
+							variant="secondary"
+							size="xs"
 							onClick={onLoadMarkdownQaMessages}
 						>
 							{t("chat.messageList.loadMarkdownQa")}
-						</button>
+						</Button>
 					)}
 				</div>
 
@@ -618,10 +619,11 @@ function ChatMessageList({
 
 			{showJumpToLatest && (
 				<div className="pointer-events-none absolute bottom-5 right-4 z-10 sm:right-8">
-					<button
-						type="button"
+					<Button
 						onClick={scrollToLatest}
-						className="pointer-events-auto inline-flex items-center gap-2 rounded-full border border-app-border bg-app-panel/92 px-4 py-2 text-sm font-medium text-app-text shadow-soft transition hover:border-primary hover:text-primary dark:border-action-border dark:bg-dialog-panel dark:text-app-text dark:hover:border-muted dark:hover:bg-action-hover dark:hover:text-app-text"
+						className="pointer-events-auto"
+						variant="floating"
+						shape="pill"
 					>
 						<ArrowDown size={16} aria-hidden="true" />
 						{t("chat.messageList.jumpToLatest")}
@@ -630,7 +632,7 @@ function ChatMessageList({
 								+{unseenMessageCount}
 							</span>
 						)}
-					</button>
+					</Button>
 				</div>
 			)}
 		</div>

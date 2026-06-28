@@ -1,5 +1,6 @@
 import GoogleSignInButton from "@/components/auth/GoogleSignInButton";
 import { useDialogBackgroundSurface } from "@/components/dialog/useDialogBackgroundSurface";
+import Button from "@/components/ui/Button";
 import { useI18n } from "@/i18n";
 import { CheckCircle2, LogOut, Mail, RefreshCw, User, X } from "lucide-react";
 import { type FormEvent, useEffect, useMemo, useState } from "react";
@@ -143,14 +144,14 @@ function AuthProfileDialog({
 								</div>
 							</div>
 							{isAuthenticated && (
-								<button
-									type="button"
-									className="inline-flex h-10 shrink-0 items-center gap-2 rounded-xl border border-red-400/25 bg-red-500/10 px-3 text-sm font-semibold text-red-500 transition hover:border-red-400/50 hover:bg-red-500/15 focus:outline-none focus:ring-4 focus:ring-red-500/15"
+								<Button
+									variant="destructive"
+									size="md"
 									onClick={onLogout}
 								>
 									<LogOut size={16} aria-hidden="true" />
 									{t("auth.profile.logout")}
-								</button>
+								</Button>
 							)}
 						</div>
 					</section>
@@ -198,15 +199,17 @@ function AuthProfileDialog({
 											onChange={(event) => setAvatarUrlDraft(event.target.value)}
 										/>
 									</label>
-									<button
+									<Button
 										type="submit"
-										className="w-full rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-white transition hover:bg-primary-600 disabled:cursor-not-allowed disabled:opacity-60"
+										variant="primary"
+										size="lg"
+										fullWidth
 										disabled={!displayNameDraft.trim() || isSavingProfile}
 									>
 										{isSavingProfile
 											? t("auth.profile.savingProfile")
 											: t("auth.profile.saveProfile")}
-									</button>
+									</Button>
 									{profileMessage && (
 										<p className="flex items-center gap-2 text-xs text-emerald-500">
 											<CheckCircle2 size={14} aria-hidden="true" />
@@ -231,14 +234,15 @@ function AuthProfileDialog({
 								</div>
 								{hasPendingGuestSync && (
 									<div className="mt-4 space-y-2">
-										<button
-											type="button"
-											className="w-full rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-white transition hover:bg-primary-600 disabled:cursor-not-allowed disabled:opacity-60"
+										<Button
+											variant="primary"
+											size="lg"
+											fullWidth
 											onClick={onSyncNow}
 											disabled={isSyncing}
 										>
 											{isSyncing ? t("auth.profile.syncing") : t("auth.profile.syncNow")}
-										</button>
+										</Button>
 										{syncError && <p className="text-xs text-red-500">{syncError}</p>}
 									</div>
 								)}

@@ -1,6 +1,7 @@
 import { Image, ScanFace, Volume2, X } from "lucide-react";
 import { type FormEvent, useEffect, useState } from "react";
 import { useDialogBackgroundSurface } from "@/components/dialog/useDialogBackgroundSurface";
+import Button from "@/components/ui/Button";
 import { useI18n } from "@/i18n";
 import { cn } from "@/utils/classNames";
 import type { AvatarOverlayPosition, AvatarOverlaySize } from "@/stores/avatarOverlayStore";
@@ -129,19 +130,20 @@ function AppSettingsDialog({
 								/>
 							</label>
 							<div className="grid grid-cols-2 gap-2">
-								<button
-									type="button"
-									className="rounded-xl border border-red-400/25 bg-red-500/10 px-4 py-3 text-sm font-semibold text-red-500 transition hover:border-red-400/50 hover:bg-red-500/15 focus:outline-none focus:ring-4 focus:ring-red-500/15"
+								<Button
+									variant="destructive"
+									size="lg"
 									onClick={handleClear}
 								>
 									{t("settings.background.clear")}
-								</button>
-								<button
+								</Button>
+								<Button
 									type="submit"
-									className="rounded-xl bg-primary px-4 py-3 text-sm font-semibold text-white transition hover:bg-primary-600"
+									variant="primary"
+									size="lg"
 								>
 									{t("settings.background.apply")}
-								</button>
+								</Button>
 							</div>
 						</form>
 					</section>

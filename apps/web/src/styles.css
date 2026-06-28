@@ -221,6 +221,62 @@
 		@apply cursor-not-allowed border-app-border text-muted/50 opacity-60 grayscale hover:border-app-border hover:text-muted/50 focus:ring-0;
 	}
 
+	.button {
+		@apply inline-flex shrink-0 items-center justify-center gap-2 whitespace-nowrap border font-semibold leading-none transition focus:outline-none disabled:cursor-not-allowed disabled:opacity-60;
+	}
+
+	.button--xs {
+		@apply min-h-7 rounded-md px-2 text-xs;
+	}
+
+	.button--sm {
+		@apply min-h-8 rounded-lg px-3 text-xs;
+	}
+
+	.button--md {
+		@apply min-h-10 rounded-lg px-4 text-sm;
+	}
+
+	.button--lg {
+		@apply min-h-11 rounded-xl px-4 text-sm;
+	}
+
+	.button--pill {
+		@apply rounded-full;
+	}
+
+	.button--full {
+		@apply w-full;
+	}
+
+	.button--action {
+		@apply border-action-border bg-action text-action-text shadow-soft hover:border-primary hover:bg-action-hover focus:ring-4 focus:ring-action-ring/25 disabled:border-app-border disabled:bg-app-border disabled:text-muted disabled:shadow-none dark:hover:border-muted dark:hover:text-app-text;
+	}
+
+	.button--primary {
+		@apply border-primary bg-primary text-white hover:bg-primary-600 focus:ring-4 focus:ring-primary/15 disabled:shadow-none dark:border-action-border dark:bg-action dark:text-action-text dark:hover:bg-action-hover dark:hover:text-app-text dark:focus:ring-action-ring/25;
+	}
+
+	.button--app-secondary {
+		@apply border-app-border bg-app-soft text-app-text hover:border-primary hover:text-primary focus:ring-2 focus:ring-primary/20 dark:hover:border-action-border dark:hover:bg-action-hover dark:hover:text-app-text dark:focus:ring-action-ring/25;
+	}
+
+	.button--dialog-secondary {
+		@apply border-dialog-border bg-dialog-soft text-app-text hover:border-primary hover:text-primary focus:ring-2 focus:ring-primary/20 dark:hover:border-action-border dark:hover:bg-dialog-panel dark:hover:text-app-text dark:focus:ring-action-ring/25;
+	}
+
+	.button--destructive {
+		@apply border-red-400/25 bg-red-500/10 text-red-500 hover:border-red-400/50 hover:bg-red-500/15 focus:ring-4 focus:ring-red-500/15;
+	}
+
+	.button--chip {
+		@apply border-app-border bg-app-soft/76 text-app-text shadow-soft hover:border-primary/50 hover:bg-app-panel/86 focus:ring-2 focus:ring-primary/25 disabled:hover:border-app-border disabled:hover:bg-app-soft/76;
+	}
+
+	.button--floating {
+		@apply border-app-border bg-app-panel/92 text-app-text shadow-soft hover:border-primary hover:text-primary focus:ring-4 focus:ring-primary/15 dark:border-action-border dark:bg-dialog-panel dark:text-app-text dark:hover:border-muted dark:hover:bg-action-hover dark:hover:text-app-text dark:focus:ring-action-ring/25;
+	}
+
 	.status-dot {
 		@apply size-2 rounded-full bg-emerald-400 ring-4 ring-emerald-400/15;
 	}

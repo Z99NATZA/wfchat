@@ -290,30 +290,43 @@ For select-like toolbar fields, keep the text stable and only make the border/ri
 
 ### Secondary Action Button
 
+For ordinary command buttons with visible text, use `Button` from
+`apps/web/src/components/ui/Button.tsx`. The component applies shared `.button`
+classes from `apps/web/src/styles.css`, so button padding, border, focus,
+disabled state, hover state, and dark-mode behavior stay consistent.
+
 For ordinary secondary actions in app chrome:
 
 ```tsx
-<button className="border border-app-border bg-app-soft text-app-text hover:border-primary hover:text-primary dark:hover:border-action-border dark:hover:bg-action-hover dark:hover:text-app-text">
+<Button variant="secondary">
 	Cancel
-</button>
+</Button>
 ```
 
 For ordinary secondary actions in dialogs:
 
 ```tsx
-<button className="border border-dialog-border bg-dialog-soft text-app-text hover:border-primary hover:text-primary">
+<Button variant="secondary" surface="dialog">
 	Cancel
-</button>
+</Button>
+```
+
+For high-contrast action buttons:
+
+```tsx
+<Button variant="action">
+	Sync now
+</Button>
 ```
 
 ### Destructive Action Button
 
-Use the existing red pattern:
+Use the destructive button variant:
 
 ```tsx
-<button className="border border-red-400/25 bg-red-500/10 text-red-500 hover:border-red-400/50 hover:bg-red-500/15">
+<Button variant="destructive">
 	Delete
-</button>
+</Button>
 ```
 
 ## Do And Do Not
@@ -330,6 +343,7 @@ Do:
 - Prefer `bg-app-panel/82` for app popovers and menus.
 - Prefer `bg-app-panel/92` for chat bubbles and floating message controls.
 - Prefer `bg-app-soft` or `bg-app-soft/82` for nested controls inside those surfaces.
+- Use `Button` for ordinary non-icon command buttons instead of repeating button padding, border, focus, and dark-mode classes inline.
 
 Do not:
 
@@ -341,6 +355,7 @@ Do not:
 - Use synced surfaces for high-count repeated items such as message bubbles.
 - Make text itself transparent to create visual softness.
 - Use one opacity value everywhere. Shells, nested controls, chat cards, and dialogs have different jobs.
+- Add new one-off text button class strings in feature components when an existing `Button` variant covers the intent.
 
 ## Adding A New Component
 

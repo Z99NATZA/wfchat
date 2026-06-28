@@ -6,6 +6,7 @@ Shared UI lives in `apps/web/src/components/ui`.
 
 Current shared components:
 
+- `Button`: shared non-icon command button styling for ordinary app and dialog actions.
 - `IconButton`: consistent icon-only button styling and accessibility defaults.
 - `StatusDot`: small presence indicator used by chat headers.
 
@@ -22,6 +23,16 @@ Use `useDialog()` from `DialogProvider` for consistent app-wide behavior:
 - `openCustom(options)`: custom content modal using a render callback.
 
 Shared components should be generic. Do not place chat-specific text, fixtures, or business behavior in this folder.
+
+Use `Button` for ordinary command buttons that contain visible text, with or without a leading icon. Pick the smallest variant and size that matches the command intent:
+
+```tsx
+<Button variant="primary" size="lg">Save</Button>
+<Button variant="secondary" surface="dialog">Cancel</Button>
+<Button variant="destructive">Delete</Button>
+```
+
+Do not use `Button` for icon-only controls, full-row list selectors, menu items, switches, or segmented controls unless that control is intentionally being redesigned to share command-button geometry. Use `IconButton` for icon-only controls.
 
 ## Feature Components
 

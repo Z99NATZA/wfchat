@@ -4,6 +4,7 @@ import {
 	AppHeaderMobileControls,
 	type AppHeaderControlProps
 } from "@/components/header/AppHeaderControls";
+import Button from "@/components/ui/Button";
 import IconButton from "@/components/ui/IconButton";
 import {
 	AIKO_PNGTUBER_EMOTIONS,
@@ -158,11 +159,11 @@ function PngTuberPage({ activityBar, backgroundImageUrl, headerControls }: PngTu
 						data-pngtuber-emotion-strip
 					>
 						{AIKO_PNGTUBER_EMOTIONS.map((emotion) => (
-							<button
+							<Button
 								key={emotion.id}
-								type="button"
+								variant="chip"
+								size="sm"
 								className={cn(
-									"rounded-lg border px-3 py-2 text-xs font-semibold shadow-soft transition",
 									emotion.id === activeEmotionId
 										? "border-app-border bg-app-panel/92 text-muted hover:border-app-border"
 										: cn(
@@ -174,7 +175,7 @@ function PngTuberPage({ activityBar, backgroundImageUrl, headerControls }: PngTu
 								onClick={() => setExpression(emotion.id)}
 							>
 								{t(emotion.labelKey)}
-							</button>
+							</Button>
 						))}
 					</div>
 				</div>
