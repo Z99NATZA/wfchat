@@ -216,18 +216,12 @@ function PngTuberSidebar({ activeEmotionId, onEmotionChange }: PngTuberSidebarPr
 				</p>
 				<div className="space-y-2">
 					{pngTuberAssets.map((asset) => (
-						<button
+						<Button
 							key={asset.nameKey}
-							type="button"
-							className={cn(
-								"flex w-full items-center gap-3 rounded-lg border p-3 text-left transition",
-								asset.active
-									? "border-primary/30 bg-primary/10"
-									: cn(
-											"border-transparent hover:border-app-border hover:bg-app-soft",
-											darkAppControlHoverClassName
-										)
-							)}
+							variant={asset.active ? "selected" : "ghost"}
+							size="row"
+							align="start"
+							fullWidth
 						>
 							<span className="flex size-10 shrink-0 items-center justify-center rounded-lg border border-app-border bg-app-soft text-muted">
 								<UserRound size={18} aria-hidden="true" />
@@ -236,7 +230,7 @@ function PngTuberSidebar({ activeEmotionId, onEmotionChange }: PngTuberSidebarPr
 								<span className="block truncate text-sm font-semibold text-app-text">{t(asset.nameKey)}</span>
 								<span className="text-xs text-muted">{t(asset.statusKey)}</span>
 							</span>
-						</button>
+						</Button>
 					))}
 				</div>
 				<p className="px-1 pb-2 pt-5 text-xs font-semibold uppercase text-muted">
@@ -244,18 +238,12 @@ function PngTuberSidebar({ activeEmotionId, onEmotionChange }: PngTuberSidebarPr
 				</p>
 				<div className="space-y-2">
 					{AIKO_PNGTUBER_EMOTIONS.map((emotion) => (
-						<button
+						<Button
 							key={emotion.id}
-							type="button"
-							className={cn(
-								"flex w-full items-center gap-3 rounded-lg border p-3 text-left transition",
-								emotion.id === activeEmotionId
-									? "border-primary/30 bg-primary/10"
-									: cn(
-											"border-transparent hover:border-app-border hover:bg-app-soft",
-											darkAppControlHoverClassName
-										)
-							)}
+							variant={emotion.id === activeEmotionId ? "selected" : "ghost"}
+							size="row"
+							align="start"
+							fullWidth
 							onClick={() => onEmotionChange(emotion.id)}
 						>
 							<span className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-app-border bg-app-soft text-muted">
@@ -267,7 +255,7 @@ function PngTuberSidebar({ activeEmotionId, onEmotionChange }: PngTuberSidebarPr
 								</span>
 								<span className="text-xs text-muted">{t(emotion.descriptionKey)}</span>
 							</span>
-						</button>
+						</Button>
 					))}
 				</div>
 			</div>

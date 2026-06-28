@@ -1,12 +1,23 @@
 import type { ButtonHTMLAttributes, ReactNode } from "react";
 import { cn } from "@/utils/classNames";
 
-type ButtonVariant = "action" | "primary" | "secondary" | "destructive" | "chip" | "floating";
-type ButtonSize = "xs" | "sm" | "md" | "lg";
+type ButtonVariant =
+	| "action"
+	| "primary"
+	| "secondary"
+	| "destructive"
+	| "chip"
+	| "floating"
+	| "ghost"
+	| "ghostDestructive"
+	| "selected";
+type ButtonSize = "xs" | "sm" | "md" | "lg" | "menu" | "row";
 type ButtonSurface = "app" | "dialog";
 type ButtonShape = "default" | "pill";
+type ButtonAlign = "center" | "start" | "between";
 
 type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
+	align?: ButtonAlign;
 	children: ReactNode;
 	fullWidth?: boolean;
 	shape?: ButtonShape;
@@ -16,6 +27,7 @@ type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
 };
 
 function Button({
+	align = "center",
 	children,
 	className,
 	fullWidth = false,
@@ -32,6 +44,7 @@ function Button({
 			className={cn(
 				"button",
 				`button--${size}`,
+				`button--align-${align}`,
 				variantClassName(variant, surface),
 				shape === "pill" && "button--pill",
 				fullWidth && "button--full",
@@ -47,6 +60,10 @@ function Button({
 function variantClassName(variant: ButtonVariant, surface: ButtonSurface): string {
 	if (variant === "secondary") {
 		return surface === "dialog" ? "button--dialog-secondary" : "button--app-secondary";
+	}
+
+	if (variant === "ghostDestructive") {
+		return "button--ghost-destructive";
 	}
 
 	return `button--${variant}`;

@@ -290,7 +290,7 @@ For select-like toolbar fields, keep the text stable and only make the border/ri
 
 ### Secondary Action Button
 
-For ordinary command buttons with visible text, use `Button` from
+For non-icon buttons with visible text, use `Button` from
 `apps/web/src/components/ui/Button.tsx`. The component applies shared `.button`
 classes from `apps/web/src/styles.css`, so button padding, border, focus,
 disabled state, hover state, and dark-mode behavior stay consistent.
@@ -319,6 +319,15 @@ For high-contrast action buttons:
 </Button>
 ```
 
+For menu and row actions, keep the same `Button` component and change only the
+variant, size, alignment, or width:
+
+```tsx
+<Button variant="ghostDestructive" size="menu" align="start" fullWidth>
+	Delete chat
+</Button>
+```
+
 ### Destructive Action Button
 
 Use the destructive button variant:
@@ -343,7 +352,7 @@ Do:
 - Prefer `bg-app-panel/82` for app popovers and menus.
 - Prefer `bg-app-panel/92` for chat bubbles and floating message controls.
 - Prefer `bg-app-soft` or `bg-app-soft/82` for nested controls inside those surfaces.
-- Use `Button` for ordinary non-icon command buttons instead of repeating button padding, border, focus, and dark-mode classes inline.
+- Use `Button` for non-icon text buttons instead of repeating button padding, border, focus, and dark-mode classes inline.
 
 Do not:
 
@@ -355,7 +364,7 @@ Do not:
 - Use synced surfaces for high-count repeated items such as message bubbles.
 - Make text itself transparent to create visual softness.
 - Use one opacity value everywhere. Shells, nested controls, chat cards, and dialogs have different jobs.
-- Add new one-off text button class strings in feature components when an existing `Button` variant covers the intent.
+- Add new one-off text button class strings in feature components when an existing `Button` prop or variant covers the intent.
 
 ## Adding A New Component
 

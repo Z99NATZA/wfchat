@@ -15,9 +15,10 @@ Problem observed:
 - The inconsistent styling made buttons hard to copy safely and easy to regress when theme tokens changed.
 
 Decision:
-- Ordinary command buttons with visible text should use `Button` from `apps/web/src/components/ui/Button.tsx`.
+- Non-icon buttons with visible text should use `Button` from `apps/web/src/components/ui/Button.tsx`.
 - Button color, border, padding, focus, hover, disabled, and dark-mode behavior should come from shared `.button` classes in `apps/web/src/styles.css`.
-- Icon-only controls stay on `IconButton`; list rows, menu items, switches, and segmented controls keep their own interaction-specific styling unless intentionally redesigned.
+- Menu items, row selectors, segmented options, and switch rows should use `Button` when they are text buttons, changing only `variant`, `size`, `align`, `surface`, and `fullWidth` as needed.
+- Icon-only controls stay on `IconButton` or icon-only local controls when they need specialized behavior.
 
 Why:
 - Centralizing the command-button contract keeps light and dark theme behavior token-driven while avoiding one-off feature styling for common actions.

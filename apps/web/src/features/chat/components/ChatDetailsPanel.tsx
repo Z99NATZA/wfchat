@@ -224,29 +224,33 @@ function ChatDetailsPanel({
 								</button>
 								{openFactMenuId === fact.id && (
 									<div className="absolute right-2 top-10 z-10 min-w-32 rounded-md border border-app-border bg-app-panel/82 p-1 shadow-soft">
-										<button
-											type="button"
+										<Button
 											onClick={() => {
 												setOpenFactMenuId(null);
 												setEditingFactId(fact.id);
 												setEditingFactDraft(fact.content);
 											}}
-											className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-app-text hover:bg-app-soft"
+											variant="ghost"
+											size="xs"
+											align="start"
+											fullWidth
 										>
 											<Pencil size={12} aria-hidden="true" />
 											{t("chat.details.memoryEdit")}
-										</button>
-										<button
-											type="button"
+										</Button>
+										<Button
 											onClick={async () => {
 												setOpenFactMenuId(null);
 												await onDeleteMemoryFact(fact.id);
 											}}
-											className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-red-500 hover:bg-app-soft"
+											variant="ghostDestructive"
+											size="xs"
+											align="start"
+											fullWidth
 										>
 											<Trash2 size={12} aria-hidden="true" />
 											{t("chat.details.memoryDelete")}
-										</button>
+										</Button>
 									</div>
 								)}
 							</div>
@@ -324,29 +328,33 @@ function ChatDetailsPanel({
 								</button>
 								{openSummaryMenuId === summary.id && (
 									<div className="absolute right-2 top-10 z-10 min-w-32 rounded-md border border-app-border bg-app-panel/82 p-1 shadow-soft">
-										<button
-											type="button"
+										<Button
 											onClick={() => {
 												setOpenSummaryMenuId(null);
 												setEditingSummaryId(summary.id);
 												setEditingSummaryDraft(summary.summary);
 											}}
-											className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-app-text hover:bg-app-soft"
+											variant="ghost"
+											size="xs"
+											align="start"
+											fullWidth
 										>
 											<Pencil size={12} aria-hidden="true" />
 											{t("chat.details.memoryEdit")}
-										</button>
-										<button
-											type="button"
+										</Button>
+										<Button
 											onClick={async () => {
 												setOpenSummaryMenuId(null);
 												await onDeleteMemorySummary(summary.id);
 											}}
-											className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-red-500 hover:bg-app-soft"
+											variant="ghostDestructive"
+											size="xs"
+											align="start"
+											fullWidth
 										>
 											<Trash2 size={12} aria-hidden="true" />
 											{t("chat.details.memorySummaryDelete")}
-										</button>
+										</Button>
 									</div>
 								)}
 							</div>

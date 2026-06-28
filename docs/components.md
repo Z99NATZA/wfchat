@@ -24,15 +24,16 @@ Use `useDialog()` from `DialogProvider` for consistent app-wide behavior:
 
 Shared components should be generic. Do not place chat-specific text, fixtures, or business behavior in this folder.
 
-Use `Button` for ordinary command buttons that contain visible text, with or without a leading icon. Pick the smallest variant and size that matches the command intent:
+Use `Button` for every non-icon button that contains visible text, with or without a leading icon. Pick the smallest variant and size that matches the command intent:
 
 ```tsx
 <Button variant="primary" size="lg">Save</Button>
 <Button variant="secondary" surface="dialog">Cancel</Button>
 <Button variant="destructive">Delete</Button>
+<Button variant="ghostDestructive" size="menu" align="start" fullWidth>Delete chat</Button>
 ```
 
-Do not use `Button` for icon-only controls, full-row list selectors, menu items, switches, or segmented controls unless that control is intentionally being redesigned to share command-button geometry. Use `IconButton` for icon-only controls.
+Menu items, row selectors, segmented options, and switch rows should still use `Button` when they are implemented as text buttons. Use `variant`, `size`, `align`, `surface`, and `fullWidth` rather than one-off padding, border, hover, or dark-mode class strings. Use `IconButton` for icon-only controls.
 
 ## Feature Components
 

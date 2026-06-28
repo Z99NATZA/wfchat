@@ -112,15 +112,12 @@ function ChatSidebar({
 
 				<nav className="space-y-2 border-b border-app-border p-3" aria-label={t("chat.sidebar.companions")}>
 					{personas.map((persona) => (
-						<button
+						<Button
 							key={persona.id}
-							type="button"
-							className={cn(
-								"flex w-full items-center gap-3 rounded-lg p-3 text-left transition",
-								persona.id === activePersonaId
-									? "bg-primary/10 text-app-text ring-1 ring-primary/20"
-									: "hover:bg-app-soft"
-							)}
+							variant={persona.id === activePersonaId ? "selected" : "ghost"}
+							size="row"
+							align="start"
+							fullWidth
 							onClick={() => onSelectPersona(persona.id)}
 						>
 							<div className="size-11 shrink-0 overflow-hidden rounded-lg border-2 border-primary/35 bg-app-soft">
@@ -142,7 +139,7 @@ function ChatSidebar({
 									{persona.unreadCount}
 								</span>
 							)}
-						</button>
+						</Button>
 					))}
 				</nav>
 
@@ -172,18 +169,23 @@ function ChatSidebar({
 										: "border-transparent hover:border-app-border hover:bg-app-soft"
 								)}
 							>
-								<button
-									type="button"
+								<Button
 									onClick={() => onSelectSession(session.id)}
-									className="w-full px-3 py-2 pr-10 text-left"
+									variant="ghost"
+									size="menu"
+									align="start"
+									fullWidth
+									className="pr-10"
 								>
-									<p className="truncate text-sm font-medium text-app-text">
-										{session.lastMessage || t("chat.sidebar.newChat")}
-									</p>
-									<p className="mt-1 text-[11px] text-muted">
-										{formatMessageTime(new Date(session.updatedAt * 1000))}
-									</p>
-								</button>
+									<span className="min-w-0">
+										<span className="block truncate text-sm font-medium text-app-text">
+											{session.lastMessage || t("chat.sidebar.newChat")}
+										</span>
+										<span className="mt-1 block text-[11px] text-muted">
+											{formatMessageTime(new Date(session.updatedAt * 1000))}
+										</span>
+									</span>
+								</Button>
 								<button
 									type="button"
 									aria-label={t("chat.sidebar.chatActions")}
@@ -203,17 +205,19 @@ function ChatSidebar({
 								</button>
 								{isMenuOpen && (
 									<div className="absolute right-1.5 top-9 z-20 min-w-36 rounded-lg border border-app-border bg-app-panel/82 p-1 shadow-soft">
-										<button
-											type="button"
+										<Button
 											onClick={async () => {
 												setActiveSessionMenuId(null);
 												await onDeleteSession(session.id);
 											}}
-											className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-red-500 transition hover:bg-app-soft"
+											variant="ghostDestructive"
+											size="menu"
+											align="start"
+											fullWidth
 										>
 											<Trash2 size={14} aria-hidden="true" />
 											{t("chat.sidebar.deleteChat")}
-										</button>
+										</Button>
 									</div>
 								)}
 							</div>

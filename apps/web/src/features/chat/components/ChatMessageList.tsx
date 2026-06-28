@@ -432,14 +432,16 @@ function ChatMessageList({
 							</button>
 							{isMenuOpen && (
 								<div className="absolute bottom-8 left-0 z-20 min-w-44 rounded-lg border border-app-border bg-app-panel/92 p-1 text-app-text shadow-soft">
-									<button
-										type="button"
+									<Button
 										onClick={() => hideUserMessage(message.id)}
-										className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition hover:bg-app-soft"
+										variant="ghost"
+										size="menu"
+										align="start"
+										fullWidth
 									>
 										<EyeOff size={15} aria-hidden="true" />
 										{t("chat.messageList.hideMessage")}
-									</button>
+									</Button>
 								</div>
 							)}
 						</div>

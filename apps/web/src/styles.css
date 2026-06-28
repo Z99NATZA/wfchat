@@ -222,7 +222,19 @@
 	}
 
 	.button {
-		@apply inline-flex shrink-0 items-center justify-center gap-2 whitespace-nowrap border font-semibold leading-none transition focus:outline-none disabled:cursor-not-allowed disabled:opacity-60;
+		@apply inline-flex shrink-0 items-center gap-2 whitespace-nowrap border font-semibold leading-none transition focus:outline-none disabled:cursor-not-allowed disabled:opacity-60;
+	}
+
+	.button--align-center {
+		@apply justify-center text-center;
+	}
+
+	.button--align-start {
+		@apply justify-start text-left;
+	}
+
+	.button--align-between {
+		@apply justify-between text-left;
 	}
 
 	.button--xs {
@@ -239,6 +251,14 @@
 
 	.button--lg {
 		@apply min-h-11 rounded-xl px-4 text-sm;
+	}
+
+	.button--menu {
+		@apply min-h-8 rounded-md px-3 py-2 text-sm;
+	}
+
+	.button--row {
+		@apply min-h-0 rounded-lg px-3 py-3 text-sm leading-normal;
 	}
 
 	.button--pill {
@@ -275,6 +295,18 @@
 
 	.button--floating {
 		@apply border-app-border bg-app-panel/92 text-app-text shadow-soft hover:border-primary hover:text-primary focus:ring-4 focus:ring-primary/15 dark:border-action-border dark:bg-dialog-panel dark:text-app-text dark:hover:border-muted dark:hover:bg-action-hover dark:hover:text-app-text dark:focus:ring-action-ring/25;
+	}
+
+	.button--ghost {
+		@apply border-transparent bg-transparent text-app-text hover:border-app-border hover:bg-app-soft focus:ring-2 focus:ring-primary/25 dark:hover:border-action-border dark:hover:bg-action-hover dark:hover:text-app-text dark:focus:ring-action-ring/25;
+	}
+
+	.button--ghost-destructive {
+		@apply border-transparent bg-transparent text-red-500 hover:border-red-400/25 hover:bg-red-500/10 focus:ring-2 focus:ring-red-500/15;
+	}
+
+	.button--selected {
+		@apply border-primary/30 bg-primary/10 text-app-text focus:ring-2 focus:ring-primary/25 dark:border-action-border dark:bg-action-hover dark:text-app-text dark:focus:ring-action-ring/25;
 	}
 
 	.status-dot {

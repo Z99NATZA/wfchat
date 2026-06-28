@@ -4,6 +4,7 @@ import {
 	AppHeaderMobileControls,
 	type AppHeaderControlProps
 } from "@/components/header/AppHeaderControls";
+import Button from "@/components/ui/Button";
 import IconButton from "@/components/ui/IconButton";
 import AppLayout from "@/layouts/AppLayout";
 import { cn } from "@/utils/classNames";
@@ -84,18 +85,12 @@ function Model2DSidebar() {
 				</p>
 				<div className="space-y-2">
 					{modelAssets.map((asset) => (
-						<button
+						<Button
 							key={asset.nameKey}
-							type="button"
-							className={cn(
-								"flex w-full items-center gap-3 rounded-lg border p-3 text-left transition",
-								asset.active
-									? "border-primary/30 bg-primary/10"
-									: cn(
-											"border-transparent hover:border-app-border hover:bg-app-soft",
-											darkAppControlHoverClassName
-										)
-							)}
+							variant={asset.active ? "selected" : "ghost"}
+							size="row"
+							align="start"
+							fullWidth
 						>
 							<span className="flex size-10 shrink-0 items-center justify-center rounded-lg border border-app-border bg-app-soft text-muted">
 								<Box size={18} aria-hidden="true" />
@@ -104,7 +99,7 @@ function Model2DSidebar() {
 								<span className="block truncate text-sm font-semibold text-app-text">{t(asset.nameKey)}</span>
 								<span className="text-xs text-muted">{t(asset.statusKey)}</span>
 							</span>
-						</button>
+						</Button>
 					))}
 				</div>
 			</div>

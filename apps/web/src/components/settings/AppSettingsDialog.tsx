@@ -3,7 +3,6 @@ import { type FormEvent, useEffect, useState } from "react";
 import { useDialogBackgroundSurface } from "@/components/dialog/useDialogBackgroundSurface";
 import Button from "@/components/ui/Button";
 import { useI18n } from "@/i18n";
-import { cn } from "@/utils/classNames";
 import type { AvatarOverlayPosition, AvatarOverlaySize } from "@/stores/avatarOverlayStore";
 
 type AppSettingsDialogProps = {
@@ -240,11 +239,14 @@ function SwitchSetting({
 	onChange: (checked: boolean) => void;
 }) {
 	return (
-		<button
-			type="button"
+		<Button
 			role="switch"
 			aria-checked={checked}
-			className="flex w-full items-center justify-between gap-4 rounded-xl border border-dialog-border bg-dialog-soft px-4 py-3 text-left transition hover:border-primary/40 focus:outline-none focus:ring-4 focus:ring-primary/15"
+			surface="dialog"
+			variant="secondary"
+			size="lg"
+			align="between"
+			fullWidth
 			onClick={() => onChange(!checked)}
 		>
 			<span className="text-sm font-semibold text-app-text">{label}</span>
@@ -259,7 +261,7 @@ function SwitchSetting({
 					}`}
 				/>
 			</span>
-		</button>
+		</Button>
 	);
 }
 
@@ -284,20 +286,16 @@ function SegmentedSetting<TValue extends string>({
 					const isActive = option.value === value;
 
 					return (
-						<button
+						<Button
 							key={option.value}
-							type="button"
-							className={cn(
-								"min-h-9 rounded-lg px-3 py-2 text-sm font-semibold text-muted transition focus:outline-none focus:ring-2 focus:ring-primary/25",
-								isActive
-									? "bg-app-panel text-app-text shadow-soft"
-									: "hover:bg-app-soft hover:text-app-text"
-							)}
+							variant={isActive ? "selected" : "ghost"}
+							size="sm"
+							fullWidth
 							aria-pressed={isActive}
 							onClick={() => onChange(option.value)}
 						>
 							{option.label}
-						</button>
+						</Button>
 					);
 				})}
 			</div>
