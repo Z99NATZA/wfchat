@@ -92,6 +92,7 @@ type CachedChatMessage = {
 	chatId: string;
 	author: "user" | "companion";
 	text: string;
+	attachments?: ChatMessage["attachments"];
 	createdAt?: string;
 	time: string;
 	updatedAt: string;
@@ -344,6 +345,7 @@ export function readChatMessagesCache(chatId: string): ChatMessage[] {
 			id: item.id,
 			author: item.author,
 			text: item.text,
+			attachments: item.attachments,
 			createdAt: Number(item.createdAt) || Number(item.updatedAt) || 0,
 			time: item.time
 		}))

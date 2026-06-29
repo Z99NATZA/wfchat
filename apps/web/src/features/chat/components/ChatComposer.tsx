@@ -1,10 +1,11 @@
-import { FormEvent, KeyboardEvent, useEffect, useRef, useState } from "react";
+import { ClipboardEvent, DragEvent, FormEvent, KeyboardEvent, useEffect, useRef, useState } from "react";
 import { Image, LoaderCircle, Mic, Paperclip, Send, Square, X } from "lucide-react";
 import { useI18n } from "@/i18n";
 import Button from "@/components/ui/Button";
 import IconButton from "@/components/ui/IconButton";
 import type { UserSpeechInputState } from "@/features/chat/hooks/useUserSpeechTranscription";
 import type { AppFont } from "@/types/font";
+import type { PendingChatImageAttachment } from "@/types/chat";
 
 type ChatComposerProps = {
 	draft: string;
@@ -12,7 +13,7 @@ type ChatComposerProps = {
 	companionName: string;
 	quickPrompts?: string[];
 	onDraftChange: (draft: string) => void;
-	onSend: () => void;
+	onSend: (imageAttachments?: PendingChatImageAttachment[]) => boolean | void | Promise<boolean | void>;
 	isDisabled?: boolean;
 	isSending?: boolean;
 	isUserSpeechInputEnabled?: boolean;
@@ -21,12 +22,16 @@ type ChatComposerProps = {
 	onToggleSpeechInput?: () => void;
 };
 
+const MAX_IMAGE_ATTACHMENTS = 4;
+const SUPPORTED_IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
+const IMAGE_INPUT_ACCEPT = "image/png,image/jpeg,image/webp,image/gif";
+
 function shouldSkipAutomaticComposerFocus() {
 	if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
 		return false;
 	}
 
-	return window.matchMedia("(max-width: 767px), (pointer: coarse)").matches;
+	return window.matchMedia("(max-width: 767px), (pointer: coarse)")?.matches === true;
 }
 
 function focusComposerTextArea(textarea: HTMLTextAreaElement | null) {
@@ -49,8 +54,22 @@ function ChatComposer({
 }: ChatComposerProps) {
 	const { t } = useI18n();
 	const textareaRef = useRef<HTMLTextAreaElement>(null);
+	const imageInputRef = useRef<HTMLInputElement>(null);
 	const wasSendingRef = useRef(false);
+	const selectedImagesRef = useRef<PendingChatImageAttachment[]>([]);
 	const [recordingElapsedSeconds, setRecordingElapsedSeconds] = useState(0);
+	const [selectedImages, setSelectedImages] = useState<PendingChatImageAttachment[]>([]);
+	const [imageStatus, setImageStatus] = useState<string | null>(null);
+
+	useEffect(() => {
+		selectedImagesRef.current = selectedImages;
+	}, [selectedImages]);
+
+	useEffect(() => {
+		return () => {
+			revokePendingImages(selectedImagesRef.current);
+		};
+	}, []);
 
 	useEffect(() => {
 		const textarea = textareaRef.current;
@@ -96,17 +115,7 @@ function ChatComposer({
 	function handleSubmit(event: FormEvent<HTMLFormElement>) {
 		event.preventDefault();
 
-		if (isSending) {
-			focusComposerTextArea(textareaRef.current);
-			return;
-		}
-
-		onSend();
-		requestAnimationFrame(() => {
-			if (!shouldSkipAutomaticComposerFocus()) {
-				focusComposerTextArea(textareaRef.current);
-			}
-		});
+		void requestSend();
 	}
 
 	function handleDraftKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
@@ -116,17 +125,113 @@ function ChatComposer({
 
 		event.preventDefault();
 
+		void requestSend();
+	}
+
+	async function requestSend() {
 		if (isSending) {
 			focusComposerTextArea(textareaRef.current);
 			return;
 		}
 
-		onSend();
+		const sendImages = selectedImagesRef.current;
+		const didSend = await onSend(sendImages);
+		if (didSend !== false && sendImages.length > 0) {
+			revokePendingImages(sendImages);
+			setSelectedImages([]);
+			selectedImagesRef.current = [];
+			setImageStatus(null);
+		}
 		requestAnimationFrame(() => {
 			if (!shouldSkipAutomaticComposerFocus()) {
 				focusComposerTextArea(textareaRef.current);
 			}
 		});
+	}
+
+	function handleImagePickerClick() {
+		if (isDisabled || isSending) {
+			return;
+		}
+
+		imageInputRef.current?.click();
+	}
+
+	function handleImageInputChange() {
+		addImageFiles(imageInputRef.current?.files);
+		if (imageInputRef.current) {
+			imageInputRef.current.value = "";
+		}
+	}
+
+	function handlePaste(event: ClipboardEvent<HTMLTextAreaElement>) {
+		const files = Array.from(event.clipboardData.files).filter((file) => file.type.startsWith("image/"));
+		if (files.length === 0) {
+			return;
+		}
+
+		event.preventDefault();
+		addImageFiles(files);
+	}
+
+	function handleDragOver(event: DragEvent<HTMLDivElement>) {
+		if (isDisabled || isSending || !hasImageFiles(event.dataTransfer.files)) {
+			return;
+		}
+
+		event.preventDefault();
+		event.dataTransfer.dropEffect = "copy";
+	}
+
+	function handleDrop(event: DragEvent<HTMLDivElement>) {
+		if (isDisabled || isSending || !hasImageFiles(event.dataTransfer.files)) {
+			return;
+		}
+
+		event.preventDefault();
+		addImageFiles(event.dataTransfer.files);
+	}
+
+	function addImageFiles(files: FileList | File[] | undefined | null) {
+		if (!files || isDisabled || isSending) {
+			return;
+		}
+
+		const currentImages = selectedImagesRef.current;
+		const availableSlots = Math.max(0, MAX_IMAGE_ATTACHMENTS - currentImages.length);
+		const imageFiles = Array.from(files);
+		const supportedFiles = imageFiles.filter((file) => SUPPORTED_IMAGE_TYPES.has(file.type));
+		const nextFiles = supportedFiles.slice(0, availableSlots);
+		const nextImages = nextFiles.map(makePendingImageAttachment);
+
+		if (nextImages.length > 0) {
+			const nextSelectedImages = [...currentImages, ...nextImages];
+			selectedImagesRef.current = nextSelectedImages;
+			setSelectedImages(nextSelectedImages);
+		}
+
+		if (supportedFiles.length < imageFiles.length) {
+			setImageStatus(t("chat.composer.imageUnsupported"));
+			return;
+		}
+
+		if (supportedFiles.length > nextFiles.length) {
+			setImageStatus(t("chat.composer.imageLimit", { count: MAX_IMAGE_ATTACHMENTS }));
+			return;
+		}
+
+		setImageStatus(null);
+	}
+
+	function removeSelectedImage(imageId: string) {
+		const image = selectedImagesRef.current.find((item) => item.id === imageId);
+		if (image) {
+			URL.revokeObjectURL(image.previewUrl);
+		}
+		const nextImages = selectedImagesRef.current.filter((item) => item.id !== imageId);
+		selectedImagesRef.current = nextImages;
+		setSelectedImages(nextImages);
+		setImageStatus(null);
 	}
 
 	function handleQuickPromptSelect(prompt: string) {
@@ -153,9 +258,12 @@ function ChatComposer({
 		speechStatus === "requesting" || speechStatus === "recording" || speechStatus === "transcribing";
 	const canUseSpeechInput = isUserSpeechInputEnabled && !isDisabled && !isSending;
 	const speechStatusText = speechInputStatusText(userSpeechInput, t);
+	const canSendMessage = draft.trim().length > 0 || selectedImages.length > 0;
 
 	return (
 		<div
+			onDragOver={handleDragOver}
+			onDrop={handleDrop}
 			className="sticky bottom-0 z-20 border-t border-app-border bg-app-panel/62 px-4 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-4 lg:px-8"
 		>
 			<div className="mx-auto flex max-w-3xl flex-col gap-2">
@@ -178,6 +286,34 @@ function ChatComposer({
 						))}
 					</div>
 				) : null}
+				{selectedImages.length > 0 ? (
+					<div className="flex gap-2 overflow-x-auto rounded-lg border border-app-border bg-app-soft/82 p-2">
+						{selectedImages.map((image) => (
+							<div key={image.id} className="relative h-20 w-20 shrink-0 overflow-hidden rounded-md border border-app-border bg-app-panel">
+								<img
+									className="h-full w-full object-cover"
+									src={image.previewUrl}
+									alt={image.name || t("chat.composer.selectedImage")}
+								/>
+								<IconButton
+									size="xs"
+									variant="danger"
+									className="absolute right-1 top-1"
+									aria-label={t("chat.composer.removeImageAttachment")}
+									title={t("chat.composer.removeImageAttachment")}
+									onClick={() => removeSelectedImage(image.id)}
+								>
+									<X size={12} aria-hidden="true" />
+								</IconButton>
+							</div>
+						))}
+					</div>
+				) : null}
+				{imageStatus ? (
+					<p className="px-1 text-xs text-red-500" role="alert">
+						{imageStatus}
+					</p>
+				) : null}
 				<form
 					className="flex items-center gap-2 rounded-lg border border-app-border bg-app-soft/82 p-2 shadow-soft focus-within:border-primary focus-within:ring-4 focus-within:ring-primary/15"
 					onSubmit={handleSubmit}
@@ -185,6 +321,14 @@ function ChatComposer({
 					<IconButton className="shrink-0" aria-label={t("chat.composer.attachFile")} disabled title={t("common.notSupportedYet")}>
 						<Paperclip size={18} aria-hidden="true" />
 					</IconButton>
+					<input
+						ref={imageInputRef}
+						className="hidden"
+						type="file"
+						accept={IMAGE_INPUT_ACCEPT}
+						multiple
+						onChange={handleImageInputChange}
+					/>
 					<textarea
 						ref={textareaRef}
 						autoCapitalize="off"
@@ -197,6 +341,7 @@ function ChatComposer({
 						spellCheck={false}
 						onChange={(event) => onDraftChange(event.target.value)}
 						onKeyDown={handleDraftKeyDown}
+						onPaste={handlePaste}
 					/>
 					{speechStatus === "recording" ? (
 						<span
@@ -264,7 +409,13 @@ function ChatComposer({
 							<Mic size={18} aria-hidden="true" />
 						)}
 					</IconButton>
-					<IconButton className="hidden sm:flex" aria-label={t("chat.composer.imagePrompt")} disabled title={t("common.notSupportedYet")}>
+					<IconButton
+						className="shrink-0"
+						aria-label={t("chat.composer.attachImage")}
+						disabled={isDisabled || isSending || selectedImages.length >= MAX_IMAGE_ATTACHMENTS}
+						title={t("chat.composer.attachImage")}
+						onClick={handleImagePickerClick}
+					>
 						<Image size={18} aria-hidden="true" />
 					</IconButton>
 					<IconButton
@@ -272,7 +423,7 @@ function ChatComposer({
 						size="lg"
 						variant="action"
 						aria-label={isSending ? t("chat.composer.waitingForResponse") : t("chat.composer.sendMessage")}
-						disabled={isDisabled || isSending || !draft.trim()}
+						disabled={isDisabled || isSending || !canSendMessage}
 						title={
 							isSending
 								? t("chat.composer.waitBeforeSending", { name: companionName })
@@ -338,4 +489,26 @@ function formatElapsedTime(totalSeconds: number): string {
 	const seconds = totalSeconds % 60;
 
 	return `${minutes}:${seconds.toString().padStart(2, "0")}`;
+}
+
+function makePendingImageAttachment(file: File): PendingChatImageAttachment {
+	return {
+		id: typeof crypto !== "undefined" && "randomUUID" in crypto
+			? crypto.randomUUID()
+			: `local-image-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+		file,
+		name: file.name,
+		previewUrl: URL.createObjectURL(file),
+		kind: "image"
+	};
+}
+
+function revokePendingImages(images: PendingChatImageAttachment[]) {
+	for (const image of images) {
+		URL.revokeObjectURL(image.previewUrl);
+	}
+}
+
+function hasImageFiles(files: FileList): boolean {
+	return Array.from(files).some((file) => file.type.startsWith("image/"));
 }

@@ -2,6 +2,26 @@ export type ChatPersonaStatus = "Online" | "Typing" | "Away";
 
 export type ChatMessageAuthor = "user" | "companion";
 
+export type ChatMessageAttachmentKind = "image";
+
+export type ChatMessageAttachment = {
+	id: string;
+	kind: ChatMessageAttachmentKind;
+	mimeType: string;
+	byteSize: number;
+	width?: number | null;
+	height?: number | null;
+	previewUrl: string;
+};
+
+export type PendingChatImageAttachment = {
+	id: string;
+	file: File;
+	name: string;
+	previewUrl: string;
+	kind: "image";
+};
+
 export type ChatPersona = {
 	id: string;
 	name: string;
@@ -19,6 +39,7 @@ export type ChatMessage = {
 	text: string;
 	createdAt: number;
 	time: string;
+	attachments?: ChatMessageAttachment[];
 };
 
 export type ChatSessionSummary = {

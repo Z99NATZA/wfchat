@@ -4,6 +4,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import ChatMessageList from "@/features/chat/components/ChatMessageList";
+import { fetchChatAttachmentPreview } from "@/features/chat/services/chatApiService";
 import type { ChatMessage } from "@/types/chat";
 
 vi.mock("@/i18n", () => ({
@@ -33,6 +34,12 @@ vi.mock("@/i18n", () => ({
 			if (key === "chat.messageList.assistantSpeechFailed") {
 				return "Voice failed";
 			}
+			if (key === "chat.messageList.imageAttachmentAlt") {
+				return `Image ${params?.index}`;
+			}
+			if (key === "chat.messageList.imageAttachmentMissing") {
+				return "Image unavailable";
+			}
 			if (key === "chat.messageList.loadMarkdownQa") {
 				return "Load QA";
 			}
@@ -47,9 +54,23 @@ vi.mock("@/components/dialog/DialogProvider", () => ({
 	})
 }));
 
+vi.mock("@/features/chat/services/chatApiService", () => ({
+	fetchChatAttachmentPreview: vi.fn()
+}));
+
 describe("ChatMessageList streaming state", () => {
 	beforeEach(() => {
+		vi.clearAllMocks();
 		HTMLElement.prototype.scrollTo = vi.fn();
+		vi.mocked(fetchChatAttachmentPreview).mockResolvedValue(new Blob(["image"], { type: "image/png" }));
+		Object.defineProperty(URL, "createObjectURL", {
+			configurable: true,
+			value: vi.fn(() => "blob:fetched-preview")
+		});
+		Object.defineProperty(URL, "revokeObjectURL", {
+			configurable: true,
+			value: vi.fn()
+		});
 		Object.defineProperty(navigator, "clipboard", {
 			configurable: true,
 			value: {
@@ -187,6 +208,64 @@ describe("ChatMessageList streaming state", () => {
 		);
 
 		expect(screen.queryByRole("button", { name: "Copy message" })).toBeNull();
+	});
+
+	it("fetches and renders image attachments inside message bubbles", async () => {
+		render(
+			<ChatMessageList
+				messages={[
+					{
+						...message("user-1", "user", "look"),
+						attachments: [
+							{
+								id: "attachment-1",
+								kind: "image",
+								mimeType: "image/png",
+								byteSize: 12,
+								width: 2,
+								height: 3,
+								previewUrl: "http://localhost:8080/api/chat/attachments/attachment-1/preview"
+							}
+						]
+					}
+				]}
+				companionName="Aiko"
+				companionAvatarUrl="/images/aiko-avatar.png"
+			/>
+		);
+
+		const image = await screen.findByRole("img", { name: "Image 1" }) as HTMLImageElement;
+		expect(fetchChatAttachmentPreview).toHaveBeenCalledWith("attachment-1");
+		expect(image.src).toBe("blob:fetched-preview");
+	});
+
+	it("renders local blob image previews without fetching", () => {
+		render(
+			<ChatMessageList
+				messages={[
+					{
+						...message("user-1", "user", "look"),
+						attachments: [
+							{
+								id: "local-attachment",
+								kind: "image",
+								mimeType: "image/png",
+								byteSize: 12,
+								width: 2,
+								height: 3,
+								previewUrl: "blob:local-preview"
+							}
+						]
+					}
+				]}
+				companionName="Aiko"
+				companionAvatarUrl="/images/aiko-avatar.png"
+			/>
+		);
+
+		const image = screen.getByRole("img", { name: "Image 1" }) as HTMLImageElement;
+		expect(fetchChatAttachmentPreview).not.toHaveBeenCalled();
+		expect(image.src).toBe("blob:local-preview");
 	});
 
 	it("shows assistant speech action for persisted assistant messages when enabled", () => {

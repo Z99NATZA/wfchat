@@ -80,6 +80,7 @@ pub struct StoredMessage {
     pub id: Uuid,
     pub role: AiRole,
     pub content: String,
+    pub attachments: Vec<ChatAttachmentRecord>,
     pub created_at: u64,
 }
 
@@ -514,6 +515,24 @@ impl ChatStore {
         user_message: StoredMessage,
         assistant_message: StoredMessage,
     ) -> Option<ChatRecord> {
+        self.append_chat_messages_with_attachments(
+            owner,
+            chat_id,
+            user_message,
+            assistant_message,
+            &[],
+        )
+        .await
+    }
+
+    pub async fn append_chat_messages_with_attachments(
+        &self,
+        owner: OwnerScope,
+        chat_id: Uuid,
+        user_message: StoredMessage,
+        assistant_message: StoredMessage,
+        attachment_ids: &[Uuid],
+    ) -> Option<ChatRecord> {
         let owner_exists = sqlx::query(
             "select id from chats where id = $1 and (($3::uuid is not null and owner_user_id = $3) or ($3::uuid is null and owner_session_id = $2))",
         )
@@ -542,6 +561,15 @@ impl ChatStore {
         .bind(assistant_message.created_at as i64)
         .execute(self.db.as_ref())
         .await;
+
+        if !attachment_ids.is_empty() {
+            let updated_count = self
+                .link_chat_attachments_to_message(owner, chat_id, user_message.id, attachment_ids)
+                .await?;
+            if updated_count != attachment_ids.len() as u64 {
+                return None;
+            }
+        }
 
         let _ = sqlx::query("update chats set updated_at = now() where id = $1")
             .bind(chat_id)
@@ -645,6 +673,38 @@ impl ChatStore {
         .ok()??;
 
         Some(chat_attachment_from_row(row))
+    }
+
+    pub async fn link_chat_attachments_to_message(
+        &self,
+        owner: OwnerScope,
+        chat_id: Uuid,
+        message_id: Uuid,
+        attachment_ids: &[Uuid],
+    ) -> Option<u64> {
+        if attachment_ids.is_empty() {
+            return Some(0);
+        }
+
+        let result = sqlx::query(
+            "update chat_attachments
+             set chat_id = $1, message_id = $2
+             where id = any($3)
+               and chat_id is null
+               and message_id is null
+               and deleted_at is null
+               and (($5::uuid is not null and owner_user_id = $5) or ($5::uuid is null and owner_session_id = $4))",
+        )
+        .bind(chat_id)
+        .bind(message_id)
+        .bind(attachment_ids)
+        .bind(owner.session_id)
+        .bind(owner.user_id)
+        .execute(self.db.as_ref())
+        .await
+        .ok()?;
+
+        Some(result.rows_affected())
     }
 
     pub async fn get_chat_attachment(
@@ -1168,18 +1228,52 @@ impl ChatStore {
         .await
         .unwrap_or_default();
 
-        rows.into_iter()
-            .filter_map(|row| {
-                let role_value: String = row.get("role");
-                let role = role_from_db(&role_value)?;
-                Some(StoredMessage {
-                    id: row.get("id"),
-                    role,
-                    content: row.get("content"),
-                    created_at: row.get::<i64, _>("created_at") as u64,
-                })
-            })
-            .collect()
+        let mut messages = Vec::with_capacity(rows.len());
+        for row in rows {
+            let role_value: String = row.get("role");
+            let Some(role) = role_from_db(&role_value) else {
+                continue;
+            };
+            let message_id: Uuid = row.get("id");
+            messages.push(StoredMessage {
+                id: message_id,
+                role,
+                content: row.get("content"),
+                attachments: self.attachments_for_message(message_id).await,
+                created_at: row.get::<i64, _>("created_at") as u64,
+            });
+        }
+
+        messages
+    }
+
+    async fn attachments_for_message(&self, message_id: Uuid) -> Vec<ChatAttachmentRecord> {
+        let rows = sqlx::query(
+            "select
+                id,
+                owner_session_id,
+                owner_user_id,
+                chat_id,
+                message_id,
+                kind,
+                mime_type,
+                byte_size,
+                width,
+                height,
+                sha256,
+                storage_key,
+                extract(epoch from created_at)::bigint as created_at,
+                extract(epoch from deleted_at)::bigint as deleted_at
+             from chat_attachments
+             where message_id = $1 and deleted_at is null
+             order by created_at asc",
+        )
+        .bind(message_id)
+        .fetch_all(self.db.as_ref())
+        .await
+        .unwrap_or_default();
+
+        rows.into_iter().map(chat_attachment_from_row).collect()
     }
 
     async fn migrate(&self) -> Result<(), sqlx::Error> {
@@ -1491,6 +1585,7 @@ impl StoredMessage {
             id: Uuid::new_v4(),
             role: message.role,
             content: message.content,
+            attachments: Vec::new(),
             created_at: now_unix_seconds(),
         }
     }

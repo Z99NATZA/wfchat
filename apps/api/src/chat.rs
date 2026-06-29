@@ -29,7 +29,7 @@ use crate::{
     characters,
     error::{AppError, AppResult},
     state::AppState,
-    store::{ChatRecord, NewChatAttachmentRecord, OwnerScope, StoredMessage},
+    store::{ChatAttachmentRecord, ChatRecord, NewChatAttachmentRecord, OwnerScope, StoredMessage},
     voice::{SpeechAudioStreamBody, VoiceService},
 };
 
@@ -87,12 +87,22 @@ struct MessageResponse {
     id: Uuid,
     role: AiRole,
     content: String,
+    attachments: Vec<ChatAttachmentResponse>,
     created_at: u64,
 }
 
 #[derive(Deserialize)]
 struct SendMessageRequest {
+    #[serde(default)]
     content: String,
+    #[serde(default)]
+    attachments: Vec<SendMessageAttachmentRequest>,
+}
+
+#[derive(Deserialize)]
+struct SendMessageAttachmentRequest {
+    id: Uuid,
+    kind: String,
 }
 
 #[derive(Serialize)]
@@ -129,6 +139,7 @@ struct StreamMessageErrorEvent {
 
 struct ChatCompletionContext {
     chat: ChatRecord,
+    attachment_ids: Vec<Uuid>,
     ai_messages: Vec<AiMessage>,
     user_ai_message: AiMessage,
 }
@@ -424,7 +435,7 @@ async fn send_message(
         .ensure_session(session_id_from_headers(&headers))
         .await;
     let owner = OwnerScope::from_session(&session);
-    let context = prepare_chat_completion_context(&state, owner, chat_id, &payload.content).await?;
+    let context = prepare_chat_completion_context(&state, owner, chat_id, &payload).await?;
     let completed = complete_and_append_chat_message(state, owner, chat_id, context).await?;
 
     Ok(Json(SendMessageResponse {
@@ -451,7 +462,7 @@ async fn stream_message(
         .ensure_session(session_id_from_headers(&headers))
         .await;
     let owner = OwnerScope::from_session(&session);
-    let context = prepare_chat_completion_context(&state, owner, chat_id, &payload.content).await?;
+    let context = prepare_chat_completion_context(&state, owner, chat_id, &payload).await?;
     let persona_id = context.chat.character_id.clone();
     let (sender, receiver) = mpsc::channel::<Result<Event, Infallible>>(16);
 
@@ -711,13 +722,16 @@ fn message_response(message: StoredMessage) -> MessageResponse {
         id: message.id,
         role: message.role,
         content: message.content,
+        attachments: message
+            .attachments
+            .into_iter()
+            .map(chat_attachment_response)
+            .collect(),
         created_at: message.created_at,
     }
 }
 
-fn chat_attachment_response(
-    attachment: crate::store::ChatAttachmentRecord,
-) -> ChatAttachmentResponse {
+fn chat_attachment_response(attachment: ChatAttachmentRecord) -> ChatAttachmentResponse {
     ChatAttachmentResponse {
         id: attachment.id,
         kind: attachment.kind,
@@ -739,11 +753,11 @@ async fn prepare_chat_completion_context(
     state: &AppState,
     owner: OwnerScope,
     chat_id: Uuid,
-    content: &str,
+    payload: &SendMessageRequest,
 ) -> AppResult<ChatCompletionContext> {
-    let content = content.trim();
+    let content = payload.content.trim();
 
-    if content.is_empty() {
+    if content.is_empty() && payload.attachments.is_empty() {
         return Err(AppError::BadRequest("message content is empty".to_owned()));
     }
 
@@ -752,6 +766,8 @@ async fn prepare_chat_completion_context(
         .get_chat(owner, chat_id)
         .await
         .ok_or(AppError::NotFound)?;
+    let attachment_ids =
+        validate_message_attachment_requests(state, owner, &payload.attachments).await?;
     let mut ai_messages = chat
         .messages
         .iter()
@@ -775,14 +791,70 @@ async fn prepare_chat_completion_context(
             },
         );
     }
-    let user_ai_message = AiMessage::user(content.to_owned());
-    ai_messages.push(user_ai_message.clone());
+    ai_messages.push(AiMessage::user(ai_user_content(
+        content,
+        attachment_ids.len(),
+    )));
 
     Ok(ChatCompletionContext {
         chat,
+        attachment_ids,
         ai_messages,
-        user_ai_message,
+        user_ai_message: AiMessage::user(content.to_owned()),
     })
+}
+
+async fn validate_message_attachment_requests(
+    state: &AppState,
+    owner: OwnerScope,
+    attachments: &[SendMessageAttachmentRequest],
+) -> AppResult<Vec<Uuid>> {
+    if attachments.len() > state.config.chat_attachment_max_images_per_message {
+        return Err(AppError::BadRequest(
+            "too many image attachments for one message".to_owned(),
+        ));
+    }
+
+    let mut attachment_ids = Vec::with_capacity(attachments.len());
+    for attachment in attachments {
+        if attachment.kind != CHAT_ATTACHMENT_KIND_IMAGE {
+            return Err(AppError::BadRequest(
+                "only image attachments are supported".to_owned(),
+            ));
+        }
+        if attachment_ids.contains(&attachment.id) {
+            return Err(AppError::BadRequest(
+                "duplicate image attachment id".to_owned(),
+            ));
+        }
+
+        let record = state
+            .store
+            .get_chat_attachment(owner, attachment.id)
+            .await
+            .ok_or(AppError::NotFound)?;
+        if record.kind != CHAT_ATTACHMENT_KIND_IMAGE
+            || record.chat_id.is_some()
+            || record.message_id.is_some()
+        {
+            return Err(AppError::BadRequest(
+                "image attachment is not pending".to_owned(),
+            ));
+        }
+        attachment_ids.push(attachment.id);
+    }
+
+    Ok(attachment_ids)
+}
+
+fn ai_user_content(content: &str, attachment_count: usize) -> String {
+    if !content.is_empty() {
+        return content.to_owned();
+    }
+
+    format!(
+        "The user sent {attachment_count} image attachment(s). Image understanding is not available in this milestone yet."
+    )
 }
 
 async fn complete_and_append_chat_message(
@@ -800,14 +872,17 @@ async fn complete_and_append_chat_message(
     let assistant_message = StoredMessage::from_ai_message(assistant_ai_message);
     let updated_chat = state
         .store
-        .append_chat_messages(
+        .append_chat_messages_with_attachments(
             owner,
             chat_id,
             user_message.clone(),
             assistant_message.clone(),
+            &context.attachment_ids,
         )
         .await
         .ok_or(AppError::NotFound)?;
+    let user_message = message_from_updated_chat(&updated_chat, user_message);
+    let assistant_message = message_from_updated_chat(&updated_chat, assistant_message);
 
     Ok(CompletedChatMessage {
         user_message,
@@ -848,20 +923,31 @@ async fn stream_and_append_chat_message(
     let assistant_message = StoredMessage::from_ai_message(assistant_ai_message);
     let updated_chat = state
         .store
-        .append_chat_messages(
+        .append_chat_messages_with_attachments(
             owner,
             chat_id,
             user_message.clone(),
             assistant_message.clone(),
+            &context.attachment_ids,
         )
         .await
         .ok_or(AppError::NotFound)?;
+    let user_message = message_from_updated_chat(&updated_chat, user_message);
+    let assistant_message = message_from_updated_chat(&updated_chat, assistant_message);
 
     Ok(CompletedChatMessage {
         user_message,
         assistant_message,
         updated_chat,
     })
+}
+
+fn message_from_updated_chat(chat: &ChatRecord, fallback: StoredMessage) -> StoredMessage {
+    chat.messages
+        .iter()
+        .find(|message| message.id == fallback.id)
+        .cloned()
+        .unwrap_or(fallback)
 }
 
 async fn send_sse_event<T: Serialize>(
@@ -931,6 +1017,7 @@ mod tests {
     use axum::{
         body::{to_bytes, Body},
         http::{header, HeaderName, Request, StatusCode},
+        Router,
     };
     use image::{DynamicImage, ImageBuffer, ImageFormat, Rgba};
     use reqwest::Client;
@@ -1097,6 +1184,144 @@ mod tests {
         assert!(persisted.messages.is_empty());
 
         state.store.delete_chat(owner, chat.id).await;
+    }
+
+    #[tokio::test]
+    async fn stream_message_endpoint_links_image_attachment_to_user_message() {
+        let Some(state) = test_state().await else {
+            return;
+        };
+        let session = state.store.create_guest_session().await;
+        let owner = OwnerScope::from_session(&session);
+        let upload_dir = state.config.chat_attachment_upload_dir.clone();
+        let chat = state
+            .store
+            .create_chat(owner, "aiko".to_owned(), "aiko_default".to_owned())
+            .await;
+        let app = build_router(state.clone());
+        let upload_payload = upload_png_attachment(app.clone(), session.id).await;
+        let attachment_id = upload_payload["id"]
+            .as_str()
+            .expect("upload response should include attachment id");
+        let request = Request::builder()
+            .method("POST")
+            .uri(format!("/api/chats/{}/messages/stream", chat.id))
+            .header(header::CONTENT_TYPE, "application/json")
+            .header(header::ACCEPT, "text/event-stream")
+            .header("x-wfchat-session", session.id.to_string())
+            .body(Body::from(format!(
+                r#"{{"content":"look","attachments":[{{"id":"{attachment_id}","kind":"image"}}]}}"#
+            )))
+            .expect("request should build");
+
+        let response = app.oneshot(request).await.expect("request should run");
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("body should collect");
+        let body = String::from_utf8(body.to_vec()).expect("body should be utf-8");
+        let events = parse_sse_events(&body);
+        let done_payload = events
+            .iter()
+            .find(|event| event.0 == "message_done")
+            .and_then(|event| serde_json::from_str::<Value>(&event.1).ok())
+            .expect("message_done should include json payload");
+
+        assert_eq!(
+            done_payload["user_message"]["attachments"][0]["id"].as_str(),
+            Some(attachment_id)
+        );
+        assert_eq!(
+            done_payload["messages"][0]["attachments"][0]["preview_url"].as_str(),
+            Some(format!("/api/chat/attachments/{attachment_id}/preview").as_str())
+        );
+
+        let persisted = state
+            .store
+            .get_chat(owner, chat.id)
+            .await
+            .expect("chat should still exist");
+        assert_eq!(persisted.messages.len(), 2);
+        assert_eq!(persisted.messages[0].attachments.len(), 1);
+        assert_eq!(
+            persisted.messages[0].attachments[0].id.to_string(),
+            attachment_id
+        );
+        assert_eq!(persisted.messages[0].attachments[0].chat_id, Some(chat.id));
+        assert_eq!(
+            persisted.messages[0].attachments[0].message_id,
+            Some(persisted.messages[0].id)
+        );
+
+        state.store.delete_chat(owner, chat.id).await;
+        let _ = tokio::fs::remove_dir_all(upload_dir).await;
+    }
+
+    #[tokio::test]
+    async fn stream_message_endpoint_keeps_attachment_pending_when_ai_fails() {
+        let Some(state) = test_state_with_provider("openai").await else {
+            return;
+        };
+        let session = state.store.create_guest_session().await;
+        let owner = OwnerScope::from_session(&session);
+        let upload_dir = state.config.chat_attachment_upload_dir.clone();
+        let chat = state
+            .store
+            .create_chat(owner, "aiko".to_owned(), "aiko_default".to_owned())
+            .await;
+        let app = build_router(state.clone());
+        let upload_payload = upload_png_attachment(app.clone(), session.id).await;
+        let attachment_id = Uuid::parse_str(
+            upload_payload["id"]
+                .as_str()
+                .expect("upload response should include attachment id"),
+        )
+        .expect("attachment id should be uuid");
+        let request = Request::builder()
+            .method("POST")
+            .uri(format!("/api/chats/{}/messages/stream", chat.id))
+            .header(header::CONTENT_TYPE, "application/json")
+            .header(header::ACCEPT, "text/event-stream")
+            .header("x-wfchat-session", session.id.to_string())
+            .body(Body::from(format!(
+                r#"{{"content":"look","attachments":[{{"id":"{attachment_id}","kind":"image"}}]}}"#
+            )))
+            .expect("request should build");
+
+        let response = app.oneshot(request).await.expect("request should run");
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("body should collect");
+        let body = String::from_utf8(body.to_vec()).expect("body should be utf-8");
+        let events = parse_sse_events(&body);
+        assert_eq!(
+            events
+                .iter()
+                .map(|event| event.0.as_str())
+                .collect::<Vec<_>>(),
+            ["message_start", "error"]
+        );
+
+        let persisted = state
+            .store
+            .get_chat(owner, chat.id)
+            .await
+            .expect("chat should still exist");
+        assert!(persisted.messages.is_empty());
+        let attachment = state
+            .store
+            .get_chat_attachment(owner, attachment_id)
+            .await
+            .expect("attachment should remain pending");
+        assert_eq!(attachment.chat_id, None);
+        assert_eq!(attachment.message_id, None);
+        assert_eq!(attachment.deleted_at, None);
+
+        state.store.delete_chat(owner, chat.id).await;
+        let _ = tokio::fs::remove_dir_all(upload_dir).await;
     }
 
     #[tokio::test]
@@ -1488,6 +1713,26 @@ mod tests {
         body.extend_from_slice(file_bytes);
         body.extend_from_slice(format!("\r\n--{boundary}--\r\n").as_bytes());
         body
+    }
+
+    async fn upload_png_attachment(app: Router, session_id: Uuid) -> Value {
+        let boundary = "wfchat-image-upload";
+        let request = Request::builder()
+            .method("POST")
+            .uri("/api/chat/attachments")
+            .header(
+                header::CONTENT_TYPE,
+                format!("multipart/form-data; boundary={boundary}"),
+            )
+            .header("x-wfchat-session", session_id.to_string())
+            .body(Body::from(multipart_file_body(boundary, &png_bytes(2, 3))))
+            .expect("request should build");
+        let response = app.oneshot(request).await.expect("request should run");
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("body should collect");
+        serde_json::from_slice(&body).expect("upload response should be json")
     }
 
     fn assert_header_contains(

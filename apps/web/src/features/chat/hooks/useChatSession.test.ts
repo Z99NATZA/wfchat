@@ -7,9 +7,12 @@ import type { ChatMessage, ChatPersona } from "@/types/chat";
 import { useChatSession, type ChatSessionAvatarEvent } from "@/features/chat/hooks/useChatSession";
 import {
 	createPersonaChat,
+	deleteChatAttachment,
 	deleteChat,
 	sendChatMessage,
-	streamChatMessage
+	streamChatMessage,
+	uploadChatImageAttachment,
+	isChatApiStatus
 } from "@/features/chat/services/chatApiService";
 import { readChatMessagesCache, syncLocalDeletesNow } from "@/services/syncService";
 
@@ -28,9 +31,12 @@ const mocks = vi.hoisted(() => ({
 	createPersonaChat: vi.fn(),
 	streamChatMessage: vi.fn(),
 	sendChatMessage: vi.fn(),
+	uploadChatImageAttachment: vi.fn(),
+	deleteChatAttachment: vi.fn(),
 	deleteChat: vi.fn(),
 	clearChatMessages: vi.fn(),
 	getChat: vi.fn(),
+	isChatApiStatus: vi.fn(),
 	isNotFound: vi.fn(),
 	createMemoryFact: vi.fn(),
 	createMemorySummary: vi.fn(),
@@ -75,6 +81,7 @@ vi.mock("@/features/chat/services/chatApiService", () => ({
 	createMemorySummary: mocks.createMemorySummary,
 	createPersonaChat: mocks.createPersonaChat,
 	deleteChat: mocks.deleteChat,
+	deleteChatAttachment: mocks.deleteChatAttachment,
 	deleteMemoryFact: mocks.deleteMemoryFact,
 	deleteMemorySummary: mocks.deleteMemorySummary,
 	getChat: mocks.getChat,
@@ -82,12 +89,14 @@ vi.mock("@/features/chat/services/chatApiService", () => ({
 	fetchAssistantMessageSpeech: mocks.fetchAssistantMessageSpeech,
 	getAssistantMessageSpeech: mocks.getAssistantMessageSpeech,
 	transcribeUserSpeech: mocks.transcribeUserSpeech,
+	isChatApiStatus: mocks.isChatApiStatus,
 	isNotFound: mocks.isNotFound,
 	listMemoryFacts: mocks.listMemoryFacts,
 	listMemorySummaries: mocks.listMemorySummaries,
 	listPersonaChats: mocks.listPersonaChats,
 	sendChatMessage: mocks.sendChatMessage,
 	streamChatMessage: mocks.streamChatMessage,
+	uploadChatImageAttachment: mocks.uploadChatImageAttachment,
 	updateMemoryFact: mocks.updateMemoryFact,
 	updateMemorySummary: mocks.updateMemorySummary
 }));
@@ -177,6 +186,17 @@ describe("useChatSession streaming sendMessage", () => {
 		mocks.listMemorySummaries.mockResolvedValue([]);
 		mocks.createPersonaChat.mockResolvedValue({ chatId: "chat-1", messages: [] });
 		mocks.deleteChat.mockResolvedValue(undefined);
+		mocks.deleteChatAttachment.mockResolvedValue(undefined);
+		mocks.uploadChatImageAttachment.mockResolvedValue({
+			id: "attachment-1",
+			kind: "image",
+			mimeType: "image/png",
+			byteSize: 12,
+			width: 2,
+			height: 3,
+			previewUrl: "http://localhost:8080/api/chat/attachments/attachment-1/preview"
+		});
+		mocks.isChatApiStatus.mockReturnValue(false);
 		mocks.isNotFound.mockReturnValue(false);
 	});
 
@@ -190,8 +210,8 @@ describe("useChatSession streaming sendMessage", () => {
 		const avatarEvents: ChatSessionAvatarEvent[] = [];
 		const streamedMessages = [message("server-user", "user", "hello"), message("server-ai", "companion", "hello back")];
 		let finishStream: (() => void) | undefined;
-		let streamHandlers: Parameters<typeof streamChatMessage>[2] | undefined;
-		mocks.streamChatMessage.mockImplementation((_chatId, _content, handlers) => {
+		let streamHandlers: Parameters<typeof streamChatMessage>[3] | undefined;
+		mocks.streamChatMessage.mockImplementation((_chatId, _content, _attachments, handlers) => {
 			streamHandlers = handlers;
 			handlers.onStart?.({ chatId: "chat-1", personaId: "aiko" });
 			handlers.onToken?.("hel");
@@ -215,7 +235,7 @@ describe("useChatSession streaming sendMessage", () => {
 		await act(async () => {
 			result.current.setDraft("hello");
 		});
-		let sendPromise: Promise<void> | undefined;
+		let sendPromise: Promise<boolean | void> | undefined;
 		await act(async () => {
 			sendPromise = result.current.sendMessage();
 			await Promise.resolve();
@@ -247,6 +267,71 @@ describe("useChatSession streaming sendMessage", () => {
 		]);
 	});
 
+	it("uploads image attachments before streaming and keeps local previews until server messages arrive", async () => {
+		const localImage = pendingImage("blob:local-image");
+		const serverUser = {
+			...message("server-user", "user", ""),
+			attachments: [
+				{
+					id: "attachment-1",
+					kind: "image" as const,
+					mimeType: "image/png",
+					byteSize: 12,
+					width: 2,
+					height: 3,
+					previewUrl: "http://localhost:8080/api/chat/attachments/attachment-1/preview"
+				}
+			]
+		};
+		const serverMessages = [serverUser, message("server-ai", "companion", "I received the image.")];
+		let finishStream: (() => void) | undefined;
+		mocks.streamChatMessage.mockImplementation((_chatId, _content, _attachments, handlers) => {
+			handlers.onStart?.({ chatId: "chat-1", personaId: "aiko" });
+			return new Promise<void>((resolve) => {
+				finishStream = () => {
+					handlers.onDone?.({
+						chatId: "chat-1",
+						userMessage: serverMessages[0],
+						assistantMessage: serverMessages[1],
+						messages: serverMessages
+					});
+					resolve();
+				};
+			});
+		});
+		const { result } = renderHook(() => useChatSession());
+
+		let sendPromise: Promise<boolean | void> | undefined;
+		await act(async () => {
+			sendPromise = result.current.sendMessage([localImage]);
+			await Promise.resolve();
+		});
+
+		await waitFor(() => expect(uploadChatImageAttachment).toHaveBeenCalledWith(localImage.file));
+		expect(streamChatMessage).toHaveBeenCalledWith(
+			"chat-1",
+			"",
+			[{ id: "attachment-1", kind: "image" }],
+			expect.any(Object)
+		);
+		await waitFor(() =>
+			expect(result.current.messages[0]).toEqual(
+				expect.objectContaining({
+					author: "user",
+					text: "",
+					attachments: [expect.objectContaining({ id: "attachment-1", previewUrl: "blob:local-image" })]
+				})
+			)
+		);
+
+		await act(async () => {
+			finishStream?.();
+			await sendPromise;
+		});
+
+		expect(result.current.messages).toEqual(serverMessages);
+	});
+
 	it("falls back to non-streaming send when streaming fails before it starts", async () => {
 		const avatarEvents: ChatSessionAvatarEvent[] = [];
 		const fallbackMessages = [
@@ -266,7 +351,7 @@ describe("useChatSession streaming sendMessage", () => {
 			await result.current.sendMessage();
 		});
 
-		expect(sendChatMessage).toHaveBeenCalledWith("chat-1", "fallback");
+		expect(sendChatMessage).toHaveBeenCalledWith("chat-1", "fallback", []);
 		expect(result.current.messages).toEqual(fallbackMessages);
 		expect(deleteChat).not.toHaveBeenCalled();
 		expect(avatarEvents.map((event) => event.type)).toEqual(["assistant_waiting", "assistant_replied"]);
@@ -274,7 +359,7 @@ describe("useChatSession streaming sendMessage", () => {
 
 	it("rolls back optimistic messages when streaming fails after starting", async () => {
 		const avatarEvents: ChatSessionAvatarEvent[] = [];
-		mocks.streamChatMessage.mockImplementation(async (_chatId, _content, handlers) => {
+		mocks.streamChatMessage.mockImplementation(async (_chatId, _content, _attachments, handlers) => {
 			handlers.onStart?.({ chatId: "chat-1", personaId: "aiko" });
 			handlers.onToken?.("partial");
 			throw new Error("stream failed after token");
@@ -299,6 +384,61 @@ describe("useChatSession streaming sendMessage", () => {
 			"assistant_streaming",
 			"assistant_error"
 		]);
+	});
+
+	it("deletes uploaded image attachments when message send fails before persistence", async () => {
+		const localImage = pendingImage("blob:cleanup-image");
+		mocks.streamChatMessage.mockImplementation(async (_chatId, _content, _attachments, handlers) => {
+			handlers.onStart?.({ chatId: "chat-1", personaId: "aiko" });
+			handlers.onToken?.("partial");
+			throw new Error("stream failed after token");
+		});
+		const { result } = renderHook(() => useChatSession());
+
+		await act(async () => {
+			result.current.setDraft("broken image");
+		});
+		await act(async () => {
+			await result.current.sendMessage([localImage]);
+		});
+
+		expect(uploadChatImageAttachment).toHaveBeenCalledWith(localImage.file);
+		expect(deleteChatAttachment).toHaveBeenCalledWith("attachment-1");
+		expect(result.current.messages).toEqual([]);
+		expect(result.current.errorMessage).toBe("chat.session.aiNoResponse");
+	});
+
+	it("shows a specific upload error when the server rejects an image as too large", async () => {
+		const localImage = pendingImage("blob:large-image");
+		const uploadError = new Error("request failed with status 413");
+		mocks.uploadChatImageAttachment.mockRejectedValue(uploadError);
+		mocks.isChatApiStatus.mockImplementation((error, status) => error === uploadError && status === 413);
+		const { result } = renderHook(() => useChatSession());
+
+		await act(async () => {
+			await result.current.sendMessage([localImage]);
+		});
+
+		expect(uploadChatImageAttachment).toHaveBeenCalledWith(localImage.file);
+		expect(isChatApiStatus).toHaveBeenCalledWith(uploadError, 413);
+		expect(result.current.errorMessage).toBe("chat.session.attachmentTooLarge");
+		expect(result.current.messages).toEqual([]);
+		expect(createPersonaChat).not.toHaveBeenCalled();
+	});
+
+	it("maps backend image validation errors to specific upload messages", async () => {
+		const localImage = pendingImage("blob:invalid-image");
+		mocks.uploadChatImageAttachment.mockRejectedValue(
+			new Error("bad request: image attachment type is not supported")
+		);
+		const { result } = renderHook(() => useChatSession());
+
+		await act(async () => {
+			await result.current.sendMessage([localImage]);
+		});
+
+		expect(result.current.errorMessage).toBe("chat.session.attachmentUnsupported");
+		expect(result.current.messages).toEqual([]);
 	});
 
 	it("loads markdown QA fixture messages only when the dev query flag is present", async () => {
@@ -504,7 +644,7 @@ describe("useChatSession streaming sendMessage", () => {
 			chatId: "chat-1",
 			messages: [message("assistant-1", "companion", "hello")]
 		});
-		mocks.streamChatMessage.mockImplementation(async (_chatId, _content, handlers) => {
+		mocks.streamChatMessage.mockImplementation(async (_chatId, _content, _attachments, handlers) => {
 			handlers.onStart?.({ chatId: "chat-1", personaId: "aiko" });
 			handlers.onDone?.({
 				chatId: "chat-1",
@@ -661,5 +801,15 @@ function message(id: string, author: ChatMessage["author"], text: string): ChatM
 		text,
 		createdAt: 1_780_325_400,
 		time: "12:00"
+	};
+}
+
+function pendingImage(previewUrl: string) {
+	return {
+		id: `local-${previewUrl}`,
+		file: new File(["image"], "local.png", { type: "image/png" }),
+		name: "local.png",
+		previewUrl,
+		kind: "image" as const
 	};
 }

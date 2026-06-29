@@ -25,9 +25,11 @@ The chat request sends user intent only. Provider and model selection happen ins
 
 Image attachment support keeps the same boundary. The backend foundation
 exposes backend-owned upload, preview, and pending-delete endpoints for local
-image files, validates image bytes, stores attachment metadata, and checks
-session/user ownership. Message send integration, AI message parts, and
-provider vision mapping remain planned. See `docs/chat-image-attachments.md`.
+image files, validates image bytes, stores attachment metadata, checks
+session/user ownership, accepts backend-issued attachment ids in chat message
+requests, and links attachments only after successful assistant completion. AI
+message parts and provider vision mapping remain planned. See
+`docs/chat-image-attachments.md`.
 
 The streaming path is additive and does not replace the non-streaming endpoint:
 
@@ -136,8 +138,8 @@ On first Google login, the backend seeds `user_profiles` from Google. Later logi
 
 ## AI Profiles
 
-The chat UI should send `chat_id`, `character_id`, message content, and
-backend-issued attachment ids when attachments are implemented. It should not
+The chat UI sends `chat_id`, `character_id`, message content, and
+backend-issued attachment ids for image messages. It should not
 send `provider`, `model`, local file paths, user-provided image URLs, or
 provider-specific image payloads.
 

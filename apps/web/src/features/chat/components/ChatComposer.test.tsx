@@ -1,7 +1,7 @@
 /**
  * @vitest-environment happy-dom
  */
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import ChatComposer from "@/features/chat/components/ChatComposer";
@@ -279,4 +279,90 @@ describe("ChatComposer", () => {
 		expect(alert.textContent).toContain("chat.composer.voiceMessagePermissionFailed");
 		expect(alert.getAttribute("aria-label")).toContain("NotAllowedError");
 	});
+
+	it("adds and removes selected image previews", () => {
+		const { revokeObjectUrl } = installObjectUrlMocks("blob:image-preview");
+		const { container } = render(
+			<ChatComposer
+				draft=""
+				font="inter"
+				companionName="Aiko"
+				onDraftChange={vi.fn()}
+				onSend={vi.fn()}
+			/>
+		);
+		const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+		const file = new File(["image"], "local.png", { type: "image/png" });
+
+		fireEvent.change(input, { target: { files: [file] } });
+		fireEvent.click(screen.getByRole("button", { name: "chat.composer.removeImageAttachment" }));
+
+		expect(screen.queryByAltText("local.png")).toBeNull();
+		expect(revokeObjectUrl).toHaveBeenCalledWith("blob:image-preview");
+	});
+
+	it("sends image-only messages and clears previews after success", async () => {
+		const { revokeObjectUrl } = installObjectUrlMocks("blob:image-preview");
+		const onSend = vi.fn().mockResolvedValue(true);
+		const { container } = render(
+			<ChatComposer
+				draft=""
+				font="inter"
+				companionName="Aiko"
+				onDraftChange={vi.fn()}
+				onSend={onSend}
+			/>
+		);
+		const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+		const file = new File(["image"], "local.png", { type: "image/png" });
+
+		fireEvent.change(input, { target: { files: [file] } });
+		fireEvent.click(screen.getByRole("button", { name: "chat.composer.sendMessage" }));
+
+		await waitFor(() => expect(onSend).toHaveBeenCalledTimes(1));
+		expect(onSend).toHaveBeenCalledWith([
+			expect.objectContaining({
+				file,
+				kind: "image",
+				name: "local.png",
+				previewUrl: "blob:image-preview"
+			})
+		]);
+		await waitFor(() => expect(screen.queryByAltText("local.png")).toBeNull());
+		expect(revokeObjectUrl).toHaveBeenCalledWith("blob:image-preview");
+	});
+
+	it("rejects unsupported local image types before sending", () => {
+		const onSend = vi.fn();
+		const { container } = render(
+			<ChatComposer
+				draft=""
+				font="inter"
+				companionName="Aiko"
+				onDraftChange={vi.fn()}
+				onSend={onSend}
+			/>
+		);
+		const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+		const file = new File(["<svg />"], "local.svg", { type: "image/svg+xml" });
+
+		fireEvent.change(input, { target: { files: [file] } });
+
+		expect(screen.getByRole("alert").textContent).toBe("chat.composer.imageUnsupported");
+		expect(onSend).not.toHaveBeenCalled();
+	});
 });
+
+function installObjectUrlMocks(previewUrl: string) {
+	const createObjectUrl = vi.fn(() => previewUrl);
+	const revokeObjectUrl = vi.fn();
+	Object.defineProperty(URL, "createObjectURL", {
+		configurable: true,
+		value: createObjectUrl
+	});
+	Object.defineProperty(URL, "revokeObjectURL", {
+		configurable: true,
+		value: revokeObjectUrl
+	});
+	return { createObjectUrl, revokeObjectUrl };
+}

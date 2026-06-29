@@ -27,6 +27,12 @@ apps/web/src/main.tsx
 
 The chat UI uses `apps/web/src/features/chat/services/chatApiService.ts` to create a guest session, create/load a chat, and send messages through the Rust backend. Message sends try the SSE streaming endpoint first and fall back to the non-streaming endpoint if the stream fails before it starts.
 
+Local chat image attachments are supported for PNG, JPEG, WebP, and GIF files.
+The composer can select images from the device, paste clipboard images, and
+accept drag/drop images. The browser creates `blob:` URLs only for pending
+previews, uploads image bytes to the backend before send, and sends only
+backend-issued attachment ids in chat message requests.
+
 The current supported chat companion is Aiko only. If a browser has no stored session/chat history, the message list starts empty.
 
 The clear chat button in the header is supported. It calls `DELETE /api/chats/:chat_id/messages` after a browser confirmation and leaves the current chat/session intact.
@@ -42,8 +48,9 @@ input: `docs/chat-voice.md`.
 
 Current chat message rendering:
 
-- User and assistant messages still use `ChatMessage.text` as the only content field.
+- User and assistant messages still use `ChatMessage.text` as the primary text content field.
 - User messages render as plain text.
+- User messages can render image attachment thumbnails from authenticated backend preview URLs.
 - Assistant messages render a safe Markdown subset through the frontend renderer.
 - Assistant bubbles are wider than user bubbles to improve readability for structured Markdown such as tables and code blocks.
 - Assistant messages with non-empty text expose a copy action for the raw message text.
@@ -77,7 +84,7 @@ App-level persisted settings live behind `apps/web/src/app/AppSettingsProvider.t
 - Use admin screens for AI profile configuration later.
 - Keep `VITE_*` variables limited to non-secret browser configuration.
 - Put reusable browser infrastructure in `apps/web/src/services`.
-- Keep unsupported controls disabled and visually muted. This currently includes attachments, image prompts, search, notifications, chat modes, response-shape controls, and safety toggles.
+- Keep unsupported controls disabled and visually muted. This currently includes arbitrary file attachments, image generation prompts, search, notifications, chat modes, response-shape controls, and safety toggles.
 - Supported controls currently include theme toggle, settings, send message,
-  quick prompts, clear chat, assistant speech playback, and push-to-talk speech
-  input when the backend enables them.
+  quick prompts, image attachment selection, clear chat, assistant speech
+  playback, and push-to-talk speech input when the backend enables them.

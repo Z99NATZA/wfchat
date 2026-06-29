@@ -14,8 +14,9 @@ import { useDialog } from "@/components/dialog/DialogProvider";
 import Button from "@/components/ui/Button";
 import IconButton from "@/components/ui/IconButton";
 import ChatMessageContent from "@/features/chat/components/ChatMessageContent";
+import { fetchChatAttachmentPreview } from "@/features/chat/services/chatApiService";
 import { useI18n } from "@/i18n";
-import type { ChatMessage } from "@/types/chat";
+import type { ChatMessage, ChatMessageAttachment } from "@/types/chat";
 import type { AssistantSpeechPlaybackState } from "@/features/chat/hooks/useAssistantSpeechPlayback";
 import type { Theme } from "@/types/theme";
 import { cn } from "@/utils/classNames";
@@ -457,6 +458,12 @@ function ChatMessageList({
 								: "border border-app-border bg-app-panel/92 text-app-text"
 						)}
 					>
+						{message.attachments && message.attachments.length > 0 ? (
+							<ChatMessageAttachmentGrid
+								attachments={message.attachments}
+								isUser={isUser}
+							/>
+						) : null}
 						<ChatMessageContent
 							author={message.author}
 							isStreaming={isStreamingAssistant}
@@ -780,6 +787,7 @@ function findFirstRowAfterOffset(offsets: number[], targetOffset: number): numbe
 
 function estimateMessageRowHeight(row: MessageRow): number {
 	const text = row.message.text || " ";
+	const attachmentCount = row.message.attachments?.length ?? 0;
 	const estimatedCharactersPerLine = row.message.author === "user" ? 42 : 72;
 	const textLines = Math.max(
 		1,
@@ -791,7 +799,10 @@ function estimateMessageRowHeight(row: MessageRow): number {
 	const tableLineCount = text.split("\n").filter((line) => line.trim().startsWith("|")).length;
 	const dateLabelHeight = row.dateLabel ? 38 : 0;
 	const markdownExtraHeight = Math.min(260, Math.ceil(codeBlockCount) * 88 + tableLineCount * 12);
-	const estimatedHeight = 74 + textLines * 22 + markdownExtraHeight + dateLabelHeight + MESSAGE_ROW_GAP_PX;
+	const attachmentExtraHeight =
+		attachmentCount === 0 ? 0 : Math.ceil(attachmentCount / 2) * 112 + 10;
+	const estimatedHeight =
+		74 + textLines * 22 + markdownExtraHeight + attachmentExtraHeight + dateLabelHeight + MESSAGE_ROW_GAP_PX;
 
 	return Math.max(108, Math.min(900, estimatedHeight));
 }
@@ -813,6 +824,115 @@ function estimateMessageRowHeightFromId(
 
 function isStreamingAssistantMessage(message: ChatMessage): boolean {
 	return message.author === "companion" && message.id.startsWith("local-assistant-");
+}
+
+function ChatMessageAttachmentGrid({
+	attachments,
+	isUser
+}: {
+	attachments: ChatMessageAttachment[];
+	isUser: boolean;
+}) {
+	const { t } = useI18n();
+
+	return (
+		<div className={cn("mb-3 grid gap-2", attachments.length === 1 ? "grid-cols-1" : "grid-cols-2")}>
+			{attachments.map((attachment, index) => (
+				<ChatMessageAttachmentPreview
+					key={attachment.id}
+					attachment={attachment}
+					alt={t("chat.messageList.imageAttachmentAlt", { index: index + 1 })}
+					isUser={isUser}
+				/>
+			))}
+		</div>
+	);
+}
+
+function ChatMessageAttachmentPreview({
+	alt,
+	attachment,
+	isUser
+}: {
+	alt: string;
+	attachment: ChatMessageAttachment;
+	isUser: boolean;
+}) {
+	const { t } = useI18n();
+	const [imageUrl, setImageUrl] = useState(() =>
+		attachment.previewUrl.startsWith("blob:") ? attachment.previewUrl : null
+	);
+	const [didFail, setDidFail] = useState(false);
+	const frameClassName = cn(
+		"block overflow-hidden rounded-md border",
+		isUser ? "border-white/20 dark:border-app-border" : "border-app-border"
+	);
+
+	useEffect(() => {
+		if (attachment.previewUrl.startsWith("blob:")) {
+			setImageUrl(attachment.previewUrl);
+			setDidFail(false);
+			return;
+		}
+
+		let isCurrent = true;
+		let objectUrl: string | null = null;
+		setImageUrl(null);
+		setDidFail(false);
+
+		fetchChatAttachmentPreview(attachment.id)
+			.then((blob) => {
+				if (!isCurrent) {
+					return;
+				}
+				objectUrl = URL.createObjectURL(blob);
+				setImageUrl(objectUrl);
+			})
+			.catch(() => {
+				if (isCurrent) {
+					setDidFail(true);
+				}
+			});
+
+		return () => {
+			isCurrent = false;
+			if (objectUrl) {
+				URL.revokeObjectURL(objectUrl);
+			}
+		};
+	}, [attachment.id, attachment.previewUrl]);
+
+	if (imageUrl) {
+		return (
+			<a
+				className={frameClassName}
+				href={imageUrl}
+				target="_blank"
+				rel="noreferrer"
+			>
+				<img
+					className="aspect-square max-h-56 w-full object-cover"
+					src={imageUrl}
+					alt={alt}
+					loading="lazy"
+				/>
+			</a>
+		);
+	}
+
+	return (
+		<div
+			className={cn(
+				frameClassName,
+				"flex aspect-square max-h-56 w-full items-center justify-center bg-app-soft px-3 text-center text-xs",
+				isUser ? "text-white/80 dark:text-muted" : "text-muted"
+			)}
+			role={didFail ? "alert" : "status"}
+			aria-label={didFail ? t("chat.messageList.imageAttachmentMissing") : alt}
+		>
+			{didFail ? t("chat.messageList.imageAttachmentMissing") : ""}
+		</div>
+	);
 }
 
 export default ChatMessageList;

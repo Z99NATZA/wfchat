@@ -10,16 +10,19 @@ import {
 	createMemorySummary,
 	createPersonaChat,
 	deleteChat,
+	deleteChatAttachment,
 	deleteMemoryFact,
 	deleteMemorySummary,
 	getChat,
 	getChatUiConfig,
+	isChatApiStatus,
 	isNotFound,
 	listMemoryFacts,
 	listMemorySummaries,
 	listPersonaChats,
 	sendChatMessage,
 	streamChatMessage,
+	uploadChatImageAttachment,
 	updateMemoryFact,
 	updateMemorySummary
 } from "@/features/chat/services/chatApiService";
@@ -35,7 +38,14 @@ import {
 	syncLocalDeletesNow
 } from "@/services/syncService";
 import { useDialog } from "@/components/dialog/DialogProvider";
-import type { ChatMessage, ChatSessionSummary, MemoryFact, MemorySummary } from "@/types/chat";
+import type {
+	ChatMessage,
+	ChatMessageAttachment,
+	ChatSessionSummary,
+	MemoryFact,
+	MemorySummary,
+	PendingChatImageAttachment
+} from "@/types/chat";
 import { formatMessageTime } from "@/utils/date";
 
 const CHAT_PATH_PREFIX = "/chat/";
@@ -601,15 +611,39 @@ export function useChatSession({ onAvatarChatEvent }: UseChatSessionOptions = {}
 		}
 	}
 
-	async function sendMessage() {
+	async function sendMessage(imageAttachments: PendingChatImageAttachment[] = []) {
 		const trimmedDraft = draft.trim();
+		const pendingImageAttachments = imageAttachments.filter((attachment) => attachment.kind === "image");
+		const hasImageAttachments = pendingImageAttachments.length > 0;
 
-		if (!trimmedDraft || isSending || !selectedPersonaId || isActiveChatReadOnly) {
-			return;
+		if ((!trimmedDraft && !hasImageAttachments) || isSending || !selectedPersonaId || isActiveChatReadOnly) {
+			return false;
 		}
 
 		stopAssistantSpeech();
 		cancelUserSpeechInput();
+		setIsSending(true);
+		setErrorMessage(null);
+
+		let uploadedAttachments: ChatMessageAttachment[] = [];
+		try {
+			for (const attachment of pendingImageAttachments) {
+				const uploaded = await uploadChatImageAttachment(attachment.file);
+				uploadedAttachments = [
+					...uploadedAttachments,
+					{
+						...uploaded,
+						previewUrl: attachment.previewUrl
+					}
+				];
+			}
+		} catch (error) {
+			await cleanupUploadedAttachments(uploadedAttachments);
+			setErrorMessage(attachmentUploadErrorMessage(error, t));
+			setIsSending(false);
+			return false;
+		}
+
 		const createdAt = Math.floor(Date.now() / 1000);
 		const timestamp = formatMessageTime(new Date(createdAt * 1000));
 		const optimisticMessage: ChatMessage = {
@@ -617,13 +651,16 @@ export function useChatSession({ onAvatarChatEvent }: UseChatSessionOptions = {}
 			author: "user",
 			text: trimmedDraft,
 			createdAt,
-			time: timestamp
+			time: timestamp,
+			attachments: uploadedAttachments
 		};
+		const sendAttachments = uploadedAttachments.map((attachment) => ({
+			id: attachment.id,
+			kind: attachment.kind
+		}));
 
 		setMessages((currentMessages) => [...currentMessages, optimisticMessage]);
 		setDraft("");
-		setIsSending(true);
-		setErrorMessage(null);
 		onAvatarChatEvent?.({
 			type: "assistant_waiting",
 			chatId: activeChatId,
@@ -691,7 +728,7 @@ export function useChatSession({ onAvatarChatEvent }: UseChatSessionOptions = {}
 			}
 
 			try {
-				await streamChatMessage(chatId, trimmedDraft, {
+				await streamChatMessage(chatId, trimmedDraft, sendAttachments, {
 					onStart: () => {
 						streamStarted = true;
 						ensureOptimisticAssistantMessage();
@@ -730,7 +767,7 @@ export function useChatSession({ onAvatarChatEvent }: UseChatSessionOptions = {}
 				}
 
 				if (!streamStarted && !streamReceivedToken) {
-					const nextMessages = await sendChatMessage(chatId, trimmedDraft);
+					const nextMessages = await sendChatMessage(chatId, trimmedDraft, sendAttachments);
 					applyServerMessages(
 						chatId,
 						nextMessages,
@@ -741,7 +778,9 @@ export function useChatSession({ onAvatarChatEvent }: UseChatSessionOptions = {}
 
 				throw streamError;
 			}
+			return true;
 		} catch {
+			await cleanupUploadedAttachments(uploadedAttachments);
 			if (createdChatId) {
 				void deleteChat(createdChatId);
 				setActiveChatId(null);
@@ -758,6 +797,7 @@ export function useChatSession({ onAvatarChatEvent }: UseChatSessionOptions = {}
 				chatId: createdChatId ?? activeChatId,
 				personaId: selectedPersonaId
 			});
+			return false;
 		} finally {
 			setIsSending(false);
 		}
@@ -1034,6 +1074,29 @@ function mergeDraftWithTranscript(currentDraft: string, transcript: string): str
 	}
 
 	return /\s$/.test(currentDraft) ? `${currentDraft}${trimmedTranscript}` : `${currentDraft} ${trimmedTranscript}`;
+}
+
+async function cleanupUploadedAttachments(attachments: ChatMessageAttachment[]) {
+	await Promise.allSettled(attachments.map((attachment) => deleteChatAttachment(attachment.id)));
+}
+
+function attachmentUploadErrorMessage(error: unknown, t: (key: string) => string): string {
+	if (isChatApiStatus(error, 413)) {
+		return t("chat.session.attachmentTooLarge");
+	}
+
+	const message = error instanceof Error ? error.message.toLowerCase() : "";
+	if (message.includes("too large") || message.includes("request entity too large")) {
+		return t("chat.session.attachmentTooLarge");
+	}
+	if (message.includes("not supported")) {
+		return t("chat.session.attachmentUnsupported");
+	}
+	if (message.includes("not a valid image") || message.includes("invalid attachment upload")) {
+		return t("chat.session.attachmentInvalid");
+	}
+
+	return t("chat.session.attachmentUploadError");
 }
 
 function mergeMemoryFacts(primary: MemoryFact[], secondary: MemoryFact[]): MemoryFact[] {

@@ -56,7 +56,7 @@ Let users send local images to the chat so the assistant can understand them thr
 
 ## Frontend Flow
 
-- Status: planned, not implemented.
+- Status: implemented for local image selection, paste, drag/drop, preview, upload, send, and render.
 - Enable the image button in `ChatComposer`.
 - Add a hidden file input for accepted image types.
 - Allow drag and drop onto the composer.
@@ -65,7 +65,7 @@ Let users send local images to the chat so the assistant can understand them thr
 - Never send `blob:` URLs to the backend.
 - Never send local filesystem paths to the backend.
 - Upload selected images before sending the message.
-- Render upload progress or pending state.
+- Render pending state through the existing sending state.
 - Render thumbnail chips above the textarea.
 - Allow removing each pending image before send.
 - Disable duplicate sends while upload or send is active.
@@ -136,7 +136,7 @@ Rules:
 
 ### Send Message
 
-Status: planned, not implemented.
+Status: implemented for attachment id validation, message linking, SSE, and non-streaming send.
 
 Existing endpoints stay:
 
@@ -254,21 +254,22 @@ Status: planned, not implemented.
 
 ## Rendering Plan
 
-Status: planned, not implemented.
+Status: implemented for message thumbnails. Full preview dialog and missing-image placeholder remain planned.
 
 - User bubbles render plain text.
 - User bubbles render attached image thumbnails.
 - Assistant bubbles keep current Markdown rendering.
 - Copy-message action copies text only.
-- Image click opens a preview dialog.
-- Preview dialog uses backend preview URL.
+- Thumbnail rendering fetches the backend preview URL with the session header and renders a browser `blob:` URL.
+- Image click opens the fetched `blob:` URL in a new tab.
+- Preview dialog uses authenticated backend preview bytes. Planned.
 - Preview dialog does not expose storage paths.
-- Missing image shows a compact placeholder.
+- Missing image shows a compact placeholder. Planned.
 - Upload failures show a composer-level error.
 
 ## Sync Plan
 
-Status: planned, not implemented.
+Status: implemented for message attachment metadata in local message cache. Raw image sync remains out of scope.
 
 - Sync attachment metadata with chat message cache.
 - Do not sync raw image bytes in the first implementation.
@@ -310,27 +311,27 @@ Backend:
 - Reject unsupported MIME. Implemented through magic-byte allowlist.
 - Reject oversized image. Implemented.
 - Reject oversized dimensions. Implemented.
-- Reject too many attachments. Planned for message send.
+- Reject too many attachments. Implemented for message send.
 - Reject attachment owned by another session. Implemented for preview/delete.
 - Reject URL/path attachment input. Implemented by upload-only API shape.
-- Link attachments only after successful message completion.
-- Leave pending attachments unlinked after provider failure.
+- Link attachments only after successful message completion. Implemented.
+- Leave pending attachments unlinked after provider failure. Implemented.
 - Return safe upload errors. Implemented.
-- Return safe stream errors.
+- Return safe stream errors. Implemented.
 
 Frontend:
 
-- File picker accepts only supported image types.
-- Drag and drop adds images.
-- Clipboard paste adds images.
-- Thumbnail preview renders.
-- Remove image works.
-- Image-only send works.
-- Text plus image send works.
-- Upload failure state renders.
-- Send is disabled while upload is pending.
-- Optimistic user image message renders.
-- Final server message replacement preserves attachments.
+- File picker accepts only supported image types. Implemented.
+- Drag and drop adds images. Implemented.
+- Clipboard paste adds images. Implemented.
+- Thumbnail preview renders. Implemented.
+- Remove image works. Implemented.
+- Image-only send works. Implemented.
+- Text plus image send works. Implemented.
+- Upload failure state renders. Implemented.
+- Send is disabled while upload is pending. Implemented through send state.
+- Optimistic user image message renders. Implemented.
+- Final server message replacement preserves attachments. Implemented.
 
 Provider:
 
@@ -343,9 +344,9 @@ Provider:
 1. Documentation and contract.
 2. Database and storage foundation. Implemented.
 3. Secure upload API. Implemented.
-4. Frontend picker, paste, drop, and preview.
-5. Message request attachments.
-6. Message rendering attachments.
+4. Frontend picker, paste, drop, and preview. Implemented.
+5. Message request attachments. Implemented.
+6. Message rendering attachments. Implemented.
 7. AI message parts.
 8. OpenAI vision adapter.
 9. Tests and cleanup.
@@ -383,4 +384,4 @@ Provider:
 - Tests cover validation, ownership, rendering, and provider mapping.
 - Docs match implemented behavior.
 
-Current status: backend upload, preview, delete, validation, storage, metadata persistence, and ownership checks are implemented. Chat message attachment sending, rendering, sync materialization, AI message parts, and provider vision are still planned.
+Current status: backend upload, preview, delete, validation, storage, message linking, metadata persistence, ownership checks, frontend composer image selection, upload, message send, cache metadata, and thumbnail rendering are implemented. AI message parts, provider vision, preview dialog, missing-image placeholder, raw image sync, and orphan cleanup scheduling are still planned.

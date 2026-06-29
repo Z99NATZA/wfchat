@@ -1,7 +1,14 @@
 import { AxiosError } from "axios";
 import { apiBaseUrl, apiClient } from "@/services/apiClient";
 import { readStorageItem, writeStorageItem } from "@/services/storageService";
-import type { ChatMessage, ChatPersona, ChatSessionSummary, MemoryFact, MemorySummary } from "@/types/chat";
+import type {
+	ChatMessage,
+	ChatMessageAttachment,
+	ChatPersona,
+	ChatSessionSummary,
+	MemoryFact,
+	MemorySummary
+} from "@/types/chat";
 import { formatMessageTime } from "@/utils/date";
 
 const sessionStorageKey = "wfchat.sessionId";
@@ -16,7 +23,18 @@ type ApiMessage = {
 	id: string;
 	role: ApiMessageRole;
 	content: string;
+	attachments?: ApiChatAttachment[];
 	created_at: number;
+};
+
+type ApiChatAttachment = {
+	id: string;
+	kind: "image";
+	mime_type: string;
+	byte_size: number;
+	width?: number | null;
+	height?: number | null;
+	preview_url: string;
 };
 
 type ApiChat = {
@@ -75,6 +93,16 @@ export type ParsedSseEvent = {
 	data: string;
 };
 
+export class ChatApiRequestError extends Error {
+	status: number;
+
+	constructor(message: string, status: number) {
+		super(message);
+		this.name = "ChatApiRequestError";
+		this.status = status;
+	}
+}
+
 type ApiChatUiPersona = {
 	id: string;
 	name: string;
@@ -100,6 +128,11 @@ type ApiChatUiConfig = {
 
 type ApiSpeechTranscriptionResponse = {
 	text: string;
+};
+
+export type SendChatMessageAttachment = {
+	id: string;
+	kind: "image";
 };
 
 export type VoiceCredit = {
@@ -154,11 +187,15 @@ export async function getChat(chatId: string): Promise<{ chatId: string; message
 	};
 }
 
-export async function sendChatMessage(chatId: string, content: string): Promise<ChatMessage[]> {
+export async function sendChatMessage(
+	chatId: string,
+	content: string,
+	attachments: SendChatMessageAttachment[] = []
+): Promise<ChatMessage[]> {
 	const sessionId = await ensureGuestSession();
 	const response = await apiClient.post<ApiSendMessageResponse>(
 		`/api/chats/${chatId}/messages`,
-		{ content },
+		messageRequestBody(content, attachments),
 		{ headers: sessionHeaders(sessionId) }
 	);
 
@@ -168,6 +205,7 @@ export async function sendChatMessage(chatId: string, content: string): Promise<
 export async function streamChatMessage(
 	chatId: string,
 	content: string,
+	attachments: SendChatMessageAttachment[],
 	handlers: StreamChatMessageHandlers
 ): Promise<void> {
 	const sessionId = await ensureGuestSession();
@@ -179,11 +217,11 @@ export async function streamChatMessage(
 			Accept: "text/event-stream",
 			"Content-Type": "application/json"
 		},
-		body: JSON.stringify({ content })
+		body: JSON.stringify(messageRequestBody(content, attachments))
 	});
 
 	if (!response.ok) {
-		throw new Error(await readApiError(response));
+		throw await apiRequestError(response);
 	}
 
 	if (!response.body) {
@@ -208,6 +246,58 @@ export async function streamChatMessage(
 		parser.push(remainingText);
 	}
 	parser.end();
+}
+
+export async function uploadChatImageAttachment(file: File): Promise<ChatMessageAttachment> {
+	const sessionId = await ensureGuestSession();
+	const formData = new FormData();
+	formData.append("file", file, file.name || "image");
+	const response = await fetch(apiUrl("/api/chat/attachments"), {
+		method: "POST",
+		credentials: "include",
+		headers: {
+			...sessionHeaders(sessionId)
+		},
+		body: formData
+	});
+
+	if (!response.ok) {
+		throw await apiRequestError(response);
+	}
+
+	return toChatAttachment((await response.json()) as ApiChatAttachment);
+}
+
+export async function deleteChatAttachment(attachmentId: string): Promise<void> {
+	const sessionId = await ensureGuestSession();
+	const response = await fetch(apiUrl(`/api/chat/attachments/${attachmentId}`), {
+		method: "DELETE",
+		credentials: "include",
+		headers: {
+			...sessionHeaders(sessionId)
+		}
+	});
+
+	if (!response.ok && response.status !== 404) {
+		throw await apiRequestError(response);
+	}
+}
+
+export async function fetchChatAttachmentPreview(attachmentId: string): Promise<Blob> {
+	const sessionId = await ensureGuestSession();
+	const response = await fetch(apiUrl(`/api/chat/attachments/${attachmentId}/preview`), {
+		method: "GET",
+		credentials: "include",
+		headers: {
+			...sessionHeaders(sessionId)
+		}
+	});
+
+	if (!response.ok) {
+		throw await apiRequestError(response);
+	}
+
+	return response.blob();
 }
 
 export async function clearChatMessages(chatId: string): Promise<ChatMessage[]> {
@@ -274,7 +364,7 @@ export async function transcribeUserSpeech(
 	});
 
 	if (!response.ok) {
-		throw new Error(await readApiError(response));
+		throw await apiRequestError(response);
 	}
 
 	const payload = (await response.json()) as ApiSpeechTranscriptionResponse;
@@ -320,7 +410,7 @@ export async function fetchAssistantMessageSpeech(
 	});
 
 	if (!response.ok) {
-		throw new Error(await readApiError(response));
+		throw await apiRequestError(response);
 	}
 
 	return response;
@@ -437,7 +527,30 @@ function toChatMessage(message: ApiMessage): ChatMessage {
 		author: message.role === "user" ? "user" : "companion",
 		text: message.content,
 		createdAt: message.created_at,
-		time: formatMessageTime(new Date(message.created_at * 1000))
+		time: formatMessageTime(new Date(message.created_at * 1000)),
+		attachments: (message.attachments ?? []).map(toChatAttachment)
+	};
+}
+
+function toChatAttachment(attachment: ApiChatAttachment): ChatMessageAttachment {
+	return {
+		id: attachment.id,
+		kind: attachment.kind,
+		mimeType: attachment.mime_type,
+		byteSize: attachment.byte_size,
+		width: attachment.width,
+		height: attachment.height,
+		previewUrl: apiUrl(attachment.preview_url)
+	};
+}
+
+function messageRequestBody(content: string, attachments: SendChatMessageAttachment[]) {
+	return {
+		content,
+		attachments: attachments.map((attachment) => ({
+			id: attachment.id,
+			kind: attachment.kind
+		}))
 	};
 }
 
@@ -453,6 +566,10 @@ function toSessionSummary(chat: ApiChat): ChatSessionSummary {
 
 export function isNotFound(error: unknown): boolean {
 	return error instanceof AxiosError && error.response?.status === 404;
+}
+
+export function isChatApiStatus(error: unknown, status: number): boolean {
+	return error instanceof ChatApiRequestError && error.status === status;
 }
 
 export function createSseEventParser(onEvent: (event: ParsedSseEvent) => void) {
@@ -565,11 +682,20 @@ function parseStreamEventData<TPayload>(event: ParsedSseEvent): TPayload {
 
 async function readApiError(response: Response): Promise<string> {
 	try {
-		const body = (await response.json()) as { error?: string };
+		const body = (await response.clone().json()) as { error?: string };
 		return body.error ?? `request failed with status ${response.status}`;
 	} catch {
-		return `request failed with status ${response.status}`;
+		try {
+			const text = (await response.text()).trim();
+			return text || `request failed with status ${response.status}`;
+		} catch {
+			return `request failed with status ${response.status}`;
+		}
 	}
+}
+
+async function apiRequestError(response: Response): Promise<ChatApiRequestError> {
+	return new ChatApiRequestError(await readApiError(response), response.status);
 }
 
 function apiUrl(path: string): string {
