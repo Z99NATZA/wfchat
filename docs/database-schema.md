@@ -74,6 +74,32 @@ This project uses PostgreSQL with schema SQL at `apps/api/db/init.sql`.
   - `idx_messages_chat_created (chat_id, created_at asc)`
   - `idx_messages_chat_sort (chat_id, sort_order asc)`
 
+### Planned `chat_attachments`
+
+- Purpose: validated image attachment metadata for user chat messages.
+- Status: planned, not implemented.
+- Detailed contract: `docs/chat-image-attachments.md`.
+- Columns:
+  - `id uuid primary key`
+  - `owner_session_id uuid not null` -> `auth_sessions(id)` (`on delete cascade`)
+  - `owner_user_id uuid null` for registered account ownership
+  - `chat_id uuid null` -> `chats(id)` (`on delete cascade`)
+  - `message_id uuid null` -> `chat_messages(id)` (`on delete cascade`)
+  - `kind text not null`
+  - `mime_type text not null`
+  - `byte_size bigint not null`
+  - `width integer null`
+  - `height integer null`
+  - `sha256 text not null`
+  - `storage_key text not null`
+  - `created_at timestamptz not null default now()`
+  - `deleted_at timestamptz null`
+- Indexes:
+  - `idx_chat_attachments_owner_created (owner_session_id, created_at desc)`
+  - `idx_chat_attachments_owner_user_created (owner_user_id, created_at desc)`
+  - `idx_chat_attachments_message (message_id)`
+  - `idx_chat_attachments_chat (chat_id)`
+
 ### `memory_facts`
 
 - Purpose: atomic user memory facts scoped by session + persona.
@@ -131,5 +157,6 @@ This project uses PostgreSQL with schema SQL at `apps/api/db/init.sql`.
 - One registered `user_id` has one editable `user_profile`.
 - One registered `user_id` can have one or more external `auth_identities`.
 - One `chat` has many `chat_messages`.
+- Planned image attachments belong to one owner, may be pending before send, and become linked to one `chat_message` after successful message completion.
 - One owner + `character_id` has many `memory_facts` and `memory_summaries`.
 - `source_chat_id` on memory tables is optional provenance back to a chat.

@@ -23,6 +23,12 @@ React
 
 The chat request sends user intent only. Provider and model selection happen inside the backend.
 
+Planned image attachment support keeps the same boundary. The chat UI uploads
+local image files to backend-owned attachment endpoints, then sends attachment
+ids with the message request. The backend validates image bytes, resolves
+attachments into AI message parts, and lets provider adapters map those parts
+to provider-specific vision payloads. See `docs/chat-image-attachments.md`.
+
 The streaming path is additive and does not replace the non-streaming endpoint:
 
 ```text
@@ -130,7 +136,10 @@ On first Google login, the backend seeds `user_profiles` from Google. Later logi
 
 ## AI Profiles
 
-The chat UI should send `chat_id`, `character_id`, and message content. It should not send `provider` or `model`.
+The chat UI should send `chat_id`, `character_id`, message content, and
+backend-issued attachment ids when attachments are implemented. It should not
+send `provider`, `model`, local file paths, user-provided image URLs, or
+provider-specific image payloads.
 
 Backend routing should use an AI profile:
 
