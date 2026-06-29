@@ -1,4 +1,6 @@
 use axum::{
+    body::Body,
+    extract::DefaultBodyLimit,
     extract::{Multipart, Path, State},
     http::{header, HeaderMap, HeaderName, HeaderValue},
     response::{
@@ -19,16 +21,34 @@ const MAX_TRANSCRIPTION_AUDIO_BYTES: usize = 25 * 1024 * 1024;
 
 use crate::{
     ai::{AiChatStreamEvent, AiMessage, AiRole, AiService},
+    attachments::{
+        image_storage_key, read_attachment_bytes, remove_attachment_file,
+        validate_image_attachment, write_attachment_bytes, CHAT_ATTACHMENT_KIND_IMAGE,
+        MAX_ATTACHMENT_MULTIPART_BYTES,
+    },
     characters,
     error::{AppError, AppResult},
     state::AppState,
-    store::{ChatRecord, OwnerScope, StoredMessage},
+    store::{ChatRecord, NewChatAttachmentRecord, OwnerScope, StoredMessage},
     voice::{SpeechAudioStreamBody, VoiceService},
 };
 
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/chat-ui/config", get(get_chat_ui_config))
+        .route(
+            "/chat/attachments",
+            axum::routing::post(upload_chat_attachment)
+                .layer(DefaultBodyLimit::max(MAX_ATTACHMENT_MULTIPART_BYTES)),
+        )
+        .route(
+            "/chat/attachments/{attachment_id}",
+            axum::routing::delete(delete_chat_attachment),
+        )
+        .route(
+            "/chat/attachments/{attachment_id}/preview",
+            get(preview_chat_attachment),
+        )
         .route(
             "/chat/transcription",
             axum::routing::post(transcribe_user_speech),
@@ -132,6 +152,17 @@ struct ChatVoiceCreditResponse {
     text: String,
 }
 
+#[derive(Serialize)]
+struct ChatAttachmentResponse {
+    id: Uuid,
+    kind: String,
+    mime_type: String,
+    byte_size: i64,
+    width: Option<i32>,
+    height: Option<i32>,
+    preview_url: String,
+}
+
 async fn list_chats_for_persona(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -190,6 +221,153 @@ fn chat_voice_credits(config: &crate::config::Config) -> Vec<ChatVoiceCreditResp
         .unwrap_or_else(|| format!("VOICEVOX speaker {}", config.voicevox_speaker_id));
 
     vec![ChatVoiceCreditResponse { text }]
+}
+
+async fn upload_chat_attachment(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    mut multipart: Multipart,
+) -> AppResult<Json<ChatAttachmentResponse>> {
+    let session = state
+        .store
+        .ensure_session(session_id_from_headers(&headers))
+        .await;
+    let owner = OwnerScope::from_session(&session);
+    let mut file_bytes = None;
+
+    while let Some(field) = multipart
+        .next_field()
+        .await
+        .map_err(|_| AppError::BadRequest("invalid attachment upload".to_owned()))?
+    {
+        let Some(name) = field.name().map(str::to_owned) else {
+            continue;
+        };
+
+        if name != "file" {
+            continue;
+        }
+
+        if file_bytes.is_some() {
+            return Err(AppError::BadRequest(
+                "only one image attachment can be uploaded per request".to_owned(),
+            ));
+        }
+
+        let bytes = field
+            .bytes()
+            .await
+            .map_err(|_| AppError::BadRequest("invalid attachment upload".to_owned()))?;
+        file_bytes = Some(bytes.to_vec());
+    }
+
+    let file_bytes = file_bytes.ok_or_else(|| {
+        AppError::BadRequest("image attachment upload requires a file".to_owned())
+    })?;
+    let validated = validate_image_attachment(&state.config, &file_bytes)?;
+    let attachment_id = Uuid::new_v4();
+    let storage_key = image_storage_key(attachment_id, validated.extension);
+
+    write_attachment_bytes(
+        &state.config.chat_attachment_upload_dir,
+        &storage_key,
+        &file_bytes,
+    )
+    .await?;
+
+    let attachment = state
+        .store
+        .create_chat_attachment(
+            owner,
+            NewChatAttachmentRecord {
+                id: attachment_id,
+                kind: CHAT_ATTACHMENT_KIND_IMAGE.to_owned(),
+                mime_type: validated.mime_type.to_owned(),
+                byte_size: validated.byte_size as i64,
+                width: Some(validated.width as i32),
+                height: Some(validated.height as i32),
+                sha256: validated.sha256.clone(),
+                storage_key: storage_key.clone(),
+            },
+        )
+        .await;
+
+    let Some(attachment) = attachment else {
+        remove_attachment_file(&state.config.chat_attachment_upload_dir, &storage_key).await;
+        return Err(AppError::BadRequest(
+            "failed to save attachment metadata".to_owned(),
+        ));
+    };
+
+    Ok(Json(chat_attachment_response(attachment)))
+}
+
+async fn preview_chat_attachment(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(attachment_id): Path<Uuid>,
+) -> AppResult<impl IntoResponse> {
+    let session = state
+        .store
+        .ensure_session(session_id_from_headers(&headers))
+        .await;
+    let owner = OwnerScope::from_session(&session);
+    let attachment = state
+        .store
+        .get_chat_attachment(owner, attachment_id)
+        .await
+        .ok_or(AppError::NotFound)?;
+    let bytes = read_attachment_bytes(
+        &state.config.chat_attachment_upload_dir,
+        &attachment.storage_key,
+    )
+    .await?;
+    let content_type = HeaderValue::from_str(&attachment.mime_type)
+        .unwrap_or_else(|_| HeaderValue::from_static("application/octet-stream"));
+
+    Ok((
+        [
+            (header::CONTENT_TYPE, content_type),
+            (header::CACHE_CONTROL, HeaderValue::from_static("no-store")),
+        ],
+        Body::from(bytes),
+    ))
+}
+
+async fn delete_chat_attachment(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(attachment_id): Path<Uuid>,
+) -> AppResult<Json<serde_json::Value>> {
+    let session = state
+        .store
+        .ensure_session(session_id_from_headers(&headers))
+        .await;
+    let owner = OwnerScope::from_session(&session);
+    let attachment = state
+        .store
+        .get_chat_attachment(owner, attachment_id)
+        .await
+        .ok_or(AppError::NotFound)?;
+
+    if attachment.message_id.is_some() {
+        return Err(AppError::BadRequest(
+            "sent attachments cannot be deleted from this endpoint".to_owned(),
+        ));
+    }
+
+    let deleted = state
+        .store
+        .mark_pending_chat_attachment_deleted(owner, attachment_id)
+        .await
+        .ok_or(AppError::NotFound)?;
+    remove_attachment_file(
+        &state.config.chat_attachment_upload_dir,
+        &deleted.storage_key,
+    )
+    .await;
+
+    Ok(Json(json!({ "ok": true })))
 }
 
 async fn create_chat_for_persona(
@@ -537,6 +715,20 @@ fn message_response(message: StoredMessage) -> MessageResponse {
     }
 }
 
+fn chat_attachment_response(
+    attachment: crate::store::ChatAttachmentRecord,
+) -> ChatAttachmentResponse {
+    ChatAttachmentResponse {
+        id: attachment.id,
+        kind: attachment.kind,
+        mime_type: attachment.mime_type,
+        byte_size: attachment.byte_size,
+        width: attachment.width,
+        height: attachment.height,
+        preview_url: format!("/api/chat/attachments/{}/preview", attachment.id),
+    }
+}
+
 struct CompletedChatMessage {
     user_message: StoredMessage,
     assistant_message: StoredMessage,
@@ -740,8 +932,10 @@ mod tests {
         body::{to_bytes, Body},
         http::{header, HeaderName, Request, StatusCode},
     };
+    use image::{DynamicImage, ImageBuffer, ImageFormat, Rgba};
     use reqwest::Client;
     use serde_json::Value;
+    use std::io::Cursor;
     use tower::ServiceExt;
 
     use crate::{app::build_router, config::Config, store::ChatStore};
@@ -1026,6 +1220,136 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn upload_chat_attachment_accepts_png_and_enforces_preview_ownership() {
+        let Some(state) = test_state().await else {
+            return;
+        };
+        let session = state.store.create_guest_session().await;
+        let other_session = state.store.create_guest_session().await;
+        let upload_dir = state.config.chat_attachment_upload_dir.clone();
+        let app = build_router(state.clone());
+        let boundary = "wfchat-image-upload";
+        let request = Request::builder()
+            .method("POST")
+            .uri("/api/chat/attachments")
+            .header(
+                header::CONTENT_TYPE,
+                format!("multipart/form-data; boundary={boundary}"),
+            )
+            .header("x-wfchat-session", session.id.to_string())
+            .body(Body::from(multipart_file_body(boundary, &png_bytes(2, 3))))
+            .expect("request should build");
+
+        let response = app
+            .clone()
+            .oneshot(request)
+            .await
+            .expect("request should run");
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("body should collect");
+        let payload: Value = serde_json::from_slice(&body).expect("upload response should be json");
+        assert_eq!(payload["kind"].as_str(), Some("image"));
+        assert_eq!(payload["mime_type"].as_str(), Some("image/png"));
+        assert_eq!(payload["width"].as_i64(), Some(2));
+        assert_eq!(payload["height"].as_i64(), Some(3));
+        let preview_url = payload["preview_url"]
+            .as_str()
+            .expect("preview url should be present");
+
+        let request = Request::builder()
+            .method("GET")
+            .uri(preview_url)
+            .header("x-wfchat-session", other_session.id.to_string())
+            .body(Body::empty())
+            .expect("request should build");
+        let response = app
+            .clone()
+            .oneshot(request)
+            .await
+            .expect("request should run");
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+
+        let request = Request::builder()
+            .method("GET")
+            .uri(preview_url)
+            .header("x-wfchat-session", session.id.to_string())
+            .body(Body::empty())
+            .expect("request should build");
+        let response = app
+            .clone()
+            .oneshot(request)
+            .await
+            .expect("request should run");
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_header_contains(&response, header::CONTENT_TYPE, "image/png");
+        assert_header_contains(&response, header::CACHE_CONTROL, "no-store");
+
+        let request = Request::builder()
+            .method("DELETE")
+            .uri(preview_url.trim_end_matches("/preview"))
+            .header("x-wfchat-session", other_session.id.to_string())
+            .body(Body::empty())
+            .expect("request should build");
+        let response = app
+            .clone()
+            .oneshot(request)
+            .await
+            .expect("request should run");
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+
+        let request = Request::builder()
+            .method("DELETE")
+            .uri(preview_url.trim_end_matches("/preview"))
+            .header("x-wfchat-session", session.id.to_string())
+            .body(Body::empty())
+            .expect("request should build");
+        let response = app.oneshot(request).await.expect("request should run");
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let _ = tokio::fs::remove_dir_all(upload_dir).await;
+    }
+
+    #[tokio::test]
+    async fn upload_chat_attachment_rejects_svg_bytes_even_with_image_content_type() {
+        let Some(state) = test_state().await else {
+            return;
+        };
+        let session = state.store.create_guest_session().await;
+        let app = build_router(state.clone());
+        let boundary = "wfchat-image-upload";
+        let request = Request::builder()
+            .method("POST")
+            .uri("/api/chat/attachments")
+            .header(
+                header::CONTENT_TYPE,
+                format!("multipart/form-data; boundary={boundary}"),
+            )
+            .header("x-wfchat-session", session.id.to_string())
+            .body(Body::from(multipart_file_body(
+                boundary,
+                br#"<svg xmlns="http://www.w3.org/2000/svg"></svg>"#,
+            )))
+            .expect("request should build");
+
+        let response = app.oneshot(request).await.expect("request should run");
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        let body = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("body should collect");
+        let payload: Value = serde_json::from_slice(&body).expect("error response should be json");
+        assert_eq!(
+            payload["error"].as_str(),
+            Some("bad request: image attachment type is not supported")
+        );
+
+        let _ = tokio::fs::remove_dir_all(state.config.chat_attachment_upload_dir).await;
+    }
+
+    #[tokio::test]
     async fn chat_ui_config_exposes_transcription_capability() {
         let Some(state) = test_state().await else {
             return;
@@ -1126,10 +1450,44 @@ mod tests {
                 voicevox_pre_phoneme_length: None,
                 voicevox_post_phoneme_length: None,
                 google_client_id: None,
+                chat_attachment_upload_dir: test_upload_dir(),
+                chat_attachment_max_bytes: 10 * 1024 * 1024,
+                chat_attachment_max_images_per_message: 4,
+                chat_attachment_max_width: 8192,
+                chat_attachment_max_height: 8192,
+                chat_attachment_max_pixels: 20_000_000,
             },
             http: Client::new(),
             store,
         })
+    }
+
+    fn test_upload_dir() -> String {
+        std::env::temp_dir()
+            .join(format!("wfchat-api-upload-test-{}", Uuid::new_v4()))
+            .to_string_lossy()
+            .to_string()
+    }
+
+    fn png_bytes(width: u32, height: u32) -> Vec<u8> {
+        let image = ImageBuffer::from_pixel(width, height, Rgba([1, 2, 3, 255]));
+        let mut bytes = Cursor::new(Vec::new());
+        DynamicImage::ImageRgba8(image)
+            .write_to(&mut bytes, ImageFormat::Png)
+            .expect("test png should encode");
+        bytes.into_inner()
+    }
+
+    fn multipart_file_body(boundary: &str, file_bytes: &[u8]) -> Vec<u8> {
+        let mut body = Vec::new();
+        body.extend_from_slice(format!("--{boundary}\r\n").as_bytes());
+        body.extend_from_slice(
+            b"Content-Disposition: form-data; name=\"file\"; filename=\"local.png\"\r\n",
+        );
+        body.extend_from_slice(b"Content-Type: image/png\r\n\r\n");
+        body.extend_from_slice(file_bytes);
+        body.extend_from_slice(format!("\r\n--{boundary}--\r\n").as_bytes());
+        body
     }
 
     fn assert_header_contains(

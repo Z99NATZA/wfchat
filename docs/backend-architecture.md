@@ -23,11 +23,11 @@ React
 
 The chat request sends user intent only. Provider and model selection happen inside the backend.
 
-Planned image attachment support keeps the same boundary. The chat UI uploads
-local image files to backend-owned attachment endpoints, then sends attachment
-ids with the message request. The backend validates image bytes, resolves
-attachments into AI message parts, and lets provider adapters map those parts
-to provider-specific vision payloads. See `docs/chat-image-attachments.md`.
+Image attachment support keeps the same boundary. The backend foundation
+exposes backend-owned upload, preview, and pending-delete endpoints for local
+image files, validates image bytes, stores attachment metadata, and checks
+session/user ownership. Message send integration, AI message parts, and
+provider vision mapping remain planned. See `docs/chat-image-attachments.md`.
 
 The streaming path is additive and does not replace the non-streaming endpoint:
 

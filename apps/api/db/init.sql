@@ -55,6 +55,28 @@ create index if not exists idx_chats_owner_user_character_updated on chats(owner
 create index if not exists idx_messages_chat_created on chat_messages(chat_id, created_at asc);
 create index if not exists idx_messages_chat_sort on chat_messages(chat_id, sort_order asc);
 
+create table if not exists chat_attachments (
+    id uuid primary key,
+    owner_session_id uuid not null references auth_sessions(id) on delete cascade,
+    owner_user_id uuid,
+    chat_id uuid references chats(id) on delete cascade,
+    message_id uuid references chat_messages(id) on delete cascade,
+    kind text not null,
+    mime_type text not null,
+    byte_size bigint not null,
+    width integer,
+    height integer,
+    sha256 text not null,
+    storage_key text not null,
+    created_at timestamptz not null default now(),
+    deleted_at timestamptz
+);
+
+create index if not exists idx_chat_attachments_owner_created on chat_attachments(owner_session_id, created_at desc);
+create index if not exists idx_chat_attachments_owner_user_created on chat_attachments(owner_user_id, created_at desc);
+create index if not exists idx_chat_attachments_message on chat_attachments(message_id);
+create index if not exists idx_chat_attachments_chat on chat_attachments(chat_id);
+
 create table if not exists memory_facts (
     id uuid primary key,
     owner_session_id uuid not null references auth_sessions(id) on delete cascade,

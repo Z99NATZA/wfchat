@@ -29,6 +29,7 @@ npm run init
 # AI_PROVIDER=openai
 # AI_VOICE_PROVIDER=voicevox
 # AI_TRANSCRIPTION_PROVIDER=openai
+# CHAT_ATTACHMENT_UPLOAD_DIR=data/uploads
 
 # start
 docker compose up -d --build

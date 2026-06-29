@@ -56,6 +56,7 @@ Let users send local images to the chat so the assistant can understand them thr
 
 ## Frontend Flow
 
+- Status: planned, not implemented.
 - Enable the image button in `ChatComposer`.
 - Add a hidden file input for accepted image types.
 - Allow drag and drop onto the composer.
@@ -75,6 +76,8 @@ Let users send local images to the chat so the assistant can understand them thr
 ## Backend API
 
 ### Upload Attachment
+
+Status: implemented.
 
 ```text
 POST /api/chat/attachments
@@ -102,6 +105,8 @@ Response:
 
 ### Delete Pending Attachment
 
+Status: implemented.
+
 ```text
 DELETE /api/chat/attachments/:attachment_id
 X-WFChat-Session: <session uuid>
@@ -114,6 +119,8 @@ Rules:
 - For sent-message attachments, prefer soft delete or deny until a message-delete flow owns it.
 
 ### Preview Attachment
+
+Status: implemented.
 
 ```text
 GET /api/chat/attachments/:attachment_id/preview
@@ -128,6 +135,8 @@ Rules:
 - Do not expose storage keys or filesystem paths.
 
 ### Send Message
+
+Status: planned, not implemented.
 
 Existing endpoints stay:
 
@@ -161,7 +170,9 @@ Rules:
 
 ## Database Plan
 
-Add `chat_attachments`.
+Status: implemented.
+
+Added `chat_attachments`.
 
 Columns:
 
@@ -189,6 +200,8 @@ Indexes:
 
 ## Storage Plan
 
+Status: implemented for local backend-owned storage.
+
 - Add backend-owned upload directory configuration.
 - Store files under generated keys.
 - Keep original filename only as optional display metadata if needed later.
@@ -198,6 +211,8 @@ Indexes:
 - Keep storage interface replaceable for future S3-compatible storage.
 
 ## AI Message Model
+
+Status: planned, not implemented.
 
 Current state:
 
@@ -227,6 +242,8 @@ Rules:
 
 ## Provider Plan
 
+Status: planned, not implemented.
+
 - OpenAI is the first real vision provider.
 - Mock provider accepts image metadata for tests.
 - Providers without image support return a clear unsupported-image error.
@@ -236,6 +253,8 @@ Rules:
 - Provider/model selection remains backend-owned.
 
 ## Rendering Plan
+
+Status: planned, not implemented.
 
 - User bubbles render plain text.
 - User bubbles render attached image thumbnails.
@@ -248,6 +267,8 @@ Rules:
 - Upload failures show a composer-level error.
 
 ## Sync Plan
+
+Status: planned, not implemented.
 
 - Sync attachment metadata with chat message cache.
 - Do not sync raw image bytes in the first implementation.
@@ -267,25 +288,34 @@ Initial defaults:
 
 These are backend-owned configuration values.
 
+Current backend config:
+
+- `CHAT_ATTACHMENT_UPLOAD_DIR`
+- `CHAT_ATTACHMENT_MAX_BYTES`
+- `CHAT_ATTACHMENT_MAX_IMAGES_PER_MESSAGE`
+- `CHAT_ATTACHMENT_MAX_WIDTH`
+- `CHAT_ATTACHMENT_MAX_HEIGHT`
+- `CHAT_ATTACHMENT_MAX_PIXELS`
+
 ## Tests
 
 Backend:
 
-- Accept PNG upload.
-- Accept JPEG upload.
-- Accept WebP upload.
-- Accept GIF upload.
-- Reject SVG upload.
-- Reject wrong magic bytes.
-- Reject unsupported MIME.
-- Reject oversized image.
-- Reject oversized dimensions.
-- Reject too many attachments.
-- Reject attachment owned by another session.
-- Reject URL/path attachment input.
+- Accept PNG upload. Implemented.
+- Accept JPEG upload. Planned.
+- Accept WebP upload. Planned.
+- Accept GIF upload. Planned.
+- Reject SVG upload. Implemented.
+- Reject wrong magic bytes. Implemented.
+- Reject unsupported MIME. Implemented through magic-byte allowlist.
+- Reject oversized image. Implemented.
+- Reject oversized dimensions. Implemented.
+- Reject too many attachments. Planned for message send.
+- Reject attachment owned by another session. Implemented for preview/delete.
+- Reject URL/path attachment input. Implemented by upload-only API shape.
 - Link attachments only after successful message completion.
 - Leave pending attachments unlinked after provider failure.
-- Return safe upload errors.
+- Return safe upload errors. Implemented.
 - Return safe stream errors.
 
 Frontend:
@@ -311,8 +341,8 @@ Provider:
 ## Milestones
 
 1. Documentation and contract.
-2. Database and storage foundation.
-3. Secure upload API.
+2. Database and storage foundation. Implemented.
+3. Secure upload API. Implemented.
 4. Frontend picker, paste, drop, and preview.
 5. Message request attachments.
 6. Message rendering attachments.
@@ -353,4 +383,4 @@ Provider:
 - Tests cover validation, ownership, rendering, and provider mapping.
 - Docs match implemented behavior.
 
-Current status: planned, not implemented.
+Current status: backend upload, preview, delete, validation, storage, metadata persistence, and ownership checks are implemented. Chat message attachment sending, rendering, sync materialization, AI message parts, and provider vision are still planned.

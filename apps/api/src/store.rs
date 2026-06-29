@@ -84,6 +84,36 @@ pub struct StoredMessage {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct ChatAttachmentRecord {
+    pub id: Uuid,
+    pub owner_session_id: Uuid,
+    pub owner_user_id: Option<Uuid>,
+    pub chat_id: Option<Uuid>,
+    pub message_id: Option<Uuid>,
+    pub kind: String,
+    pub mime_type: String,
+    pub byte_size: i64,
+    pub width: Option<i32>,
+    pub height: Option<i32>,
+    pub sha256: String,
+    pub storage_key: String,
+    pub created_at: u64,
+    pub deleted_at: Option<u64>,
+}
+
+#[derive(Clone, Debug)]
+pub struct NewChatAttachmentRecord {
+    pub id: Uuid,
+    pub kind: String,
+    pub mime_type: String,
+    pub byte_size: i64,
+    pub width: Option<i32>,
+    pub height: Option<i32>,
+    pub sha256: String,
+    pub storage_key: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct MemoryFactRecord {
     pub id: Uuid,
     pub owner_session_id: Uuid,
@@ -563,6 +593,132 @@ impl ChatStore {
             .await
             .map(|result| result.rows_affected() > 0)
             .unwrap_or(false)
+    }
+
+    pub async fn create_chat_attachment(
+        &self,
+        owner: OwnerScope,
+        attachment: NewChatAttachmentRecord,
+    ) -> Option<ChatAttachmentRecord> {
+        let row = sqlx::query(
+            "insert into chat_attachments (
+                id,
+                owner_session_id,
+                owner_user_id,
+                kind,
+                mime_type,
+                byte_size,
+                width,
+                height,
+                sha256,
+                storage_key
+             )
+             values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+             returning
+                id,
+                owner_session_id,
+                owner_user_id,
+                chat_id,
+                message_id,
+                kind,
+                mime_type,
+                byte_size,
+                width,
+                height,
+                sha256,
+                storage_key,
+                extract(epoch from created_at)::bigint as created_at,
+                extract(epoch from deleted_at)::bigint as deleted_at",
+        )
+        .bind(attachment.id)
+        .bind(owner.session_id)
+        .bind(owner.user_id)
+        .bind(attachment.kind)
+        .bind(attachment.mime_type)
+        .bind(attachment.byte_size)
+        .bind(attachment.width)
+        .bind(attachment.height)
+        .bind(attachment.sha256)
+        .bind(attachment.storage_key)
+        .fetch_optional(self.db.as_ref())
+        .await
+        .ok()??;
+
+        Some(chat_attachment_from_row(row))
+    }
+
+    pub async fn get_chat_attachment(
+        &self,
+        owner: OwnerScope,
+        attachment_id: Uuid,
+    ) -> Option<ChatAttachmentRecord> {
+        let row = sqlx::query(
+            "select
+                id,
+                owner_session_id,
+                owner_user_id,
+                chat_id,
+                message_id,
+                kind,
+                mime_type,
+                byte_size,
+                width,
+                height,
+                sha256,
+                storage_key,
+                extract(epoch from created_at)::bigint as created_at,
+                extract(epoch from deleted_at)::bigint as deleted_at
+             from chat_attachments
+             where id = $1
+               and deleted_at is null
+               and (($3::uuid is not null and owner_user_id = $3) or ($3::uuid is null and owner_session_id = $2))",
+        )
+        .bind(attachment_id)
+        .bind(owner.session_id)
+        .bind(owner.user_id)
+        .fetch_optional(self.db.as_ref())
+        .await
+        .ok()??;
+
+        Some(chat_attachment_from_row(row))
+    }
+
+    pub async fn mark_pending_chat_attachment_deleted(
+        &self,
+        owner: OwnerScope,
+        attachment_id: Uuid,
+    ) -> Option<ChatAttachmentRecord> {
+        let row = sqlx::query(
+            "update chat_attachments
+             set deleted_at = now()
+             where id = $1
+               and message_id is null
+               and deleted_at is null
+               and (($3::uuid is not null and owner_user_id = $3) or ($3::uuid is null and owner_session_id = $2))
+             returning
+                id,
+                owner_session_id,
+                owner_user_id,
+                chat_id,
+                message_id,
+                kind,
+                mime_type,
+                byte_size,
+                width,
+                height,
+                sha256,
+                storage_key,
+                extract(epoch from created_at)::bigint as created_at,
+                extract(epoch from deleted_at)::bigint as deleted_at",
+        )
+        .bind(attachment_id)
+        .bind(owner.session_id)
+        .bind(owner.user_id)
+        .fetch_optional(self.db.as_ref())
+        .await
+        .ok()??;
+
+        Some(chat_attachment_from_row(row))
     }
 
     pub async fn list_memory_facts(
@@ -1121,6 +1277,52 @@ impl ChatStore {
             .execute(self.db.as_ref())
             .await?;
         sqlx::query(
+            "create table if not exists chat_attachments (
+                id uuid primary key,
+                owner_session_id uuid not null references auth_sessions(id) on delete cascade,
+                owner_user_id uuid,
+                chat_id uuid references chats(id) on delete cascade,
+                message_id uuid references chat_messages(id) on delete cascade,
+                kind text not null,
+                mime_type text not null,
+                byte_size bigint not null,
+                width integer,
+                height integer,
+                sha256 text not null,
+                storage_key text not null,
+                created_at timestamptz not null default now(),
+                deleted_at timestamptz
+            )",
+        )
+        .execute(self.db.as_ref())
+        .await?;
+        sqlx::query("alter table chat_attachments add column if not exists owner_user_id uuid")
+            .execute(self.db.as_ref())
+            .await?;
+        sqlx::query("alter table chat_attachments add column if not exists chat_id uuid references chats(id) on delete cascade")
+            .execute(self.db.as_ref())
+            .await?;
+        sqlx::query("alter table chat_attachments add column if not exists message_id uuid references chat_messages(id) on delete cascade")
+            .execute(self.db.as_ref())
+            .await?;
+        sqlx::query("alter table chat_attachments add column if not exists deleted_at timestamptz")
+            .execute(self.db.as_ref())
+            .await?;
+        sqlx::query("create index if not exists idx_chat_attachments_owner_created on chat_attachments(owner_session_id, created_at desc)")
+            .execute(self.db.as_ref())
+            .await?;
+        sqlx::query("create index if not exists idx_chat_attachments_owner_user_created on chat_attachments(owner_user_id, created_at desc)")
+            .execute(self.db.as_ref())
+            .await?;
+        sqlx::query("create index if not exists idx_chat_attachments_message on chat_attachments(message_id)")
+            .execute(self.db.as_ref())
+            .await?;
+        sqlx::query(
+            "create index if not exists idx_chat_attachments_chat on chat_attachments(chat_id)",
+        )
+        .execute(self.db.as_ref())
+        .await?;
+        sqlx::query(
             "create table if not exists memory_facts (
                 id uuid primary key,
                 owner_session_id uuid not null references auth_sessions(id) on delete cascade,
@@ -1248,7 +1450,38 @@ impl ChatStore {
         )
         .execute(self.db.as_ref())
         .await?;
+        sqlx::query(
+            "update chat_attachments
+             set owner_user_id = auth_sessions.user_id
+             from auth_sessions
+             where chat_attachments.owner_session_id = auth_sessions.id
+               and auth_sessions.kind <> 'guest'
+               and chat_attachments.owner_user_id is null",
+        )
+        .execute(self.db.as_ref())
+        .await?;
         Ok(())
+    }
+}
+
+fn chat_attachment_from_row(row: sqlx::postgres::PgRow) -> ChatAttachmentRecord {
+    ChatAttachmentRecord {
+        id: row.get("id"),
+        owner_session_id: row.get("owner_session_id"),
+        owner_user_id: row.get("owner_user_id"),
+        chat_id: row.get("chat_id"),
+        message_id: row.get("message_id"),
+        kind: row.get("kind"),
+        mime_type: row.get("mime_type"),
+        byte_size: row.get("byte_size"),
+        width: row.get("width"),
+        height: row.get("height"),
+        sha256: row.get("sha256"),
+        storage_key: row.get("storage_key"),
+        created_at: row.get::<i64, _>("created_at") as u64,
+        deleted_at: row
+            .get::<Option<i64>, _>("deleted_at")
+            .map(|value| value as u64),
     }
 }
 

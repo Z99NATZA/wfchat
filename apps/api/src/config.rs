@@ -35,6 +35,12 @@ pub struct Config {
     pub voicevox_pre_phoneme_length: Option<f32>,
     pub voicevox_post_phoneme_length: Option<f32>,
     pub google_client_id: Option<String>,
+    pub chat_attachment_upload_dir: String,
+    pub chat_attachment_max_bytes: usize,
+    pub chat_attachment_max_images_per_message: usize,
+    pub chat_attachment_max_width: u32,
+    pub chat_attachment_max_height: u32,
+    pub chat_attachment_max_pixels: u64,
 }
 
 impl Config {
@@ -79,6 +85,25 @@ impl Config {
             voicevox_pre_phoneme_length: optional_f32_env_value("VOICEVOX_PRE_PHONEME_LENGTH")?,
             voicevox_post_phoneme_length: optional_f32_env_value("VOICEVOX_POST_PHONEME_LENGTH")?,
             google_client_id: optional_env_value("GOOGLE_CLIENT_ID"),
+            chat_attachment_upload_dir: env_value("CHAT_ATTACHMENT_UPLOAD_DIR", "data/uploads"),
+            chat_attachment_max_bytes: env_value("CHAT_ATTACHMENT_MAX_BYTES", "10485760")
+                .parse()
+                .unwrap_or(10 * 1024 * 1024),
+            chat_attachment_max_images_per_message: env_value(
+                "CHAT_ATTACHMENT_MAX_IMAGES_PER_MESSAGE",
+                "4",
+            )
+            .parse()
+            .unwrap_or(4),
+            chat_attachment_max_width: env_value("CHAT_ATTACHMENT_MAX_WIDTH", "8192")
+                .parse()
+                .unwrap_or(8192),
+            chat_attachment_max_height: env_value("CHAT_ATTACHMENT_MAX_HEIGHT", "8192")
+                .parse()
+                .unwrap_or(8192),
+            chat_attachment_max_pixels: env_value("CHAT_ATTACHMENT_MAX_PIXELS", "20000000")
+                .parse()
+                .unwrap_or(20_000_000),
         };
 
         config.validate()?;
@@ -204,7 +229,32 @@ impl Config {
             other => Err(format!(
                 "AI_TRANSCRIPTION_PROVIDER={other} is invalid. Allowed values: disabled, mock, openai"
             )),
+        }?;
+        self.validate_chat_attachment_config()
+    }
+
+    fn validate_chat_attachment_config(&self) -> Result<(), String> {
+        require_non_empty(
+            Some(self.chat_attachment_upload_dir.as_str()),
+            "CHAT_ATTACHMENT_UPLOAD_DIR is required",
+        )?;
+        if self.chat_attachment_max_bytes == 0 {
+            return Err("CHAT_ATTACHMENT_MAX_BYTES must be greater than 0".to_owned());
         }
+        if self.chat_attachment_max_images_per_message == 0 {
+            return Err("CHAT_ATTACHMENT_MAX_IMAGES_PER_MESSAGE must be greater than 0".to_owned());
+        }
+        if self.chat_attachment_max_width == 0 {
+            return Err("CHAT_ATTACHMENT_MAX_WIDTH must be greater than 0".to_owned());
+        }
+        if self.chat_attachment_max_height == 0 {
+            return Err("CHAT_ATTACHMENT_MAX_HEIGHT must be greater than 0".to_owned());
+        }
+        if self.chat_attachment_max_pixels == 0 {
+            return Err("CHAT_ATTACHMENT_MAX_PIXELS must be greater than 0".to_owned());
+        }
+
+        Ok(())
     }
 }
 
@@ -315,6 +365,12 @@ mod tests {
             voicevox_pre_phoneme_length: None,
             voicevox_post_phoneme_length: None,
             google_client_id: None,
+            chat_attachment_upload_dir: "data/uploads".to_owned(),
+            chat_attachment_max_bytes: 10 * 1024 * 1024,
+            chat_attachment_max_images_per_message: 4,
+            chat_attachment_max_width: 8192,
+            chat_attachment_max_height: 8192,
+            chat_attachment_max_pixels: 20_000_000,
         }
     }
 
@@ -538,5 +594,29 @@ mod tests {
             error,
             "AI_TRANSCRIPTION_PROVIDER=browser is invalid. Allowed values: disabled, mock, openai"
         );
+    }
+
+    #[test]
+    fn attachment_upload_dir_is_required() {
+        let mut config = base_config();
+        config.chat_attachment_upload_dir = "".to_owned();
+
+        let error = config
+            .validate()
+            .expect_err("upload directory should be required");
+
+        assert_eq!(error, "CHAT_ATTACHMENT_UPLOAD_DIR is required");
+    }
+
+    #[test]
+    fn attachment_limits_must_be_positive() {
+        let mut config = base_config();
+        config.chat_attachment_max_bytes = 0;
+
+        let error = config
+            .validate()
+            .expect_err("zero byte limit should be rejected");
+
+        assert_eq!(error, "CHAT_ATTACHMENT_MAX_BYTES must be greater than 0");
     }
 }

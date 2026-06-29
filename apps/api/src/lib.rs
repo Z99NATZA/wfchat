@@ -1,6 +1,7 @@
 pub mod admin;
 pub mod ai;
 pub mod app;
+pub mod attachments;
 pub mod auth;
 pub mod characters;
 pub mod chat;

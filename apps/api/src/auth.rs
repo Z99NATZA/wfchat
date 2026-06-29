@@ -363,6 +363,12 @@ mod tests {
             voicevox_pre_phoneme_length: None,
             voicevox_post_phoneme_length: None,
             google_client_id,
+            chat_attachment_upload_dir: "data/uploads".to_owned(),
+            chat_attachment_max_bytes: 10 * 1024 * 1024,
+            chat_attachment_max_images_per_message: 4,
+            chat_attachment_max_width: 8192,
+            chat_attachment_max_height: 8192,
+            chat_attachment_max_pixels: 20_000_000,
         })
         .await
         .ok()
