@@ -115,7 +115,7 @@ describe("chat image attachment send boundary", () => {
 	});
 
 	it("streams image-only messages with only backend-issued attachment ids", async () => {
-		const fetchMock = vi.fn(async () => streamDoneResponse());
+		const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => streamDoneResponse());
 		vi.stubGlobal("fetch", fetchMock);
 
 		await streamChatMessage(

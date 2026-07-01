@@ -274,16 +274,18 @@ unsupported-provider failure.
 
 ## Rendering Plan
 
-Status: implemented for message thumbnails and missing-image placeholder. Full preview dialog remains planned.
+Status: implemented for message thumbnails, in-app preview dialog, and missing-image placeholder.
 
 - User bubbles render plain text.
 - User bubbles render attached image thumbnails.
 - Assistant bubbles keep current Markdown rendering.
 - Copy-message action copies text only.
 - Thumbnail rendering fetches the backend preview URL with the session header and renders a browser `blob:` URL.
-- Image click opens the fetched `blob:` URL in a new tab.
-- Preview dialog uses authenticated backend preview bytes. Planned.
-- Preview dialog does not expose storage paths.
+- Image click opens an in-app preview dialog instead of a new browser tab.
+- Preview dialog uses authenticated backend preview bytes for sent attachments
+  and local `blob:` URLs for pending attachments. Implemented.
+- Preview dialog does not expose storage paths, preview endpoint URLs,
+  filesystem paths, or provider payload details.
 - Missing or inaccessible sent image previews show a compact placeholder without
   exposing backend storage paths or internal details. Implemented.
 - Pending local `blob:` previews continue to render directly without backend
@@ -371,6 +373,11 @@ Frontend:
   placeholder. Implemented.
 - Pending local `blob:` previews remain unchanged by missing-image fallback.
   Implemented.
+- Successful sent image previews open in an in-app preview dialog. Implemented.
+- Failed sent image previews keep the compact placeholder and do not open a
+  broken preview dialog. Implemented.
+- Pending local `blob:` previews open in the same in-app preview dialog.
+  Implemented.
 
 Provider:
 
@@ -425,4 +432,4 @@ Provider:
 - Tests cover validation, ownership, rendering, and provider mapping.
 - Docs match implemented behavior.
 
-Current status: backend upload, preview, delete, validation, storage, stale pending orphan cleanup, message linking, metadata persistence, ownership checks, frontend composer image selection, upload, message send, cache metadata, thumbnail rendering, missing-image placeholder, AI message parts, mock image-part handling, OpenAI vision payload mapping, and unsupported-provider image safety are implemented. Preview dialog and raw image sync are still planned.
+Current status: backend upload, preview, delete, validation, storage, stale pending orphan cleanup, message linking, metadata persistence, ownership checks, frontend composer image selection, upload, message send, cache metadata, thumbnail rendering, in-app preview dialog, missing-image placeholder, AI message parts, mock image-part handling, OpenAI vision payload mapping, and unsupported-provider image safety are implemented. Raw image sync is still planned.

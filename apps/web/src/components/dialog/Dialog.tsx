@@ -11,6 +11,7 @@ type DialogProps = {
 	actions: ReactNode;
 	onClose: () => void;
 	isDraggable?: boolean;
+	size?: "default" | "wide";
 };
 
 function Dialog({
@@ -20,7 +21,8 @@ function Dialog({
 	content,
 	actions,
 	onClose,
-	isDraggable = true
+	isDraggable = true,
+	size = "default"
 }: DialogProps) {
 	const [offset, setOffset] = useState({ x: 0, y: 0 });
 	const dragStateRef = useRef<{ pointerId: number; startX: number; startY: number } | null>(null);
@@ -106,7 +108,11 @@ function Dialog({
 				aria-modal="true"
 				aria-labelledby="wfchat-dialog-title"
 				aria-describedby={description ? "wfchat-dialog-description" : undefined}
-				className="relative w-full max-w-md overflow-hidden rounded-xl border border-dialog-border bg-dialog-soft text-app-text shadow-soft"
+				className={
+					size === "wide"
+						? "relative w-full max-w-4xl overflow-hidden rounded-xl border border-dialog-border bg-dialog-soft text-app-text shadow-soft"
+						: "relative w-full max-w-md overflow-hidden rounded-xl border border-dialog-border bg-dialog-soft text-app-text shadow-soft"
+				}
 				style={{
 					transform: `translate(${offset.x}px, ${offset.y}px)`
 				}}

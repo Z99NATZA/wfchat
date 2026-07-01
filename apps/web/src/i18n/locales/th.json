@@ -153,6 +153,7 @@
 	"chat.messageList.assistantSpeechFailed": "เล่นเสียงไม่สำเร็จ",
 	"chat.messageList.imageAttachmentAlt": "รูปภาพแนบ {index}",
 	"chat.messageList.imageAttachmentMissing": "ไม่สามารถโหลดตัวอย่างรูปภาพได้",
+	"chat.messageList.openImagePreview": "เปิดตัวอย่าง {label}",
 	"chat.messageList.loadMarkdownQa": "โหลด QA",
 	"chat.messageList.thinking": "{name} กำลังคิดคำตอบ...",
 	"chat.messageList.jumpToLatest": "ล่าสุด",

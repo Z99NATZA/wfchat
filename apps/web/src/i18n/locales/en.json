@@ -153,6 +153,7 @@
 	"chat.messageList.assistantSpeechFailed": "Voice failed",
 	"chat.messageList.imageAttachmentAlt": "Image attachment {index}",
 	"chat.messageList.imageAttachmentMissing": "Image preview is unavailable",
+	"chat.messageList.openImagePreview": "Open preview for {label}",
 	"chat.messageList.loadMarkdownQa": "Load QA",
 	"chat.messageList.thinking": "{name} is thinking...",
 	"chat.messageList.jumpToLatest": "Jump to latest",

@@ -859,6 +859,7 @@ function ChatMessageAttachmentPreview({
 	isUser: boolean;
 }) {
 	const { t } = useI18n();
+	const { openCustom } = useDialog();
 	const isLocalPreview = attachment.previewUrl.startsWith("blob:");
 	const [imageUrl, setImageUrl] = useState(() =>
 		isLocalPreview ? attachment.previewUrl : null
@@ -868,6 +869,28 @@ function ChatMessageAttachmentPreview({
 		"block overflow-hidden rounded-md border",
 		isUser ? "border-white/20 dark:border-app-border" : "border-app-border"
 	);
+
+	function handleOpenPreview() {
+		if (!imageUrl || didFail) {
+			return;
+		}
+
+		void openCustom({
+			title: alt,
+			isDraggable: false,
+			showCancelAction: false,
+			size: "wide",
+			render: () => (
+				<div className="flex max-h-[72vh] items-center justify-center overflow-auto rounded-md bg-black/90 p-2">
+					<img
+						className="max-h-[70vh] max-w-full object-contain"
+						src={imageUrl}
+						alt={alt}
+					/>
+				</div>
+			)
+		});
+	}
 
 	useEffect(() => {
 		if (attachment.previewUrl.startsWith("blob:")) {
@@ -905,11 +928,14 @@ function ChatMessageAttachmentPreview({
 
 	if (imageUrl && !didFail) {
 		return (
-			<a
-				className={frameClassName}
-				href={imageUrl}
-				target="_blank"
-				rel="noreferrer"
+			<button
+				type="button"
+				className={cn(
+					frameClassName,
+					"w-full cursor-zoom-in bg-transparent p-0 text-left transition hover:opacity-95 focus:outline-none focus:ring-2 focus:ring-primary/35"
+				)}
+				aria-label={t("chat.messageList.openImagePreview", { label: alt })}
+				onClick={handleOpenPreview}
 			>
 				<img
 					className="aspect-square max-h-56 w-full object-cover"
@@ -923,7 +949,7 @@ function ChatMessageAttachmentPreview({
 						}
 					}}
 				/>
-			</a>
+			</button>
 		);
 	}
 

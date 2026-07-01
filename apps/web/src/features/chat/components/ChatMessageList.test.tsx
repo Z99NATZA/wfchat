@@ -7,6 +7,11 @@ import ChatMessageList from "@/features/chat/components/ChatMessageList";
 import { fetchChatAttachmentPreview } from "@/features/chat/services/chatApiService";
 import type { ChatMessage } from "@/types/chat";
 
+const dialogMocks = vi.hoisted(() => ({
+	confirm: vi.fn(),
+	openCustom: vi.fn()
+}));
+
 vi.mock("@/i18n", () => ({
 	useI18n: () => ({
 		t: (key: string, params?: Record<string, string | number>) => {
@@ -40,6 +45,9 @@ vi.mock("@/i18n", () => ({
 			if (key === "chat.messageList.imageAttachmentMissing") {
 				return "Image unavailable";
 			}
+			if (key === "chat.messageList.openImagePreview") {
+				return `Open preview for ${params?.label}`;
+			}
 			if (key === "chat.messageList.loadMarkdownQa") {
 				return "Load QA";
 			}
@@ -50,7 +58,8 @@ vi.mock("@/i18n", () => ({
 
 vi.mock("@/components/dialog/DialogProvider", () => ({
 	useDialog: () => ({
-		confirm: vi.fn()
+		confirm: dialogMocks.confirm,
+		openCustom: dialogMocks.openCustom
 	})
 }));
 
@@ -239,6 +248,42 @@ describe("ChatMessageList streaming state", () => {
 		expect(image.src).toBe("blob:fetched-preview");
 	});
 
+	it("opens successful sent image attachments in an in-app preview dialog", async () => {
+		render(
+			<ChatMessageList
+				messages={[
+					{
+						...message("user-1", "user", "look"),
+						attachments: [
+							{
+								id: "attachment-1",
+								kind: "image",
+								mimeType: "image/png",
+								byteSize: 12,
+								width: 2,
+								height: 3,
+								previewUrl: "http://localhost:8080/api/chat/attachments/attachment-1/preview"
+							}
+						]
+					}
+				]}
+				companionName="Aiko"
+				companionAvatarUrl="/images/aiko-avatar.png"
+			/>
+		);
+
+		await screen.findByRole("img", { name: "Image 1" });
+		fireEvent.click(screen.getByRole("button", { name: "Open preview for Image 1" }));
+
+		expect(dialogMocks.openCustom).toHaveBeenCalledWith(expect.objectContaining({
+			title: "Image 1",
+			isDraggable: false,
+			showCancelAction: false,
+			size: "wide"
+		}));
+		expect(dialogMocks.openCustom.mock.calls[0][0].render).toEqual(expect.any(Function));
+	});
+
 	it("shows a compact placeholder when a sent image preview cannot be fetched", async () => {
 		vi.mocked(fetchChatAttachmentPreview).mockRejectedValue(new Error("not found"));
 
@@ -269,6 +314,8 @@ describe("ChatMessageList streaming state", () => {
 		expect(fetchChatAttachmentPreview).toHaveBeenCalledWith("attachment-missing");
 		expect(placeholder.textContent).toBe("Image unavailable");
 		expect(screen.queryByRole("img", { name: "Image 1" })).toBeNull();
+		expect(screen.queryByRole("button", { name: "Open preview for Image 1" })).toBeNull();
+		expect(dialogMocks.openCustom).not.toHaveBeenCalled();
 	});
 
 	it("shows a compact placeholder when a fetched sent image cannot render", async () => {
@@ -329,6 +376,39 @@ describe("ChatMessageList streaming state", () => {
 		const image = screen.getByRole("img", { name: "Image 1" }) as HTMLImageElement;
 		expect(fetchChatAttachmentPreview).not.toHaveBeenCalled();
 		expect(image.src).toBe("blob:local-preview");
+	});
+
+	it("opens pending local blob image attachments in the same preview dialog", () => {
+		render(
+			<ChatMessageList
+				messages={[
+					{
+						...message("user-1", "user", "look"),
+						attachments: [
+							{
+								id: "local-attachment",
+								kind: "image",
+								mimeType: "image/png",
+								byteSize: 12,
+								width: 2,
+								height: 3,
+								previewUrl: "blob:local-preview"
+							}
+						]
+					}
+				]}
+				companionName="Aiko"
+				companionAvatarUrl="/images/aiko-avatar.png"
+			/>
+		);
+
+		fireEvent.click(screen.getByRole("button", { name: "Open preview for Image 1" }));
+
+		expect(fetchChatAttachmentPreview).not.toHaveBeenCalled();
+		expect(dialogMocks.openCustom).toHaveBeenCalledWith(expect.objectContaining({
+			title: "Image 1",
+			size: "wide"
+		}));
 	});
 
 	it("keeps pending local blob previews unchanged after image error events", () => {

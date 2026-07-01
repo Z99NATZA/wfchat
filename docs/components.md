@@ -21,6 +21,8 @@ Use `useDialog()` from `DialogProvider` for consistent app-wide behavior:
 - `confirm(options)`: yes/no confirmation.
 - `alert(options)`: one-button information modal.
 - `openCustom(options)`: custom content modal using a render callback.
+  `openCustom` supports `size: "wide"` for larger content and
+  `showCancelAction: false` for single-action preview-style dialogs.
 
 Shared components should be generic. Do not place chat-specific text, fixtures, or business behavior in this folder.
 

@@ -37,6 +37,8 @@ type CustomDialogOptions<TResult = void> = {
 	confirmLabel?: string;
 	cancelLabel?: string;
 	isDraggable?: boolean;
+	showCancelAction?: boolean;
+	size?: "default" | "wide";
 	render: (params: CustomDialogRenderParams<TResult>) => ReactNode;
 };
 
@@ -167,6 +169,7 @@ function DialogProvider({ children }: DialogProviderProps) {
 				title={customDialogState?.title ?? ""}
 				description={customDialogState?.description}
 				isDraggable={customDialogState?.isDraggable}
+				size={customDialogState?.size}
 				onClose={() => closeCustom(undefined)}
 				content={
 					customDialogState?.render({
@@ -176,13 +179,15 @@ function DialogProvider({ children }: DialogProviderProps) {
 				}
 				actions={
 					<div className="flex items-center gap-2">
-						<Button
-							surface="dialog"
-							variant="secondary"
-							onClick={() => closeCustom(undefined)}
-						>
-							{customDialogState?.cancelLabel ?? t("common.cancel")}
-						</Button>
+						{customDialogState?.showCancelAction === false ? null : (
+							<Button
+								surface="dialog"
+								variant="secondary"
+								onClick={() => closeCustom(undefined)}
+							>
+								{customDialogState?.cancelLabel ?? t("common.cancel")}
+							</Button>
+						)}
 						<Button
 							variant="primary"
 							onClick={() => closeCustom(undefined)}
