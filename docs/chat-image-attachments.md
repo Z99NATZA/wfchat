@@ -274,7 +274,7 @@ unsupported-provider failure.
 
 ## Rendering Plan
 
-Status: implemented for message thumbnails. Full preview dialog and missing-image placeholder remain planned.
+Status: implemented for message thumbnails and missing-image placeholder. Full preview dialog remains planned.
 
 - User bubbles render plain text.
 - User bubbles render attached image thumbnails.
@@ -284,7 +284,10 @@ Status: implemented for message thumbnails. Full preview dialog and missing-imag
 - Image click opens the fetched `blob:` URL in a new tab.
 - Preview dialog uses authenticated backend preview bytes. Planned.
 - Preview dialog does not expose storage paths.
-- Missing image shows a compact placeholder. Planned.
+- Missing or inaccessible sent image previews show a compact placeholder without
+  exposing backend storage paths or internal details. Implemented.
+- Pending local `blob:` previews continue to render directly without backend
+  fetches. Implemented.
 - Upload failures show a composer-level error.
 
 ## Sync Plan
@@ -362,6 +365,12 @@ Frontend:
 - Frontend send requests do not include local preview URLs, authenticated
   preview URLs, local paths, user image URLs, raw bytes, provider names, model
   names, or provider-specific image payloads. Implemented.
+- Sent image preview fetch failures render a compact missing-image placeholder.
+  Implemented.
+- Fetched sent image render failures render a compact missing-image
+  placeholder. Implemented.
+- Pending local `blob:` previews remain unchanged by missing-image fallback.
+  Implemented.
 
 Provider:
 
@@ -416,4 +425,4 @@ Provider:
 - Tests cover validation, ownership, rendering, and provider mapping.
 - Docs match implemented behavior.
 
-Current status: backend upload, preview, delete, validation, storage, stale pending orphan cleanup, message linking, metadata persistence, ownership checks, frontend composer image selection, upload, message send, cache metadata, thumbnail rendering, AI message parts, mock image-part handling, OpenAI vision payload mapping, and unsupported-provider image safety are implemented. Preview dialog, missing-image placeholder, and raw image sync are still planned.
+Current status: backend upload, preview, delete, validation, storage, stale pending orphan cleanup, message linking, metadata persistence, ownership checks, frontend composer image selection, upload, message send, cache metadata, thumbnail rendering, missing-image placeholder, AI message parts, mock image-part handling, OpenAI vision payload mapping, and unsupported-provider image safety are implemented. Preview dialog and raw image sync are still planned.

@@ -1,4 +1,4 @@
-import { ArrowDown, Check, Clipboard, Ellipsis, EyeOff, LoaderCircle, Volume2, VolumeX, Wand2 } from "lucide-react";
+import { ArrowDown, Check, Clipboard, Ellipsis, EyeOff, ImageOff, LoaderCircle, Volume2, VolumeX, Wand2 } from "lucide-react";
 import {
 	type CSSProperties,
 	type ReactNode,
@@ -859,8 +859,9 @@ function ChatMessageAttachmentPreview({
 	isUser: boolean;
 }) {
 	const { t } = useI18n();
+	const isLocalPreview = attachment.previewUrl.startsWith("blob:");
 	const [imageUrl, setImageUrl] = useState(() =>
-		attachment.previewUrl.startsWith("blob:") ? attachment.previewUrl : null
+		isLocalPreview ? attachment.previewUrl : null
 	);
 	const [didFail, setDidFail] = useState(false);
 	const frameClassName = cn(
@@ -902,7 +903,7 @@ function ChatMessageAttachmentPreview({
 		};
 	}, [attachment.id, attachment.previewUrl]);
 
-	if (imageUrl) {
+	if (imageUrl && !didFail) {
 		return (
 			<a
 				className={frameClassName}
@@ -915,6 +916,12 @@ function ChatMessageAttachmentPreview({
 					src={imageUrl}
 					alt={alt}
 					loading="lazy"
+					onError={() => {
+						if (!isLocalPreview) {
+							setDidFail(true);
+							setImageUrl(null);
+						}
+					}}
 				/>
 			</a>
 		);
@@ -924,13 +931,18 @@ function ChatMessageAttachmentPreview({
 		<div
 			className={cn(
 				frameClassName,
-				"flex aspect-square max-h-56 w-full items-center justify-center bg-app-soft px-3 text-center text-xs",
+				"flex aspect-square max-h-56 w-full flex-col items-center justify-center gap-2 bg-app-soft px-3 text-center text-xs",
 				isUser ? "text-white/80 dark:text-muted" : "text-muted"
 			)}
 			role={didFail ? "alert" : "status"}
 			aria-label={didFail ? t("chat.messageList.imageAttachmentMissing") : alt}
 		>
-			{didFail ? t("chat.messageList.imageAttachmentMissing") : ""}
+			{didFail ? (
+				<>
+					<ImageOff size={18} aria-hidden="true" />
+					<span>{t("chat.messageList.imageAttachmentMissing")}</span>
+				</>
+			) : null}
 		</div>
 	);
 }

@@ -239,6 +239,69 @@ describe("ChatMessageList streaming state", () => {
 		expect(image.src).toBe("blob:fetched-preview");
 	});
 
+	it("shows a compact placeholder when a sent image preview cannot be fetched", async () => {
+		vi.mocked(fetchChatAttachmentPreview).mockRejectedValue(new Error("not found"));
+
+		render(
+			<ChatMessageList
+				messages={[
+					{
+						...message("user-1", "user", "look"),
+						attachments: [
+							{
+								id: "attachment-missing",
+								kind: "image",
+								mimeType: "image/png",
+								byteSize: 12,
+								width: 2,
+								height: 3,
+								previewUrl: "http://localhost:8080/api/chat/attachments/attachment-missing/preview"
+							}
+						]
+					}
+				]}
+				companionName="Aiko"
+				companionAvatarUrl="/images/aiko-avatar.png"
+			/>
+		);
+
+		const placeholder = await screen.findByRole("alert", { name: "Image unavailable" });
+		expect(fetchChatAttachmentPreview).toHaveBeenCalledWith("attachment-missing");
+		expect(placeholder.textContent).toBe("Image unavailable");
+		expect(screen.queryByRole("img", { name: "Image 1" })).toBeNull();
+	});
+
+	it("shows a compact placeholder when a fetched sent image cannot render", async () => {
+		render(
+			<ChatMessageList
+				messages={[
+					{
+						...message("user-1", "user", "look"),
+						attachments: [
+							{
+								id: "attachment-bad-image",
+								kind: "image",
+								mimeType: "image/png",
+								byteSize: 12,
+								width: 2,
+								height: 3,
+								previewUrl: "http://localhost:8080/api/chat/attachments/attachment-bad-image/preview"
+							}
+						]
+					}
+				]}
+				companionName="Aiko"
+				companionAvatarUrl="/images/aiko-avatar.png"
+			/>
+		);
+
+		const image = await screen.findByRole("img", { name: "Image 1" });
+		fireEvent.error(image);
+
+		expect(await screen.findByRole("alert", { name: "Image unavailable" })).toBeTruthy();
+		expect(screen.queryByRole("img", { name: "Image 1" })).toBeNull();
+	});
+
 	it("renders local blob image previews without fetching", () => {
 		render(
 			<ChatMessageList
@@ -265,6 +328,38 @@ describe("ChatMessageList streaming state", () => {
 
 		const image = screen.getByRole("img", { name: "Image 1" }) as HTMLImageElement;
 		expect(fetchChatAttachmentPreview).not.toHaveBeenCalled();
+		expect(image.src).toBe("blob:local-preview");
+	});
+
+	it("keeps pending local blob previews unchanged after image error events", () => {
+		render(
+			<ChatMessageList
+				messages={[
+					{
+						...message("user-1", "user", "look"),
+						attachments: [
+							{
+								id: "local-attachment",
+								kind: "image",
+								mimeType: "image/png",
+								byteSize: 12,
+								width: 2,
+								height: 3,
+								previewUrl: "blob:local-preview"
+							}
+						]
+					}
+				]}
+				companionName="Aiko"
+				companionAvatarUrl="/images/aiko-avatar.png"
+			/>
+		);
+
+		const image = screen.getByRole("img", { name: "Image 1" }) as HTMLImageElement;
+		fireEvent.error(image);
+
+		expect(screen.getByRole("img", { name: "Image 1" })).toBeTruthy();
+		expect(screen.queryByRole("alert", { name: "Image unavailable" })).toBeNull();
 		expect(image.src).toBe("blob:local-preview");
 	});
 
