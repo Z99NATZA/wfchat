@@ -212,15 +212,15 @@ Status: implemented for local backend-owned storage.
 
 ## AI Message Model
 
-Status: planned, not implemented.
+Status: implemented.
 
 Current state:
 
 ```text
-AiMessage = role + content string
+Stored chat messages persist role + content string for compatibility.
 ```
 
-Target state:
+Provider-facing state:
 
 ```text
 AiMessage = role + parts
@@ -233,20 +233,35 @@ Parts:
 
 Rules:
 
-- Keep text fallback for existing chat history.
-- Convert stored text-only messages into `Text` parts.
-- Convert validated attachments into `Image` parts.
-- Resolve image bytes or signed/internal URLs only inside the backend.
+- Existing persisted text-only history is converted into `Text` parts when
+  building AI history.
+- New user sends are converted into `Text` parts plus backend-owned `Image`
+  parts from validated attachment records.
+- Image bytes are read from backend storage during send; the frontend sends
+  only backend-issued attachment ids.
 - Provider adapters convert `Image` parts into provider-specific payloads.
 - Frontend never sends provider-specific image payloads.
+- Stored chat message `content` remains text-only so existing rendering, copy,
+  speech, sync metadata, SSE replacement, and message history behavior stay
+  compatible.
 
 ## Provider Plan
 
-Status: planned, not implemented.
+Status: implemented for mock support, OpenAI vision mapping, and safe
+unsupported-provider failure.
 
 - OpenAI is the first real vision provider.
-- Mock provider accepts image metadata for tests.
-- Providers without image support return a clear unsupported-image error.
+- OpenAI Chat Completions payloads map text-only messages to string `content`
+  and image messages to `content` parts containing `text` and `image_url`
+  entries.
+- OpenAI image payloads use backend-generated `data:<mime>;base64,...` URLs
+  from validated attachment bytes; user-provided image URLs, paths, `file://`,
+  and `blob:` URLs are not accepted.
+- Mock provider accepts image parts for tests and reports image attachment
+  counts in its deterministic reply.
+- Providers without image support return
+  `image attachments are not supported by the configured AI provider` before
+  the user/assistant messages are persisted.
 - LM Studio image support is later.
 - xAI image support is later.
 - Anthropic image support is later.
@@ -335,9 +350,9 @@ Frontend:
 
 Provider:
 
-- Mock provider receives image metadata.
-- OpenAI adapter maps text and image parts.
-- Unsupported provider returns a clear image unsupported error.
+- Mock provider receives image parts. Implemented.
+- OpenAI adapter maps text and image parts. Implemented.
+- Unsupported provider returns a clear image unsupported error. Implemented.
 
 ## Milestones
 
@@ -347,9 +362,9 @@ Provider:
 4. Frontend picker, paste, drop, and preview. Implemented.
 5. Message request attachments. Implemented.
 6. Message rendering attachments. Implemented.
-7. AI message parts.
-8. OpenAI vision adapter.
-9. Tests and cleanup.
+7. AI message parts. Implemented.
+8. OpenAI vision adapter. Implemented.
+9. Tests and cleanup. Implemented for provider mapping and unsupported provider safety.
 10. Manual QA and security review.
 
 ## Manual QA
@@ -384,4 +399,4 @@ Provider:
 - Tests cover validation, ownership, rendering, and provider mapping.
 - Docs match implemented behavior.
 
-Current status: backend upload, preview, delete, validation, storage, message linking, metadata persistence, ownership checks, frontend composer image selection, upload, message send, cache metadata, and thumbnail rendering are implemented. AI message parts, provider vision, preview dialog, missing-image placeholder, raw image sync, and orphan cleanup scheduling are still planned.
+Current status: backend upload, preview, delete, validation, storage, message linking, metadata persistence, ownership checks, frontend composer image selection, upload, message send, cache metadata, thumbnail rendering, AI message parts, mock image-part handling, OpenAI vision payload mapping, and unsupported-provider image safety are implemented. Preview dialog, missing-image placeholder, raw image sync, and orphan cleanup scheduling are still planned.

@@ -20,7 +20,7 @@ use uuid::Uuid;
 const MAX_TRANSCRIPTION_AUDIO_BYTES: usize = 25 * 1024 * 1024;
 
 use crate::{
-    ai::{AiChatStreamEvent, AiMessage, AiRole, AiService},
+    ai::{AiChatStreamEvent, AiImagePart, AiMessage, AiMessagePart, AiRole, AiService},
     attachments::{
         image_storage_key, read_attachment_bytes, remove_attachment_file,
         validate_image_attachment, write_attachment_bytes, CHAT_ATTACHMENT_KIND_IMAGE,
@@ -766,8 +766,12 @@ async fn prepare_chat_completion_context(
         .get_chat(owner, chat_id)
         .await
         .ok_or(AppError::NotFound)?;
-    let attachment_ids =
+    let attachments =
         validate_message_attachment_requests(state, owner, &payload.attachments).await?;
+    let attachment_ids = attachments
+        .iter()
+        .map(|attachment| attachment.id)
+        .collect::<Vec<_>>();
     let mut ai_messages = chat
         .messages
         .iter()
@@ -783,18 +787,10 @@ async fn prepare_chat_completion_context(
         .await;
     let memory_context = build_memory_context(&memory_facts, &memory_summaries);
     if let Some(memory_note) = memory_context {
-        ai_messages.insert(
-            0,
-            AiMessage {
-                role: AiRole::System,
-                content: memory_note,
-            },
-        );
+        ai_messages.insert(0, AiMessage::system(memory_note));
     }
-    ai_messages.push(AiMessage::user(ai_user_content(
-        content,
-        attachment_ids.len(),
-    )));
+    let ai_user_message = build_ai_user_message(state, content, &attachments).await?;
+    ai_messages.push(ai_user_message.clone());
 
     Ok(ChatCompletionContext {
         chat,
@@ -808,7 +804,7 @@ async fn validate_message_attachment_requests(
     state: &AppState,
     owner: OwnerScope,
     attachments: &[SendMessageAttachmentRequest],
-) -> AppResult<Vec<Uuid>> {
+) -> AppResult<Vec<ChatAttachmentRecord>> {
     if attachments.len() > state.config.chat_attachment_max_images_per_message {
         return Err(AppError::BadRequest(
             "too many image attachments for one message".to_owned(),
@@ -816,6 +812,7 @@ async fn validate_message_attachment_requests(
     }
 
     let mut attachment_ids = Vec::with_capacity(attachments.len());
+    let mut records = Vec::with_capacity(attachments.len());
     for attachment in attachments {
         if attachment.kind != CHAT_ATTACHMENT_KIND_IMAGE {
             return Err(AppError::BadRequest(
@@ -842,19 +839,39 @@ async fn validate_message_attachment_requests(
             ));
         }
         attachment_ids.push(attachment.id);
+        records.push(record);
     }
 
-    Ok(attachment_ids)
+    Ok(records)
 }
 
-fn ai_user_content(content: &str, attachment_count: usize) -> String {
+async fn build_ai_user_message(
+    state: &AppState,
+    content: &str,
+    attachments: &[ChatAttachmentRecord],
+) -> AppResult<AiMessage> {
+    let mut parts = Vec::new();
     if !content.is_empty() {
-        return content.to_owned();
+        parts.push(AiMessagePart::text(content.to_owned()));
     }
 
-    format!(
-        "The user sent {attachment_count} image attachment(s). Image understanding is not available in this milestone yet."
-    )
+    for attachment in attachments {
+        let bytes = read_attachment_bytes(
+            &state.config.chat_attachment_upload_dir,
+            &attachment.storage_key,
+        )
+        .await?;
+        parts.push(AiMessagePart::image(AiImagePart::new(
+            attachment.mime_type.clone(),
+            bytes,
+            attachment.byte_size,
+            attachment.width,
+            attachment.height,
+            attachment.sha256.clone(),
+        )));
+    }
+
+    Ok(AiMessage::with_parts(AiRole::User, parts))
 }
 
 async fn complete_and_append_chat_message(
@@ -1210,7 +1227,7 @@ mod tests {
             .header(header::ACCEPT, "text/event-stream")
             .header("x-wfchat-session", session.id.to_string())
             .body(Body::from(format!(
-                r#"{{"content":"look","attachments":[{{"id":"{attachment_id}","kind":"image"}}]}}"#
+                r#"{{"content":"","attachments":[{{"id":"{attachment_id}","kind":"image"}}]}}"#
             )))
             .expect("request should build");
 
@@ -1236,6 +1253,10 @@ mod tests {
             done_payload["messages"][0]["attachments"][0]["preview_url"].as_str(),
             Some(format!("/api/chat/attachments/{attachment_id}/preview").as_str())
         );
+        assert_eq!(
+            done_payload["assistant_message"]["content"].as_str(),
+            Some("[aiko_default] mock reply: I received \"\" with 1 image attachment(s).")
+        );
 
         let persisted = state
             .store
@@ -1253,6 +1274,80 @@ mod tests {
             persisted.messages[0].attachments[0].message_id,
             Some(persisted.messages[0].id)
         );
+
+        state.store.delete_chat(owner, chat.id).await;
+        let _ = tokio::fs::remove_dir_all(upload_dir).await;
+    }
+
+    #[tokio::test]
+    async fn stream_message_endpoint_rejects_image_for_unsupported_provider_without_persisting() {
+        let Some(state) = test_state_with_provider("lmstudio").await else {
+            return;
+        };
+        let session = state.store.create_guest_session().await;
+        let owner = OwnerScope::from_session(&session);
+        let upload_dir = state.config.chat_attachment_upload_dir.clone();
+        let chat = state
+            .store
+            .create_chat(owner, "aiko".to_owned(), "aiko_default".to_owned())
+            .await;
+        let app = build_router(state.clone());
+        let upload_payload = upload_png_attachment(app.clone(), session.id).await;
+        let attachment_id = Uuid::parse_str(
+            upload_payload["id"]
+                .as_str()
+                .expect("upload response should include attachment id"),
+        )
+        .expect("attachment id should be uuid");
+        let request = Request::builder()
+            .method("POST")
+            .uri(format!("/api/chats/{}/messages/stream", chat.id))
+            .header(header::CONTENT_TYPE, "application/json")
+            .header(header::ACCEPT, "text/event-stream")
+            .header("x-wfchat-session", session.id.to_string())
+            .body(Body::from(format!(
+                r#"{{"content":"look","attachments":[{{"id":"{attachment_id}","kind":"image"}}]}}"#
+            )))
+            .expect("request should build");
+
+        let response = app.oneshot(request).await.expect("request should run");
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("body should collect");
+        let body = String::from_utf8(body.to_vec()).expect("body should be utf-8");
+        let events = parse_sse_events(&body);
+        assert_eq!(
+            events
+                .iter()
+                .map(|event| event.0.as_str())
+                .collect::<Vec<_>>(),
+            ["message_start", "error"]
+        );
+        let error_payload = events
+            .iter()
+            .find(|event| event.0 == "error")
+            .and_then(|event| serde_json::from_str::<Value>(&event.1).ok())
+            .expect("error event should include json payload");
+        assert_eq!(
+            error_payload["message"].as_str(),
+            Some("bad request: image attachments are not supported by the configured AI provider")
+        );
+
+        let persisted = state
+            .store
+            .get_chat(owner, chat.id)
+            .await
+            .expect("chat should still exist");
+        assert!(persisted.messages.is_empty());
+        let attachment = state
+            .store
+            .get_chat_attachment(owner, attachment_id)
+            .await
+            .expect("attachment should remain pending");
+        assert_eq!(attachment.chat_id, None);
+        assert_eq!(attachment.message_id, None);
 
         state.store.delete_chat(owner, chat.id).await;
         let _ = tokio::fs::remove_dir_all(upload_dir).await;

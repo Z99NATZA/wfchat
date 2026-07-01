@@ -1,10 +1,11 @@
 use std::future::Future;
 
+use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine};
 use serde::{Deserialize, Serialize};
 use tokio_stream::StreamExt;
 
 use crate::{
-    ai::{AiChatStreamEvent, AiMessage, AiRole},
+    ai::{AiChatStreamEvent, AiMessage, AiMessagePart, AiRole},
     characters,
     error::{AppError, AppResult},
     state::AppState,
@@ -356,15 +357,41 @@ fn aiko_guard_safe_split_index(content: &str) -> Option<usize> {
 fn build_messages<'a>(ai_profile_id: &str, messages: &'a [AiMessage]) -> Vec<ProviderMessage<'a>> {
     let mut provider_messages = vec![ProviderMessage {
         role: "system",
-        content: system_prompt(ai_profile_id),
+        content: ProviderMessageContent::Text(system_prompt(ai_profile_id).to_owned()),
     }];
 
     provider_messages.extend(messages.iter().map(|message| ProviderMessage {
         role: role_name(&message.role),
-        content: message.content.as_str(),
+        content: provider_message_content(message),
     }));
 
     provider_messages
+}
+
+fn provider_message_content(message: &AiMessage) -> ProviderMessageContent {
+    let has_image_parts = message.has_image_parts();
+    if !has_image_parts {
+        return ProviderMessageContent::Text(message.text_content());
+    }
+
+    let parts = message
+        .parts
+        .iter()
+        .map(|part| match part {
+            AiMessagePart::Text { text } => ProviderMessagePart::Text { text: text.clone() },
+            AiMessagePart::Image(image) => ProviderMessagePart::ImageUrl {
+                image_url: ProviderImageUrl {
+                    url: format!(
+                        "data:{};base64,{}",
+                        image.mime_type,
+                        BASE64_STANDARD.encode(&image.bytes)
+                    ),
+                },
+            },
+        })
+        .collect();
+
+    ProviderMessageContent::Parts(parts)
 }
 
 fn system_prompt(ai_profile_id: &str) -> &'static str {
@@ -394,7 +421,26 @@ struct ChatCompletionRequest<'a> {
 #[derive(Serialize)]
 struct ProviderMessage<'a> {
     role: &'a str,
-    content: &'a str,
+    content: ProviderMessageContent,
+}
+
+#[derive(Serialize)]
+#[serde(untagged)]
+enum ProviderMessageContent {
+    Text(String),
+    Parts(Vec<ProviderMessagePart>),
+}
+
+#[derive(Serialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+enum ProviderMessagePart {
+    Text { text: String },
+    ImageUrl { image_url: ProviderImageUrl },
+}
+
+#[derive(Serialize)]
+struct ProviderImageUrl {
+    url: String,
 }
 
 #[derive(Deserialize)]
@@ -430,6 +476,8 @@ struct ChatCompletionStreamDelta {
 #[cfg(test)]
 mod tests {
     use std::{cell::RefCell, rc::Rc};
+
+    use crate::ai::AiImagePart;
 
     use super::*;
 
@@ -555,5 +603,46 @@ mod tests {
         assert_eq!(guard.push_delta("ผม"), Some("ผม".to_owned()));
         assert_eq!(guard.finish(), None);
         assert_eq!(guard.content(), "ครับผม");
+    }
+
+    #[test]
+    fn build_messages_serializes_text_only_messages_as_strings() {
+        let messages = vec![AiMessage::user("hello".to_owned())];
+
+        let payload = serde_json::to_value(build_messages("aiko_default", &messages))
+            .expect("messages should serialize");
+
+        assert_eq!(payload[1]["role"], "user");
+        assert_eq!(payload[1]["content"], "hello");
+    }
+
+    #[test]
+    fn build_messages_serializes_image_messages_as_openai_parts() {
+        let messages = vec![AiMessage::with_parts(
+            AiRole::User,
+            vec![
+                AiMessagePart::text("describe this"),
+                AiMessagePart::image(AiImagePart::new(
+                    "image/png".to_owned(),
+                    vec![1, 2, 3],
+                    3,
+                    Some(1),
+                    Some(1),
+                    "sha".to_owned(),
+                )),
+            ],
+        )];
+
+        let payload = serde_json::to_value(build_messages("aiko_default", &messages))
+            .expect("messages should serialize");
+
+        assert_eq!(payload[1]["role"], "user");
+        assert_eq!(payload[1]["content"][0]["type"], "text");
+        assert_eq!(payload[1]["content"][0]["text"], "describe this");
+        assert_eq!(payload[1]["content"][1]["type"], "image_url");
+        assert_eq!(
+            payload[1]["content"][1]["image_url"]["url"],
+            "data:image/png;base64,AQID"
+        );
     }
 }

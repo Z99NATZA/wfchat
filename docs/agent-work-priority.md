@@ -4,19 +4,17 @@ Use this file as the first document to read before starting a new scoped agent t
 
 ## Active Scope
 
-No active scoped priority.
+- No active scoped task.
 
 ## Required Read Order
 
 When a new priority is set, read these documents in order before implementation.
 
-1. `docs/agent-work-priority.md`
-2. `docs/backend-architecture.md`
-3. `docs/frontend-architecture.md`
+- No active scoped task-specific read order.
 
 ## Required Outcome
 
-- No active scoped outcome.
+- No active scoped task-specific outcome.
 
 ## Notes
 

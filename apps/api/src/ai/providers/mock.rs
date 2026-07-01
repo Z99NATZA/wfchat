@@ -10,11 +10,27 @@ use crate::{
 pub fn complete_chat(ai_profile_id: &str, messages: &[AiMessage]) -> AiMessage {
     let last_message = messages
         .last()
-        .map(|message| message.content.as_str())
-        .unwrap_or("");
+        .map(AiMessage::text_content)
+        .unwrap_or_default();
+    let image_count = messages
+        .last()
+        .map(|message| {
+            message
+                .parts
+                .iter()
+                .filter(|part| matches!(part, crate::ai::AiMessagePart::Image(_)))
+                .count()
+        })
+        .unwrap_or_default();
+
+    let image_suffix = if image_count == 0 {
+        String::new()
+    } else {
+        format!(" with {image_count} image attachment(s)")
+    };
 
     AiMessage::assistant(format!(
-        "[{ai_profile_id}] mock reply: I received \"{last_message}\"."
+        "[{ai_profile_id}] mock reply: I received \"{last_message}\"{image_suffix}."
     ))
 }
 
@@ -29,7 +45,7 @@ where
 {
     let assistant = complete_chat(ai_profile_id, messages);
 
-    for token in split_mock_tokens(&assistant.content) {
+    for token in split_mock_tokens(&assistant.text_content()) {
         on_event(AiChatStreamEvent::Token(token)).await?;
         sleep(Duration::from_millis(80)).await;
     }

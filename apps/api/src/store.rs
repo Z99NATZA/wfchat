@@ -1581,20 +1581,18 @@ fn chat_attachment_from_row(row: sqlx::postgres::PgRow) -> ChatAttachmentRecord 
 
 impl StoredMessage {
     pub fn from_ai_message(message: AiMessage) -> Self {
+        let content = message.text_content();
         Self {
             id: Uuid::new_v4(),
             role: message.role,
-            content: message.content,
+            content,
             attachments: Vec::new(),
             created_at: now_unix_seconds(),
         }
     }
 
     pub fn to_ai_message(&self) -> AiMessage {
-        AiMessage {
-            role: self.role.clone(),
-            content: self.content.clone(),
-        }
+        AiMessage::text(self.role.clone(), self.content.clone())
     }
 }
 

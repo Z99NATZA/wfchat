@@ -27,8 +27,9 @@ Image attachment support keeps the same boundary. The backend foundation
 exposes backend-owned upload, preview, and pending-delete endpoints for local
 image files, validates image bytes, stores attachment metadata, checks
 session/user ownership, accepts backend-issued attachment ids in chat message
-requests, and links attachments only after successful assistant completion. AI
-message parts and provider vision mapping remain planned. See
+requests, converts validated image attachments into backend-owned AI image
+parts, maps OpenAI vision payloads, and links attachments only after successful
+assistant completion. See
 `docs/chat-image-attachments.md`.
 
 The streaming path is additive and does not replace the non-streaming endpoint:

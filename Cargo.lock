@@ -2511,6 +2511,7 @@ name = "wfchat-api"
 version = "0.1.0"
 dependencies = [
  "axum",
+ "base64",
  "dotenvy",
  "image",
  "reqwest",
