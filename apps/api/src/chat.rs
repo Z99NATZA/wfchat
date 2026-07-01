@@ -1846,7 +1846,6 @@ mod tests {
                 app_port: 0,
                 frontend_origin: "http://localhost:5173".to_owned(),
                 ai_provider: ai_provider.to_owned(),
-                ai_model: "mock-waifu".to_owned(),
                 ai_voice_provider: "mock".to_owned(),
                 ai_voice_model: "gpt-4o-mini-tts".to_owned(),
                 ai_voice_id: "marin".to_owned(),

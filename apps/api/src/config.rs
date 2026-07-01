@@ -6,7 +6,6 @@ pub struct Config {
     pub app_port: u16,
     pub frontend_origin: String,
     pub ai_provider: String,
-    pub ai_model: String,
     pub ai_voice_provider: String,
     pub ai_voice_model: String,
     pub ai_voice_id: String,
@@ -53,7 +52,6 @@ impl Config {
                 &env_value("FRONTEND_ORIGIN", "http://localhost:5173"),
             ),
             ai_provider: env_value("AI_PROVIDER", "mock"),
-            ai_model: env_value("AI_MODEL", "mock-waifu"),
             ai_voice_provider: env_value("AI_VOICE_PROVIDER", "disabled"),
             ai_voice_model: env_value("AI_VOICE_MODEL", "gpt-4o-mini-tts"),
             ai_voice_id: env_value("AI_VOICE_ID", "marin"),
@@ -119,7 +117,8 @@ impl Config {
             "openai" => &self.openai_model,
             "lmstudio" => &self.lmstudio_model,
             "xai" => &self.xai_model,
-            _ => &self.ai_model,
+            "mock" => "mock-waifu",
+            _ => "unknown",
         }
     }
 
@@ -336,7 +335,6 @@ mod tests {
             app_port: 8080,
             frontend_origin: "http://localhost:5173".to_owned(),
             ai_provider: "mock".to_owned(),
-            ai_model: "mock-waifu".to_owned(),
             ai_voice_provider: "disabled".to_owned(),
             ai_voice_model: "gpt-4o-mini-tts".to_owned(),
             ai_voice_id: "marin".to_owned(),
