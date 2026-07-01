@@ -347,6 +347,13 @@ Frontend:
 - Send is disabled while upload is pending. Implemented through send state.
 - Optimistic user image message renders. Implemented.
 - Final server message replacement preserves attachments. Implemented.
+- Image-only send request body includes only `content` and backend-issued
+  attachment ids. Implemented.
+- Text plus image send request body includes only `content` and backend-issued
+  attachment ids. Implemented.
+- Frontend send requests do not include local preview URLs, authenticated
+  preview URLs, local paths, user image URLs, raw bytes, provider names, model
+  names, or provider-specific image payloads. Implemented.
 
 Provider:
 
