@@ -781,6 +781,91 @@ impl ChatStore {
         Some(chat_attachment_from_row(row))
     }
 
+    pub async fn mark_stale_pending_chat_attachments_deleted(
+        &self,
+        kind: &str,
+        stale_before_unix_seconds: u64,
+        limit: i64,
+    ) -> Vec<ChatAttachmentRecord> {
+        if limit <= 0 {
+            return Vec::new();
+        }
+
+        let rows = sqlx::query(
+            "update chat_attachments
+             set deleted_at = now()
+             where id in (
+                select id
+                from chat_attachments
+                where kind = $1
+                  and chat_id is null
+                  and message_id is null
+                  and deleted_at is null
+                  and created_at < to_timestamp($2)
+                order by created_at asc
+                limit $3
+             )
+             returning
+                id,
+                owner_session_id,
+                owner_user_id,
+                chat_id,
+                message_id,
+                kind,
+                mime_type,
+                byte_size,
+                width,
+                height,
+                sha256,
+                storage_key,
+                extract(epoch from created_at)::bigint as created_at,
+                extract(epoch from deleted_at)::bigint as deleted_at",
+        )
+        .bind(kind)
+        .bind(stale_before_unix_seconds as i64)
+        .bind(limit)
+        .fetch_all(self.db.as_ref())
+        .await
+        .unwrap_or_default();
+
+        rows.into_iter().map(chat_attachment_from_row).collect()
+    }
+
+    #[cfg(test)]
+    pub async fn set_chat_attachment_created_at_for_test(
+        &self,
+        attachment_id: Uuid,
+        created_at: u64,
+    ) -> Option<ChatAttachmentRecord> {
+        let row = sqlx::query(
+            "update chat_attachments
+             set created_at = to_timestamp($2)
+             where id = $1
+             returning
+                id,
+                owner_session_id,
+                owner_user_id,
+                chat_id,
+                message_id,
+                kind,
+                mime_type,
+                byte_size,
+                width,
+                height,
+                sha256,
+                storage_key,
+                extract(epoch from created_at)::bigint as created_at,
+                extract(epoch from deleted_at)::bigint as deleted_at",
+        )
+        .bind(attachment_id)
+        .bind(created_at as i64)
+        .fetch_optional(self.db.as_ref())
+        .await
+        .ok()??;
+
+        Some(chat_attachment_from_row(row))
+    }
+
     pub async fn list_memory_facts(
         &self,
         owner: OwnerScope,

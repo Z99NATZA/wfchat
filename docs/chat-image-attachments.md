@@ -200,14 +200,19 @@ Indexes:
 
 ## Storage Plan
 
-Status: implemented for local backend-owned storage.
+Status: implemented for local backend-owned storage and stale pending cleanup.
 
 - Add backend-owned upload directory configuration.
 - Store files under generated keys.
 - Keep original filename only as optional display metadata if needed later.
 - Keep storage outside frontend public assets.
 - Avoid direct static serving for the first implementation.
-- Add cleanup for pending orphan files.
+- Pending orphan cleanup is backend-owned. Attachments that remain pending for
+  more than 24 hours are soft-deleted in metadata and their backend storage
+  files are removed.
+- Cleanup runs automatically from the API process on startup and then every
+  hour. It only targets pending image attachments with no `chat_id` and no
+  `message_id`; linked message attachments are not removed by this cleanup.
 - Keep storage interface replaceable for future S3-compatible storage.
 
 ## AI Message Model
@@ -333,6 +338,9 @@ Backend:
 - Leave pending attachments unlinked after provider failure. Implemented.
 - Return safe upload errors. Implemented.
 - Return safe stream errors. Implemented.
+- Clean stale pending orphan attachments. Implemented.
+- Preserve linked attachments during orphan cleanup. Implemented.
+- Preserve current pending attachments during orphan cleanup. Implemented.
 
 Frontend:
 
@@ -371,7 +379,7 @@ Provider:
 6. Message rendering attachments. Implemented.
 7. AI message parts. Implemented.
 8. OpenAI vision adapter. Implemented.
-9. Tests and cleanup. Implemented for provider mapping and unsupported provider safety.
+9. Tests and cleanup. Implemented for provider mapping, unsupported provider safety, frontend send boundaries, and pending orphan cleanup.
 10. Manual QA and security review.
 
 ## Manual QA
@@ -392,6 +400,8 @@ Provider:
 - Verify another session cannot fetch preview.
 - Verify deleted pending attachment cannot be previewed.
 - Verify refresh loads sent image metadata.
+- Verify stale pending attachment cleanup removes orphan files without removing
+  linked message attachments.
 
 ## Completion Criteria
 
@@ -406,4 +416,4 @@ Provider:
 - Tests cover validation, ownership, rendering, and provider mapping.
 - Docs match implemented behavior.
 
-Current status: backend upload, preview, delete, validation, storage, message linking, metadata persistence, ownership checks, frontend composer image selection, upload, message send, cache metadata, thumbnail rendering, AI message parts, mock image-part handling, OpenAI vision payload mapping, and unsupported-provider image safety are implemented. Preview dialog, missing-image placeholder, raw image sync, and orphan cleanup scheduling are still planned.
+Current status: backend upload, preview, delete, validation, storage, stale pending orphan cleanup, message linking, metadata persistence, ownership checks, frontend composer image selection, upload, message send, cache metadata, thumbnail rendering, AI message parts, mock image-part handling, OpenAI vision payload mapping, and unsupported-provider image safety are implemented. Preview dialog, missing-image placeholder, and raw image sync are still planned.

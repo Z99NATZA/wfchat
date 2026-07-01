@@ -29,7 +29,8 @@ image files, validates image bytes, stores attachment metadata, checks
 session/user ownership, accepts backend-issued attachment ids in chat message
 requests, converts validated image attachments into backend-owned AI image
 parts, maps OpenAI vision payloads, and links attachments only after successful
-assistant completion. See
+assistant completion. The API process also runs backend-owned cleanup for stale
+pending image attachments so orphaned upload files do not remain indefinitely. See
 `docs/chat-image-attachments.md`.
 
 The streaming path is additive and does not replace the non-streaming endpoint:

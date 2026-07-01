@@ -1042,7 +1042,10 @@ mod tests {
     use std::io::Cursor;
     use tower::ServiceExt;
 
-    use crate::{app::build_router, config::Config, store::ChatStore};
+    use crate::{
+        app::build_router, attachments::cleanup_stale_pending_chat_attachments, config::Config,
+        store::ChatStore,
+    };
 
     #[test]
     fn stream_error_message_hides_upstream_ai_details() {
@@ -1633,6 +1636,108 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn stale_pending_attachment_cleanup_removes_only_orphaned_pending_files() {
+        let Some(state) = test_state().await else {
+            return;
+        };
+        let session = state.store.create_guest_session().await;
+        let owner = OwnerScope::from_session(&session);
+        let upload_dir = state.config.chat_attachment_upload_dir.clone();
+        let app = build_router(state.clone());
+
+        let stale_pending_id =
+            uploaded_attachment_id(upload_png_attachment(app.clone(), session.id).await);
+        let linked_id =
+            uploaded_attachment_id(upload_png_attachment(app.clone(), session.id).await);
+        let current_pending_id =
+            uploaded_attachment_id(upload_png_attachment(app.clone(), session.id).await);
+
+        let stale_pending = state
+            .store
+            .set_chat_attachment_created_at_for_test(stale_pending_id, 1)
+            .await
+            .expect("stale pending attachment should exist");
+        let chat = state
+            .store
+            .create_chat(owner, "aiko".to_owned(), "aiko_default".to_owned())
+            .await;
+        let user_message = StoredMessage::from_ai_message(AiMessage::user("with image".to_owned()));
+        let assistant_message =
+            StoredMessage::from_ai_message(AiMessage::assistant("ok".to_owned()));
+        state
+            .store
+            .append_chat_messages_with_attachments(
+                owner,
+                chat.id,
+                user_message,
+                assistant_message,
+                &[linked_id],
+            )
+            .await
+            .expect("linked attachment should append");
+        let linked = state
+            .store
+            .set_chat_attachment_created_at_for_test(linked_id, 1)
+            .await
+            .expect("linked attachment should exist");
+        let current_pending = state
+            .store
+            .get_chat_attachment(owner, current_pending_id)
+            .await
+            .expect("current pending attachment should exist");
+
+        let cleaned_count =
+            cleanup_stale_pending_chat_attachments(&state.config, &state.store).await;
+
+        assert_eq!(cleaned_count, 1);
+        assert!(
+            state
+                .store
+                .get_chat_attachment(owner, stale_pending_id)
+                .await
+                .is_none(),
+            "stale pending attachment metadata should be hidden after cleanup"
+        );
+        assert!(
+            read_attachment_bytes(&upload_dir, &stale_pending.storage_key)
+                .await
+                .is_err(),
+            "stale pending attachment file should be removed"
+        );
+        assert!(
+            state
+                .store
+                .get_chat_attachment(owner, linked_id)
+                .await
+                .is_some(),
+            "linked attachment metadata should be preserved"
+        );
+        assert!(
+            read_attachment_bytes(&upload_dir, &linked.storage_key)
+                .await
+                .is_ok(),
+            "linked attachment file should be preserved"
+        );
+        assert!(
+            state
+                .store
+                .get_chat_attachment(owner, current_pending_id)
+                .await
+                .is_some(),
+            "current pending attachment metadata should be preserved"
+        );
+        assert!(
+            read_attachment_bytes(&upload_dir, &current_pending.storage_key)
+                .await
+                .is_ok(),
+            "current pending attachment file should be preserved"
+        );
+
+        state.store.delete_chat(owner, chat.id).await;
+        let _ = tokio::fs::remove_dir_all(upload_dir).await;
+    }
+
+    #[tokio::test]
     async fn upload_chat_attachment_rejects_svg_bytes_even_with_image_content_type() {
         let Some(state) = test_state().await else {
             return;
@@ -1828,6 +1933,15 @@ mod tests {
             .await
             .expect("body should collect");
         serde_json::from_slice(&body).expect("upload response should be json")
+    }
+
+    fn uploaded_attachment_id(payload: Value) -> Uuid {
+        Uuid::parse_str(
+            payload["id"]
+                .as_str()
+                .expect("upload response should include attachment id"),
+        )
+        .expect("attachment id should be uuid")
     }
 
     fn assert_header_contains(

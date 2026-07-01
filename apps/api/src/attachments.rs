@@ -8,10 +8,14 @@ use uuid::Uuid;
 use crate::{
     config::Config,
     error::{AppError, AppResult},
+    store::ChatStore,
 };
 
 pub const CHAT_ATTACHMENT_KIND_IMAGE: &str = "image";
 pub const MAX_ATTACHMENT_MULTIPART_BYTES: usize = 64 * 1024 * 1024;
+pub const PENDING_ATTACHMENT_CLEANUP_AFTER_SECONDS: u64 = 24 * 60 * 60;
+pub const PENDING_ATTACHMENT_CLEANUP_INTERVAL_SECONDS: u64 = 60 * 60;
+const PENDING_ATTACHMENT_CLEANUP_BATCH_SIZE: i64 = 100;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ValidatedImageAttachment {
@@ -143,6 +147,24 @@ pub async fn remove_attachment_file(upload_dir: &str, storage_key: &str) {
     }
 }
 
+pub async fn cleanup_stale_pending_chat_attachments(config: &Config, store: &ChatStore) -> usize {
+    let stale_before = now_unix_seconds().saturating_sub(PENDING_ATTACHMENT_CLEANUP_AFTER_SECONDS);
+    let attachments = store
+        .mark_stale_pending_chat_attachments_deleted(
+            CHAT_ATTACHMENT_KIND_IMAGE,
+            stale_before,
+            PENDING_ATTACHMENT_CLEANUP_BATCH_SIZE,
+        )
+        .await;
+    let count = attachments.len();
+
+    for attachment in attachments {
+        remove_attachment_file(&config.chat_attachment_upload_dir, &attachment.storage_key).await;
+    }
+
+    count
+}
+
 fn attachment_storage_path(upload_dir: &str, storage_key: &str) -> AppResult<PathBuf> {
     let storage_key_path = Path::new(storage_key);
     if storage_key_path.is_absolute()
@@ -182,6 +204,13 @@ fn sha256_hex(bytes: &[u8]) -> String {
         output.push_str(&format!("{byte:02x}"));
     }
     output
+}
+
+fn now_unix_seconds() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|duration| duration.as_secs())
+        .unwrap_or_default()
 }
 
 #[cfg(test)]
