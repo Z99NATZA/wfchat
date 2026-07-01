@@ -61,7 +61,7 @@ pub async fn complete_chat_completions(
         .json(&ChatCompletionRequest {
             model: provider.model,
             messages: build_messages(provider.ai_profile_id, messages),
-            temperature: 0.8,
+            temperature: chat_completion_temperature(provider.model),
             stream: false,
         })
         .send()
@@ -147,7 +147,7 @@ where
         .json(&ChatCompletionRequest {
             model: provider.model,
             messages: build_messages(provider.ai_profile_id, messages),
-            temperature: 0.8,
+            temperature: chat_completion_temperature(provider.model),
             stream: true,
         })
         .send()
@@ -410,11 +410,20 @@ fn role_name(role: &AiRole) -> &'static str {
     }
 }
 
+fn chat_completion_temperature(model: &str) -> Option<f32> {
+    if model == "gpt-5.5" || model.starts_with("gpt-5.5-") {
+        None
+    } else {
+        Some(0.8)
+    }
+}
+
 #[derive(Serialize)]
 struct ChatCompletionRequest<'a> {
     model: &'a str,
     messages: Vec<ProviderMessage<'a>>,
-    temperature: f32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    temperature: Option<f32>,
     stream: bool,
 }
 
@@ -644,5 +653,40 @@ mod tests {
             payload[1]["content"][1]["image_url"]["url"],
             "data:image/png;base64,AQID"
         );
+    }
+
+    #[test]
+    fn gpt_55_requests_omit_custom_temperature() {
+        let messages = vec![AiMessage::user("hello".to_owned())];
+        let request = ChatCompletionRequest {
+            model: "gpt-5.5",
+            messages: build_messages("aiko_default", &messages),
+            temperature: chat_completion_temperature("gpt-5.5"),
+            stream: false,
+        };
+
+        let payload = serde_json::to_value(request).expect("request should serialize");
+
+        assert_eq!(payload["model"], "gpt-5.5");
+        assert!(payload.get("temperature").is_none());
+    }
+
+    #[test]
+    fn non_gpt_55_requests_keep_existing_temperature() {
+        let messages = vec![AiMessage::user("hello".to_owned())];
+        let request = ChatCompletionRequest {
+            model: "gpt-4.1-mini",
+            messages: build_messages("aiko_default", &messages),
+            temperature: chat_completion_temperature("gpt-4.1-mini"),
+            stream: false,
+        };
+
+        let payload = serde_json::to_value(request).expect("request should serialize");
+
+        assert_eq!(payload["model"], "gpt-4.1-mini");
+        let temperature = payload["temperature"]
+            .as_f64()
+            .expect("temperature should serialize as a number");
+        assert!((temperature - 0.8).abs() < 0.00001);
     }
 }
