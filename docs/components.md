@@ -13,7 +13,7 @@ Current shared components:
 Dialog primitives live in `apps/web/src/components/dialog`.
 
 - `DialogProvider`: app-level dialog state host and API.
-- `Dialog`: base modal shell (overlay, focus/escape close, draggable header, actions slot).
+- `Dialog`: base modal shell (overlay, focus/escape close, desktop-only draggable header, actions slot).
 - `ConfirmDialog`: reusable confirm modal built on top of `Dialog`.
 
 Use `useDialog()` from `DialogProvider` for consistent app-wide behavior:
@@ -22,7 +22,9 @@ Use `useDialog()` from `DialogProvider` for consistent app-wide behavior:
 - `alert(options)`: one-button information modal.
 - `openCustom(options)`: custom content modal using a render callback.
   `openCustom` supports `size: "wide"` for larger content and
-  `showCancelAction: false` for single-action preview-style dialogs.
+  `showCancelAction: false` for single-action preview-style dialogs. Dialog
+  dragging is enabled only on desktop-like fine-pointer viewports, even when a
+  dialog allows dragging.
 
 Shared components should be generic. Do not place chat-specific text, fixtures, or business behavior in this folder.
 

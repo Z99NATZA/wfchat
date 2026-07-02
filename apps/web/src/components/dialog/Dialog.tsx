@@ -26,6 +26,7 @@ function Dialog({
 }: DialogProps) {
 	const [offset, setOffset] = useState({ x: 0, y: 0 });
 	const dragStateRef = useRef<{ pointerId: number; startX: number; startY: number } | null>(null);
+	const canDragDialog = useDesktopDraggableDialog(isDraggable);
 
 	useEffect(() => {
 		if (isOpen) {
@@ -53,7 +54,7 @@ function Dialog({
 	}
 
 	function handleDragStart(event: PointerEvent<HTMLDivElement>) {
-		if (!isDraggable || event.button !== 0) {
+		if (!canDragDialog || event.button !== 0) {
 			return;
 		}
 
@@ -119,7 +120,7 @@ function Dialog({
 			>
 				<div
 					className={
-						isDraggable
+						canDragDialog
 							? "cursor-move select-none border-b border-dialog-border bg-dialog-soft px-5 py-3"
 							: "border-b border-dialog-border bg-dialog-soft px-5 py-3"
 					}
@@ -155,6 +156,39 @@ function Dialog({
 		</div>,
 		document.body
 	);
+}
+
+function useDesktopDraggableDialog(isDraggable: boolean) {
+	const [canDragDialog, setCanDragDialog] = useState(() => isDraggable && matchesDesktopDraggableDialog());
+
+	useEffect(() => {
+		if (!isDraggable) {
+			setCanDragDialog(false);
+			return;
+		}
+
+		if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
+			setCanDragDialog(false);
+			return;
+		}
+
+		const mediaQuery = window.matchMedia("(min-width: 768px) and (pointer: fine)");
+		const updateCanDragDialog = () => setCanDragDialog(mediaQuery.matches);
+
+		updateCanDragDialog();
+		mediaQuery.addEventListener("change", updateCanDragDialog);
+		return () => mediaQuery.removeEventListener("change", updateCanDragDialog);
+	}, [isDraggable]);
+
+	return canDragDialog;
+}
+
+function matchesDesktopDraggableDialog() {
+	if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
+		return false;
+	}
+
+	return window.matchMedia("(min-width: 768px) and (pointer: fine)").matches;
 }
 
 export default Dialog;

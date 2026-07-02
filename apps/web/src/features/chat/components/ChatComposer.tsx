@@ -241,7 +241,7 @@ function ChatComposer({
 
 		void openCustom({
 			title: label,
-			isDraggable: false,
+			isDraggable: true,
 			showCancelAction: false,
 			size: "wide",
 			render: () => (

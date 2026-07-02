@@ -277,7 +277,7 @@ describe("ChatMessageList streaming state", () => {
 
 		expect(dialogMocks.openCustom).toHaveBeenCalledWith(expect.objectContaining({
 			title: "Image 1",
-			isDraggable: false,
+			isDraggable: true,
 			showCancelAction: false,
 			size: "wide"
 		}));

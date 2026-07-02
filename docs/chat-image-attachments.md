@@ -288,6 +288,8 @@ Status: implemented for message thumbnails, in-app preview dialog, and missing-i
   and local `blob:` URLs for pending attachments. Implemented.
 - Pending composer thumbnails open local `blob:` previews in the same in-app
   preview dialog before upload/send. Implemented.
+- Image preview dialogs use the shared desktop-only draggable dialog behavior.
+  Implemented.
 - Preview dialog does not expose storage paths, preview endpoint URLs,
   filesystem paths, or provider payload details.
 - Missing or inaccessible sent image previews show a compact placeholder without

@@ -877,7 +877,7 @@ function ChatMessageAttachmentPreview({
 
 		void openCustom({
 			title: alt,
-			isDraggable: false,
+			isDraggable: true,
 			showCancelAction: false,
 			size: "wide",
 			render: () => (

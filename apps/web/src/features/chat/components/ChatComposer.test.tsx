@@ -333,7 +333,7 @@ describe("ChatComposer", () => {
 		fireEvent.click(screen.getByRole("button", { name: "Open selected preview for local.png" }));
 
 		expect(dialogMocks.openCustom).toHaveBeenCalledWith(expect.objectContaining({
-			isDraggable: false,
+			isDraggable: true,
 			showCancelAction: false,
 			size: "wide",
 			title: "local.png"
