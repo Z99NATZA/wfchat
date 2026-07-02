@@ -25,7 +25,7 @@ If measured against a stricter public SaaS production bar:
 These checks passed during review:
 
 - Frontend tests: 162 passed
-- Backend tests: 86 passed
+- Backend tests: 90 passed
 - Frontend production build: passed
 
 Approximate source size excluding dependencies/build output:
@@ -46,30 +46,7 @@ Severity definitions used in this review:
 
 ## Critical Risks
 
-### 1. Admin Routes Are Not Protected
-
-Files:
-
-- `apps/api/src/admin.rs`
-- `docs/backend-architecture.md`
-
-The backend exposes `/api/admin/ai-profiles` and `/api/admin/ai-providers/status`, but there is no session or role guard in `admin.rs`. The documentation says these are intended to be admin-only endpoints.
-
-Current exposure is limited because these endpoints only return provider/model status and profile metadata, not API keys. However, this is still a dangerous boundary to leave open because future write endpoints may be added under the same router.
-
-Recommended fix:
-
-- Add an admin authentication/authorization extractor or middleware.
-- Require a valid session.
-- Require `UserKind::Admin`.
-- Add tests that guest and registered sessions get `403`.
-- Add tests that admin sessions can access the endpoints.
-
-Priority:
-
-Fix before adding any admin write endpoint or deploying publicly.
-
-### 2. Session Model Is Weaker Than It Looks
+### 1. Session Model Is Weaker Than It Looks
 
 Files:
 
@@ -96,7 +73,7 @@ Fix before public deployment or before storing sensitive user data.
 
 ## High Risks
 
-### 3. Multi-Step Database Writes Are Not Transactional
+### 2. Multi-Step Database Writes Are Not Transactional
 
 File:
 
@@ -122,7 +99,7 @@ Priority:
 
 Fix before relying heavily on image attachments or multi-device sync.
 
-### 4. Database Errors Are Often Hidden
+### 3. Database Errors Are Often Hidden
 
 File:
 
@@ -147,7 +124,7 @@ Priority:
 
 Fix progressively, starting with chat writes, auth/session writes, attachments, and sync commits.
 
-### 5. No Rate Limiting or Abuse Controls
+### 4. No Rate Limiting or Abuse Controls
 
 Files:
 
@@ -177,7 +154,7 @@ Fix before exposing the API publicly.
 
 ## Medium Risks
 
-### 6. Migration System Is Ad Hoc
+### 5. Migration System Is Ad Hoc
 
 Files:
 
@@ -197,47 +174,7 @@ Priority:
 
 Fix before multiple deployed environments exist.
 
-### 7. Admin Documentation Does Not Match Runtime Protection
-
-Files:
-
-- `docs/backend-architecture.md`
-- `docs/folder-structure.md`
-- `apps/api/src/admin.rs`
-
-The docs call admin APIs an admin-only boundary, but the code does not enforce it. This kind of drift is dangerous because future contributors may assume the boundary already exists.
-
-Recommended fix:
-
-- Either implement the guard or update docs to say the endpoints are currently public read-only status endpoints.
-- Prefer implementing the guard.
-
-Priority:
-
-Fix with the admin route protection work.
-
-### 8. Backend Docs Still Mention the Old JSON Store
-
-Files:
-
-- `docs/backend-architecture.md`
-- `apps/api/.env.example`
-
-`docs/backend-architecture.md` says the current local implementation uses a JSON file store at `DATA_PATH` and later should add `sqlx`. The code already uses PostgreSQL and `sqlx`.
-
-`apps/api/.env.example` also still contains `DATA_PATH=data/wfchat.json`, which is no longer used by `Config`.
-
-Recommended fix:
-
-- Remove `DATA_PATH` from `.env.example`.
-- Update backend architecture docs to say PostgreSQL is current.
-- Add a short note if old JSON data migration is still relevant.
-
-Priority:
-
-Low effort, fix soon to avoid confusing future work.
-
-### 9. No CI Gate Found
+### 6. No CI Gate Found
 
 Files:
 
@@ -262,7 +199,7 @@ Priority:
 
 Fix before accepting outside contributions or making larger changes.
 
-### 10. No Frontend Lint/Format Gate
+### 7. No Frontend Lint/Format Gate
 
 Files:
 
@@ -281,7 +218,7 @@ Priority:
 
 Medium for team development, low for solo work.
 
-### 11. Sync Has Known Missing E2E Coverage
+### 8. Sync Has Known Missing E2E Coverage
 
 Files:
 
@@ -304,7 +241,7 @@ Priority:
 
 Medium, especially before changing sync logic.
 
-### 12. Profile Avatar URL Is Not Strictly Validated
+### 9. Profile Avatar URL Is Not Strictly Validated
 
 Files:
 
@@ -325,7 +262,7 @@ Medium if profiles are public or shared. Low if only local/personal.
 
 ## Low Risks
 
-### 13. Bundle Size Should Be Watched
+### 10. Bundle Size Should Be Watched
 
 Files:
 
@@ -344,7 +281,7 @@ Priority:
 
 Low.
 
-### 14. Test Output Contains Expected Error Logs
+### 11. Test Output Contains Expected Error Logs
 
 Files:
 
@@ -361,7 +298,7 @@ Priority:
 
 Low.
 
-### 15. Some Future/Scaffolded Providers Are Present
+### 12. Some Future/Scaffolded Providers Are Present
 
 Files:
 
@@ -417,10 +354,9 @@ The number and focus of tests are strong for an MVP:
 
 ### Phase 1: Public Deployment Blockers
 
-1. Protect `/api/admin/*` with session and admin role checks.
-2. Harden session handling and reduce reliance on browser-readable session ids.
-3. Add rate limits to chat, voice, transcription, and upload endpoints.
-4. Add transactions to chat message append plus attachment linking.
+1. Harden session handling and reduce reliance on browser-readable session ids.
+2. Add rate limits to chat, voice, transcription, and upload endpoints.
+3. Add transactions to chat message append plus attachment linking.
 
 ### Phase 2: Reliability and Operations
 
@@ -431,11 +367,10 @@ The number and focus of tests are strong for an MVP:
 
 ### Phase 3: Maintainability and Polish
 
-1. Fix stale docs and remove unused `DATA_PATH`.
-2. Add browser E2E tests for sync and auth flows.
-3. Validate profile avatar URLs.
-4. Clean expected error logs from test output.
-5. Monitor frontend bundle size.
+1. Add browser E2E tests for sync and auth flows.
+2. Validate profile avatar URLs.
+3. Clean expected error logs from test output.
+4. Monitor frontend bundle size.
 
 ## Overall Assessment
 
@@ -443,7 +378,6 @@ WFChat has a better foundation than the phrase "vibe coding" suggests. The proje
 
 The main gap is not that the system is poorly built. The main gap is that it has not yet been hardened around production boundaries:
 
-- admin authorization
 - session security
 - transactional writes
 - rate limiting

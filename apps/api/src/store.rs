@@ -211,6 +211,32 @@ impl ChatStore {
         })
     }
 
+    #[cfg(test)]
+    pub async fn promote_session_to_admin_for_test(
+        &self,
+        session_id: Uuid,
+        user_id: Uuid,
+    ) -> Option<SessionRecord> {
+        let row = sqlx::query(
+            "update auth_sessions
+             set user_id = $1, kind = 'admin'
+             where id = $2
+             returning id, user_id, kind, extract(epoch from created_at)::bigint as created_at",
+        )
+        .bind(user_id)
+        .bind(session_id)
+        .fetch_optional(self.db.as_ref())
+        .await
+        .ok()??;
+
+        Some(SessionRecord {
+            id: row.get("id"),
+            user_id: row.get("user_id"),
+            kind: parse_user_kind(row.get::<String, _>("kind").as_str()),
+            created_at: row.get::<i64, _>("created_at") as u64,
+        })
+    }
+
     pub async fn migrate_session_data_to_user(&self, session_id: Uuid, user_id: Uuid) {
         let _ = sqlx::query(
             "update chats set owner_user_id = $1 where owner_session_id = $2 and owner_user_id is null",

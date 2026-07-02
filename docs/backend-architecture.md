@@ -8,7 +8,7 @@ The backend is a Rust Axum API in `apps/api`. It is designed to keep common requ
 - API keys stay in backend environment variables only.
 - Guest users can chat without logging in.
 - Registered users can be added later for sync and recovery.
-- Admin-only endpoints are the intended boundary for provider, model, and AI profile configuration. The current admin API exposes read/status endpoints only.
+- Admin-only endpoints are the boundary for provider, model, and AI profile configuration. The current admin API exposes read/status endpoints only and requires an admin session.
 - Provider adapters can be added without changing the chat UI contract.
 
 ## Request Flow
@@ -95,7 +95,7 @@ This clears message history for the current chat while keeping the chat id and g
 
 `characters.rs` owns character-facing endpoints, the current static character registry, and character-specific system prompts.
 
-`admin.rs` owns admin-only AI profile and provider endpoints. It currently exposes list/status endpoints; write/manage flows are not implemented yet.
+`admin.rs` owns admin-only AI profile and provider endpoints. It currently exposes list/status endpoints protected by `UserKind::Admin`; write/manage flows are not implemented yet.
 
 `ai/mod.rs` owns provider selection and the shared AI message types.
 
@@ -117,14 +117,14 @@ This clears message history for the current chat while keeping the chat id and g
 
 `uuid`: ids for chats, users, sessions, and messages.
 
-The current local implementation uses a JSON file store at `DATA_PATH`. Later, add `sqlx` when relational persistence is needed.
+The current backend uses PostgreSQL through `sqlx`. Local and deployed environments should provide `DATABASE_URL`; `apps/api/db/init.sql` and the startup migration code keep the schema available for development.
 
 ## Auth Model
 
 ```text
 guest      can chat without login on the same browser/device
 registered can chat and sync across browsers/devices through account-scoped ownership
-admin      planned role for managing AI profiles, provider settings, and models
+admin      can access admin AI profile/provider endpoints and is the role for future management flows
 ```
 
 Auth uses an HTTP-only session cookie plus the `X-WFChat-Session` header for API ownership resolution. Frontend code should not store API keys or admin secrets.
