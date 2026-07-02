@@ -396,28 +396,29 @@ Provider:
 7. AI message parts. Implemented.
 8. OpenAI vision adapter. Implemented.
 9. Tests and cleanup. Implemented for upload acceptance, provider mapping, unsupported provider safety, frontend send boundaries, and pending orphan cleanup.
-10. Manual QA and security review.
+10. Manual QA completed; security review remains.
 
 ## Manual QA
 
-- Upload PNG from device.
-- Upload JPEG from device.
-- Upload WebP from device.
-- Upload GIF from device.
-- Paste screenshot from clipboard.
-- Drag image into composer.
-- Remove pending image.
-- Send image-only message.
-- Send text plus image message.
-- Verify assistant can answer about image content.
-- Verify unsupported provider error is clear.
-- Verify local path cannot be submitted.
-- Verify user URL cannot be submitted.
-- Verify another session cannot fetch preview.
-- Verify deleted pending attachment cannot be previewed.
-- Verify refresh loads sent image metadata.
+- Status: completed.
+- Upload PNG from device. Completed.
+- Upload JPEG from device. Completed.
+- Upload WebP from device. Completed.
+- Upload GIF from device. Completed.
+- Paste screenshot from clipboard. Completed.
+- Drag image into composer. Completed.
+- Remove pending image. Completed.
+- Send image-only message. Completed.
+- Send text plus image message. Completed.
+- Verify assistant can answer about image content. Completed.
+- Verify unsupported provider error is clear. Completed.
+- Verify local path cannot be submitted. Completed.
+- Verify user URL cannot be submitted. Completed.
+- Verify another session cannot fetch preview. Completed.
+- Verify deleted pending attachment cannot be previewed. Completed.
+- Verify refresh loads sent image metadata. Completed.
 - Verify stale pending attachment cleanup removes orphan files without removing
-  linked message attachments.
+  linked message attachments. Completed.
 
 ## Completion Criteria
 
@@ -432,4 +433,4 @@ Provider:
 - Tests cover validation, ownership, rendering, and provider mapping.
 - Docs match implemented behavior.
 
-Current status: backend upload, preview, delete, validation, storage, stale pending orphan cleanup, message linking, metadata persistence, ownership checks, frontend composer image selection, upload, message send, cache metadata, thumbnail rendering, in-app preview dialog, missing-image placeholder, AI message parts, mock image-part handling, OpenAI vision payload mapping, and unsupported-provider image safety are implemented. Raw image sync is still planned.
+Current status: backend upload, preview, delete, validation, storage, stale pending orphan cleanup, message linking, metadata persistence, ownership checks, frontend composer image selection, upload, message send, cache metadata, thumbnail rendering, in-app preview dialog, missing-image placeholder, AI message parts, mock image-part handling, OpenAI vision payload mapping, unsupported-provider image safety, and manual QA are completed. Raw image sync is still planned.
