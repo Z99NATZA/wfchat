@@ -328,9 +328,9 @@ Current backend config:
 Backend:
 
 - Accept PNG upload. Implemented.
-- Accept JPEG upload. Planned.
-- Accept WebP upload. Planned.
-- Accept GIF upload. Planned.
+- Accept JPEG upload. Implemented.
+- Accept WebP upload. Implemented.
+- Accept GIF upload. Implemented.
 - Reject SVG upload. Implemented.
 - Reject wrong magic bytes. Implemented.
 - Reject unsupported MIME. Implemented through magic-byte allowlist.
@@ -395,7 +395,7 @@ Provider:
 6. Message rendering attachments. Implemented.
 7. AI message parts. Implemented.
 8. OpenAI vision adapter. Implemented.
-9. Tests and cleanup. Implemented for provider mapping, unsupported provider safety, frontend send boundaries, and pending orphan cleanup.
+9. Tests and cleanup. Implemented for upload acceptance, provider mapping, unsupported provider safety, frontend send boundaries, and pending orphan cleanup.
 10. Manual QA and security review.
 
 ## Manual QA

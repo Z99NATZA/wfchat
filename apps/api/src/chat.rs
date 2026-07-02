@@ -1036,7 +1036,7 @@ mod tests {
         http::{header, HeaderName, Request, StatusCode},
         Router,
     };
-    use image::{DynamicImage, ImageBuffer, ImageFormat, Rgba};
+    use image::{DynamicImage, ImageBuffer, ImageFormat, Rgb, Rgba};
     use reqwest::Client;
     use serde_json::Value;
     use std::io::Cursor;
@@ -1636,6 +1636,62 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn upload_chat_attachment_accepts_jpeg_webp_and_gif() {
+        let Some(state) = test_state().await else {
+            return;
+        };
+        let session = state.store.create_guest_session().await;
+        let upload_dir = state.config.chat_attachment_upload_dir.clone();
+        let app = build_router(state);
+
+        for (format, expected_mime) in [
+            (ImageFormat::Jpeg, "image/jpeg"),
+            (ImageFormat::WebP, "image/webp"),
+            (ImageFormat::Gif, "image/gif"),
+        ] {
+            let boundary = "wfchat-image-upload";
+            let request = Request::builder()
+                .method("POST")
+                .uri("/api/chat/attachments")
+                .header(
+                    header::CONTENT_TYPE,
+                    format!("multipart/form-data; boundary={boundary}"),
+                )
+                .header("x-wfchat-session", session.id.to_string())
+                .body(Body::from(multipart_file_body(
+                    boundary,
+                    &image_bytes(2, 3, format),
+                )))
+                .expect("request should build");
+
+            let response = app
+                .clone()
+                .oneshot(request)
+                .await
+                .expect("request should run");
+
+            assert_eq!(response.status(), StatusCode::OK);
+            let body = to_bytes(response.into_body(), usize::MAX)
+                .await
+                .expect("body should collect");
+            let payload: Value =
+                serde_json::from_slice(&body).expect("upload response should be json");
+            assert_eq!(payload["kind"].as_str(), Some("image"));
+            assert_eq!(payload["mime_type"].as_str(), Some(expected_mime));
+            assert_eq!(payload["width"].as_i64(), Some(2));
+            assert_eq!(payload["height"].as_i64(), Some(3));
+            assert!(
+                payload["preview_url"]
+                    .as_str()
+                    .is_some_and(|url| url.starts_with("/api/chat/attachments/")),
+                "upload response should include backend preview url"
+            );
+        }
+
+        let _ = tokio::fs::remove_dir_all(upload_dir).await;
+    }
+
+    #[tokio::test]
     async fn stale_pending_attachment_cleanup_removes_only_orphaned_pending_files() {
         let Some(state) = test_state().await else {
             return;
@@ -1899,6 +1955,15 @@ mod tests {
         DynamicImage::ImageRgba8(image)
             .write_to(&mut bytes, ImageFormat::Png)
             .expect("test png should encode");
+        bytes.into_inner()
+    }
+
+    fn image_bytes(width: u32, height: u32, format: ImageFormat) -> Vec<u8> {
+        let image = ImageBuffer::from_pixel(width, height, Rgb([1, 2, 3]));
+        let mut bytes = Cursor::new(Vec::new());
+        DynamicImage::ImageRgb8(image)
+            .write_to(&mut bytes, format)
+            .expect("test image should encode");
         bytes.into_inner()
     }
 
