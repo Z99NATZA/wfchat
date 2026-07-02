@@ -177,6 +177,7 @@
 	"chat.composer.imagePrompt": "พรอมป์ตรูปภาพ",
 	"chat.composer.attachImage": "แนบรูปภาพ",
 	"chat.composer.selectedImage": "รูปภาพที่เลือก",
+	"chat.composer.openSelectedImagePreview": "เปิดตัวอย่าง {label}",
 	"chat.composer.removeImageAttachment": "ลบรูปภาพ",
 	"chat.composer.imageUnsupported": "รองรับเฉพาะ PNG, JPEG, WebP และ GIF",
 	"chat.composer.imageLimit": "แนบรูปได้สูงสุด {count} รูป",

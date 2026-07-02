@@ -177,6 +177,7 @@
 	"chat.composer.imagePrompt": "Image prompt",
 	"chat.composer.attachImage": "Attach image",
 	"chat.composer.selectedImage": "Selected image",
+	"chat.composer.openSelectedImagePreview": "Open preview for {label}",
 	"chat.composer.removeImageAttachment": "Remove image",
 	"chat.composer.imageUnsupported": "Only PNG, JPEG, WebP, and GIF images are supported.",
 	"chat.composer.imageLimit": "You can attach up to {count} images.",

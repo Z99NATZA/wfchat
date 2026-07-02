@@ -67,6 +67,8 @@ Let users send local images to the chat so the assistant can understand them thr
 - Upload selected images before sending the message.
 - Render pending state through the existing sending state.
 - Render thumbnail chips above the textarea.
+- Allow clicking pending thumbnail chips to open a larger in-app preview before
+  sending.
 - Allow removing each pending image before send.
 - Disable duplicate sends while upload or send is active.
 - Allow submit when text is non-empty or at least one image is attached.
@@ -284,6 +286,8 @@ Status: implemented for message thumbnails, in-app preview dialog, and missing-i
 - Image click opens an in-app preview dialog instead of a new browser tab.
 - Preview dialog uses authenticated backend preview bytes for sent attachments
   and local `blob:` URLs for pending attachments. Implemented.
+- Pending composer thumbnails open local `blob:` previews in the same in-app
+  preview dialog before upload/send. Implemented.
 - Preview dialog does not expose storage paths, preview endpoint URLs,
   filesystem paths, or provider payload details.
 - Missing or inaccessible sent image previews show a compact placeholder without
@@ -353,6 +357,8 @@ Frontend:
 - Drag and drop adds images. Implemented.
 - Clipboard paste adds images. Implemented.
 - Thumbnail preview renders. Implemented.
+- Pending thumbnail preview opens in an in-app preview dialog before send.
+  Implemented.
 - Remove image works. Implemented.
 - Image-only send works. Implemented.
 - Text plus image send works. Implemented.
@@ -433,4 +439,4 @@ Provider:
 - Tests cover validation, ownership, rendering, and provider mapping.
 - Docs match implemented behavior.
 
-Current status: backend upload, preview, delete, validation, storage, stale pending orphan cleanup, message linking, metadata persistence, ownership checks, frontend composer image selection, upload, message send, cache metadata, thumbnail rendering, in-app preview dialog, missing-image placeholder, AI message parts, mock image-part handling, OpenAI vision payload mapping, unsupported-provider image safety, and manual QA are completed. Raw image sync is still planned.
+Current status: backend upload, preview, delete, validation, storage, stale pending orphan cleanup, message linking, metadata persistence, ownership checks, frontend composer image selection, pending thumbnail preview dialog, upload, message send, cache metadata, thumbnail rendering, in-app preview dialog, missing-image placeholder, AI message parts, mock image-part handling, OpenAI vision payload mapping, unsupported-provider image safety, and manual QA are completed. Raw image sync is still planned.

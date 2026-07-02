@@ -1,5 +1,6 @@
 import { ClipboardEvent, DragEvent, FormEvent, KeyboardEvent, useEffect, useRef, useState } from "react";
 import { Image, LoaderCircle, Mic, Paperclip, Send, Square, X } from "lucide-react";
+import { useDialog } from "@/components/dialog/DialogProvider";
 import { useI18n } from "@/i18n";
 import Button from "@/components/ui/Button";
 import IconButton from "@/components/ui/IconButton";
@@ -53,6 +54,7 @@ function ChatComposer({
 	onToggleSpeechInput
 }: ChatComposerProps) {
 	const { t } = useI18n();
+	const { openCustom } = useDialog();
 	const textareaRef = useRef<HTMLTextAreaElement>(null);
 	const imageInputRef = useRef<HTMLInputElement>(null);
 	const wasSendingRef = useRef(false);
@@ -234,6 +236,26 @@ function ChatComposer({
 		setImageStatus(null);
 	}
 
+	function openSelectedImagePreview(image: PendingChatImageAttachment) {
+		const label = image.name || t("chat.composer.selectedImage");
+
+		void openCustom({
+			title: label,
+			isDraggable: false,
+			showCancelAction: false,
+			size: "wide",
+			render: () => (
+				<div className="flex max-h-[72vh] items-center justify-center overflow-auto rounded-md bg-black/90 p-2">
+					<img
+						className="max-h-[70vh] max-w-full object-contain"
+						src={image.previewUrl}
+						alt={label}
+					/>
+				</div>
+			)
+		});
+	}
+
 	function handleQuickPromptSelect(prompt: string) {
 		if (isDisabled || isSending) {
 			return;
@@ -290,15 +312,24 @@ function ChatComposer({
 					<div className="flex gap-2 overflow-x-auto rounded-lg border border-app-border bg-app-soft/82 p-2">
 						{selectedImages.map((image) => (
 							<div key={image.id} className="relative h-20 w-20 shrink-0 overflow-hidden rounded-md border border-app-border bg-app-panel">
-								<img
-									className="h-full w-full object-cover"
-									src={image.previewUrl}
-									alt={image.name || t("chat.composer.selectedImage")}
-								/>
+								<button
+									type="button"
+									className="block h-full w-full cursor-zoom-in bg-transparent p-0 text-left focus:outline-none focus:ring-2 focus:ring-primary/35"
+									aria-label={t("chat.composer.openSelectedImagePreview", {
+										label: image.name || t("chat.composer.selectedImage")
+									})}
+									onClick={() => openSelectedImagePreview(image)}
+								>
+									<img
+										className="h-full w-full object-cover"
+										src={image.previewUrl}
+										alt={image.name || t("chat.composer.selectedImage")}
+									/>
+								</button>
 								<IconButton
 									size="xs"
 									variant="danger"
-									className="absolute right-1 top-1"
+									className="absolute right-1 top-1 z-10"
 									aria-label={t("chat.composer.removeImageAttachment")}
 									title={t("chat.composer.removeImageAttachment")}
 									onClick={() => removeSelectedImage(image.id)}

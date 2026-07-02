@@ -6,15 +6,28 @@ import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import ChatComposer from "@/features/chat/components/ChatComposer";
 
+const dialogMocks = vi.hoisted(() => ({
+	openCustom: vi.fn()
+}));
+
 vi.mock("@/i18n", () => ({
 	useI18n: () => ({
 		t: (key: string, params?: Record<string, string | number>) => {
 			if (key === "chat.composer.placeholder") {
 				return `Message ${params?.name ?? ""}`;
 			}
+			if (key === "chat.composer.openSelectedImagePreview") {
+				return `Open selected preview for ${params?.label ?? ""}`;
+			}
 
 			return key;
 		}
+	})
+}));
+
+vi.mock("@/components/dialog/DialogProvider", () => ({
+	useDialog: () => ({
+		openCustom: dialogMocks.openCustom
 	})
 }));
 
@@ -23,6 +36,7 @@ describe("ChatComposer", () => {
 		cleanup();
 		vi.useRealTimers();
 		vi.restoreAllMocks();
+		dialogMocks.openCustom.mockReset();
 	});
 
 	function mockMatchMedia(matches: boolean) {
@@ -299,6 +313,36 @@ describe("ChatComposer", () => {
 
 		expect(screen.queryByAltText("local.png")).toBeNull();
 		expect(revokeObjectUrl).toHaveBeenCalledWith("blob:image-preview");
+	});
+
+	it("opens selected image previews before sending", () => {
+		installObjectUrlMocks("blob:image-preview");
+		const { container } = render(
+			<ChatComposer
+				draft=""
+				font="inter"
+				companionName="Aiko"
+				onDraftChange={vi.fn()}
+				onSend={vi.fn()}
+			/>
+		);
+		const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+		const file = new File(["image"], "local.png", { type: "image/png" });
+
+		fireEvent.change(input, { target: { files: [file] } });
+		fireEvent.click(screen.getByRole("button", { name: "Open selected preview for local.png" }));
+
+		expect(dialogMocks.openCustom).toHaveBeenCalledWith(expect.objectContaining({
+			isDraggable: false,
+			showCancelAction: false,
+			size: "wide",
+			title: "local.png"
+		}));
+
+		const renderPreview = dialogMocks.openCustom.mock.calls[0][0].render;
+		const preview = render(renderPreview());
+		const previewImage = preview.container.querySelector('img[alt="local.png"]') as HTMLImageElement;
+		expect(previewImage.src).toBe("blob:image-preview");
 	});
 
 	it("sends image-only messages and clears previews after success", async () => {
