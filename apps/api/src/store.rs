@@ -559,13 +559,14 @@ impl ChatStore {
         assistant_message: StoredMessage,
         attachment_ids: &[Uuid],
     ) -> Option<ChatRecord> {
+        let mut tx = self.db.begin().await.ok()?;
         let owner_exists = sqlx::query(
             "select id from chats where id = $1 and (($3::uuid is not null and owner_user_id = $3) or ($3::uuid is null and owner_session_id = $2))",
         )
             .bind(chat_id)
             .bind(owner.session_id)
             .bind(owner.user_id)
-            .fetch_optional(self.db.as_ref())
+            .fetch_optional(&mut *tx)
             .await
             .ok()?
             .is_some();
@@ -573,7 +574,7 @@ impl ChatStore {
             return None;
         }
 
-        let _ = sqlx::query(
+        sqlx::query(
             "insert into chat_messages (id, chat_id, role, content, created_at) values ($1, $2, $3, $4, to_timestamp($5)), ($6, $2, $7, $8, to_timestamp($9))",
         )
         .bind(user_message.id)
@@ -585,22 +586,42 @@ impl ChatStore {
         .bind(role_to_db(&assistant_message.role))
         .bind(&assistant_message.content)
         .bind(assistant_message.created_at as i64)
-        .execute(self.db.as_ref())
-        .await;
+        .execute(&mut *tx)
+        .await
+        .ok()?;
 
         if !attachment_ids.is_empty() {
-            let updated_count = self
-                .link_chat_attachments_to_message(owner, chat_id, user_message.id, attachment_ids)
-                .await?;
+            let result = sqlx::query(
+                "update chat_attachments
+                 set chat_id = $1, message_id = $2
+                 where id = any($3)
+                   and chat_id is null
+                   and message_id is null
+                   and deleted_at is null
+                   and (($5::uuid is not null and owner_user_id = $5) or ($5::uuid is null and owner_session_id = $4))",
+            )
+            .bind(chat_id)
+            .bind(user_message.id)
+            .bind(attachment_ids)
+            .bind(owner.session_id)
+            .bind(owner.user_id)
+            .execute(&mut *tx)
+            .await
+            .ok()?;
+            let updated_count = result.rows_affected();
             if updated_count != attachment_ids.len() as u64 {
+                let _ = tx.rollback().await;
                 return None;
             }
         }
 
-        let _ = sqlx::query("update chats set updated_at = now() where id = $1")
+        sqlx::query("update chats set updated_at = now() where id = $1")
             .bind(chat_id)
-            .execute(self.db.as_ref())
-            .await;
+            .execute(&mut *tx)
+            .await
+            .ok()?;
+
+        tx.commit().await.ok()?;
 
         self.get_chat(owner, chat_id).await
     }
@@ -1775,6 +1796,80 @@ mod integration_tests {
                 .execute(store.db.as_ref())
                 .await;
         }
+    }
+
+    #[tokio::test]
+    async fn append_chat_messages_rolls_back_when_attachment_linking_is_incomplete() {
+        let Some(store) = test_store().await else {
+            return;
+        };
+        let session = store.create_guest_session().await;
+        let owner = OwnerScope::from_session(&session);
+        let chat = store
+            .create_chat(owner, "aiko".to_owned(), "aiko_default".to_owned())
+            .await;
+        let attachment_id = Uuid::new_v4();
+        store
+            .create_chat_attachment(
+                owner,
+                NewChatAttachmentRecord {
+                    id: attachment_id,
+                    kind: "image".to_owned(),
+                    mime_type: "image/png".to_owned(),
+                    byte_size: 8,
+                    width: Some(1),
+                    height: Some(1),
+                    sha256: "test-sha256".to_owned(),
+                    storage_key: format!("chat-images/{attachment_id}.png"),
+                },
+            )
+            .await
+            .expect("attachment should be created");
+        let user_message = StoredMessage {
+            id: Uuid::new_v4(),
+            role: AiRole::User,
+            content: "look".to_owned(),
+            attachments: Vec::new(),
+            created_at: now_unix_seconds(),
+        };
+        let assistant_message = StoredMessage {
+            id: Uuid::new_v4(),
+            role: AiRole::Assistant,
+            content: "I see it".to_owned(),
+            attachments: Vec::new(),
+            created_at: now_unix_seconds(),
+        };
+
+        let appended = store
+            .append_chat_messages_with_attachments(
+                owner,
+                chat.id,
+                user_message,
+                assistant_message,
+                &[attachment_id, Uuid::new_v4()],
+            )
+            .await;
+
+        assert!(
+            appended.is_none(),
+            "append should fail when any requested attachment cannot be linked"
+        );
+        let persisted = store
+            .get_chat(owner, chat.id)
+            .await
+            .expect("chat should remain");
+        assert!(
+            persisted.messages.is_empty(),
+            "message inserts should roll back when attachment linking fails"
+        );
+        let attachment = store
+            .get_chat_attachment(owner, attachment_id)
+            .await
+            .expect("valid attachment should remain visible");
+        assert_eq!(attachment.chat_id, None);
+        assert_eq!(attachment.message_id, None);
+
+        cleanup_sessions(&store, &[session.id]).await;
     }
 
     #[tokio::test]

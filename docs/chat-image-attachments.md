@@ -167,6 +167,9 @@ Rules:
 - `attachments` must contain previously uploaded attachment ids.
 - Every attachment must be pending, valid, image-kind, and owned by the same chat owner.
 - On successful assistant completion, link attachments to the persisted user message.
+- Persist the user message, assistant message, attachment links, and chat timestamp
+  in one transaction. If any requested attachment cannot be linked, roll the
+  full append back and leave attachments pending.
 - On provider failure, do not link pending attachments to a message.
 - Streaming event names remain unchanged.
 
@@ -346,6 +349,8 @@ Backend:
 - Reject attachment owned by another session. Implemented for preview/delete.
 - Reject URL/path attachment input. Implemented by upload-only API shape.
 - Link attachments only after successful message completion. Implemented.
+- Roll back message persistence when attachment linking is incomplete.
+  Implemented in `apps/api/src/store.rs`.
 - Leave pending attachments unlinked after provider failure. Implemented.
 - Return safe upload errors. Implemented.
 - Return safe stream errors. Implemented.

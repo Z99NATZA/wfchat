@@ -25,7 +25,7 @@ If measured against a stricter public SaaS production bar:
 These checks passed during review:
 
 - Frontend tests: 162 passed
-- Backend tests: 90 passed
+- Backend tests: 91 passed
 - Frontend production build: passed
 
 Approximate source size excluding dependencies/build output:
@@ -73,33 +73,7 @@ Fix before public deployment or before storing sensitive user data.
 
 ## High Risks
 
-### 2. Multi-Step Database Writes Are Not Transactional
-
-File:
-
-- `apps/api/src/store.rs`
-
-The chat append flow inserts user and assistant messages, then links attachments in a later query. If the message insert succeeds but attachment linking fails, the database can end up with partial state.
-
-Example flow:
-
-- Insert user message and assistant message.
-- Link pending attachment ids to the user message.
-- Update chat timestamp.
-
-These should be one atomic transaction.
-
-Recommended fix:
-
-- Wrap chat message append, attachment linking, and chat timestamp update in one SQL transaction.
-- Return an error if any step fails.
-- Add a regression test that simulates an invalid attachment id and verifies no message is persisted.
-
-Priority:
-
-Fix before relying heavily on image attachments or multi-device sync.
-
-### 3. Database Errors Are Often Hidden
+### 2. Database Errors Are Often Hidden
 
 File:
 
@@ -124,7 +98,7 @@ Priority:
 
 Fix progressively, starting with chat writes, auth/session writes, attachments, and sync commits.
 
-### 4. No Rate Limiting or Abuse Controls
+### 3. No Rate Limiting or Abuse Controls
 
 Files:
 
@@ -154,7 +128,7 @@ Fix before exposing the API publicly.
 
 ## Medium Risks
 
-### 5. Migration System Is Ad Hoc
+### 4. Migration System Is Ad Hoc
 
 Files:
 
@@ -174,7 +148,7 @@ Priority:
 
 Fix before multiple deployed environments exist.
 
-### 6. No CI Gate Found
+### 5. No CI Gate Found
 
 Files:
 
@@ -199,7 +173,7 @@ Priority:
 
 Fix before accepting outside contributions or making larger changes.
 
-### 7. No Frontend Lint/Format Gate
+### 6. No Frontend Lint/Format Gate
 
 Files:
 
@@ -218,7 +192,7 @@ Priority:
 
 Medium for team development, low for solo work.
 
-### 8. Sync Has Known Missing E2E Coverage
+### 7. Sync Has Known Missing E2E Coverage
 
 Files:
 
@@ -241,7 +215,7 @@ Priority:
 
 Medium, especially before changing sync logic.
 
-### 9. Profile Avatar URL Is Not Strictly Validated
+### 8. Profile Avatar URL Is Not Strictly Validated
 
 Files:
 
@@ -262,7 +236,7 @@ Medium if profiles are public or shared. Low if only local/personal.
 
 ## Low Risks
 
-### 10. Bundle Size Should Be Watched
+### 9. Bundle Size Should Be Watched
 
 Files:
 
@@ -281,7 +255,7 @@ Priority:
 
 Low.
 
-### 11. Test Output Contains Expected Error Logs
+### 10. Test Output Contains Expected Error Logs
 
 Files:
 
@@ -298,7 +272,7 @@ Priority:
 
 Low.
 
-### 12. Some Future/Scaffolded Providers Are Present
+### 11. Some Future/Scaffolded Providers Are Present
 
 Files:
 
@@ -356,7 +330,6 @@ The number and focus of tests are strong for an MVP:
 
 1. Harden session handling and reduce reliance on browser-readable session ids.
 2. Add rate limits to chat, voice, transcription, and upload endpoints.
-3. Add transactions to chat message append plus attachment linking.
 
 ### Phase 2: Reliability and Operations
 
@@ -379,7 +352,6 @@ WFChat has a better foundation than the phrase "vibe coding" suggests. The proje
 The main gap is not that the system is poorly built. The main gap is that it has not yet been hardened around production boundaries:
 
 - session security
-- transactional writes
 - rate limiting
 - database error visibility
 - migration and CI discipline
