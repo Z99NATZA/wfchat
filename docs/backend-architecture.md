@@ -119,6 +119,12 @@ This clears message history for the current chat while keeping the chat id and g
 
 The current backend uses PostgreSQL through `sqlx`. Local and deployed environments should provide `DATABASE_URL`; `apps/api/db/init.sql` and the startup migration code keep the schema available for development.
 
+Store methods should propagate PostgreSQL errors as `Result` values instead of
+turning unexpected failures into optimistic success, not-found, `false`, or
+empty lists. Route handlers should convert expected missing rows into `404 Not
+Found` and let real database failures reach the API error boundary as a logged
+`500 database error`.
+
 ## Auth Model
 
 ```text

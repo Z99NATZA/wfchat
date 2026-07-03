@@ -178,21 +178,21 @@ async fn list_chats_for_persona(
     State(state): State<AppState>,
     headers: HeaderMap,
     Path(persona_id): Path<String>,
-) -> Json<Vec<ChatResponse>> {
+) -> AppResult<Json<Vec<ChatResponse>>> {
     let session = state
         .store
         .ensure_session(session_id_from_headers(&headers))
-        .await;
+        .await?;
     let owner = OwnerScope::from_session(&session);
     let chats = state
         .store
         .list_chats(owner)
-        .await
+        .await?
         .into_iter()
         .filter(|chat| chat.character_id == persona_id)
         .collect::<Vec<_>>();
 
-    Json(chats.into_iter().map(chat_response).collect())
+    Ok(Json(chats.into_iter().map(chat_response).collect()))
 }
 
 async fn get_chat_ui_config(State(state): State<AppState>) -> Json<ChatUiConfigResponse> {
@@ -242,7 +242,7 @@ async fn upload_chat_attachment(
     let session = state
         .store
         .ensure_session(session_id_from_headers(&headers))
-        .await;
+        .await?;
     let owner = OwnerScope::from_session(&session);
     let mut file_bytes = None;
 
@@ -301,13 +301,18 @@ async fn upload_chat_attachment(
                 storage_key: storage_key.clone(),
             },
         )
-        .await;
+        .await
+        .map_err(|error| {
+            let error = AppError::database("save chat attachment metadata", error);
+            error
+        });
 
-    let Some(attachment) = attachment else {
-        remove_attachment_file(&state.config.chat_attachment_upload_dir, &storage_key).await;
-        return Err(AppError::BadRequest(
-            "failed to save attachment metadata".to_owned(),
-        ));
+    let attachment = match attachment {
+        Ok(attachment) => attachment,
+        Err(error) => {
+            remove_attachment_file(&state.config.chat_attachment_upload_dir, &storage_key).await;
+            return Err(error);
+        }
     };
 
     Ok(Json(chat_attachment_response(attachment)))
@@ -321,12 +326,12 @@ async fn preview_chat_attachment(
     let session = state
         .store
         .ensure_session(session_id_from_headers(&headers))
-        .await;
+        .await?;
     let owner = OwnerScope::from_session(&session);
     let attachment = state
         .store
         .get_chat_attachment(owner, attachment_id)
-        .await
+        .await?
         .ok_or(AppError::NotFound)?;
     let bytes = read_attachment_bytes(
         &state.config.chat_attachment_upload_dir,
@@ -353,12 +358,12 @@ async fn delete_chat_attachment(
     let session = state
         .store
         .ensure_session(session_id_from_headers(&headers))
-        .await;
+        .await?;
     let owner = OwnerScope::from_session(&session);
     let attachment = state
         .store
         .get_chat_attachment(owner, attachment_id)
-        .await
+        .await?
         .ok_or(AppError::NotFound)?;
 
     if attachment.message_id.is_some() {
@@ -370,7 +375,7 @@ async fn delete_chat_attachment(
     let deleted = state
         .store
         .mark_pending_chat_attachment_deleted(owner, attachment_id)
-        .await
+        .await?
         .ok_or(AppError::NotFound)?;
     remove_attachment_file(
         &state.config.chat_attachment_upload_dir,
@@ -389,7 +394,7 @@ async fn create_chat_for_persona(
     let session = state
         .store
         .ensure_session(session_id_from_headers(&headers))
-        .await;
+        .await?;
     let owner = OwnerScope::from_session(&session);
     let character = characters::character_by_id(&persona_id)
         .ok_or_else(|| AppError::BadRequest(format!("unknown character: {persona_id}")))?;
@@ -400,7 +405,7 @@ async fn create_chat_for_persona(
             character.id.to_owned(),
             character.ai_profile_id.to_owned(),
         )
-        .await;
+        .await?;
 
     Ok(Json(chat_response(chat)))
 }
@@ -413,17 +418,16 @@ async fn get_chat(
     let session = state
         .store
         .ensure_session(session_id_from_headers(&headers))
-        .await;
+        .await?;
     let owner = OwnerScope::from_session(&session);
     let chat = state
         .store
         .get_chat(owner, chat_id)
-        .await
+        .await?
         .ok_or(AppError::NotFound)?;
 
     Ok(Json(chat_response(chat)))
 }
-
 async fn send_message(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -433,7 +437,7 @@ async fn send_message(
     let session = state
         .store
         .ensure_session(session_id_from_headers(&headers))
-        .await;
+        .await?;
     let owner = OwnerScope::from_session(&session);
     let context = prepare_chat_completion_context(&state, owner, chat_id, &payload).await?;
     let completed = complete_and_append_chat_message(state, owner, chat_id, context).await?;
@@ -460,7 +464,7 @@ async fn stream_message(
     let session = state
         .store
         .ensure_session(session_id_from_headers(&headers))
-        .await;
+        .await?;
     let owner = OwnerScope::from_session(&session);
     let context = prepare_chat_completion_context(&state, owner, chat_id, &payload).await?;
     let persona_id = context.chat.character_id.clone();
@@ -532,12 +536,12 @@ async fn clear_messages(
     let session = state
         .store
         .ensure_session(session_id_from_headers(&headers))
-        .await;
+        .await?;
     let owner = OwnerScope::from_session(&session);
     let chat = state
         .store
         .clear_chat_messages(owner, chat_id)
-        .await
+        .await?
         .ok_or(AppError::NotFound)?;
 
     Ok(Json(chat_response(chat)))
@@ -551,10 +555,10 @@ async fn delete_chat(
     let session = state
         .store
         .ensure_session(session_id_from_headers(&headers))
-        .await;
+        .await?;
     let owner = OwnerScope::from_session(&session);
 
-    if !state.store.delete_chat(owner, chat_id).await {
+    if !state.store.delete_chat(owner, chat_id).await? {
         return Err(AppError::NotFound);
     }
 
@@ -569,12 +573,12 @@ async fn synthesize_message_speech(
     let session = state
         .store
         .ensure_session(session_id_from_headers(&headers))
-        .await;
+        .await?;
     let owner = OwnerScope::from_session(&session);
     let chat = state
         .store
         .get_chat(owner, chat_id)
-        .await
+        .await?
         .ok_or(AppError::NotFound)?;
     let message = chat
         .messages
@@ -627,7 +631,7 @@ async fn transcribe_user_speech(
     let _session = state
         .store
         .ensure_session(session_id_from_headers(&headers))
-        .await;
+        .await?;
     let mut audio_bytes = None;
     let mut content_type = None;
     let mut filename = None;
@@ -764,7 +768,7 @@ async fn prepare_chat_completion_context(
     let chat = state
         .store
         .get_chat(owner, chat_id)
-        .await
+        .await?
         .ok_or(AppError::NotFound)?;
     let attachments =
         validate_message_attachment_requests(state, owner, &payload.attachments).await?;
@@ -780,11 +784,11 @@ async fn prepare_chat_completion_context(
     let memory_facts = state
         .store
         .list_memory_facts(owner, &chat.character_id)
-        .await;
+        .await?;
     let memory_summaries = state
         .store
         .list_memory_summaries(owner, &chat.character_id)
-        .await;
+        .await?;
     let memory_context = build_memory_context(&memory_facts, &memory_summaries);
     if let Some(memory_note) = memory_context {
         ai_messages.insert(0, AiMessage::system(memory_note));
@@ -828,7 +832,7 @@ async fn validate_message_attachment_requests(
         let record = state
             .store
             .get_chat_attachment(owner, attachment.id)
-            .await
+            .await?
             .ok_or(AppError::NotFound)?;
         if record.kind != CHAT_ATTACHMENT_KIND_IMAGE
             || record.chat_id.is_some()
@@ -896,7 +900,7 @@ async fn complete_and_append_chat_message(
             assistant_message.clone(),
             &context.attachment_ids,
         )
-        .await
+        .await?
         .ok_or(AppError::NotFound)?;
     let user_message = message_from_updated_chat(&updated_chat, user_message);
     let assistant_message = message_from_updated_chat(&updated_chat, assistant_message);
@@ -947,7 +951,7 @@ async fn stream_and_append_chat_message(
             assistant_message.clone(),
             &context.attachment_ids,
         )
-        .await
+        .await?
         .ok_or(AppError::NotFound)?;
     let user_message = message_from_updated_chat(&updated_chat, user_message);
     let assistant_message = message_from_updated_chat(&updated_chat, assistant_message);
@@ -1043,9 +1047,27 @@ mod tests {
     use tower::ServiceExt;
 
     use crate::{
-        app::build_router, attachments::cleanup_stale_pending_chat_attachments, config::Config,
-        store::ChatStore,
+        app::build_router,
+        attachments::cleanup_stale_pending_chat_attachments,
+        config::Config,
+        store::{ChatStore, SessionRecord},
     };
+
+    async fn create_test_session(state: &AppState) -> SessionRecord {
+        state
+            .store
+            .create_guest_session()
+            .await
+            .expect("guest session should create")
+    }
+
+    async fn create_test_chat(state: &AppState, owner: OwnerScope) -> ChatRecord {
+        state
+            .store
+            .create_chat(owner, "aiko".to_owned(), "aiko_default".to_owned())
+            .await
+            .expect("chat should create")
+    }
 
     #[test]
     fn stream_error_message_hides_upstream_ai_details() {
@@ -1069,12 +1091,9 @@ mod tests {
         let Some(state) = test_state().await else {
             return;
         };
-        let session = state.store.create_guest_session().await;
+        let session = create_test_session(&state).await;
         let owner = OwnerScope::from_session(&session);
-        let chat = state
-            .store
-            .create_chat(owner, "aiko".to_owned(), "aiko_default".to_owned())
-            .await;
+        let chat = create_test_chat(&state, owner).await;
         let app = build_router(state.clone());
         let request = Request::builder()
             .method("POST")
@@ -1137,12 +1156,13 @@ mod tests {
             .store
             .get_chat(owner, chat.id)
             .await
+            .expect("chat lookup should query")
             .expect("chat should still exist");
         assert_eq!(persisted.messages.len(), 2);
         assert_eq!(persisted.messages[0].content, "hello stream");
         assert_eq!(persisted.messages[1].content, assistant_content);
 
-        state.store.delete_chat(owner, chat.id).await;
+        let _ = state.store.delete_chat(owner, chat.id).await;
     }
 
     #[tokio::test]
@@ -1150,12 +1170,9 @@ mod tests {
         let Some(state) = test_state_with_provider("openai").await else {
             return;
         };
-        let session = state.store.create_guest_session().await;
+        let session = create_test_session(&state).await;
         let owner = OwnerScope::from_session(&session);
-        let chat = state
-            .store
-            .create_chat(owner, "aiko".to_owned(), "aiko_default".to_owned())
-            .await;
+        let chat = create_test_chat(&state, owner).await;
         let app = build_router(state.clone());
         let request = Request::builder()
             .method("POST")
@@ -1200,10 +1217,11 @@ mod tests {
             .store
             .get_chat(owner, chat.id)
             .await
+            .expect("chat lookup should query")
             .expect("chat should still exist");
         assert!(persisted.messages.is_empty());
 
-        state.store.delete_chat(owner, chat.id).await;
+        let _ = state.store.delete_chat(owner, chat.id).await;
     }
 
     #[tokio::test]
@@ -1211,13 +1229,10 @@ mod tests {
         let Some(state) = test_state().await else {
             return;
         };
-        let session = state.store.create_guest_session().await;
+        let session = create_test_session(&state).await;
         let owner = OwnerScope::from_session(&session);
         let upload_dir = state.config.chat_attachment_upload_dir.clone();
-        let chat = state
-            .store
-            .create_chat(owner, "aiko".to_owned(), "aiko_default".to_owned())
-            .await;
+        let chat = create_test_chat(&state, owner).await;
         let app = build_router(state.clone());
         let upload_payload = upload_png_attachment(app.clone(), session.id).await;
         let attachment_id = upload_payload["id"]
@@ -1265,6 +1280,7 @@ mod tests {
             .store
             .get_chat(owner, chat.id)
             .await
+            .expect("chat lookup should query")
             .expect("chat should still exist");
         assert_eq!(persisted.messages.len(), 2);
         assert_eq!(persisted.messages[0].attachments.len(), 1);
@@ -1278,7 +1294,7 @@ mod tests {
             Some(persisted.messages[0].id)
         );
 
-        state.store.delete_chat(owner, chat.id).await;
+        let _ = state.store.delete_chat(owner, chat.id).await;
         let _ = tokio::fs::remove_dir_all(upload_dir).await;
     }
 
@@ -1287,13 +1303,10 @@ mod tests {
         let Some(state) = test_state_with_provider("lmstudio").await else {
             return;
         };
-        let session = state.store.create_guest_session().await;
+        let session = create_test_session(&state).await;
         let owner = OwnerScope::from_session(&session);
         let upload_dir = state.config.chat_attachment_upload_dir.clone();
-        let chat = state
-            .store
-            .create_chat(owner, "aiko".to_owned(), "aiko_default".to_owned())
-            .await;
+        let chat = create_test_chat(&state, owner).await;
         let app = build_router(state.clone());
         let upload_payload = upload_png_attachment(app.clone(), session.id).await;
         let attachment_id = Uuid::parse_str(
@@ -1342,17 +1355,19 @@ mod tests {
             .store
             .get_chat(owner, chat.id)
             .await
+            .expect("chat lookup should query")
             .expect("chat should still exist");
         assert!(persisted.messages.is_empty());
         let attachment = state
             .store
             .get_chat_attachment(owner, attachment_id)
             .await
+            .expect("attachment lookup should query")
             .expect("attachment should remain pending");
         assert_eq!(attachment.chat_id, None);
         assert_eq!(attachment.message_id, None);
 
-        state.store.delete_chat(owner, chat.id).await;
+        let _ = state.store.delete_chat(owner, chat.id).await;
         let _ = tokio::fs::remove_dir_all(upload_dir).await;
     }
 
@@ -1361,13 +1376,10 @@ mod tests {
         let Some(state) = test_state_with_provider("openai").await else {
             return;
         };
-        let session = state.store.create_guest_session().await;
+        let session = create_test_session(&state).await;
         let owner = OwnerScope::from_session(&session);
         let upload_dir = state.config.chat_attachment_upload_dir.clone();
-        let chat = state
-            .store
-            .create_chat(owner, "aiko".to_owned(), "aiko_default".to_owned())
-            .await;
+        let chat = create_test_chat(&state, owner).await;
         let app = build_router(state.clone());
         let upload_payload = upload_png_attachment(app.clone(), session.id).await;
         let attachment_id = Uuid::parse_str(
@@ -1407,18 +1419,20 @@ mod tests {
             .store
             .get_chat(owner, chat.id)
             .await
+            .expect("chat lookup should query")
             .expect("chat should still exist");
         assert!(persisted.messages.is_empty());
         let attachment = state
             .store
             .get_chat_attachment(owner, attachment_id)
             .await
+            .expect("attachment lookup should query")
             .expect("attachment should remain pending");
         assert_eq!(attachment.chat_id, None);
         assert_eq!(attachment.message_id, None);
         assert_eq!(attachment.deleted_at, None);
 
-        state.store.delete_chat(owner, chat.id).await;
+        let _ = state.store.delete_chat(owner, chat.id).await;
         let _ = tokio::fs::remove_dir_all(upload_dir).await;
     }
 
@@ -1427,12 +1441,9 @@ mod tests {
         let Some(state) = test_state().await else {
             return;
         };
-        let session = state.store.create_guest_session().await;
+        let session = create_test_session(&state).await;
         let owner = OwnerScope::from_session(&session);
-        let chat = state
-            .store
-            .create_chat(owner, "aiko".to_owned(), "aiko_default".to_owned())
-            .await;
+        let chat = create_test_chat(&state, owner).await;
         let user_message = StoredMessage::from_ai_message(AiMessage::user("hello".to_owned()));
         let assistant_message =
             StoredMessage::from_ai_message(AiMessage::assistant("hello back".to_owned()));
@@ -1463,7 +1474,7 @@ mod tests {
         assert!(body.starts_with(b"RIFF"));
         assert_eq!(&body[8..12], b"WAVE");
 
-        state.store.delete_chat(owner, chat.id).await;
+        let _ = state.store.delete_chat(owner, chat.id).await;
     }
 
     #[tokio::test]
@@ -1471,12 +1482,9 @@ mod tests {
         let Some(state) = test_state().await else {
             return;
         };
-        let session = state.store.create_guest_session().await;
+        let session = create_test_session(&state).await;
         let owner = OwnerScope::from_session(&session);
-        let chat = state
-            .store
-            .create_chat(owner, "aiko".to_owned(), "aiko_default".to_owned())
-            .await;
+        let chat = create_test_chat(&state, owner).await;
         let user_message = StoredMessage::from_ai_message(AiMessage::user("hello".to_owned()));
         let assistant_message =
             StoredMessage::from_ai_message(AiMessage::assistant("hello back".to_owned()));
@@ -1505,7 +1513,7 @@ mod tests {
         let body = String::from_utf8(body.to_vec()).expect("body should be utf-8");
         assert!(body.contains("speech is only available for assistant messages"));
 
-        state.store.delete_chat(owner, chat.id).await;
+        let _ = state.store.delete_chat(owner, chat.id).await;
     }
 
     #[tokio::test]
@@ -1513,7 +1521,7 @@ mod tests {
         let Some(state) = test_state().await else {
             return;
         };
-        let session = state.store.create_guest_session().await;
+        let session = create_test_session(&state).await;
         let app = build_router(state);
         let boundary = "wfchat-test-boundary";
         let body = format!(
@@ -1547,8 +1555,8 @@ mod tests {
         let Some(state) = test_state().await else {
             return;
         };
-        let session = state.store.create_guest_session().await;
-        let other_session = state.store.create_guest_session().await;
+        let session = create_test_session(&state).await;
+        let other_session = create_test_session(&state).await;
         let upload_dir = state.config.chat_attachment_upload_dir.clone();
         let app = build_router(state.clone());
         let boundary = "wfchat-image-upload";
@@ -1640,7 +1648,7 @@ mod tests {
         let Some(state) = test_state().await else {
             return;
         };
-        let session = state.store.create_guest_session().await;
+        let session = create_test_session(&state).await;
         let upload_dir = state.config.chat_attachment_upload_dir.clone();
         let app = build_router(state);
 
@@ -1696,7 +1704,7 @@ mod tests {
         let Some(state) = test_state().await else {
             return;
         };
-        let session = state.store.create_guest_session().await;
+        let session = create_test_session(&state).await;
         let owner = OwnerScope::from_session(&session);
         let upload_dir = state.config.chat_attachment_upload_dir.clone();
         let app = build_router(state.clone());
@@ -1712,11 +1720,9 @@ mod tests {
             .store
             .set_chat_attachment_created_at_for_test(stale_pending_id, 1)
             .await
+            .expect("attachment update should query")
             .expect("stale pending attachment should exist");
-        let chat = state
-            .store
-            .create_chat(owner, "aiko".to_owned(), "aiko_default".to_owned())
-            .await;
+        let chat = create_test_chat(&state, owner).await;
         let user_message = StoredMessage::from_ai_message(AiMessage::user("with image".to_owned()));
         let assistant_message =
             StoredMessage::from_ai_message(AiMessage::assistant("ok".to_owned()));
@@ -1735,11 +1741,13 @@ mod tests {
             .store
             .set_chat_attachment_created_at_for_test(linked_id, 1)
             .await
+            .expect("attachment update should query")
             .expect("linked attachment should exist");
         let current_pending = state
             .store
             .get_chat_attachment(owner, current_pending_id)
             .await
+            .expect("attachment lookup should query")
             .expect("current pending attachment should exist");
 
         let cleaned_count =
@@ -1751,6 +1759,7 @@ mod tests {
                 .store
                 .get_chat_attachment(owner, stale_pending_id)
                 .await
+                .expect("attachment lookup should query")
                 .is_none(),
             "stale pending attachment metadata should be hidden after cleanup"
         );
@@ -1765,6 +1774,7 @@ mod tests {
                 .store
                 .get_chat_attachment(owner, linked_id)
                 .await
+                .expect("attachment lookup should query")
                 .is_some(),
             "linked attachment metadata should be preserved"
         );
@@ -1779,6 +1789,7 @@ mod tests {
                 .store
                 .get_chat_attachment(owner, current_pending_id)
                 .await
+                .expect("attachment lookup should query")
                 .is_some(),
             "current pending attachment metadata should be preserved"
         );
@@ -1789,7 +1800,7 @@ mod tests {
             "current pending attachment file should be preserved"
         );
 
-        state.store.delete_chat(owner, chat.id).await;
+        let _ = state.store.delete_chat(owner, chat.id).await;
         let _ = tokio::fs::remove_dir_all(upload_dir).await;
     }
 
@@ -1798,7 +1809,7 @@ mod tests {
         let Some(state) = test_state().await else {
             return;
         };
-        let session = state.store.create_guest_session().await;
+        let session = create_test_session(&state).await;
         let app = build_router(state.clone());
         let boundary = "wfchat-image-upload";
         let request = Request::builder()

@@ -61,7 +61,7 @@ async fn require_admin_session(state: &AppState, headers: &HeaderMap) -> AppResu
     let Some(session_id) = session_id_from_headers(headers) else {
         return Err(AppError::Forbidden);
     };
-    let Some(session) = state.store.get_session(session_id).await else {
+    let Some(session) = state.store.get_session(session_id).await? else {
         return Err(AppError::Forbidden);
     };
 
@@ -185,7 +185,11 @@ mod tests {
         let Some(state) = test_state().await else {
             return;
         };
-        let session = state.store.create_guest_session().await;
+        let session = state
+            .store
+            .create_guest_session()
+            .await
+            .expect("guest session should create");
 
         let response = get_admin_profiles(state, Some(session.id)).await;
 
@@ -197,11 +201,16 @@ mod tests {
         let Some(state) = test_state().await else {
             return;
         };
-        let session = state.store.create_guest_session().await;
+        let session = state
+            .store
+            .create_guest_session()
+            .await
+            .expect("guest session should create");
         let session = state
             .store
             .promote_session_to_registered(session.id, Uuid::new_v4())
             .await
+            .expect("session promotion should query")
             .expect("session should promote");
 
         let response = get_admin_profiles(state, Some(session.id)).await;
@@ -214,11 +223,16 @@ mod tests {
         let Some(state) = test_state().await else {
             return;
         };
-        let session = state.store.create_guest_session().await;
+        let session = state
+            .store
+            .create_guest_session()
+            .await
+            .expect("guest session should create");
         let session = state
             .store
             .promote_session_to_admin_for_test(session.id, Uuid::new_v4())
             .await
+            .expect("session promotion should query")
             .expect("session should promote to admin");
 
         let response = get_admin_profiles(state, Some(session.id)).await;

@@ -38,8 +38,10 @@ struct UserProfileResponse {
     avatar_url: Option<String>,
 }
 
-async fn create_guest_session(State(state): State<AppState>) -> (HeaderMap, Json<SessionResponse>) {
-    let session = state.store.create_guest_session().await;
+async fn create_guest_session(
+    State(state): State<AppState>,
+) -> AppResult<(HeaderMap, Json<SessionResponse>)> {
+    let session = state.store.create_guest_session().await?;
     let mut headers = HeaderMap::new();
     let cookie = format!(
         "wfchat_session={}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000",
@@ -50,7 +52,7 @@ async fn create_guest_session(State(state): State<AppState>) -> (HeaderMap, Json
         headers.insert(SET_COOKIE, value);
     }
 
-    (
+    Ok((
         headers,
         Json(SessionResponse {
             user_id: session.user_id,
@@ -60,7 +62,7 @@ async fn create_guest_session(State(state): State<AppState>) -> (HeaderMap, Json
             name: None,
             profile: None,
         }),
-    )
+    ))
 }
 
 async fn current_user(
@@ -70,15 +72,15 @@ async fn current_user(
     let session = state
         .store
         .ensure_session(session_id_from_headers(&headers))
-        .await;
+        .await?;
     if !matches!(&session.kind, UserKind::Guest) {
         state
             .store
             .migrate_session_data_to_user(session.id, session.user_id)
-            .await;
+            .await?;
     }
 
-    Ok(Json(session_response(&state, &session).await))
+    Ok(Json(session_response(&state, &session).await?))
 }
 
 #[derive(Deserialize)]
@@ -122,16 +124,16 @@ async fn promote_with_google_token_info(
     let session = state
         .store
         .ensure_session(session_id_from_headers(&headers))
-        .await;
+        .await?;
     let promoted = state
         .store
         .promote_session_to_registered(session.id, promoted_user_id)
-        .await
+        .await?
         .ok_or_else(|| AppError::BadRequest("could not promote session".to_owned()))?;
     state
         .store
         .migrate_session_data_to_user(promoted.id, promoted.user_id)
-        .await;
+        .await?;
     state
         .store
         .upsert_auth_identity(
@@ -142,11 +144,11 @@ async fn promote_with_google_token_info(
             token_info.name.clone(),
             token_info.picture.clone(),
         )
-        .await;
+        .await?;
     state
         .store
         .ensure_user_profile(promoted.user_id, token_info.name, token_info.picture)
-        .await;
+        .await?;
 
     let mut response_headers = HeaderMap::new();
     let cookie = format!(
@@ -159,12 +161,12 @@ async fn promote_with_google_token_info(
 
     Ok((
         response_headers,
-        Json(session_response(&state, &promoted).await),
+        Json(session_response(&state, &promoted).await?),
     ))
 }
 
-async fn logout(State(state): State<AppState>) -> (HeaderMap, Json<SessionResponse>) {
-    let guest = state.store.create_guest_session().await;
+async fn logout(State(state): State<AppState>) -> AppResult<(HeaderMap, Json<SessionResponse>)> {
+    let guest = state.store.create_guest_session().await?;
     let mut headers = HeaderMap::new();
     let cookie = format!(
         "wfchat_session={}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000",
@@ -174,7 +176,7 @@ async fn logout(State(state): State<AppState>) -> (HeaderMap, Json<SessionRespon
         headers.insert(SET_COOKIE, value);
     }
 
-    (
+    Ok((
         headers,
         Json(SessionResponse {
             user_id: guest.user_id,
@@ -184,7 +186,7 @@ async fn logout(State(state): State<AppState>) -> (HeaderMap, Json<SessionRespon
             name: None,
             profile: None,
         }),
-    )
+    ))
 }
 
 #[derive(Deserialize)]
@@ -201,7 +203,7 @@ async fn update_profile(
     let session = state
         .store
         .ensure_session(session_id_from_headers(&headers))
-        .await;
+        .await?;
     if matches!(&session.kind, UserKind::Guest) {
         return Err(AppError::Forbidden);
     }
@@ -219,14 +221,14 @@ async fn update_profile(
     state
         .store
         .ensure_user_profile(session.user_id, None, None)
-        .await;
+        .await?;
     state
         .store
         .update_user_profile(session.user_id, payload.display_name, payload.avatar_url)
-        .await
+        .await?
         .ok_or_else(|| AppError::BadRequest("could not update profile".to_owned()))?;
 
-    Ok(Json(session_response(&state, &session).await))
+    Ok(Json(session_response(&state, &session).await?))
 }
 
 async fn verify_google_id_token(
@@ -274,19 +276,19 @@ fn user_kind_label(kind: &UserKind) -> &'static str {
 async fn session_response(
     state: &AppState,
     session: &crate::store::SessionRecord,
-) -> SessionResponse {
+) -> AppResult<SessionResponse> {
     if matches!(&session.kind, UserKind::Guest) {
-        return SessionResponse {
+        return Ok(SessionResponse {
             user_id: session.user_id,
             session_id: session.id,
             kind: user_kind_label(&session.kind).to_owned(),
             email: None,
             name: None,
             profile: None,
-        };
+        });
     }
 
-    let identity = state.store.get_auth_identity(session.user_id).await;
+    let identity = state.store.get_auth_identity(session.user_id).await?;
     let profile = state
         .store
         .ensure_user_profile(
@@ -298,7 +300,7 @@ async fn session_response(
                 .as_ref()
                 .and_then(|record| record.provider_avatar_url.clone()),
         )
-        .await;
+        .await?;
     let profile_response = profile.map(|record| UserProfileResponse {
         display_name: record.display_name,
         avatar_url: record.avatar_url,
@@ -307,14 +309,14 @@ async fn session_response(
         .as_ref()
         .map(|profile| profile.display_name.clone());
 
-    SessionResponse {
+    Ok(SessionResponse {
         user_id: session.user_id,
         session_id: session.id,
         kind: user_kind_label(&session.kind).to_owned(),
         email: identity.and_then(|record| record.email),
         name,
         profile: profile_response,
-    }
+    })
 }
 
 #[cfg(test)]
@@ -447,7 +449,11 @@ mod tests {
         let Some(state) = test_state(None).await else {
             return;
         };
-        let session = state.store.create_guest_session().await;
+        let session = state
+            .store
+            .create_guest_session()
+            .await
+            .expect("guest session should create");
 
         let result = update_profile(
             State(state),
@@ -471,7 +477,11 @@ mod tests {
         let Some(state) = test_state(Some("test-client".to_owned())).await else {
             return;
         };
-        let guest = state.store.create_guest_session().await;
+        let guest = state
+            .store
+            .create_guest_session()
+            .await
+            .expect("guest session should create");
         let guest_owner = OwnerScope::from_session(&guest);
         let item_id = format!("settings.theme.{}", Uuid::new_v4());
         let saved = state
@@ -485,7 +495,8 @@ mod tests {
                 deleted_at: None,
                 payload: json!({ "key": "theme", "value": "dark" }),
             })
-            .await;
+            .await
+            .expect("sync entity should save");
         assert!(saved);
 
         let subject = format!("google-subject-{}", Uuid::new_v4());
@@ -516,6 +527,7 @@ mod tests {
             .store
             .get_session(response.session_id)
             .await
+            .expect("promoted session lookup should query")
             .expect("promoted session should exist");
         let promoted_owner = OwnerScope::from_session(&promoted_session);
         assert_eq!(promoted_owner.user_id, Some(response.user_id));
@@ -523,7 +535,8 @@ mod tests {
         let pulled = state
             .store
             .list_sync_entities_since(promoted_owner, 0, 50)
-            .await;
+            .await
+            .expect("promoted sync rows should list");
         assert!(pulled.iter().any(|item| item.item_id == item_id));
     }
 }

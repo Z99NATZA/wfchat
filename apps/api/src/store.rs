@@ -8,6 +8,8 @@ use uuid::Uuid;
 
 use crate::ai::{AiMessage, AiRole};
 
+pub type StoreResult<T> = Result<T, sqlx::Error>;
+
 #[derive(Clone)]
 pub struct ChatStore {
     db: Arc<PgPool>,
@@ -165,7 +167,7 @@ impl ChatStore {
         Ok(store)
     }
 
-    pub async fn create_guest_session(&self) -> SessionRecord {
+    pub async fn create_guest_session(&self) -> StoreResult<SessionRecord> {
         let session = SessionRecord {
             id: Uuid::new_v4(),
             user_id: Uuid::new_v4(),
@@ -173,7 +175,7 @@ impl ChatStore {
             created_at: now_unix_seconds(),
         };
 
-        let _ = sqlx::query(
+        sqlx::query(
             "insert into auth_sessions (id, user_id, kind, created_at) values ($1, $2, $3, to_timestamp($4))",
         )
         .bind(session.id)
@@ -181,16 +183,16 @@ impl ChatStore {
         .bind("guest")
         .bind(session.created_at as i64)
         .execute(self.db.as_ref())
-        .await;
+        .await?;
 
-        session
+        Ok(session)
     }
 
     pub async fn promote_session_to_registered(
         &self,
         session_id: Uuid,
         user_id: Uuid,
-    ) -> Option<SessionRecord> {
+    ) -> StoreResult<Option<SessionRecord>> {
         let row = sqlx::query(
             "update auth_sessions
              set user_id = $1, kind = 'registered'
@@ -200,15 +202,14 @@ impl ChatStore {
         .bind(user_id)
         .bind(session_id)
         .fetch_optional(self.db.as_ref())
-        .await
-        .ok()??;
+        .await?;
 
-        Some(SessionRecord {
+        Ok(row.map(|row| SessionRecord {
             id: row.get("id"),
             user_id: row.get("user_id"),
             kind: parse_user_kind(row.get::<String, _>("kind").as_str()),
             created_at: row.get::<i64, _>("created_at") as u64,
-        })
+        }))
     }
 
     #[cfg(test)]
@@ -216,7 +217,7 @@ impl ChatStore {
         &self,
         session_id: Uuid,
         user_id: Uuid,
-    ) -> Option<SessionRecord> {
+    ) -> StoreResult<Option<SessionRecord>> {
         let row = sqlx::query(
             "update auth_sessions
              set user_id = $1, kind = 'admin'
@@ -226,55 +227,60 @@ impl ChatStore {
         .bind(user_id)
         .bind(session_id)
         .fetch_optional(self.db.as_ref())
-        .await
-        .ok()??;
+        .await?;
 
-        Some(SessionRecord {
+        Ok(row.map(|row| SessionRecord {
             id: row.get("id"),
             user_id: row.get("user_id"),
             kind: parse_user_kind(row.get::<String, _>("kind").as_str()),
             created_at: row.get::<i64, _>("created_at") as u64,
-        })
+        }))
     }
 
-    pub async fn migrate_session_data_to_user(&self, session_id: Uuid, user_id: Uuid) {
-        let _ = sqlx::query(
+    pub async fn migrate_session_data_to_user(
+        &self,
+        session_id: Uuid,
+        user_id: Uuid,
+    ) -> StoreResult<()> {
+        sqlx::query(
             "update chats set owner_user_id = $1 where owner_session_id = $2 and owner_user_id is null",
         )
         .bind(user_id)
         .bind(session_id)
         .execute(self.db.as_ref())
-        .await;
+        .await?;
 
-        let _ = sqlx::query(
+        sqlx::query(
             "update memory_facts set owner_user_id = $1 where owner_session_id = $2 and owner_user_id is null",
         )
         .bind(user_id)
         .bind(session_id)
         .execute(self.db.as_ref())
-        .await;
+        .await?;
 
-        let _ = sqlx::query(
+        sqlx::query(
             "update memory_summaries set owner_user_id = $1 where owner_session_id = $2 and owner_user_id is null",
         )
         .bind(user_id)
         .bind(session_id)
         .execute(self.db.as_ref())
-        .await;
+        .await?;
 
-        let _ = sqlx::query(
+        sqlx::query(
             "update sync_entities set owner_user_id = $1 where session_id = $2 and owner_user_id is null",
         )
         .bind(user_id)
         .bind(session_id)
         .execute(self.db.as_ref())
-        .await;
+        .await?;
+
+        Ok(())
     }
 
-    pub async fn ensure_session(&self, session_id: Option<Uuid>) -> SessionRecord {
+    pub async fn ensure_session(&self, session_id: Option<Uuid>) -> StoreResult<SessionRecord> {
         if let Some(id) = session_id {
-            if let Some(session) = self.get_session(id).await {
-                return session;
+            if let Some(session) = self.get_session(id).await? {
+                return Ok(session);
             }
 
             let session = SessionRecord {
@@ -284,7 +290,7 @@ impl ChatStore {
                 created_at: now_unix_seconds(),
             };
 
-            let _ = sqlx::query(
+            sqlx::query(
                 "insert into auth_sessions (id, user_id, kind, created_at) values ($1, $2, $3, to_timestamp($4))",
             )
             .bind(session.id)
@@ -292,28 +298,27 @@ impl ChatStore {
             .bind("guest")
             .bind(session.created_at as i64)
             .execute(self.db.as_ref())
-            .await;
-            return session;
+            .await?;
+            return Ok(session);
         }
 
         self.create_guest_session().await
     }
 
-    pub async fn get_session(&self, session_id: Uuid) -> Option<SessionRecord> {
+    pub async fn get_session(&self, session_id: Uuid) -> StoreResult<Option<SessionRecord>> {
         let row = sqlx::query(
             "select id, user_id, kind, extract(epoch from created_at)::bigint as created_at from auth_sessions where id = $1",
         )
         .bind(session_id)
         .fetch_optional(self.db.as_ref())
-        .await
-        .ok()??;
+        .await?;
 
-        Some(SessionRecord {
+        Ok(row.map(|row| SessionRecord {
             id: row.get("id"),
             user_id: row.get("user_id"),
             kind: parse_user_kind(row.get::<String, _>("kind").as_str()),
             created_at: row.get::<i64, _>("created_at") as u64,
-        })
+        }))
     }
 
     pub async fn upsert_auth_identity(
@@ -324,7 +329,7 @@ impl ChatStore {
         email: Option<String>,
         provider_name: Option<String>,
         provider_avatar_url: Option<String>,
-    ) -> Option<AuthIdentityRecord> {
+    ) -> StoreResult<AuthIdentityRecord> {
         let row = sqlx::query(
             "insert into auth_identities (user_id, provider, provider_subject, email, provider_name, provider_avatar_url, updated_at)
              values ($1, $2, $3, $4, $5, $6, now())
@@ -343,11 +348,10 @@ impl ChatStore {
         .bind(email)
         .bind(provider_name)
         .bind(provider_avatar_url)
-        .fetch_optional(self.db.as_ref())
-        .await
-        .ok()??;
+        .fetch_one(self.db.as_ref())
+        .await?;
 
-        Some(AuthIdentityRecord {
+        Ok(AuthIdentityRecord {
             user_id: row.get("user_id"),
             provider: row.get("provider"),
             provider_subject: row.get("provider_subject"),
@@ -357,7 +361,10 @@ impl ChatStore {
         })
     }
 
-    pub async fn get_auth_identity(&self, user_id: Uuid) -> Option<AuthIdentityRecord> {
+    pub async fn get_auth_identity(
+        &self,
+        user_id: Uuid,
+    ) -> StoreResult<Option<AuthIdentityRecord>> {
         let row = sqlx::query(
             "select user_id, provider, provider_subject, email, provider_name, provider_avatar_url
              from auth_identities
@@ -367,17 +374,16 @@ impl ChatStore {
         )
         .bind(user_id)
         .fetch_optional(self.db.as_ref())
-        .await
-        .ok()??;
+        .await?;
 
-        Some(AuthIdentityRecord {
+        Ok(row.map(|row| AuthIdentityRecord {
             user_id: row.get("user_id"),
             provider: row.get("provider"),
             provider_subject: row.get("provider_subject"),
             email: row.get("email"),
             provider_name: row.get("provider_name"),
             provider_avatar_url: row.get("provider_avatar_url"),
-        })
+        }))
     }
 
     pub async fn ensure_user_profile(
@@ -385,11 +391,11 @@ impl ChatStore {
         user_id: Uuid,
         display_name: Option<String>,
         avatar_url: Option<String>,
-    ) -> Option<UserProfileRecord> {
+    ) -> StoreResult<Option<UserProfileRecord>> {
         let seed_display_name =
             non_empty_string(display_name).unwrap_or_else(|| "Member".to_owned());
         let seed_avatar_url = non_empty_string(avatar_url);
-        let _ = sqlx::query(
+        sqlx::query(
             "insert into user_profiles (user_id, display_name, avatar_url, created_at, updated_at)
              values ($1, $2, $3, now(), now())
              on conflict (user_id) do nothing",
@@ -398,25 +404,24 @@ impl ChatStore {
         .bind(seed_display_name)
         .bind(seed_avatar_url)
         .execute(self.db.as_ref())
-        .await;
+        .await?;
 
         self.get_user_profile(user_id).await
     }
 
-    pub async fn get_user_profile(&self, user_id: Uuid) -> Option<UserProfileRecord> {
+    pub async fn get_user_profile(&self, user_id: Uuid) -> StoreResult<Option<UserProfileRecord>> {
         let row = sqlx::query(
             "select user_id, display_name, avatar_url from user_profiles where user_id = $1",
         )
         .bind(user_id)
         .fetch_optional(self.db.as_ref())
-        .await
-        .ok()??;
+        .await?;
 
-        Some(UserProfileRecord {
+        Ok(row.map(|row| UserProfileRecord {
             user_id: row.get("user_id"),
             display_name: row.get("display_name"),
             avatar_url: row.get("avatar_url"),
-        })
+        }))
     }
 
     pub async fn update_user_profile(
@@ -424,8 +429,10 @@ impl ChatStore {
         user_id: Uuid,
         display_name: Option<String>,
         avatar_url: Option<String>,
-    ) -> Option<UserProfileRecord> {
-        let current = self.get_user_profile(user_id).await?;
+    ) -> StoreResult<Option<UserProfileRecord>> {
+        let Some(current) = self.get_user_profile(user_id).await? else {
+            return Ok(None);
+        };
         let next_display_name = non_empty_string(display_name).unwrap_or(current.display_name);
         let next_avatar_url = avatar_url
             .map(|value| value.trim().to_owned())
@@ -440,17 +447,16 @@ impl ChatStore {
         .bind(next_avatar_url.or(current.avatar_url))
         .bind(user_id)
         .fetch_optional(self.db.as_ref())
-        .await
-        .ok()??;
+        .await?;
 
-        Some(UserProfileRecord {
+        Ok(row.map(|row| UserProfileRecord {
             user_id: row.get("user_id"),
             display_name: row.get("display_name"),
             avatar_url: row.get("avatar_url"),
-        })
+        }))
     }
 
-    pub async fn list_chats(&self, owner: OwnerScope) -> Vec<ChatRecord> {
+    pub async fn list_chats(&self, owner: OwnerScope) -> StoreResult<Vec<ChatRecord>> {
         let rows = sqlx::query(
             "select id, owner_session_id, character_id, ai_profile_id, extract(epoch from created_at)::bigint as created_at, extract(epoch from updated_at)::bigint as updated_at
              from chats
@@ -460,8 +466,7 @@ impl ChatStore {
         .bind(owner.session_id)
         .bind(owner.user_id)
         .fetch_all(self.db.as_ref())
-        .await
-        .unwrap_or_default();
+        .await?;
 
         let mut chats = Vec::with_capacity(rows.len());
         for row in rows {
@@ -471,12 +476,12 @@ impl ChatStore {
                 owner_session_id: row.get("owner_session_id"),
                 character_id: row.get("character_id"),
                 ai_profile_id: row.get("ai_profile_id"),
-                messages: self.messages_for_chat(chat_id).await,
+                messages: self.messages_for_chat(chat_id).await?,
                 created_at: row.get::<i64, _>("created_at") as u64,
                 updated_at: row.get::<i64, _>("updated_at") as u64,
             });
         }
-        chats
+        Ok(chats)
     }
 
     pub async fn create_chat(
@@ -484,10 +489,10 @@ impl ChatStore {
         owner: OwnerScope,
         character_id: String,
         ai_profile_id: String,
-    ) -> ChatRecord {
+    ) -> StoreResult<ChatRecord> {
         let id = Uuid::new_v4();
         let now = now_unix_seconds() as i64;
-        let _ = sqlx::query(
+        sqlx::query(
             "insert into chats (id, owner_session_id, owner_user_id, character_id, ai_profile_id, created_at, updated_at) values ($1, $2, $3, $4, $5, to_timestamp($6), to_timestamp($6))",
         )
         .bind(id)
@@ -497,9 +502,9 @@ impl ChatStore {
         .bind(&ai_profile_id)
         .bind(now)
         .execute(self.db.as_ref())
-        .await;
+        .await?;
 
-        ChatRecord {
+        Ok(ChatRecord {
             id,
             owner_session_id: owner.session_id,
             character_id,
@@ -507,10 +512,14 @@ impl ChatStore {
             messages: Vec::new(),
             created_at: now as u64,
             updated_at: now as u64,
-        }
+        })
     }
 
-    pub async fn get_chat(&self, owner: OwnerScope, chat_id: Uuid) -> Option<ChatRecord> {
+    pub async fn get_chat(
+        &self,
+        owner: OwnerScope,
+        chat_id: Uuid,
+    ) -> StoreResult<Option<ChatRecord>> {
         let row = sqlx::query(
             "select id, owner_session_id, character_id, ai_profile_id, extract(epoch from created_at)::bigint as created_at, extract(epoch from updated_at)::bigint as updated_at
              from chats
@@ -520,18 +529,21 @@ impl ChatStore {
         .bind(owner.session_id)
         .bind(owner.user_id)
         .fetch_optional(self.db.as_ref())
-        .await
-        .ok()??;
+        .await?;
 
-        Some(ChatRecord {
+        let Some(row) = row else {
+            return Ok(None);
+        };
+
+        Ok(Some(ChatRecord {
             id: row.get("id"),
             owner_session_id: row.get("owner_session_id"),
             character_id: row.get("character_id"),
             ai_profile_id: row.get("ai_profile_id"),
-            messages: self.messages_for_chat(chat_id).await,
+            messages: self.messages_for_chat(chat_id).await?,
             created_at: row.get::<i64, _>("created_at") as u64,
             updated_at: row.get::<i64, _>("updated_at") as u64,
-        })
+        }))
     }
 
     pub async fn append_chat_messages(
@@ -540,7 +552,7 @@ impl ChatStore {
         chat_id: Uuid,
         user_message: StoredMessage,
         assistant_message: StoredMessage,
-    ) -> Option<ChatRecord> {
+    ) -> StoreResult<Option<ChatRecord>> {
         self.append_chat_messages_with_attachments(
             owner,
             chat_id,
@@ -558,8 +570,8 @@ impl ChatStore {
         user_message: StoredMessage,
         assistant_message: StoredMessage,
         attachment_ids: &[Uuid],
-    ) -> Option<ChatRecord> {
-        let mut tx = self.db.begin().await.ok()?;
+    ) -> StoreResult<Option<ChatRecord>> {
+        let mut tx = self.db.begin().await?;
         let owner_exists = sqlx::query(
             "select id from chats where id = $1 and (($3::uuid is not null and owner_user_id = $3) or ($3::uuid is null and owner_session_id = $2))",
         )
@@ -567,11 +579,10 @@ impl ChatStore {
             .bind(owner.session_id)
             .bind(owner.user_id)
             .fetch_optional(&mut *tx)
-            .await
-            .ok()?
+            .await?
             .is_some();
         if !owner_exists {
-            return None;
+            return Ok(None);
         }
 
         sqlx::query(
@@ -587,8 +598,7 @@ impl ChatStore {
         .bind(&assistant_message.content)
         .bind(assistant_message.created_at as i64)
         .execute(&mut *tx)
-        .await
-        .ok()?;
+        .await?;
 
         if !attachment_ids.is_empty() {
             let result = sqlx::query(
@@ -606,22 +616,20 @@ impl ChatStore {
             .bind(owner.session_id)
             .bind(owner.user_id)
             .execute(&mut *tx)
-            .await
-            .ok()?;
+            .await?;
             let updated_count = result.rows_affected();
             if updated_count != attachment_ids.len() as u64 {
                 let _ = tx.rollback().await;
-                return None;
+                return Ok(None);
             }
         }
 
         sqlx::query("update chats set updated_at = now() where id = $1")
             .bind(chat_id)
             .execute(&mut *tx)
-            .await
-            .ok()?;
+            .await?;
 
-        tx.commit().await.ok()?;
+        tx.commit().await?;
 
         self.get_chat(owner, chat_id).await
     }
@@ -630,7 +638,7 @@ impl ChatStore {
         &self,
         owner: OwnerScope,
         chat_id: Uuid,
-    ) -> Option<ChatRecord> {
+    ) -> StoreResult<Option<ChatRecord>> {
         let owner_exists = sqlx::query(
             "select id from chats where id = $1 and (($3::uuid is not null and owner_user_id = $3) or ($3::uuid is null and owner_session_id = $2))",
         )
@@ -638,43 +646,41 @@ impl ChatStore {
             .bind(owner.session_id)
             .bind(owner.user_id)
             .fetch_optional(self.db.as_ref())
-            .await
-            .ok()?
+            .await?
             .is_some();
         if !owner_exists {
-            return None;
+            return Ok(None);
         }
 
-        let _ = sqlx::query("delete from chat_messages where chat_id = $1")
+        sqlx::query("delete from chat_messages where chat_id = $1")
             .bind(chat_id)
             .execute(self.db.as_ref())
-            .await;
-        let _ = sqlx::query("update chats set updated_at = now() where id = $1")
+            .await?;
+        sqlx::query("update chats set updated_at = now() where id = $1")
             .bind(chat_id)
             .execute(self.db.as_ref())
-            .await;
+            .await?;
 
         self.get_chat(owner, chat_id).await
     }
 
-    pub async fn delete_chat(&self, owner: OwnerScope, chat_id: Uuid) -> bool {
-        sqlx::query(
+    pub async fn delete_chat(&self, owner: OwnerScope, chat_id: Uuid) -> StoreResult<bool> {
+        let result = sqlx::query(
             "delete from chats where id = $1 and (($3::uuid is not null and owner_user_id = $3) or ($3::uuid is null and owner_session_id = $2))",
         )
             .bind(chat_id)
             .bind(owner.session_id)
             .bind(owner.user_id)
             .execute(self.db.as_ref())
-            .await
-            .map(|result| result.rows_affected() > 0)
-            .unwrap_or(false)
+            .await?;
+        Ok(result.rows_affected() > 0)
     }
 
     pub async fn create_chat_attachment(
         &self,
         owner: OwnerScope,
         attachment: NewChatAttachmentRecord,
-    ) -> Option<ChatAttachmentRecord> {
+    ) -> StoreResult<ChatAttachmentRecord> {
         let row = sqlx::query(
             "insert into chat_attachments (
                 id,
@@ -715,11 +721,10 @@ impl ChatStore {
         .bind(attachment.height)
         .bind(attachment.sha256)
         .bind(attachment.storage_key)
-        .fetch_optional(self.db.as_ref())
-        .await
-        .ok()??;
+        .fetch_one(self.db.as_ref())
+        .await?;
 
-        Some(chat_attachment_from_row(row))
+        Ok(chat_attachment_from_row(row))
     }
 
     pub async fn link_chat_attachments_to_message(
@@ -728,9 +733,9 @@ impl ChatStore {
         chat_id: Uuid,
         message_id: Uuid,
         attachment_ids: &[Uuid],
-    ) -> Option<u64> {
+    ) -> StoreResult<u64> {
         if attachment_ids.is_empty() {
-            return Some(0);
+            return Ok(0);
         }
 
         let result = sqlx::query(
@@ -748,17 +753,16 @@ impl ChatStore {
         .bind(owner.session_id)
         .bind(owner.user_id)
         .execute(self.db.as_ref())
-        .await
-        .ok()?;
+        .await?;
 
-        Some(result.rows_affected())
+        Ok(result.rows_affected())
     }
 
     pub async fn get_chat_attachment(
         &self,
         owner: OwnerScope,
         attachment_id: Uuid,
-    ) -> Option<ChatAttachmentRecord> {
+    ) -> StoreResult<Option<ChatAttachmentRecord>> {
         let row = sqlx::query(
             "select
                 id,
@@ -784,17 +788,16 @@ impl ChatStore {
         .bind(owner.session_id)
         .bind(owner.user_id)
         .fetch_optional(self.db.as_ref())
-        .await
-        .ok()??;
+        .await?;
 
-        Some(chat_attachment_from_row(row))
+        Ok(row.map(chat_attachment_from_row))
     }
 
     pub async fn mark_pending_chat_attachment_deleted(
         &self,
         owner: OwnerScope,
         attachment_id: Uuid,
-    ) -> Option<ChatAttachmentRecord> {
+    ) -> StoreResult<Option<ChatAttachmentRecord>> {
         let row = sqlx::query(
             "update chat_attachments
              set deleted_at = now()
@@ -822,10 +825,9 @@ impl ChatStore {
         .bind(owner.session_id)
         .bind(owner.user_id)
         .fetch_optional(self.db.as_ref())
-        .await
-        .ok()??;
+        .await?;
 
-        Some(chat_attachment_from_row(row))
+        Ok(row.map(chat_attachment_from_row))
     }
 
     pub async fn mark_stale_pending_chat_attachments_deleted(
@@ -833,9 +835,9 @@ impl ChatStore {
         kind: &str,
         stale_before_unix_seconds: u64,
         limit: i64,
-    ) -> Vec<ChatAttachmentRecord> {
+    ) -> StoreResult<Vec<ChatAttachmentRecord>> {
         if limit <= 0 {
-            return Vec::new();
+            return Ok(Vec::new());
         }
 
         let rows = sqlx::query(
@@ -872,10 +874,9 @@ impl ChatStore {
         .bind(stale_before_unix_seconds as i64)
         .bind(limit)
         .fetch_all(self.db.as_ref())
-        .await
-        .unwrap_or_default();
+        .await?;
 
-        rows.into_iter().map(chat_attachment_from_row).collect()
+        Ok(rows.into_iter().map(chat_attachment_from_row).collect())
     }
 
     #[cfg(test)]
@@ -883,7 +884,7 @@ impl ChatStore {
         &self,
         attachment_id: Uuid,
         created_at: u64,
-    ) -> Option<ChatAttachmentRecord> {
+    ) -> StoreResult<Option<ChatAttachmentRecord>> {
         let row = sqlx::query(
             "update chat_attachments
              set created_at = to_timestamp($2)
@@ -907,17 +908,16 @@ impl ChatStore {
         .bind(attachment_id)
         .bind(created_at as i64)
         .fetch_optional(self.db.as_ref())
-        .await
-        .ok()??;
+        .await?;
 
-        Some(chat_attachment_from_row(row))
+        Ok(row.map(chat_attachment_from_row))
     }
 
     pub async fn list_memory_facts(
         &self,
         owner: OwnerScope,
         character_id: &str,
-    ) -> Vec<MemoryFactRecord> {
+    ) -> StoreResult<Vec<MemoryFactRecord>> {
         let rows = sqlx::query(
             "select id, owner_session_id, character_id, content, confidence, source_chat_id, extract(epoch from created_at)::bigint as created_at, extract(epoch from updated_at)::bigint as updated_at
              from memory_facts
@@ -928,10 +928,10 @@ impl ChatStore {
         .bind(character_id)
         .bind(owner.user_id)
         .fetch_all(self.db.as_ref())
-        .await
-        .unwrap_or_default();
+        .await?;
 
-        rows.into_iter()
+        Ok(rows
+            .into_iter()
             .map(|row| MemoryFactRecord {
                 id: row.get("id"),
                 owner_session_id: row.get("owner_session_id"),
@@ -942,7 +942,7 @@ impl ChatStore {
                 created_at: row.get::<i64, _>("created_at") as u64,
                 updated_at: row.get::<i64, _>("updated_at") as u64,
             })
-            .collect()
+            .collect())
     }
 
     pub async fn create_memory_fact(
@@ -952,7 +952,7 @@ impl ChatStore {
         content: String,
         confidence: f32,
         source_chat_id: Option<Uuid>,
-    ) -> Option<MemoryFactRecord> {
+    ) -> StoreResult<MemoryFactRecord> {
         let id = Uuid::new_v4();
         let row = sqlx::query(
             "insert into memory_facts (id, owner_session_id, owner_user_id, character_id, content, confidence, source_chat_id) values ($1, $2, $3, $4, $5, $6, $7) returning extract(epoch from created_at)::bigint as created_at, extract(epoch from updated_at)::bigint as updated_at",
@@ -965,10 +965,9 @@ impl ChatStore {
         .bind(confidence as f64)
         .bind(source_chat_id)
         .fetch_one(self.db.as_ref())
-        .await
-        .ok()?;
+        .await?;
 
-        Some(MemoryFactRecord {
+        Ok(MemoryFactRecord {
             id,
             owner_session_id: owner.session_id,
             character_id,
@@ -980,17 +979,16 @@ impl ChatStore {
         })
     }
 
-    pub async fn delete_memory_fact(&self, owner: OwnerScope, fact_id: Uuid) -> bool {
-        sqlx::query(
+    pub async fn delete_memory_fact(&self, owner: OwnerScope, fact_id: Uuid) -> StoreResult<bool> {
+        let result = sqlx::query(
             "delete from memory_facts where id = $1 and (($3::uuid is not null and owner_user_id = $3) or ($3::uuid is null and owner_session_id = $2))",
         )
             .bind(fact_id)
             .bind(owner.session_id)
             .bind(owner.user_id)
             .execute(self.db.as_ref())
-            .await
-            .map(|result| result.rows_affected() > 0)
-            .unwrap_or(false)
+            .await?;
+        Ok(result.rows_affected() > 0)
     }
 
     pub async fn update_memory_fact(
@@ -999,7 +997,7 @@ impl ChatStore {
         fact_id: Uuid,
         content: String,
         confidence: f32,
-    ) -> Option<MemoryFactRecord> {
+    ) -> StoreResult<Option<MemoryFactRecord>> {
         let row = sqlx::query(
             "update memory_facts
              set content = $1, confidence = $2, updated_at = now()
@@ -1012,10 +1010,9 @@ impl ChatStore {
         .bind(owner.session_id)
         .bind(owner.user_id)
         .fetch_optional(self.db.as_ref())
-        .await
-        .ok()??;
+        .await?;
 
-        Some(MemoryFactRecord {
+        Ok(row.map(|row| MemoryFactRecord {
             id: row.get("id"),
             owner_session_id: row.get("owner_session_id"),
             character_id: row.get("character_id"),
@@ -1024,14 +1021,14 @@ impl ChatStore {
             source_chat_id: row.get("source_chat_id"),
             created_at: row.get::<i64, _>("created_at") as u64,
             updated_at: row.get::<i64, _>("updated_at") as u64,
-        })
+        }))
     }
 
     pub async fn list_memory_summaries(
         &self,
         owner: OwnerScope,
         character_id: &str,
-    ) -> Vec<MemorySummaryRecord> {
+    ) -> StoreResult<Vec<MemorySummaryRecord>> {
         let rows = sqlx::query(
             "select id, owner_session_id, character_id, summary, source_chat_id, extract(epoch from created_at)::bigint as created_at
              from memory_summaries
@@ -1042,10 +1039,10 @@ impl ChatStore {
         .bind(character_id)
         .bind(owner.user_id)
         .fetch_all(self.db.as_ref())
-        .await
-        .unwrap_or_default();
+        .await?;
 
-        rows.into_iter()
+        Ok(rows
+            .into_iter()
             .map(|row| MemorySummaryRecord {
                 id: row.get("id"),
                 owner_session_id: row.get("owner_session_id"),
@@ -1054,7 +1051,7 @@ impl ChatStore {
                 source_chat_id: row.get("source_chat_id"),
                 created_at: row.get::<i64, _>("created_at") as u64,
             })
-            .collect()
+            .collect())
     }
 
     pub async fn create_memory_summary(
@@ -1063,7 +1060,7 @@ impl ChatStore {
         character_id: String,
         summary: String,
         source_chat_id: Option<Uuid>,
-    ) -> Option<MemorySummaryRecord> {
+    ) -> StoreResult<MemorySummaryRecord> {
         let id = Uuid::new_v4();
         let row = sqlx::query(
             "insert into memory_summaries (id, owner_session_id, owner_user_id, character_id, summary, source_chat_id) values ($1, $2, $3, $4, $5, $6) returning extract(epoch from created_at)::bigint as created_at",
@@ -1075,10 +1072,9 @@ impl ChatStore {
         .bind(&summary)
         .bind(source_chat_id)
         .fetch_one(self.db.as_ref())
-        .await
-        .ok()?;
+        .await?;
 
-        Some(MemorySummaryRecord {
+        Ok(MemorySummaryRecord {
             id,
             owner_session_id: owner.session_id,
             character_id,
@@ -1088,17 +1084,20 @@ impl ChatStore {
         })
     }
 
-    pub async fn delete_memory_summary(&self, owner: OwnerScope, summary_id: Uuid) -> bool {
-        sqlx::query(
+    pub async fn delete_memory_summary(
+        &self,
+        owner: OwnerScope,
+        summary_id: Uuid,
+    ) -> StoreResult<bool> {
+        let result = sqlx::query(
             "delete from memory_summaries where id = $1 and (($3::uuid is not null and owner_user_id = $3) or ($3::uuid is null and owner_session_id = $2))",
         )
             .bind(summary_id)
             .bind(owner.session_id)
             .bind(owner.user_id)
             .execute(self.db.as_ref())
-            .await
-            .map(|result| result.rows_affected() > 0)
-            .unwrap_or(false)
+            .await?;
+        Ok(result.rows_affected() > 0)
     }
 
     pub async fn update_memory_summary(
@@ -1106,7 +1105,7 @@ impl ChatStore {
         owner: OwnerScope,
         summary_id: Uuid,
         summary: String,
-    ) -> Option<MemorySummaryRecord> {
+    ) -> StoreResult<Option<MemorySummaryRecord>> {
         let row = sqlx::query(
             "update memory_summaries
              set summary = $1
@@ -1118,32 +1117,30 @@ impl ChatStore {
         .bind(owner.session_id)
         .bind(owner.user_id)
         .fetch_optional(self.db.as_ref())
-        .await
-        .ok()??;
+        .await?;
 
-        Some(MemorySummaryRecord {
+        Ok(row.map(|row| MemorySummaryRecord {
             id: row.get("id"),
             owner_session_id: row.get("owner_session_id"),
             character_id: row.get("character_id"),
             summary: row.get("summary"),
             source_chat_id: row.get("source_chat_id"),
             created_at: row.get::<i64, _>("created_at") as u64,
-        })
+        }))
     }
 
-    pub async fn count_sync_entities(&self, owner: OwnerScope) -> u32 {
+    pub async fn count_sync_entities(&self, owner: OwnerScope) -> StoreResult<u32> {
         let entities_count: i64 = sqlx::query_scalar(
             "select count(*) from sync_entities where (($2::uuid is not null and owner_user_id = $2) or ($2::uuid is null and session_id = $1))",
         )
         .bind(owner.session_id)
         .bind(owner.user_id)
         .fetch_one(self.db.as_ref())
-        .await
-        .unwrap_or(0);
-        entities_count.max(0) as u32
+        .await?;
+        Ok(entities_count.max(0) as u32)
     }
 
-    pub async fn upsert_sync_entity(&self, entity: &SyncEntityRecord) -> bool {
+    pub async fn upsert_sync_entity(&self, entity: &SyncEntityRecord) -> StoreResult<bool> {
         let deleted_at = entity.deleted_at.map(|value| value as i64);
         if let Some(owner_user_id) = entity.owner_user_id {
             let updated = sqlx::query(
@@ -1161,11 +1158,11 @@ impl ChatStore {
             .bind(deleted_at)
             .bind(&entity.payload)
             .execute(self.db.as_ref())
-            .await
-            .map(|result| result.rows_affected() > 0)
-            .unwrap_or(false);
+            .await?
+            .rows_affected()
+                > 0;
             if updated {
-                return true;
+                return Ok(true);
             }
 
             let exists = sqlx::query_scalar::<_, i64>(
@@ -1174,14 +1171,13 @@ impl ChatStore {
             .bind(owner_user_id)
             .bind(&entity.item_id)
             .fetch_one(self.db.as_ref())
-            .await
-            .map(|count| count > 0)
-            .unwrap_or(false);
+            .await?
+                > 0;
             if exists {
-                return false;
+                return Ok(false);
             }
 
-            return sqlx::query(
+            sqlx::query(
                 "insert into sync_entities (session_id, owner_user_id, item_id, item_type, updated_at, deleted_at, payload)
                  values ($1, $2, $3, $4, to_timestamp($5), to_timestamp($6), $7)",
             )
@@ -1193,11 +1189,11 @@ impl ChatStore {
             .bind(deleted_at)
             .bind(&entity.payload)
             .execute(self.db.as_ref())
-            .await
-            .is_ok();
+            .await?;
+            return Ok(true);
         }
 
-        sqlx::query(
+        let result = sqlx::query(
             "insert into sync_entities (session_id, owner_user_id, item_id, item_type, updated_at, deleted_at, payload)
              values ($1, null, $2, $3, to_timestamp($4), to_timestamp($5), $6)
              on conflict (session_id, item_id)
@@ -1216,15 +1212,15 @@ impl ChatStore {
         .bind(deleted_at)
         .bind(&entity.payload)
         .execute(self.db.as_ref())
-        .await
-        .is_ok()
+        .await?;
+        Ok(result.rows_affected() > 0)
     }
 
     pub async fn get_sync_entity_updated_at(
         &self,
         owner: OwnerScope,
         item_id: &str,
-    ) -> Option<u64> {
+    ) -> StoreResult<Option<u64>> {
         let value: Option<i64> = sqlx::query_scalar(
             "select max(extract(epoch from updated_at)::bigint)
              from sync_entities
@@ -1234,10 +1230,9 @@ impl ChatStore {
         .bind(item_id)
         .bind(owner.user_id)
         .fetch_one(self.db.as_ref())
-        .await
-        .ok()?;
+        .await?;
 
-        value.map(|item| item as u64)
+        Ok(value.map(|item| item as u64))
     }
 
     pub async fn list_sync_entities_since(
@@ -1245,7 +1240,7 @@ impl ChatStore {
         owner: OwnerScope,
         cursor: u64,
         limit: u32,
-    ) -> Vec<SyncEntityRecord> {
+    ) -> StoreResult<Vec<SyncEntityRecord>> {
         let rows = sqlx::query(
             "select session_id, owner_user_id, item_id, item_type,
                     extract(epoch from updated_at)::bigint as updated_at,
@@ -1266,10 +1261,10 @@ impl ChatStore {
         .bind(limit as i64)
         .bind(owner.user_id)
         .fetch_all(self.db.as_ref())
-        .await
-        .unwrap_or_default();
+        .await?;
 
-        rows.into_iter()
+        Ok(rows
+            .into_iter()
             .map(|row| SyncEntityRecord {
                 session_id: row.get("session_id"),
                 owner_user_id: row.get("owner_user_id"),
@@ -1281,14 +1276,14 @@ impl ChatStore {
                     .map(|value| value as u64),
                 payload: row.get("payload"),
             })
-            .collect()
+            .collect())
     }
 
     pub async fn get_sync_commit(
         &self,
         session_id: Uuid,
         operation_id: &str,
-    ) -> Option<SyncCommitRecord> {
+    ) -> StoreResult<Option<SyncCommitRecord>> {
         let row = sqlx::query(
             "select operation_id, session_id, user_id, merged_count, conflict_count, extract(epoch from committed_at)::bigint as committed_at
              from sync_commits
@@ -1297,17 +1292,16 @@ impl ChatStore {
         .bind(session_id)
         .bind(operation_id)
         .fetch_optional(self.db.as_ref())
-        .await
-        .ok()??;
+        .await?;
 
-        Some(SyncCommitRecord {
+        Ok(row.map(|row| SyncCommitRecord {
             operation_id: row.get("operation_id"),
             session_id: row.get("session_id"),
             user_id: row.get("user_id"),
             merged_count: row.get::<i32, _>("merged_count") as u32,
             conflict_count: row.get::<i32, _>("conflict_count") as u32,
             committed_at: row.get::<i64, _>("committed_at") as u64,
-        })
+        }))
     }
 
     pub async fn save_sync_commit(
@@ -1317,9 +1311,9 @@ impl ChatStore {
         operation_id: &str,
         merged_count: u32,
         conflict_count: u32,
-    ) -> Option<SyncCommitRecord> {
-        if let Some(existing) = self.get_sync_commit(session_id, operation_id).await {
-            return Some(existing);
+    ) -> StoreResult<SyncCommitRecord> {
+        if let Some(existing) = self.get_sync_commit(session_id, operation_id).await? {
+            return Ok(existing);
         }
 
         let row = sqlx::query(
@@ -1334,31 +1328,32 @@ impl ChatStore {
         .bind(merged_count as i32)
         .bind(conflict_count as i32)
         .fetch_optional(self.db.as_ref())
-        .await
-        .ok()?;
+        .await?;
 
-        if row.is_none() {
-            return self.get_sync_commit(session_id, operation_id).await;
-        }
+        let Some(row) = row else {
+            return self
+                .get_sync_commit(session_id, operation_id)
+                .await?
+                .ok_or(sqlx::Error::RowNotFound);
+        };
 
-        Some(SyncCommitRecord {
+        Ok(SyncCommitRecord {
             operation_id: operation_id.to_owned(),
             session_id,
             user_id,
             merged_count,
             conflict_count,
-            committed_at: row?.get::<i64, _>("committed_at") as u64,
+            committed_at: row.get::<i64, _>("committed_at") as u64,
         })
     }
 
-    async fn messages_for_chat(&self, chat_id: Uuid) -> Vec<StoredMessage> {
+    async fn messages_for_chat(&self, chat_id: Uuid) -> StoreResult<Vec<StoredMessage>> {
         let rows = sqlx::query(
             "select id, role, content, extract(epoch from created_at)::bigint as created_at from chat_messages where chat_id = $1 order by sort_order asc",
         )
         .bind(chat_id)
         .fetch_all(self.db.as_ref())
-        .await
-        .unwrap_or_default();
+        .await?;
 
         let mut messages = Vec::with_capacity(rows.len());
         for row in rows {
@@ -1371,15 +1366,18 @@ impl ChatStore {
                 id: message_id,
                 role,
                 content: row.get("content"),
-                attachments: self.attachments_for_message(message_id).await,
+                attachments: self.attachments_for_message(message_id).await?,
                 created_at: row.get::<i64, _>("created_at") as u64,
             });
         }
 
-        messages
+        Ok(messages)
     }
 
-    async fn attachments_for_message(&self, message_id: Uuid) -> Vec<ChatAttachmentRecord> {
+    async fn attachments_for_message(
+        &self,
+        message_id: Uuid,
+    ) -> StoreResult<Vec<ChatAttachmentRecord>> {
         let rows = sqlx::query(
             "select
                 id,
@@ -1402,10 +1400,9 @@ impl ChatStore {
         )
         .bind(message_id)
         .fetch_all(self.db.as_ref())
-        .await
-        .unwrap_or_default();
+        .await?;
 
-        rows.into_iter().map(chat_attachment_from_row).collect()
+        Ok(rows.into_iter().map(chat_attachment_from_row).collect())
     }
 
     async fn migrate(&self) -> Result<(), sqlx::Error> {
@@ -1776,6 +1773,33 @@ mod integration_tests {
         ChatStore::connect(&database_url).await.ok()
     }
 
+    async fn create_test_session(store: &ChatStore) -> SessionRecord {
+        store
+            .create_guest_session()
+            .await
+            .expect("guest session should create")
+    }
+
+    async fn create_test_chat(store: &ChatStore, owner: OwnerScope) -> ChatRecord {
+        store
+            .create_chat(owner, "aiko".to_owned(), "aiko_default".to_owned())
+            .await
+            .expect("chat should create")
+    }
+
+    async fn promote_test_session(
+        store: &ChatStore,
+        session_id: Uuid,
+        user_id: Uuid,
+        label: &'static str,
+    ) -> SessionRecord {
+        store
+            .promote_session_to_registered(session_id, user_id)
+            .await
+            .expect("session promotion should query")
+            .unwrap_or_else(|| panic!("{label} should promote"))
+    }
+
     async fn cleanup_sessions(store: &ChatStore, session_ids: &[Uuid]) {
         for session_id in session_ids {
             let _ = sqlx::query("delete from auth_sessions where id = $1")
@@ -1803,11 +1827,9 @@ mod integration_tests {
         let Some(store) = test_store().await else {
             return;
         };
-        let session = store.create_guest_session().await;
+        let session = create_test_session(&store).await;
         let owner = OwnerScope::from_session(&session);
-        let chat = store
-            .create_chat(owner, "aiko".to_owned(), "aiko_default".to_owned())
-            .await;
+        let chat = create_test_chat(&store, owner).await;
         let attachment_id = Uuid::new_v4();
         store
             .create_chat_attachment(
@@ -1848,7 +1870,8 @@ mod integration_tests {
                 assistant_message,
                 &[attachment_id, Uuid::new_v4()],
             )
-            .await;
+            .await
+            .expect("append should query");
 
         assert!(
             appended.is_none(),
@@ -1857,6 +1880,7 @@ mod integration_tests {
         let persisted = store
             .get_chat(owner, chat.id)
             .await
+            .expect("chat lookup should query")
             .expect("chat should remain");
         assert!(
             persisted.messages.is_empty(),
@@ -1865,6 +1889,7 @@ mod integration_tests {
         let attachment = store
             .get_chat_attachment(owner, attachment_id)
             .await
+            .expect("attachment lookup should query")
             .expect("valid attachment should remain visible");
         assert_eq!(attachment.chat_id, None);
         assert_eq!(attachment.message_id, None);
@@ -1878,27 +1903,25 @@ mod integration_tests {
             return;
         };
         let user_id = Uuid::new_v4();
-        let first_session = store.create_guest_session().await;
-        let first_session = store
-            .promote_session_to_registered(first_session.id, user_id)
-            .await
-            .expect("first session should promote");
+        let first_session = create_test_session(&store).await;
+        let first_session =
+            promote_test_session(&store, first_session.id, user_id, "first session").await;
         store
             .migrate_session_data_to_user(first_session.id, first_session.user_id)
-            .await;
-        let first_owner = OwnerScope::from_session(&first_session);
-        let chat = store
-            .create_chat(first_owner, "aiko".to_owned(), "aiko_default".to_owned())
-            .await;
-
-        let second_session = store.create_guest_session().await;
-        let second_session = store
-            .promote_session_to_registered(second_session.id, user_id)
             .await
-            .expect("second session should promote");
+            .expect("session data should migrate");
+        let first_owner = OwnerScope::from_session(&first_session);
+        let chat = create_test_chat(&store, first_owner).await;
+
+        let second_session = create_test_session(&store).await;
+        let second_session =
+            promote_test_session(&store, second_session.id, user_id, "second session").await;
         let second_owner = OwnerScope::from_session(&second_session);
 
-        let chats = store.list_chats(second_owner).await;
+        let chats = store
+            .list_chats(second_owner)
+            .await
+            .expect("registered owner chats should list");
         assert!(chats.iter().any(|item| item.id == chat.id));
 
         cleanup_sessions(&store, &[first_session.id, second_session.id]).await;
@@ -1910,18 +1933,14 @@ mod integration_tests {
             return;
         };
         let user_id = Uuid::new_v4();
-        let first_session = store.create_guest_session().await;
-        let first_session = store
-            .promote_session_to_registered(first_session.id, user_id)
-            .await
-            .expect("first session should promote");
+        let first_session = create_test_session(&store).await;
+        let first_session =
+            promote_test_session(&store, first_session.id, user_id, "first session").await;
         let first_owner = OwnerScope::from_session(&first_session);
 
-        let second_session = store.create_guest_session().await;
-        let second_session = store
-            .promote_session_to_registered(second_session.id, user_id)
-            .await
-            .expect("second session should promote");
+        let second_session = create_test_session(&store).await;
+        let second_session =
+            promote_test_session(&store, second_session.id, user_id, "second session").await;
         let second_owner = OwnerScope::from_session(&second_session);
 
         let saved = store
@@ -1934,10 +1953,14 @@ mod integration_tests {
                 deleted_at: None,
                 payload: json!({ "key": "theme", "value": "dark" }),
             })
-            .await;
+            .await
+            .expect("sync entity should save");
         assert!(saved);
 
-        let pulled = store.list_sync_entities_since(second_owner, 0, 100).await;
+        let pulled = store
+            .list_sync_entities_since(second_owner, 0, 100)
+            .await
+            .expect("second owner sync entities should list");
         assert_eq!(pulled.len(), 1);
         assert_eq!(pulled[0].item_id, "settings.theme");
         assert_eq!(pulled[0].payload["value"], "dark");
@@ -1952,10 +1975,14 @@ mod integration_tests {
                 deleted_at: None,
                 payload: json!({ "key": "theme", "value": "light" }),
             })
-            .await;
+            .await
+            .expect("sync entity should update");
         assert!(updated);
 
-        let pulled = store.list_sync_entities_since(first_owner, 0, 100).await;
+        let pulled = store
+            .list_sync_entities_since(first_owner, 0, 100)
+            .await
+            .expect("first owner sync entities should list");
         assert_eq!(pulled.len(), 1);
         assert_eq!(pulled[0].updated_at, 12);
         assert_eq!(pulled[0].payload["value"], "light");
@@ -1969,11 +1996,8 @@ mod integration_tests {
             return;
         };
         let user_id = Uuid::new_v4();
-        let session = store.create_guest_session().await;
-        let session = store
-            .promote_session_to_registered(session.id, user_id)
-            .await
-            .expect("session should promote");
+        let session = create_test_session(&store).await;
+        let session = promote_test_session(&store, session.id, user_id, "session").await;
 
         store
             .upsert_auth_identity(
@@ -1993,6 +2017,7 @@ mod integration_tests {
                 Some("https://example.com/google.png".to_owned()),
             )
             .await
+            .expect("profile should seed query")
             .expect("profile should seed");
         assert_eq!(profile.display_name, "Google Name");
         assert_eq!(
@@ -2007,6 +2032,7 @@ mod integration_tests {
                 Some("https://example.com/custom.png".to_owned()),
             )
             .await
+            .expect("profile should update query")
             .expect("profile should update");
         assert_eq!(updated.display_name, "Custom Name");
         assert_eq!(
@@ -2021,6 +2047,7 @@ mod integration_tests {
                 Some("https://example.com/new-google.png".to_owned()),
             )
             .await
+            .expect("profile should remain custom query")
             .expect("profile should remain custom");
         assert_eq!(profile.display_name, "Custom Name");
         assert_eq!(

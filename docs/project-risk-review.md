@@ -73,32 +73,7 @@ Fix before public deployment or before storing sensitive user data.
 
 ## High Risks
 
-### 2. Database Errors Are Often Hidden
-
-File:
-
-- `apps/api/src/store.rs`
-
-Several store operations ignore query results with `let _ = ...` or convert errors into `None`, `false`, or empty lists. This keeps the app from crashing in local development, but it makes production failures hard to detect.
-
-Risk examples:
-
-- Insert silently fails but the API returns optimistic data.
-- A query fails and the UI receives an empty list, making real data look deleted.
-- Operational issues become invisible until users report missing data.
-
-Recommended fix:
-
-- Make store methods return `Result<T, sqlx::Error>` or a domain-specific store error.
-- Convert expected not-found cases explicitly.
-- Log unexpected database errors with enough context.
-- Avoid returning empty lists for failed queries unless that behavior is intentional and documented.
-
-Priority:
-
-Fix progressively, starting with chat writes, auth/session writes, attachments, and sync commits.
-
-### 3. No Rate Limiting or Abuse Controls
+### 2. No Rate Limiting or Abuse Controls
 
 Files:
 
@@ -128,7 +103,7 @@ Fix before exposing the API publicly.
 
 ## Medium Risks
 
-### 4. Migration System Is Ad Hoc
+### 3. Migration System Is Ad Hoc
 
 Files:
 
@@ -148,7 +123,7 @@ Priority:
 
 Fix before multiple deployed environments exist.
 
-### 5. No CI Gate Found
+### 4. No CI Gate Found
 
 Files:
 
@@ -173,7 +148,7 @@ Priority:
 
 Fix before accepting outside contributions or making larger changes.
 
-### 6. No Frontend Lint/Format Gate
+### 5. No Frontend Lint/Format Gate
 
 Files:
 
@@ -192,7 +167,7 @@ Priority:
 
 Medium for team development, low for solo work.
 
-### 7. Sync Has Known Missing E2E Coverage
+### 6. Sync Has Known Missing E2E Coverage
 
 Files:
 
@@ -215,7 +190,7 @@ Priority:
 
 Medium, especially before changing sync logic.
 
-### 8. Profile Avatar URL Is Not Strictly Validated
+### 7. Profile Avatar URL Is Not Strictly Validated
 
 Files:
 
@@ -236,7 +211,7 @@ Medium if profiles are public or shared. Low if only local/personal.
 
 ## Low Risks
 
-### 9. Bundle Size Should Be Watched
+### 8. Bundle Size Should Be Watched
 
 Files:
 
@@ -255,7 +230,7 @@ Priority:
 
 Low.
 
-### 10. Test Output Contains Expected Error Logs
+### 9. Test Output Contains Expected Error Logs
 
 Files:
 
@@ -272,7 +247,7 @@ Priority:
 
 Low.
 
-### 11. Some Future/Scaffolded Providers Are Present
+### 10. Some Future/Scaffolded Providers Are Present
 
 Files:
 
@@ -333,10 +308,9 @@ The number and focus of tests are strong for an MVP:
 
 ### Phase 2: Reliability and Operations
 
-1. Stop swallowing important database errors.
-2. Adopt a migration system.
-3. Add CI for tests, build, fmt, and clippy.
-4. Add frontend lint/format checks.
+1. Adopt a migration system.
+2. Add CI for tests, build, fmt, and clippy.
+3. Add frontend lint/format checks.
 
 ### Phase 3: Maintainability and Polish
 
@@ -353,7 +327,6 @@ The main gap is not that the system is poorly built. The main gap is that it has
 
 - session security
 - rate limiting
-- database error visibility
 - migration and CI discipline
 
 After those are addressed, this project can move from strong MVP quality toward production-ready quality.

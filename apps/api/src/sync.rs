@@ -82,14 +82,14 @@ async fn sync_changes(
     let session = state
         .store
         .ensure_session(session_id_from_headers(&headers))
-        .await;
+        .await?;
     let owner = OwnerScope::from_session(&session);
     let cursor = query.cursor.unwrap_or(0);
     let limit = query.limit.unwrap_or(100).clamp(1, 500);
     let entities = state
         .store
         .list_sync_entities_since(owner, cursor, limit)
-        .await;
+        .await?;
     let mut next_cursor = cursor;
     let items = entities
         .into_iter()
@@ -116,7 +116,7 @@ async fn sync_preview(
     let session = state
         .store
         .ensure_session(session_id_from_headers(&headers))
-        .await;
+        .await?;
     let owner = OwnerScope::from_session(&session);
     let mut to_create = 0_u32;
     let mut to_update = 0_u32;
@@ -133,7 +133,7 @@ async fn sync_preview(
             state
                 .store
                 .get_sync_entity_updated_at(owner, &item.item_id)
-                .await,
+                .await?,
         );
         match action {
             PreviewAction::Create => to_create += 1,
@@ -161,7 +161,7 @@ async fn sync_commit(
     let session = state
         .store
         .ensure_session(session_id_from_headers(&headers))
-        .await;
+        .await?;
     let owner = OwnerScope::from_session(&session);
     let mut merged_count = 0_u32;
     for item in &payload.items {
@@ -180,7 +180,7 @@ async fn sync_commit(
                 deleted_at: item.deleted_at,
                 payload: item.payload.clone(),
             })
-            .await;
+            .await?;
         if saved {
             merged_count += 1;
         }
@@ -195,8 +195,7 @@ async fn sync_commit(
             merged_count,
             0,
         )
-        .await
-        .ok_or_else(|| AppError::BadRequest("could not save sync commit".to_owned()))?;
+        .await?;
 
     Ok(Json(SyncCommitResponse {
         operation_id: commit.operation_id,
@@ -361,7 +360,11 @@ mod tests {
         let Some(state) = test_state().await else {
             return;
         };
-        let session = state.store.create_guest_session().await;
+        let session = state
+            .store
+            .create_guest_session()
+            .await
+            .expect("guest session should create");
         let headers = session_headers(session.id);
         let sync_item = unique_item(100);
 
@@ -420,7 +423,11 @@ mod tests {
         let Some(state) = test_state().await else {
             return;
         };
-        let session = state.store.create_guest_session().await;
+        let session = state
+            .store
+            .create_guest_session()
+            .await
+            .expect("guest session should create");
         let headers = session_headers(session.id);
         let mut existing = unique_item(50);
 
@@ -460,17 +467,27 @@ mod tests {
             return;
         };
         let user_id = Uuid::new_v4();
-        let first_session = state.store.create_guest_session().await;
+        let first_session = state
+            .store
+            .create_guest_session()
+            .await
+            .expect("first guest session should create");
         let first_session = state
             .store
             .promote_session_to_registered(first_session.id, user_id)
             .await
+            .expect("first promotion should query")
             .expect("first session should promote");
-        let second_session = state.store.create_guest_session().await;
+        let second_session = state
+            .store
+            .create_guest_session()
+            .await
+            .expect("second guest session should create");
         let second_session = state
             .store
             .promote_session_to_registered(second_session.id, user_id)
             .await
+            .expect("second promotion should query")
             .expect("second session should promote");
         let sync_item = unique_item(75);
 
@@ -506,7 +523,11 @@ mod tests {
         let Some(state) = test_state().await else {
             return;
         };
-        let session = state.store.create_guest_session().await;
+        let session = state
+            .store
+            .create_guest_session()
+            .await
+            .expect("guest session should create");
 
         let result = sync_commit(
             State(state),

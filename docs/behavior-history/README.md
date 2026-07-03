@@ -28,6 +28,7 @@ Keep one file per subsystem or behavior family:
 - `chat-scroll.md` for chat timeline scrolling, virtualization, jump-to-latest, and active-chat navigation state
 - `chat-sse.md` for chat streaming transport, optimistic streaming state, and SSE fallback behavior
 - `sync-system.md` for sync flow, stale cached data, tombstones, and conflict behavior
+- `backend-persistence.md` for backend store, PostgreSQL persistence, and database error handling decisions
 - `shared-buttons.md` for shared non-icon command button styling and button system decisions
 
 Add a new file only when the change does not fit an existing subsystem.

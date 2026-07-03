@@ -81,14 +81,14 @@ async fn list_memory_facts(
     State(state): State<AppState>,
     headers: HeaderMap,
     Path(persona_id): Path<String>,
-) -> Json<Vec<MemoryFactResponse>> {
+) -> AppResult<Json<Vec<MemoryFactResponse>>> {
     let session = state
         .store
         .ensure_session(session_id_from_headers(&headers))
-        .await;
+        .await?;
     let owner = OwnerScope::from_session(&session);
-    let facts = state.store.list_memory_facts(owner, &persona_id).await;
-    Json(facts.into_iter().map(memory_fact_response).collect())
+    let facts = state.store.list_memory_facts(owner, &persona_id).await?;
+    Ok(Json(facts.into_iter().map(memory_fact_response).collect()))
 }
 
 async fn create_memory_fact(
@@ -107,7 +107,7 @@ async fn create_memory_fact(
     let session = state
         .store
         .ensure_session(session_id_from_headers(&headers))
-        .await;
+        .await?;
     let owner = OwnerScope::from_session(&session);
     let fact = state
         .store
@@ -118,8 +118,7 @@ async fn create_memory_fact(
             confidence,
             payload.source_chat_id,
         )
-        .await
-        .ok_or_else(|| AppError::BadRequest("could not create memory fact".to_owned()))?;
+        .await?;
 
     Ok(Json(memory_fact_response(fact)))
 }
@@ -132,9 +131,9 @@ async fn delete_memory_fact(
     let session = state
         .store
         .ensure_session(session_id_from_headers(&headers))
-        .await;
+        .await?;
     let owner = OwnerScope::from_session(&session);
-    if !state.store.delete_memory_fact(owner, fact_id).await {
+    if !state.store.delete_memory_fact(owner, fact_id).await? {
         return Err(AppError::NotFound);
     }
     Ok(Json(serde_json::json!({ "ok": true })))
@@ -155,7 +154,7 @@ async fn update_memory_fact(
     let session = state
         .store
         .ensure_session(session_id_from_headers(&headers))
-        .await;
+        .await?;
     let owner = OwnerScope::from_session(&session);
     let updated = state
         .store
@@ -165,7 +164,7 @@ async fn update_memory_fact(
             content.to_owned(),
             payload.confidence.unwrap_or(0.7).clamp(0.0, 1.0),
         )
-        .await
+        .await?
         .ok_or(AppError::NotFound)?;
     Ok(Json(memory_fact_response(updated)))
 }
@@ -174,14 +173,19 @@ async fn list_memory_summaries(
     State(state): State<AppState>,
     headers: HeaderMap,
     Path(persona_id): Path<String>,
-) -> Json<Vec<MemorySummaryResponse>> {
+) -> AppResult<Json<Vec<MemorySummaryResponse>>> {
     let session = state
         .store
         .ensure_session(session_id_from_headers(&headers))
-        .await;
+        .await?;
     let owner = OwnerScope::from_session(&session);
-    let summaries = state.store.list_memory_summaries(owner, &persona_id).await;
-    Json(summaries.into_iter().map(memory_summary_response).collect())
+    let summaries = state
+        .store
+        .list_memory_summaries(owner, &persona_id)
+        .await?;
+    Ok(Json(
+        summaries.into_iter().map(memory_summary_response).collect(),
+    ))
 }
 
 async fn create_memory_summary(
@@ -197,7 +201,7 @@ async fn create_memory_summary(
     let session = state
         .store
         .ensure_session(session_id_from_headers(&headers))
-        .await;
+        .await?;
     let owner = OwnerScope::from_session(&session);
     let created = state
         .store
@@ -207,8 +211,7 @@ async fn create_memory_summary(
             summary.to_owned(),
             payload.source_chat_id,
         )
-        .await
-        .ok_or_else(|| AppError::BadRequest("could not create memory summary".to_owned()))?;
+        .await?;
     Ok(Json(memory_summary_response(created)))
 }
 
@@ -220,9 +223,9 @@ async fn delete_memory_summary(
     let session = state
         .store
         .ensure_session(session_id_from_headers(&headers))
-        .await;
+        .await?;
     let owner = OwnerScope::from_session(&session);
-    if !state.store.delete_memory_summary(owner, summary_id).await {
+    if !state.store.delete_memory_summary(owner, summary_id).await? {
         return Err(AppError::NotFound);
     }
     Ok(Json(serde_json::json!({ "ok": true })))
@@ -241,12 +244,12 @@ async fn update_memory_summary(
     let session = state
         .store
         .ensure_session(session_id_from_headers(&headers))
-        .await;
+        .await?;
     let owner = OwnerScope::from_session(&session);
     let updated = state
         .store
         .update_memory_summary(owner, summary_id, summary.to_owned())
-        .await
+        .await?
         .ok_or(AppError::NotFound)?;
     Ok(Json(memory_summary_response(updated)))
 }

@@ -156,6 +156,13 @@ pub async fn cleanup_stale_pending_chat_attachments(config: &Config, store: &Cha
             PENDING_ATTACHMENT_CLEANUP_BATCH_SIZE,
         )
         .await;
+    let attachments = match attachments {
+        Ok(attachments) => attachments,
+        Err(error) => {
+            tracing::error!(error = %error, "failed to mark stale pending chat attachments deleted");
+            return 0;
+        }
+    };
     let count = attachments.len();
 
     for attachment in attachments {
