@@ -1,4 +1,5 @@
 use crate::{
+    ai::providers::openai::chat_completion_temperature,
     config::Config,
     error::{AppError, AppResult},
 };
@@ -155,7 +156,7 @@ impl<'a> VoiceService<'a> {
                         content: text,
                     },
                 ],
-                temperature: 0.2,
+                temperature: chat_completion_temperature(model, 0.2),
                 stream: false,
             })
             .send()
@@ -467,7 +468,8 @@ Return only the Japanese speech text.";
 struct SpeechTextTranslationRequest<'a> {
     model: &'a str,
     messages: Vec<TranslationMessage<'a>>,
-    temperature: f32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    temperature: Option<f32>,
     stream: bool,
 }
 
@@ -995,11 +997,44 @@ mod tests {
         assert!(captured.head.contains("authorization: bearer test-key"));
         assert_eq!(body["model"], "gpt-4.1-mini");
         assert_eq!(body["stream"], false);
+        assert_eq!(body["temperature"], 0.2);
         assert_eq!(body["messages"][1]["role"], "user");
         assert_eq!(
             body["messages"][1]["content"],
             "Hello, this stays displayed in English."
         );
+    }
+
+    #[tokio::test]
+    async fn japanese_translation_policy_omits_temperature_for_gpt_55() {
+        let (base_url, request_handle) = one_response_server(
+            "HTTP/1.1 200 OK",
+            "Content-Type: application/json",
+            br#"{"choices":[{"message":{"content":"\u3053\u3093\u306b\u3061\u306f\u3002"}}]}"#,
+        );
+        let http = Client::new();
+        let mut config = config_with_voice_provider("mock");
+        config.ai_voice_speech_text_policy = "japanese_translation".to_owned();
+        config.ai_provider = "openai".to_owned();
+        config.openai_api_key = Some("test-key".to_owned());
+        config.openai_base_url = base_url;
+        config.openai_model = "gpt-5.5".to_owned();
+        let service = VoiceService::new(&config, &http);
+
+        let speech_text = service
+            .derive_speech_text("Hello, this stays displayed in English.")
+            .await
+            .expect("speech text translation should succeed");
+        let captured = request_handle
+            .join()
+            .expect("mock provider server should capture request");
+        let body: Value =
+            serde_json::from_slice(&captured.body).expect("request body should be json");
+
+        assert_eq!(speech_text, "こんにちは。");
+        assert_eq!(body["model"], "gpt-5.5");
+        assert_eq!(body["stream"], false);
+        assert!(body.get("temperature").is_none());
     }
 
     #[tokio::test]

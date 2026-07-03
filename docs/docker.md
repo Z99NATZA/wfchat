@@ -50,6 +50,8 @@ Voice playback provider requirements:
 - `AI_VOICE_PROVIDER=mock` enables backend-generated mock WAV playback for local UI lifecycle testing
 - `AI_VOICE_PROVIDER=openai` enables OpenAI text-to-speech playback and requires `OPENAI_API_KEY`
 - `AI_VOICE_PROVIDER=voicevox` enables server-side VOICEVOX Engine text-to-speech playback and requires `VOICEVOX_BASE_URL` plus `VOICEVOX_SPEAKER_ID`
+- `OPENAI_MODEL` is the text/chat model and is also used for VOICEVOX
+  `japanese_translation` speech-text generation when `AI_PROVIDER=openai`
 - `AI_VOICE_MODEL` defaults to `gpt-4o-mini-tts`
 - `AI_VOICE_ID` defaults to `marin`
 - `AI_VOICE_FORMAT` supports `mp3` and `wav`
@@ -77,6 +79,11 @@ Voice input transcription provider requirements:
   `OPENAI_API_KEY`
 - `AI_TRANSCRIPTION_MODEL` defaults to `gpt-4o-mini-transcribe`
 - `AI_TRANSCRIPTION_PROMPT` is optional provider-side transcription guidance
+
+`OPENAI_MODEL`, `AI_VOICE_MODEL`, and `AI_TRANSCRIPTION_MODEL` target different
+provider endpoint capabilities. A latest text model such as `gpt-5.5` can be
+used for `OPENAI_MODEL`, but voice playback and transcription should keep
+audio-specific model ids supported by their respective endpoints.
 
 Unknown transcription provider values fail at startup.
 

@@ -249,6 +249,10 @@ Translation rules for `japanese_translation`:
 - Return only Japanese speech text from the translation step.
 - Treat Markdown, code blocks, URLs, and tables as spoken content that may need
   summarizing or cleanup before TTS.
+- Use the configured text/chat model compatibility rules for translation
+  request parameters. For text models that require provider defaults, omit
+  unsupported custom parameters such as `temperature` instead of failing speech
+  playback.
 
 VOICEVOX adapter rules:
 
@@ -374,10 +378,21 @@ OpenAI voice configuration:
 
 - `OPENAI_API_KEY`: required when `AI_VOICE_PROVIDER=openai`
 - `OPENAI_BASE_URL`: defaults to `https://api.openai.com/v1`
+- `OPENAI_MODEL`: backend text/chat model. It is also used by the
+  `japanese_translation` speech-text step when `AI_PROVIDER=openai`; it may be
+  a latest text model such as `gpt-5.5`.
 - `AI_VOICE_MODEL`: defaults to `gpt-4o-mini-tts`
 - `AI_VOICE_ID`: defaults to `marin`
 - `AI_VOICE_FORMAT`: app-supported values are `mp3` and `wav`
 - `AI_VOICE_INSTRUCTIONS`: optional provider-side voice guidance
+
+`OPENAI_MODEL`, `AI_VOICE_MODEL`, and `AI_TRANSCRIPTION_MODEL` are separate
+capability-specific settings. Do not copy the latest text model into the voice
+or transcription model fields unless the provider explicitly supports that
+model on the target audio endpoint.
+The `japanese_translation` speech-text step follows the same text-model
+temperature compatibility behavior as normal OpenAI chat requests, so latest
+text models that reject custom temperature can still be used as `OPENAI_MODEL`.
 
 Shared voice text configuration:
 

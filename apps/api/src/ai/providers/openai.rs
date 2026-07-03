@@ -61,7 +61,7 @@ pub async fn complete_chat_completions(
         .json(&ChatCompletionRequest {
             model: provider.model,
             messages: build_messages(provider.ai_profile_id, messages),
-            temperature: chat_completion_temperature(provider.model),
+            temperature: chat_completion_temperature(provider.model, 0.8),
             stream: false,
         })
         .send()
@@ -147,7 +147,7 @@ where
         .json(&ChatCompletionRequest {
             model: provider.model,
             messages: build_messages(provider.ai_profile_id, messages),
-            temperature: chat_completion_temperature(provider.model),
+            temperature: chat_completion_temperature(provider.model, 0.8),
             stream: true,
         })
         .send()
@@ -410,11 +410,11 @@ fn role_name(role: &AiRole) -> &'static str {
     }
 }
 
-fn chat_completion_temperature(model: &str) -> Option<f32> {
+pub(crate) fn chat_completion_temperature(model: &str, temperature: f32) -> Option<f32> {
     if model == "gpt-5.5" || model.starts_with("gpt-5.5-") {
         None
     } else {
-        Some(0.8)
+        Some(temperature)
     }
 }
 
@@ -661,7 +661,7 @@ mod tests {
         let request = ChatCompletionRequest {
             model: "gpt-5.5",
             messages: build_messages("aiko_default", &messages),
-            temperature: chat_completion_temperature("gpt-5.5"),
+            temperature: chat_completion_temperature("gpt-5.5", 0.8),
             stream: false,
         };
 
@@ -677,7 +677,7 @@ mod tests {
         let request = ChatCompletionRequest {
             model: "gpt-4.1-mini",
             messages: build_messages("aiko_default", &messages),
-            temperature: chat_completion_temperature("gpt-4.1-mini"),
+            temperature: chat_completion_temperature("gpt-4.1-mini", 0.8),
             stream: false,
         };
 

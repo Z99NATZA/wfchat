@@ -1,5 +1,51 @@
 # Chat Voice Behavior History
 
+## 2026-07-03 - Keep latest text models compatible with speech translation
+
+Status: Active
+
+Previous behavior:
+- The VOICEVOX `japanese_translation` speech-text path always sent
+  `temperature: 0.2` to the configured chat completion provider.
+- Normal OpenAI chat requests already omitted custom temperature for
+  `gpt-5.5`, but the speech translation path did not.
+
+Problem observed:
+- With `OPENAI_MODEL=gpt-5.5`, assistant speech playback failed before reaching
+  VOICEVOX because OpenAI rejected the translation request's custom
+  temperature value.
+
+Decision:
+- Share the OpenAI text-model temperature compatibility helper between normal
+  chat requests and speech-text translation.
+- Keep `temperature: 0.2` for translation models that support it.
+- Omit `temperature` for `gpt-5.5` and `gpt-5.5-*` so those latest text models
+  can be used as `OPENAI_MODEL` without breaking voice playback.
+- Keep `AI_VOICE_MODEL` and `AI_TRANSCRIPTION_MODEL` separate from
+  `OPENAI_MODEL` because audio endpoints require audio-specific model ids.
+
+Why:
+- The app should be able to use the latest text model for chat and speech-text
+  translation while preserving the backend-owned voice provider boundary.
+- Voice playback should not fail just because the configured text model
+  requires provider-default generation parameters.
+
+Regression guard:
+- `apps/api/src/voice.rs` verifies `gpt-4.1-mini` translation requests still
+  send `temperature: 0.2`.
+- `apps/api/src/voice.rs` verifies `gpt-5.5` translation requests omit
+  `temperature`.
+- `apps/api/src/ai/providers/openai.rs` keeps normal chat completion coverage
+  for the same compatibility rule.
+
+Related current contract:
+- `docs/chat-voice.md`
+- `docs/docker.md`
+
+Related implementation:
+- `apps/api/src/voice.rs`
+- `apps/api/src/ai/providers/openai.rs`
+
 ## 2026-06-28 - Keep push-to-talk recording UI layout-stable
 
 Status: Active
