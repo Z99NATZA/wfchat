@@ -355,6 +355,9 @@ POST /api/chats/:chat_id/messages/:message_id/speech
 
 Request behavior:
 
+- Enforce the assistant-speech rate-limit bucket before resolving the message
+  or calling the configured voice provider. Exceeded requests return `429 Too
+  Many Requests` with the normal JSON error body.
 - Resolve the message by `chat_id` and `message_id`.
 - Verify the caller owns the chat/session.
 - Allow speech only for assistant messages with non-empty final text.
@@ -419,6 +422,9 @@ POST /api/chat/transcription
 
 Request behavior:
 
+- Enforce the user-transcription rate-limit bucket before reading the multipart
+  audio body or calling the configured transcription provider. Exceeded
+  requests return `429 Too Many Requests` with the normal JSON error body.
 - Verify or create the caller's session.
 - Accept a multipart audio file field named `file` or `audio`.
 - Reject missing, empty, or oversized audio.

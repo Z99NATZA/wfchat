@@ -25,7 +25,7 @@ If measured against a stricter public SaaS production bar:
 These checks passed during review:
 
 - Frontend tests: 162 passed
-- Backend tests: 91 passed
+- Backend tests: 100 passed
 - Frontend production build: passed
 
 Approximate source size excluding dependencies/build output:
@@ -71,39 +71,9 @@ Priority:
 
 Fix before public deployment or before storing sensitive user data.
 
-## High Risks
-
-### 2. No Rate Limiting or Abuse Controls
-
-Files:
-
-- `apps/api/src/chat.rs`
-- `apps/api/src/voice.rs`
-- `apps/api/src/attachments.rs`
-
-Endpoints that can create cost or load do not appear to have rate limits:
-
-- Chat completion and streaming
-- Text-to-speech
-- Speech transcription
-- Image upload
-
-This is acceptable for local use, but risky for any public endpoint because provider costs and CPU/storage load can grow quickly.
-
-Recommended fix:
-
-- Add per-session and per-IP rate limits.
-- Use stricter limits for speech, transcription, and upload.
-- Add request size/time limits where missing.
-- Return `429 Too Many Requests` with a simple error body.
-
-Priority:
-
-Fix before exposing the API publicly.
-
 ## Medium Risks
 
-### 3. Migration System Is Ad Hoc
+### 2. Migration System Is Ad Hoc
 
 Files:
 
@@ -123,7 +93,7 @@ Priority:
 
 Fix before multiple deployed environments exist.
 
-### 4. No CI Gate Found
+### 3. No CI Gate Found
 
 Files:
 
@@ -148,7 +118,7 @@ Priority:
 
 Fix before accepting outside contributions or making larger changes.
 
-### 5. No Frontend Lint/Format Gate
+### 4. No Frontend Lint/Format Gate
 
 Files:
 
@@ -167,7 +137,7 @@ Priority:
 
 Medium for team development, low for solo work.
 
-### 6. Sync Has Known Missing E2E Coverage
+### 5. Sync Has Known Missing E2E Coverage
 
 Files:
 
@@ -190,7 +160,7 @@ Priority:
 
 Medium, especially before changing sync logic.
 
-### 7. Profile Avatar URL Is Not Strictly Validated
+### 6. Profile Avatar URL Is Not Strictly Validated
 
 Files:
 
@@ -211,7 +181,7 @@ Medium if profiles are public or shared. Low if only local/personal.
 
 ## Low Risks
 
-### 8. Bundle Size Should Be Watched
+### 7. Bundle Size Should Be Watched
 
 Files:
 
@@ -230,7 +200,7 @@ Priority:
 
 Low.
 
-### 9. Test Output Contains Expected Error Logs
+### 8. Test Output Contains Expected Error Logs
 
 Files:
 
@@ -247,7 +217,7 @@ Priority:
 
 Low.
 
-### 10. Some Future/Scaffolded Providers Are Present
+### 9. Some Future/Scaffolded Providers Are Present
 
 Files:
 
@@ -304,7 +274,6 @@ The number and focus of tests are strong for an MVP:
 ### Phase 1: Public Deployment Blockers
 
 1. Harden session handling and reduce reliance on browser-readable session ids.
-2. Add rate limits to chat, voice, transcription, and upload endpoints.
 
 ### Phase 2: Reliability and Operations
 
@@ -326,7 +295,6 @@ WFChat has a better foundation than the phrase "vibe coding" suggests. The proje
 The main gap is not that the system is poorly built. The main gap is that it has not yet been hardened around production boundaries:
 
 - session security
-- rate limiting
 - migration and CI discipline
 
 After those are addressed, this project can move from strong MVP quality toward production-ready quality.

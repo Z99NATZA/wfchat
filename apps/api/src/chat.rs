@@ -28,6 +28,7 @@ use crate::{
     },
     characters,
     error::{AppError, AppResult},
+    rate_limit::{RateLimitFamily, RateLimitIdentity},
     state::AppState,
     store::{ChatAttachmentRecord, ChatRecord, NewChatAttachmentRecord, OwnerScope, StoredMessage},
     voice::{SpeechAudioStreamBody, VoiceService},
@@ -239,6 +240,7 @@ async fn upload_chat_attachment(
     headers: HeaderMap,
     mut multipart: Multipart,
 ) -> AppResult<Json<ChatAttachmentResponse>> {
+    enforce_sensitive_rate_limit(&state, &headers, RateLimitFamily::ImageUpload)?;
     let session = state
         .store
         .ensure_session(session_id_from_headers(&headers))
@@ -434,6 +436,7 @@ async fn send_message(
     Path(chat_id): Path<Uuid>,
     Json(payload): Json<SendMessageRequest>,
 ) -> AppResult<Json<SendMessageResponse>> {
+    enforce_sensitive_rate_limit(&state, &headers, RateLimitFamily::ChatMessages)?;
     let session = state
         .store
         .ensure_session(session_id_from_headers(&headers))
@@ -461,6 +464,7 @@ async fn stream_message(
     Path(chat_id): Path<Uuid>,
     Json(payload): Json<SendMessageRequest>,
 ) -> AppResult<impl IntoResponse> {
+    enforce_sensitive_rate_limit(&state, &headers, RateLimitFamily::ChatMessages)?;
     let session = state
         .store
         .ensure_session(session_id_from_headers(&headers))
@@ -570,6 +574,7 @@ async fn synthesize_message_speech(
     headers: HeaderMap,
     Path((chat_id, message_id)): Path<(Uuid, Uuid)>,
 ) -> AppResult<impl IntoResponse> {
+    enforce_sensitive_rate_limit(&state, &headers, RateLimitFamily::AssistantSpeech)?;
     let session = state
         .store
         .ensure_session(session_id_from_headers(&headers))
@@ -628,6 +633,7 @@ async fn transcribe_user_speech(
     headers: HeaderMap,
     mut multipart: Multipart,
 ) -> AppResult<impl IntoResponse> {
+    enforce_sensitive_rate_limit(&state, &headers, RateLimitFamily::UserTranscription)?;
     let _session = state
         .store
         .ensure_session(session_id_from_headers(&headers))
@@ -708,6 +714,16 @@ fn session_id_from_headers(headers: &HeaderMap) -> Option<Uuid> {
         .get("x-wfchat-session")
         .and_then(|value| value.to_str().ok())
         .and_then(|value| Uuid::parse_str(value).ok())
+}
+
+fn enforce_sensitive_rate_limit(
+    state: &AppState,
+    headers: &HeaderMap,
+    family: RateLimitFamily,
+) -> AppResult<()> {
+    state
+        .rate_limiter
+        .check(family, RateLimitIdentity::from_request(headers))
 }
 
 fn chat_response(chat: ChatRecord) -> ChatResponse {
@@ -1050,6 +1066,7 @@ mod tests {
         app::build_router,
         attachments::cleanup_stale_pending_chat_attachments,
         config::Config,
+        rate_limit::{RateLimitPolicies, RateLimitPolicy, RateLimiter},
         store::{ChatStore, SessionRecord},
     };
 
@@ -1161,6 +1178,52 @@ mod tests {
         assert_eq!(persisted.messages.len(), 2);
         assert_eq!(persisted.messages[0].content, "hello stream");
         assert_eq!(persisted.messages[1].content, assistant_content);
+
+        let _ = state.store.delete_chat(owner, chat.id).await;
+    }
+
+    #[tokio::test]
+    async fn chat_message_rate_limit_returns_json_429_for_send_and_stream() {
+        let Some(mut state) = test_state().await else {
+            return;
+        };
+        state.rate_limiter = RateLimiter::new(RateLimitPolicies::default().with_family_limit(
+            RateLimitFamily::ChatMessages,
+            RateLimitPolicy::per_minute(1),
+        ));
+        let session = create_test_session(&state).await;
+        let owner = OwnerScope::from_session(&session);
+        let chat = create_test_chat(&state, owner).await;
+        let app = build_router(state.clone());
+
+        let response = app
+            .clone()
+            .oneshot(chat_message_request(
+                "POST",
+                &format!("/api/chats/{}/messages", chat.id),
+                session.id,
+                "hello",
+            ))
+            .await
+            .expect("first request should run");
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let response = app
+            .oneshot(chat_message_request(
+                "POST",
+                &format!("/api/chats/{}/messages/stream", chat.id),
+                session.id,
+                "hello again",
+            ))
+            .await
+            .expect("second request should run");
+
+        assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
+        let body = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("body should collect");
+        let payload: Value = serde_json::from_slice(&body).expect("error response should be json");
+        assert_eq!(payload["error"].as_str(), Some("too many requests"));
 
         let _ = state.store.delete_chat(owner, chat.id).await;
     }
@@ -1478,6 +1541,63 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn synthesize_message_speech_endpoint_rate_limits_by_session() {
+        let Some(mut state) = test_state().await else {
+            return;
+        };
+        state.rate_limiter = RateLimiter::new(RateLimitPolicies::default().with_family_limit(
+            RateLimitFamily::AssistantSpeech,
+            RateLimitPolicy::per_minute(1),
+        ));
+        let session = create_test_session(&state).await;
+        let owner = OwnerScope::from_session(&session);
+        let chat = create_test_chat(&state, owner).await;
+        let user_message = StoredMessage::from_ai_message(AiMessage::user("hello".to_owned()));
+        let assistant_message =
+            StoredMessage::from_ai_message(AiMessage::assistant("hello back".to_owned()));
+        state
+            .store
+            .append_chat_messages(owner, chat.id, user_message, assistant_message.clone())
+            .await
+            .expect("messages should append");
+        let app = build_router(state.clone());
+        let uri = format!(
+            "/api/chats/{}/messages/{}/speech",
+            chat.id, assistant_message.id
+        );
+
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri(&uri)
+                    .header("x-wfchat-session", session.id.to_string())
+                    .body(Body::empty())
+                    .expect("request should build"),
+            )
+            .await
+            .expect("first speech request should run");
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri(&uri)
+                    .header("x-wfchat-session", session.id.to_string())
+                    .body(Body::empty())
+                    .expect("request should build"),
+            )
+            .await
+            .expect("second speech request should run");
+
+        assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
+
+        let _ = state.store.delete_chat(owner, chat.id).await;
+    }
+
+    #[tokio::test]
     async fn synthesize_message_speech_endpoint_rejects_user_messages() {
         let Some(state) = test_state().await else {
             return;
@@ -1548,6 +1668,34 @@ mod tests {
         let payload: Value =
             serde_json::from_slice(&body).expect("transcription response should be json");
         assert_eq!(payload["text"], "Mock voice transcript");
+    }
+
+    #[tokio::test]
+    async fn transcribe_user_speech_endpoint_rate_limits_by_session() {
+        let Some(mut state) = test_state().await else {
+            return;
+        };
+        state.rate_limiter = RateLimiter::new(RateLimitPolicies::default().with_family_limit(
+            RateLimitFamily::UserTranscription,
+            RateLimitPolicy::per_minute(1),
+        ));
+        let session = create_test_session(&state).await;
+        let app = build_router(state);
+        let boundary = "wfchat-test-boundary";
+
+        let response = app
+            .clone()
+            .oneshot(transcription_request(boundary, session.id))
+            .await
+            .expect("first transcription request should run");
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let response = app
+            .oneshot(transcription_request(boundary, session.id))
+            .await
+            .expect("second transcription request should run");
+
+        assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
     }
 
     #[tokio::test]
@@ -1639,6 +1787,65 @@ mod tests {
             .expect("request should build");
         let response = app.oneshot(request).await.expect("request should run");
         assert_eq!(response.status(), StatusCode::OK);
+
+        let _ = tokio::fs::remove_dir_all(upload_dir).await;
+    }
+
+    #[tokio::test]
+    async fn upload_chat_attachment_endpoint_rate_limits_by_session() {
+        let Some(mut state) = test_state().await else {
+            return;
+        };
+        state.rate_limiter = RateLimiter::new(
+            RateLimitPolicies::default()
+                .with_family_limit(RateLimitFamily::ImageUpload, RateLimitPolicy::per_minute(1)),
+        );
+        let session = create_test_session(&state).await;
+        let upload_dir = state.config.chat_attachment_upload_dir.clone();
+        let app = build_router(state);
+
+        let response = app
+            .clone()
+            .oneshot(upload_png_request(session.id))
+            .await
+            .expect("first upload request should run");
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let response = app
+            .oneshot(upload_png_request(session.id))
+            .await
+            .expect("second upload request should run");
+
+        assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
+
+        let _ = tokio::fs::remove_dir_all(upload_dir).await;
+    }
+
+    #[tokio::test]
+    async fn upload_chat_attachment_rate_limit_falls_back_to_ip_without_session_header() {
+        let Some(mut state) = test_state().await else {
+            return;
+        };
+        state.rate_limiter = RateLimiter::new(
+            RateLimitPolicies::default()
+                .with_family_limit(RateLimitFamily::ImageUpload, RateLimitPolicy::per_minute(1)),
+        );
+        let upload_dir = state.config.chat_attachment_upload_dir.clone();
+        let app = build_router(state);
+
+        let response = app
+            .clone()
+            .oneshot(upload_png_request_with_ip("203.0.113.50"))
+            .await
+            .expect("first upload request should run");
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let response = app
+            .oneshot(upload_png_request_with_ip("203.0.113.50"))
+            .await
+            .expect("second upload request should run");
+
+        assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
 
         let _ = tokio::fs::remove_dir_all(upload_dir).await;
     }
@@ -1949,6 +2156,7 @@ mod tests {
                 chat_attachment_max_pixels: 20_000_000,
             },
             http: Client::new(),
+            rate_limiter: RateLimiter::default(),
             store,
         })
     }
@@ -1991,8 +2199,20 @@ mod tests {
     }
 
     async fn upload_png_attachment(app: Router, session_id: Uuid) -> Value {
+        let response = app
+            .oneshot(upload_png_request(session_id))
+            .await
+            .expect("request should run");
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("body should collect");
+        serde_json::from_slice(&body).expect("upload response should be json")
+    }
+
+    fn upload_png_request(session_id: Uuid) -> Request<Body> {
         let boundary = "wfchat-image-upload";
-        let request = Request::builder()
+        Request::builder()
             .method("POST")
             .uri("/api/chat/attachments")
             .header(
@@ -2001,13 +2221,52 @@ mod tests {
             )
             .header("x-wfchat-session", session_id.to_string())
             .body(Body::from(multipart_file_body(boundary, &png_bytes(2, 3))))
-            .expect("request should build");
-        let response = app.oneshot(request).await.expect("request should run");
-        assert_eq!(response.status(), StatusCode::OK);
-        let body = to_bytes(response.into_body(), usize::MAX)
-            .await
-            .expect("body should collect");
-        serde_json::from_slice(&body).expect("upload response should be json")
+            .expect("request should build")
+    }
+
+    fn upload_png_request_with_ip(ip: &str) -> Request<Body> {
+        let boundary = "wfchat-image-upload";
+        Request::builder()
+            .method("POST")
+            .uri("/api/chat/attachments")
+            .header(
+                header::CONTENT_TYPE,
+                format!("multipart/form-data; boundary={boundary}"),
+            )
+            .header("x-forwarded-for", ip)
+            .body(Body::from(multipart_file_body(boundary, &png_bytes(2, 3))))
+            .expect("request should build")
+    }
+
+    fn chat_message_request(
+        method: &str,
+        uri: &str,
+        session_id: Uuid,
+        content: &str,
+    ) -> Request<Body> {
+        Request::builder()
+            .method(method)
+            .uri(uri)
+            .header(header::CONTENT_TYPE, "application/json")
+            .header("x-wfchat-session", session_id.to_string())
+            .body(Body::from(json!({ "content": content }).to_string()))
+            .expect("request should build")
+    }
+
+    fn transcription_request(boundary: &str, session_id: Uuid) -> Request<Body> {
+        let body = format!(
+            "--{boundary}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"voice.webm\"\r\nContent-Type: audio/webm\r\n\r\nfake-audio\r\n--{boundary}--\r\n"
+        );
+        Request::builder()
+            .method("POST")
+            .uri("/api/chat/transcription")
+            .header(
+                header::CONTENT_TYPE,
+                format!("multipart/form-data; boundary={boundary}"),
+            )
+            .header("x-wfchat-session", session_id.to_string())
+            .body(Body::from(body))
+            .expect("request should build")
     }
 
     fn uploaded_attachment_id(payload: Value) -> Uuid {

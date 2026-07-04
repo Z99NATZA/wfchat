@@ -17,6 +17,8 @@ pub enum AppError {
     Ai(String),
     #[error("database error")]
     Database,
+    #[error("too many requests")]
+    RateLimited,
 }
 
 #[derive(Serialize)]
@@ -45,6 +47,7 @@ impl IntoResponse for AppError {
             AppError::BadRequest(_) => StatusCode::BAD_REQUEST,
             AppError::Ai(_) => StatusCode::BAD_GATEWAY,
             AppError::Database => StatusCode::INTERNAL_SERVER_ERROR,
+            AppError::RateLimited => StatusCode::TOO_MANY_REQUESTS,
         };
 
         let body = Json(ErrorBody {

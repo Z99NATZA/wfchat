@@ -66,6 +66,10 @@ X-WFChat-Session: <session uuid>
 
 This should be read with `fetch()` and `ReadableStream` on the frontend, not `EventSource`, because the current API needs a request body and custom session header.
 
+The streaming route shares the chat-message rate-limit bucket with the regular
+send route. If that bucket is exceeded, the backend returns `429 Too Many
+Requests` with the normal JSON error body before opening an SSE stream.
+
 ### Persistence
 
 Keep the current persistence rule for the first pass:

@@ -85,6 +85,11 @@ This clears message history for the current chat while keeping the chat id and g
 
 `config.rs` reads environment variables into one typed config.
 
+`rate_limit.rs` owns in-memory fixed-window abuse controls for
+cost/load-sensitive API endpoint families. Chat send and chat SSE streaming
+share one session/IP bucket. Assistant speech, user speech transcription, and
+image attachment upload use separate stricter buckets.
+
 `state.rs` stores shared dependencies such as config and the HTTP client.
 
 `error.rs` maps application errors into HTTP responses.
@@ -124,6 +129,28 @@ turning unexpected failures into optimistic success, not-found, `false`, or
 empty lists. Route handlers should convert expected missing rows into `404 Not
 Found` and let real database failures reach the API error boundary as a logged
 `500 database error`.
+
+## Rate Limiting
+
+The backend applies in-memory fixed-window rate limits before expensive work on
+these endpoint families:
+
+- `POST /api/chats/:chat_id/messages` and
+  `POST /api/chats/:chat_id/messages/stream`: 20 requests per minute.
+- `POST /api/chats/:chat_id/messages/:message_id/speech`: 10 requests per
+  minute.
+- `POST /api/chat/transcription`: 6 requests per minute.
+- `POST /api/chat/attachments`: 12 requests per minute.
+
+Rate-limit keys prefer `X-WFChat-Session` when present. If no valid session
+header is available, the limiter falls back to the client IP reported by
+`X-Forwarded-For` or `X-Real-IP`, then to a shared unknown-client bucket. When a
+bucket is exceeded, the route returns `429 Too Many Requests` using the normal
+JSON error body:
+
+```json
+{ "error": "too many requests" }
+```
 
 ## Auth Model
 

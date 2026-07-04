@@ -91,6 +91,13 @@ Request fields:
 
 - `file`: image file bytes.
 
+Rate limiting:
+
+- The upload route enforces the image-upload rate-limit bucket before reading
+  multipart image bytes.
+- Exceeded requests return `429 Too Many Requests` with the normal JSON error
+  body.
+
 Response:
 
 ```json

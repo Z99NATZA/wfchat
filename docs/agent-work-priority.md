@@ -4,15 +4,15 @@ Use this file as the first document to read before starting a new scoped agent t
 
 ## Active Scope
 
-No active scoped task. Add the next priority here.
+No active scoped task.
 
 ## Required Read Order
 
-When a new priority is set, list any required documents here in read order.
+- None.
 
 ## Required Outcome
 
-No active scoped task. Define expected outcomes for the next priority here.
+- None.
 
 ## Notes
 

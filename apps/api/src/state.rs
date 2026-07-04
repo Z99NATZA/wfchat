@@ -6,6 +6,7 @@ use crate::{
         cleanup_stale_pending_chat_attachments, PENDING_ATTACHMENT_CLEANUP_INTERVAL_SECONDS,
     },
     config::Config,
+    rate_limit::RateLimiter,
     store::ChatStore,
 };
 
@@ -13,6 +14,7 @@ use crate::{
 pub struct AppState {
     pub config: Config,
     pub http: Client,
+    pub rate_limiter: RateLimiter,
     pub store: ChatStore,
 }
 
@@ -24,6 +26,7 @@ impl AppState {
         Ok(Self {
             config,
             http: Client::new(),
+            rate_limiter: RateLimiter::default(),
             store,
         })
     }
