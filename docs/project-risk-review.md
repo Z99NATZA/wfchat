@@ -56,13 +56,15 @@ Files:
 
 - `apps/api/db/init.sql`
 - `apps/api/src/store.rs`
+- `docs/database-migrations.md`
 
 The project uses PostgreSQL, but schema management is split between `init.sql` and in-code migration SQL. This works for local development but becomes fragile as schema changes grow.
 
 Recommended fix:
 
-- Adopt `sqlx migrate` or another migration tool.
-- Store migrations as ordered files.
+- Follow the migration rollout in `docs/database-migrations.md`.
+- Adopt `sqlx migrate` or another ordered migration tool.
+- Store migrations as ordered files and treat them as canonical.
 - Run migrations during startup or deployment.
 - Keep `init.sql` only as a bootstrap helper if needed.
 

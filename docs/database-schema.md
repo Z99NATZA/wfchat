@@ -1,6 +1,7 @@
 # Database Schema
 
-This project uses PostgreSQL with schema SQL at `apps/api/db/init.sql`.
+This project uses PostgreSQL. The current schema reference is below; migration
+ownership is tracked separately in `docs/database-migrations.md`.
 
 ## Tables
 

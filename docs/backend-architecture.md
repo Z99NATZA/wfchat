@@ -122,7 +122,10 @@ image attachment upload use separate stricter buckets.
 
 `uuid`: ids for chats, users, sessions, and messages.
 
-The current backend uses PostgreSQL through `sqlx`. Local and deployed environments should provide `DATABASE_URL`; `apps/api/db/init.sql` and the startup migration code keep the schema available for development.
+The current backend uses PostgreSQL through `sqlx`. Local and deployed
+environments should provide `DATABASE_URL`. Database migration ownership and the
+planned move away from ad hoc startup schema SQL are tracked in
+`docs/database-migrations.md`.
 
 Store methods should propagate PostgreSQL errors as `Result` values instead of
 turning unexpected failures into optimistic success, not-found, `false`, or

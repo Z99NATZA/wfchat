@@ -125,7 +125,9 @@ This exposes the frontend-only `Load QA` action at `http://localhost:5173/chat?q
 
 ## Database Init Options
 
-Single schema SQL lives at `apps/api/db/init.sql`.
+Database migration ownership is tracked in `docs/database-migrations.md`.
+Until ordered migrations replace the current bootstrap flow, single schema SQL
+lives at `apps/api/db/init.sql`.
 
 Apply manually:
 
