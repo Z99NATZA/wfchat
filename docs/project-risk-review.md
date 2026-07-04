@@ -17,15 +17,15 @@ Estimated current quality split:
 
 If measured against a stricter public SaaS production bar:
 
-- Strengths: 65%
-- Risks and gaps: 35%
+- Strengths: 70%
+- Risks and gaps: 30%
 
 ## Verification Snapshot
 
 These checks passed during review:
 
-- Frontend tests: 162 passed
-- Backend tests: 100 passed
+- Frontend tests: 164 passed
+- Backend tests: 107 passed
 - Frontend production build: passed
 
 Approximate source size excluding dependencies/build output:
@@ -46,34 +46,11 @@ Severity definitions used in this review:
 
 ## Critical Risks
 
-### 1. Session Model Is Weaker Than It Looks
-
-Files:
-
-- `apps/api/src/auth.rs`
-- `apps/web/src/features/chat/services/chatApiService.ts`
-- `apps/web/src/services/authService.ts`
-
-The backend sets an `HttpOnly` cookie named `wfchat_session`, but most request ownership is resolved from the `X-WFChat-Session` header. The frontend stores this session id in browser storage and sends it on API calls.
-
-This means the system does not get the full protection benefit of an `HttpOnly` cookie. If an XSS issue appears later, JavaScript can read the stored session id and impersonate that browser session.
-
-Recommended fix:
-
-- Prefer cookie-first auth on the backend.
-- Parse `wfchat_session` from the cookie when the header is absent.
-- Consider removing localStorage/session header usage for authenticated flows.
-- If the header must stay for LAN/local compatibility, document it as a fallback and protect it carefully.
-- Add `Secure` when running behind HTTPS.
-- Consider `SameSite=Lax` or `Strict` depending on Google login and deployment needs.
-
-Priority:
-
-Fix before public deployment or before storing sensitive user data.
+No open critical risks are currently tracked in this review.
 
 ## Medium Risks
 
-### 2. Migration System Is Ad Hoc
+### 1. Migration System Is Ad Hoc
 
 Files:
 
@@ -93,7 +70,7 @@ Priority:
 
 Fix before multiple deployed environments exist.
 
-### 3. No CI Gate Found
+### 2. No CI Gate Found
 
 Files:
 
@@ -118,7 +95,7 @@ Priority:
 
 Fix before accepting outside contributions or making larger changes.
 
-### 4. No Frontend Lint/Format Gate
+### 3. No Frontend Lint/Format Gate
 
 Files:
 
@@ -137,7 +114,7 @@ Priority:
 
 Medium for team development, low for solo work.
 
-### 5. Sync Has Known Missing E2E Coverage
+### 4. Sync Has Known Missing E2E Coverage
 
 Files:
 
@@ -160,7 +137,7 @@ Priority:
 
 Medium, especially before changing sync logic.
 
-### 6. Profile Avatar URL Is Not Strictly Validated
+### 5. Profile Avatar URL Is Not Strictly Validated
 
 Files:
 
@@ -181,7 +158,7 @@ Medium if profiles are public or shared. Low if only local/personal.
 
 ## Low Risks
 
-### 7. Bundle Size Should Be Watched
+### 6. Bundle Size Should Be Watched
 
 Files:
 
@@ -200,7 +177,7 @@ Priority:
 
 Low.
 
-### 8. Test Output Contains Expected Error Logs
+### 7. Test Output Contains Expected Error Logs
 
 Files:
 
@@ -217,7 +194,7 @@ Priority:
 
 Low.
 
-### 9. Some Future/Scaffolded Providers Are Present
+### 8. Some Future/Scaffolded Providers Are Present
 
 Files:
 
@@ -271,17 +248,13 @@ The number and focus of tests are strong for an MVP:
 
 ## Recommended Fix Order
 
-### Phase 1: Public Deployment Blockers
-
-1. Harden session handling and reduce reliance on browser-readable session ids.
-
-### Phase 2: Reliability and Operations
+### Phase 1: Reliability and Operations
 
 1. Adopt a migration system.
 2. Add CI for tests, build, fmt, and clippy.
 3. Add frontend lint/format checks.
 
-### Phase 3: Maintainability and Polish
+### Phase 2: Maintainability and Polish
 
 1. Add browser E2E tests for sync and auth flows.
 2. Validate profile avatar URLs.
@@ -292,9 +265,9 @@ The number and focus of tests are strong for an MVP:
 
 WFChat has a better foundation than the phrase "vibe coding" suggests. The project already has real product structure, a reasonable backend boundary, meaningful tests, Docker runtime, and several security-conscious choices.
 
-The main gap is not that the system is poorly built. The main gap is that it has not yet been hardened around production boundaries:
+The main gap is not that the system is poorly built. The main gap is that it still needs more production discipline around:
 
-- session security
 - migration and CI discipline
+- browser-level E2E coverage for sync/auth flows
 
 After those are addressed, this project can move from strong MVP quality toward production-ready quality.
