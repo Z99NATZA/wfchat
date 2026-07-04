@@ -122,9 +122,10 @@ image attachment upload use separate stricter buckets.
 
 `uuid`: ids for chats, users, sessions, and messages.
 
-The current backend uses PostgreSQL through `sqlx`. Local and deployed
-environments should provide `DATABASE_URL`. Database migration ownership and the
-planned move away from ad hoc startup schema SQL are tracked in
+The backend uses PostgreSQL through `sqlx`. Local and deployed environments
+should provide `DATABASE_URL`. `ChatStore::connect()` applies embedded SQLx
+migrations before the store is returned, so normal request handling starts only
+after pending migrations have completed. Migration ownership is tracked in
 `docs/database-migrations.md`.
 
 Store methods should propagate PostgreSQL errors as `Result` values instead of

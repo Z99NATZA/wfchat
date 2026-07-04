@@ -42,6 +42,10 @@ cargo fmt --check
 cargo clippy --manifest-path apps/api/Cargo.toml -- -D warnings
 ```
 
+The API test job should provide a fresh PostgreSQL service and set
+`WFCHAT_TEST_DATABASE_URL` so backend tests exercise startup migrations and
+database-backed flows.
+
 If a check is intentionally skipped, document the reason in the workflow or in
 the implementation notes.
 

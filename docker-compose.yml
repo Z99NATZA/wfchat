@@ -50,8 +50,6 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      db-init:
-        condition: service_completed_successfully
       voicevox:
         condition: service_started
     restart: unless-stopped
@@ -61,18 +59,6 @@ services:
     ports:
       - "50021:50021"
     restart: unless-stopped
-
-  db-init:
-    image: postgres:16-alpine
-    environment:
-      DATABASE_URL: postgres://postgres:postgres@postgres:5432/wfchat
-    volumes:
-      - ./apps/api/db/init.sql:/sql/init.sql:ro
-    depends_on:
-      postgres:
-        condition: service_healthy
-    command: ["sh", "-c", "psql \"$$DATABASE_URL\" -v ON_ERROR_STOP=1 -f /sql/init.sql"]
-    restart: "no"
 
   web:
     build:

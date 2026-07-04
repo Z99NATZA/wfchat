@@ -1,7 +1,8 @@
 # Database Schema
 
-This project uses PostgreSQL. The current schema reference is below; migration
-ownership is tracked separately in `docs/database-migrations.md`.
+This project uses PostgreSQL. Ordered migration files under
+`apps/api/migrations/` are the canonical schema source; this document is the
+human-readable schema reference.
 
 ## Tables
 

@@ -1,31 +1,29 @@
 # Database Migrations
 
-Status: planned
+Status: implemented
 
-This document tracks the intended migration path for WFChat's PostgreSQL schema.
-It exists because schema ownership is currently split between
-`apps/api/db/init.sql` and startup SQL in `apps/api/src/store.rs`.
+This document tracks WFChat's PostgreSQL migration policy. Ordered migration
+files under `apps/api/migrations/` are the canonical schema source.
 
 ## Current State
 
-WFChat currently keeps the database usable through two mechanisms:
+WFChat applies embedded SQLx migrations during API startup through
+`ChatStore::connect()`.
 
-- `apps/api/db/init.sql` defines a full schema that can be applied manually or
-  through the Docker `db-init` job.
-- `Store::migrate()` in `apps/api/src/store.rs` runs idempotent `create table if
-  not exists`, `alter table ... add column if not exists`, and
-  `create index if not exists` SQL at API startup.
+Current migration files:
 
-This is acceptable for local development and disposable databases. It becomes
-fragile once the project has long-lived data, multiple deployed environments, or
-schema changes that need ordering, backfills, or rollback planning.
+- `apps/api/migrations/202607040001_initial_schema.sql`
+
+`apps/api/db/init.sql` is retained only as a legacy/manual bootstrap helper. Do
+not treat it as canonical, and do not add new schema changes there unless it is
+being regenerated from migrations.
 
 ## Risk
 
-The main risk is schema drift:
+The migration system exists to avoid schema drift:
 
 - A fresh database created from `init.sql` may not match an upgraded database
-  that has only seen startup migration SQL.
+  that has seen ordered migrations.
 - Schema changes can be hard to audit because they are embedded in application
   code.
 - Deployment order is unclear when a change needs both a schema migration and
@@ -35,66 +33,46 @@ The main risk is schema drift:
 
 ## Target State
 
-Use an ordered migration system as the source of truth.
+Use ordered SQLx migrations as the source of truth.
 
-Recommended default:
-
-- Use `sqlx migrate` because the backend already uses `sqlx`.
 - Store migration files under `apps/api/migrations/`.
 - Keep migration files append-only after they have been applied to any shared or
   deployed database.
-- Run migrations before serving API traffic, either from API startup or the
-  deployment process.
-- Keep `apps/api/db/init.sql` only as a bootstrap convenience if it remains
-  useful for local Docker flows.
+- Run migrations before serving API traffic.
+- Fail API startup if a migration fails.
+- Keep `apps/api/db/init.sql` only as a non-canonical convenience if it remains
+  useful.
 
-## Proposed Rollout
+## Implementation
 
-### Phase 1: Baseline Migration
-
-Create the initial migration from the current effective schema.
-
-Suggested file:
+The baseline migration is:
 
 ```text
 apps/api/migrations/202607040001_initial_schema.sql
 ```
 
-The migration should include the schema currently represented by:
+It includes:
 
-- `apps/api/db/init.sql`
-- `Store::migrate()` in `apps/api/src/store.rs`
+- current table definitions
+- current indexes
+- compatibility `alter table ... add column if not exists` statements for
+  existing local databases
+- existing owner backfills for registered-user account data
 
-The baseline migration should be tested against a fresh empty PostgreSQL
-database.
+`Store::migrate()` has been removed. `ChatStore::connect()` now calls the SQLx
+migration runner before returning a usable store.
 
-### Phase 2: Startup Integration
+Docker Compose no longer runs a separate `db-init` service. The API container
+waits for PostgreSQL to be healthy, then applies embedded migrations during API
+startup.
 
-Replace ad hoc startup schema creation with the migration runner.
+CI starts a PostgreSQL service for the API job and sets
+`WFCHAT_TEST_DATABASE_URL`, so `cargo test` exercises the migration path against
+a fresh database.
 
-Expected behavior:
+## Operating Rules
 
-- API startup applies pending migrations or fails fast with a clear error.
-- Failed migrations stop the API from serving traffic.
-- Store methods continue to assume the schema exists after startup completes.
-
-### Phase 3: Bootstrap Cleanup
-
-Decide what to do with `apps/api/db/init.sql`.
-
-Recommended options:
-
-- Remove it if `sqlx migrate run` fully replaces the Docker `db-init` path.
-- Or keep it as a generated/local bootstrap helper and clearly document that
-  migration files are canonical.
-
-Do not maintain two independent schema sources long term.
-
-### Phase 4: Operating Rules
-
-After migration support exists:
-
-- Every schema change gets a new migration file.
+- Every future schema change gets a new migration file.
 - Migrations are reviewed with the application code that depends on them.
 - Risky migrations are split into expand/backfill/contract steps when needed.
 - CI should run migrations against an empty database before backend tests.
@@ -107,11 +85,10 @@ Migration work is complete when:
 - A fresh database can be created only from ordered migration files.
 - An existing development database can be upgraded by running the same migration
   command.
-- API startup or deployment reliably applies pending migrations before normal
-  request handling.
+- API startup applies pending migrations before normal request handling.
 - `database-schema.md` matches the schema produced by migrations.
 - Docker documentation points to the migration flow as the canonical path.
-- No new schema SQL is added to `Store::migrate()`.
+- No schema SQL is embedded in store startup code.
 
 ## Non-Goals
 

@@ -125,25 +125,19 @@ This exposes the frontend-only `Load QA` action at `http://localhost:5173/chat?q
 
 ## Database Init Options
 
-Database migration ownership is tracked in `docs/database-migrations.md`.
-Until ordered migrations replace the current bootstrap flow, single schema SQL
-lives at `apps/api/db/init.sql`.
+The API applies embedded SQLx migrations during startup. Docker Compose waits
+for PostgreSQL to become healthy, then starts the API; no separate database init
+container is required.
 
-Apply manually:
+Migration ownership is tracked in `docs/database-migrations.md`. Ordered files
+under `apps/api/migrations/` are canonical.
+
+For local manual bootstrap only, legacy schema SQL remains at
+`apps/api/db/init.sql`:
 
 ```bash
 psql "postgres://postgres:postgres@localhost:5432/wfchat" -v ON_ERROR_STOP=1 -f apps/api/db/init.sql
 ```
 
-Apply with Docker job:
-
-```bash
-docker compose up -d postgres
-docker compose run --rm db-init
-```
-
-This `db-init` container can target any reachable PostgreSQL by overriding `DATABASE_URL`:
-
-```bash
-docker compose run --rm -e DATABASE_URL="postgres://USER:PASS@HOST:5432/DB" db-init
-```
+Do not add future schema changes only to `init.sql`; add a new migration file
+instead.

@@ -5,6 +5,7 @@ WORKDIR /app
 
 COPY Cargo.toml Cargo.lock ./
 COPY apps/api/Cargo.toml apps/api/Cargo.toml
+COPY apps/api/migrations apps/api/migrations
 COPY apps/api/src apps/api/src
 
 RUN cargo build --release --manifest-path apps/api/Cargo.toml

@@ -38,6 +38,21 @@ jobs:
     name: API
     runs-on: ubuntu-latest
 
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: wfchat_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d wfchat_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
     defaults:
       run:
         working-directory: apps/api
@@ -50,6 +65,8 @@ jobs:
         run: rustup component add rustfmt clippy
 
       - name: Run API tests
+        env:
+          WFCHAT_TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/wfchat_test
         run: cargo test
 
       - name: Check Rust formatting

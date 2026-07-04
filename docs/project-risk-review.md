@@ -52,25 +52,29 @@ No open critical risks are currently tracked in this review.
 
 ### 1. Migration System Is Ad Hoc
 
+Status: addressed after this review.
+
 Files:
 
 - `apps/api/db/init.sql`
 - `apps/api/src/store.rs`
+- `apps/api/migrations/202607040001_initial_schema.sql`
 - `docs/database-migrations.md`
 
-The project uses PostgreSQL, but schema management is split between `init.sql` and in-code migration SQL. This works for local development but becomes fragile as schema changes grow.
+The project previously used PostgreSQL schema management split between
+`init.sql` and in-code migration SQL. This has been replaced by ordered SQLx
+migrations under `apps/api/migrations/`, applied during API startup.
 
-Recommended fix:
+Follow-up:
 
-- Follow the migration rollout in `docs/database-migrations.md`.
-- Adopt `sqlx migrate` or another ordered migration tool.
-- Store migrations as ordered files and treat them as canonical.
-- Run migrations during startup or deployment.
-- Keep `init.sql` only as a bootstrap helper if needed.
+- Keep migration files canonical.
+- Add every future schema change as a new ordered migration.
+- Keep `init.sql` as a legacy/manual bootstrap helper only if it remains useful.
 
 Priority:
 
-Fix before multiple deployed environments exist.
+Done for the current schema. Continue following the operating rules in
+`docs/database-migrations.md`.
 
 ### 2. CI Enforcement Depends on Branch Protection
 
@@ -252,9 +256,8 @@ The number and focus of tests are strong for an MVP:
 
 ### Phase 1: Reliability and Operations
 
-1. Adopt a migration system.
-2. Add CI for tests, build, fmt, and clippy.
-3. Add frontend lint/format checks.
+1. Enforce CI through branch protection and deployment gates.
+2. Add frontend lint/format checks.
 
 ### Phase 2: Maintainability and Polish
 
