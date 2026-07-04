@@ -6,10 +6,10 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use uuid::Uuid;
 
 use crate::{
     error::{AppError, AppResult},
+    session::session_id_from_headers,
     state::AppState,
     store::{OwnerScope, SyncEntityRecord},
 };
@@ -205,13 +205,6 @@ async fn sync_commit(
     }))
 }
 
-fn session_id_from_headers(headers: &HeaderMap) -> Option<Uuid> {
-    headers
-        .get("x-wfchat-session")
-        .and_then(|value| value.to_str().ok())
-        .and_then(|value| Uuid::parse_str(value).ok())
-}
-
 fn is_valid_item(item: &SyncItemInput) -> bool {
     !item.item_id.trim().is_empty() && !item.item_type.trim().is_empty() && item.updated_at > 0
 }
@@ -241,6 +234,7 @@ mod tests {
     use crate::config::Config;
     use axum::extract::State;
     use serde_json::json;
+    use uuid::Uuid;
 
     fn item(updated_at: u64) -> SyncItemInput {
         SyncItemInput {

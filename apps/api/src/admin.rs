@@ -1,10 +1,10 @@
 use axum::{extract::State, http::HeaderMap, routing::get, Json, Router};
 use serde::Serialize;
-use uuid::Uuid;
 
 use crate::{
     characters,
     error::{AppError, AppResult},
+    session::session_id_from_headers,
     state::AppState,
     store::UserKind,
 };
@@ -72,28 +72,6 @@ async fn require_admin_session(state: &AppState, headers: &HeaderMap) -> AppResu
     }
 }
 
-fn session_id_from_headers(headers: &HeaderMap) -> Option<Uuid> {
-    headers
-        .get("x-wfchat-session")
-        .and_then(|value| value.to_str().ok())
-        .and_then(|value| Uuid::parse_str(value).ok())
-        .or_else(|| session_id_from_cookie(headers))
-}
-
-fn session_id_from_cookie(headers: &HeaderMap) -> Option<Uuid> {
-    headers
-        .get(axum::http::header::COOKIE)
-        .and_then(|value| value.to_str().ok())
-        .and_then(|cookies| {
-            cookies.split(';').find_map(|cookie| {
-                let (name, value) = cookie.trim().split_once('=')?;
-                (name == "wfchat_session")
-                    .then(|| Uuid::parse_str(value).ok())
-                    .flatten()
-            })
-        })
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -103,6 +81,7 @@ mod tests {
     };
     use serde_json::Value;
     use tower::ServiceExt;
+    use uuid::Uuid;
 
     use crate::{app::build_router, config::Config};
 

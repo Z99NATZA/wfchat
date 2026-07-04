@@ -27,7 +27,7 @@ import {
 } from "@/services/syncService";
 import type { ChatMessage, ChatSessionSummary, MemoryFact, MemorySummary } from "@/types/chat";
 
-const sessionStorageKey = "wfchat.sessionId";
+const sessionCookieReadyKey = "wfchat.sessionCookieReady";
 const syncQueueStorageKey = "wfchat-sync-queue";
 const syncCursorStorageKey = "wfchat-sync-cursor";
 const syncMetaStorageKey = "wfchat-sync-meta";
@@ -64,6 +64,7 @@ function readQueue(): SyncQueueOperation[] {
 beforeEach(() => {
 	installLocalStorageMock();
 	window.localStorage.clear();
+	window.sessionStorage.clear();
 	apiClientMock.get.mockReset();
 	apiClientMock.post.mockReset();
 	vi.restoreAllMocks();
@@ -73,11 +74,12 @@ beforeEach(() => {
 afterEach(() => {
 	vi.restoreAllMocks();
 	window.localStorage.clear();
+	window.sessionStorage.clear();
 });
 
 describe("syncService account sync flows", () => {
 	it("enqueues mounted state, flushes it, then pulls account changes", async () => {
-		window.localStorage.setItem(sessionStorageKey, "session-1");
+		window.sessionStorage.setItem(sessionCookieReadyKey, "true");
 		window.localStorage.setItem(themeStorageKey, "dark");
 		window.localStorage.setItem(fontStorageKey, "inter");
 		window.localStorage.setItem(localeStorageKey, "th");
@@ -231,8 +233,7 @@ describe("syncService account sync flows", () => {
 					expect.objectContaining({ item_id: "memory.fact.fact-1" }),
 					expect.objectContaining({ item_id: "chat.message.chat-1.message-1" })
 				])
-			}),
-			{ headers: { "X-WFChat-Session": "session-1" } }
+			})
 		);
 		expect(appliedCount).toBe(7);
 		expect(window.localStorage.getItem(themeStorageKey)).toBe("light");
@@ -264,7 +265,7 @@ describe("syncService account sync flows", () => {
 	});
 
 	it("keeps a failed flush queued and marks retry state", async () => {
-		window.localStorage.setItem(sessionStorageKey, "session-1");
+		window.sessionStorage.setItem(sessionCookieReadyKey, "true");
 		window.localStorage.setItem(themeStorageKey, "dark");
 		apiClientMock.post.mockRejectedValueOnce(new Error("network down"));
 		vi.spyOn(Math, "random").mockReturnValue(0);
@@ -281,7 +282,7 @@ describe("syncService account sync flows", () => {
 	});
 
 	it("keeps newer local settings when an older cloud pull arrives", async () => {
-		window.localStorage.setItem(sessionStorageKey, "session-1");
+		window.sessionStorage.setItem(sessionCookieReadyKey, "true");
 		window.localStorage.setItem(themeStorageKey, "dark");
 		window.localStorage.setItem(fontStorageKey, "inter");
 		window.localStorage.setItem(localeStorageKey, "th");
@@ -350,7 +351,7 @@ describe("syncService account sync flows", () => {
 	});
 
 	it("pulls tombstones and removes cached chat and memory items", async () => {
-		window.localStorage.setItem(sessionStorageKey, "session-1");
+		window.sessionStorage.setItem(sessionCookieReadyKey, "true");
 		window.localStorage.setItem(
 			memoryFactsCacheKey,
 			JSON.stringify([

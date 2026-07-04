@@ -6,7 +6,10 @@ use std::{
 };
 use uuid::Uuid;
 
-use crate::error::{AppError, AppResult};
+use crate::{
+    error::{AppError, AppResult},
+    session::session_id_from_headers,
+};
 
 const DEFAULT_WINDOW: Duration = Duration::from_secs(60);
 
@@ -156,13 +159,6 @@ struct RateLimitKey {
 struct RateLimitBucket {
     window_started_at: Instant,
     count: u32,
-}
-
-fn session_id_from_headers(headers: &HeaderMap) -> Option<Uuid> {
-    headers
-        .get("x-wfchat-session")
-        .and_then(|value| value.to_str().ok())
-        .and_then(|value| Uuid::parse_str(value).ok())
 }
 
 fn client_ip_from_request(headers: &HeaderMap) -> String {

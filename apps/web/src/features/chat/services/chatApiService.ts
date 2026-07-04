@@ -1,6 +1,6 @@
 import { AxiosError } from "axios";
 import { apiBaseUrl, apiClient } from "@/services/apiClient";
-import { readStorageItem, writeStorageItem } from "@/services/storageService";
+import { ensureCookieSession } from "@/services/sessionService";
 import type {
 	ChatMessage,
 	ChatMessageAttachment,
@@ -10,12 +10,6 @@ import type {
 	MemorySummary
 } from "@/types/chat";
 import { formatMessageTime } from "@/utils/date";
-
-const sessionStorageKey = "wfchat.sessionId";
-
-type ApiSessionResponse = {
-	session_id: string;
-};
 
 type ApiMessageRole = "user" | "assistant" | "system";
 
@@ -158,18 +152,14 @@ type ApiMemorySummary = {
 };
 
 export async function listPersonaChats(characterId: string): Promise<ChatSessionSummary[]> {
-	const sessionId = await ensureGuestSession();
-	const response = await apiClient.get<ApiChat[]>(`/api/personas/${characterId}/chats`, {
-		headers: sessionHeaders(sessionId)
-	});
+	await ensureCookieSession();
+	const response = await apiClient.get<ApiChat[]>(`/api/personas/${characterId}/chats`);
 	return response.data.map(toSessionSummary);
 }
 
 export async function createPersonaChat(characterId: string): Promise<{ chatId: string; messages: ChatMessage[] }> {
-	const sessionId = await ensureGuestSession();
-	const response = await apiClient.post<ApiChat>(`/api/personas/${characterId}/chats`, undefined, {
-		headers: sessionHeaders(sessionId)
-	});
+	await ensureCookieSession();
+	const response = await apiClient.post<ApiChat>(`/api/personas/${characterId}/chats`);
 	return {
 		chatId: response.data.id,
 		messages: response.data.messages.map(toChatMessage)
@@ -177,10 +167,8 @@ export async function createPersonaChat(characterId: string): Promise<{ chatId: 
 }
 
 export async function getChat(chatId: string): Promise<{ chatId: string; messages: ChatMessage[] }> {
-	const sessionId = await ensureGuestSession();
-	const response = await apiClient.get<ApiChat>(`/api/chats/${chatId}`, {
-		headers: sessionHeaders(sessionId)
-	});
+	await ensureCookieSession();
+	const response = await apiClient.get<ApiChat>(`/api/chats/${chatId}`);
 	return {
 		chatId: response.data.id,
 		messages: response.data.messages.map(toChatMessage)
@@ -192,11 +180,10 @@ export async function sendChatMessage(
 	content: string,
 	attachments: SendChatMessageAttachment[] = []
 ): Promise<ChatMessage[]> {
-	const sessionId = await ensureGuestSession();
+	await ensureCookieSession();
 	const response = await apiClient.post<ApiSendMessageResponse>(
 		`/api/chats/${chatId}/messages`,
-		messageRequestBody(content, attachments),
-		{ headers: sessionHeaders(sessionId) }
+		messageRequestBody(content, attachments)
 	);
 
 	return response.data.messages.map(toChatMessage);
@@ -208,12 +195,11 @@ export async function streamChatMessage(
 	attachments: SendChatMessageAttachment[],
 	handlers: StreamChatMessageHandlers
 ): Promise<void> {
-	const sessionId = await ensureGuestSession();
+	await ensureCookieSession();
 	const response = await fetch(apiUrl(`/api/chats/${chatId}/messages/stream`), {
 		method: "POST",
 		credentials: "include",
 		headers: {
-			...sessionHeaders(sessionId),
 			Accept: "text/event-stream",
 			"Content-Type": "application/json"
 		},
@@ -249,15 +235,12 @@ export async function streamChatMessage(
 }
 
 export async function uploadChatImageAttachment(file: File): Promise<ChatMessageAttachment> {
-	const sessionId = await ensureGuestSession();
+	await ensureCookieSession();
 	const formData = new FormData();
 	formData.append("file", file, file.name || "image");
 	const response = await fetch(apiUrl("/api/chat/attachments"), {
 		method: "POST",
 		credentials: "include",
-		headers: {
-			...sessionHeaders(sessionId)
-		},
 		body: formData
 	});
 
@@ -269,13 +252,10 @@ export async function uploadChatImageAttachment(file: File): Promise<ChatMessage
 }
 
 export async function deleteChatAttachment(attachmentId: string): Promise<void> {
-	const sessionId = await ensureGuestSession();
+	await ensureCookieSession();
 	const response = await fetch(apiUrl(`/api/chat/attachments/${attachmentId}`), {
 		method: "DELETE",
-		credentials: "include",
-		headers: {
-			...sessionHeaders(sessionId)
-		}
+		credentials: "include"
 	});
 
 	if (!response.ok && response.status !== 404) {
@@ -284,13 +264,10 @@ export async function deleteChatAttachment(attachmentId: string): Promise<void> 
 }
 
 export async function fetchChatAttachmentPreview(attachmentId: string): Promise<Blob> {
-	const sessionId = await ensureGuestSession();
+	await ensureCookieSession();
 	const response = await fetch(apiUrl(`/api/chat/attachments/${attachmentId}/preview`), {
 		method: "GET",
-		credentials: "include",
-		headers: {
-			...sessionHeaders(sessionId)
-		}
+		credentials: "include"
 	});
 
 	if (!response.ok) {
@@ -301,19 +278,15 @@ export async function fetchChatAttachmentPreview(attachmentId: string): Promise<
 }
 
 export async function clearChatMessages(chatId: string): Promise<ChatMessage[]> {
-	const sessionId = await ensureGuestSession();
-	const response = await apiClient.delete<ApiChat>(`/api/chats/${chatId}/messages`, {
-		headers: sessionHeaders(sessionId)
-	});
+	await ensureCookieSession();
+	const response = await apiClient.delete<ApiChat>(`/api/chats/${chatId}/messages`);
 
 	return response.data.messages.map(toChatMessage);
 }
 
 export async function deleteChat(chatId: string): Promise<void> {
-	const sessionId = await ensureGuestSession();
-	await apiClient.delete(`/api/chats/${chatId}`, {
-		headers: sessionHeaders(sessionId)
-	});
+	await ensureCookieSession();
+	await apiClient.delete(`/api/chats/${chatId}`);
 }
 
 export async function getChatUiConfig(): Promise<{
@@ -349,16 +322,13 @@ export async function transcribeUserSpeech(
 	audio: Blob,
 	options: { signal?: AbortSignal } = {}
 ): Promise<string> {
-	const sessionId = await ensureGuestSession();
+	await ensureCookieSession();
 	const formData = new FormData();
 	const upload = normalizeSpeechAudioForUpload(audio);
 	formData.append("file", upload.audio, upload.filename);
 	const response = await fetch(apiUrl("/api/chat/transcription"), {
 		method: "POST",
 		credentials: "include",
-		headers: {
-			...sessionHeaders(sessionId)
-		},
 		body: formData,
 		signal: options.signal
 	});
@@ -399,13 +369,10 @@ export async function fetchAssistantMessageSpeech(
 	messageId: string,
 	options: { signal?: AbortSignal } = {}
 ): Promise<Response> {
-	const sessionId = await ensureGuestSession();
+	await ensureCookieSession();
 	const response = await fetch(apiUrl(`/api/chats/${chatId}/messages/${messageId}/speech`), {
 		method: "POST",
 		credentials: "include",
-		headers: {
-			...sessionHeaders(sessionId)
-		},
 		signal: options.signal
 	});
 
@@ -417,10 +384,8 @@ export async function fetchAssistantMessageSpeech(
 }
 
 export async function listMemoryFacts(characterId: string): Promise<MemoryFact[]> {
-	const sessionId = await ensureGuestSession();
-	const response = await apiClient.get<ApiMemoryFact[]>(`/api/personas/${characterId}/memory/facts`, {
-		headers: sessionHeaders(sessionId)
-	});
+	await ensureCookieSession();
+	const response = await apiClient.get<ApiMemoryFact[]>(`/api/personas/${characterId}/memory/facts`);
 	return response.data.map(toMemoryFact);
 }
 
@@ -430,20 +395,17 @@ export async function createMemoryFact(
 	confidence?: number,
 	sourceChatId?: string
 ): Promise<MemoryFact> {
-	const sessionId = await ensureGuestSession();
+	await ensureCookieSession();
 	const response = await apiClient.post<ApiMemoryFact>(
 		`/api/personas/${characterId}/memory/facts`,
-		{ content, confidence, source_chat_id: sourceChatId },
-		{ headers: sessionHeaders(sessionId) }
+		{ content, confidence, source_chat_id: sourceChatId }
 	);
 	return toMemoryFact(response.data);
 }
 
 export async function deleteMemoryFact(factId: string): Promise<void> {
-	const sessionId = await ensureGuestSession();
-	await apiClient.delete(`/api/memory/facts/${factId}`, {
-		headers: sessionHeaders(sessionId)
-	});
+	await ensureCookieSession();
+	await apiClient.delete(`/api/memory/facts/${factId}`);
 }
 
 export async function updateMemoryFact(
@@ -451,23 +413,17 @@ export async function updateMemoryFact(
 	content: string,
 	confidence?: number
 ): Promise<MemoryFact> {
-	const sessionId = await ensureGuestSession();
+	await ensureCookieSession();
 	const response = await apiClient.patch<ApiMemoryFact>(
 		`/api/memory/facts/${factId}`,
-		{ content, confidence },
-		{ headers: sessionHeaders(sessionId) }
+		{ content, confidence }
 	);
 	return toMemoryFact(response.data);
 }
 
 export async function listMemorySummaries(characterId: string): Promise<MemorySummary[]> {
-	const sessionId = await ensureGuestSession();
-	const response = await apiClient.get<ApiMemorySummary[]>(
-		`/api/personas/${characterId}/memory/summaries`,
-		{
-			headers: sessionHeaders(sessionId)
-		}
-	);
+	await ensureCookieSession();
+	const response = await apiClient.get<ApiMemorySummary[]>(`/api/personas/${characterId}/memory/summaries`);
 	return response.data.map(toMemorySummary);
 }
 
@@ -476,49 +432,26 @@ export async function createMemorySummary(
 	summary: string,
 	sourceChatId?: string
 ): Promise<MemorySummary> {
-	const sessionId = await ensureGuestSession();
+	await ensureCookieSession();
 	const response = await apiClient.post<ApiMemorySummary>(
 		`/api/personas/${characterId}/memory/summaries`,
-		{ summary, source_chat_id: sourceChatId },
-		{ headers: sessionHeaders(sessionId) }
+		{ summary, source_chat_id: sourceChatId }
 	);
 	return toMemorySummary(response.data);
 }
 
 export async function deleteMemorySummary(summaryId: string): Promise<void> {
-	const sessionId = await ensureGuestSession();
-	await apiClient.delete(`/api/memory/summaries/${summaryId}`, {
-		headers: sessionHeaders(sessionId)
-	});
+	await ensureCookieSession();
+	await apiClient.delete(`/api/memory/summaries/${summaryId}`);
 }
 
 export async function updateMemorySummary(summaryId: string, summary: string): Promise<MemorySummary> {
-	const sessionId = await ensureGuestSession();
+	await ensureCookieSession();
 	const response = await apiClient.patch<ApiMemorySummary>(
 		`/api/memory/summaries/${summaryId}`,
-		{ summary },
-		{ headers: sessionHeaders(sessionId) }
+		{ summary }
 	);
 	return toMemorySummary(response.data);
-}
-
-async function ensureGuestSession(): Promise<string> {
-	const existingSessionId = readStorageItem(sessionStorageKey);
-
-	if (existingSessionId) {
-		return existingSessionId;
-	}
-
-	const response = await apiClient.post<ApiSessionResponse>("/api/auth/guest");
-	writeStorageItem(sessionStorageKey, response.data.session_id);
-
-	return response.data.session_id;
-}
-
-function sessionHeaders(sessionId: string) {
-	return {
-		"X-WFChat-Session": sessionId
-	};
 }
 
 function toChatMessage(message: ApiMessage): ChatMessage {

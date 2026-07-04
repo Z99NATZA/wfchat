@@ -11,7 +11,7 @@ import {
 } from "@/features/chat/services/chatApiService";
 import { apiClient } from "@/services/apiClient";
 
-const sessionStorageKey = "wfchat.sessionId";
+const sessionCookieReadyKey = "wfchat.sessionCookieReady";
 
 describe("chat SSE parser", () => {
 	it("parses events split across chunks", () => {
@@ -105,11 +105,13 @@ describe("chat image attachment send boundary", () => {
 	beforeEach(() => {
 		installLocalStorageMock();
 		window.localStorage.clear();
-		window.localStorage.setItem(sessionStorageKey, "session-1");
+		window.sessionStorage.clear();
+		window.sessionStorage.setItem(sessionCookieReadyKey, "true");
 	});
 
 	afterEach(() => {
 		window.localStorage.clear();
+		window.sessionStorage.clear();
 		vi.unstubAllGlobals();
 		vi.restoreAllMocks();
 	});
@@ -144,8 +146,7 @@ describe("chat image attachment send boundary", () => {
 		expect(init?.method).toBe("POST");
 		expect(init?.headers).toMatchObject({
 			Accept: "text/event-stream",
-			"Content-Type": "application/json",
-			"X-WFChat-Session": "session-1"
+			"Content-Type": "application/json"
 		});
 		expect(JSON.parse(init?.body as string)).toEqual({
 			content: "",
@@ -178,8 +179,7 @@ describe("chat image attachment send boundary", () => {
 			{
 				content: "please describe this",
 				attachments: [{ id: "attachment-2", kind: "image" }]
-			},
-			{ headers: { "X-WFChat-Session": "session-1" } }
+			}
 		);
 		const requestBody = JSON.stringify(postSpy.mock.calls[0][1]);
 		expectSendBodyToExcludeUnsafeImagePayload(requestBody);

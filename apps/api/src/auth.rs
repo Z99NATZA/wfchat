@@ -9,6 +9,7 @@ use uuid::Uuid;
 
 use crate::{
     error::{AppError, AppResult},
+    session::{session_cookie, session_id_from_headers},
     state::AppState,
     store::UserKind,
 };
@@ -43,10 +44,7 @@ async fn create_guest_session(
 ) -> AppResult<(HeaderMap, Json<SessionResponse>)> {
     let session = state.store.create_guest_session().await?;
     let mut headers = HeaderMap::new();
-    let cookie = format!(
-        "wfchat_session={}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000",
-        session.id
-    );
+    let cookie = session_cookie(&state.config, session.id);
 
     if let Ok(value) = HeaderValue::from_str(&cookie) {
         headers.insert(SET_COOKIE, value);
@@ -68,7 +66,7 @@ async fn create_guest_session(
 async fn current_user(
     State(state): State<AppState>,
     headers: HeaderMap,
-) -> AppResult<Json<SessionResponse>> {
+) -> AppResult<(HeaderMap, Json<SessionResponse>)> {
     let session = state
         .store
         .ensure_session(session_id_from_headers(&headers))
@@ -80,7 +78,16 @@ async fn current_user(
             .await?;
     }
 
-    Ok(Json(session_response(&state, &session).await?))
+    let mut response_headers = HeaderMap::new();
+    let cookie = session_cookie(&state.config, session.id);
+    if let Ok(value) = HeaderValue::from_str(&cookie) {
+        response_headers.insert(SET_COOKIE, value);
+    }
+
+    Ok((
+        response_headers,
+        Json(session_response(&state, &session).await?),
+    ))
 }
 
 #[derive(Deserialize)]
@@ -151,10 +158,7 @@ async fn promote_with_google_token_info(
         .await?;
 
     let mut response_headers = HeaderMap::new();
-    let cookie = format!(
-        "wfchat_session={}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000",
-        promoted.id
-    );
+    let cookie = session_cookie(&state.config, promoted.id);
     if let Ok(value) = HeaderValue::from_str(&cookie) {
         response_headers.insert(SET_COOKIE, value);
     }
@@ -168,10 +172,7 @@ async fn promote_with_google_token_info(
 async fn logout(State(state): State<AppState>) -> AppResult<(HeaderMap, Json<SessionResponse>)> {
     let guest = state.store.create_guest_session().await?;
     let mut headers = HeaderMap::new();
-    let cookie = format!(
-        "wfchat_session={}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000",
-        guest.id
-    );
+    let cookie = session_cookie(&state.config, guest.id);
     if let Ok(value) = HeaderValue::from_str(&cookie) {
         headers.insert(SET_COOKIE, value);
     }
@@ -256,13 +257,6 @@ async fn verify_google_id_token(
     }
 
     Ok(token_info)
-}
-
-fn session_id_from_headers(headers: &HeaderMap) -> Option<Uuid> {
-    headers
-        .get("x-wfchat-session")
-        .and_then(|value| value.to_str().ok())
-        .and_then(|value| Uuid::parse_str(value).ok())
 }
 
 fn user_kind_label(kind: &UserKind) -> &'static str {
@@ -387,6 +381,17 @@ mod tests {
         headers
     }
 
+    fn cookie_headers(session_id: Uuid) -> HeaderMap {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            axum::http::header::COOKIE,
+            format!("wfchat_session={session_id}")
+                .parse()
+                .expect("cookie should be a valid header value"),
+        );
+        headers
+    }
+
     fn token_info(subject: &str) -> GoogleTokenInfoResponse {
         GoogleTokenInfoResponse {
             aud: "test-client".to_owned(),
@@ -395,6 +400,85 @@ mod tests {
             name: Some("Google User".to_owned()),
             picture: Some("https://example.com/google.png".to_owned()),
         }
+    }
+
+    #[tokio::test]
+    async fn current_user_resolves_cookie_session_and_refreshes_cookie() {
+        let Some(state) = test_state(None).await else {
+            return;
+        };
+        let session = state
+            .store
+            .create_guest_session()
+            .await
+            .expect("guest session should create");
+
+        let (headers, Json(response)) = current_user(State(state), cookie_headers(session.id))
+            .await
+            .expect("cookie session should resolve");
+
+        assert_eq!(response.session_id, session.id);
+        let cookie = headers
+            .get(SET_COOKIE)
+            .expect("current user should refresh the session cookie")
+            .to_str()
+            .expect("set-cookie should be readable");
+        assert!(cookie.contains(&format!("wfchat_session={}", session.id)));
+        assert!(cookie.contains("HttpOnly"));
+        assert!(cookie.contains("SameSite=Lax"));
+    }
+
+    #[tokio::test]
+    async fn current_user_prefers_cookie_session_over_header_fallback() {
+        let Some(state) = test_state(None).await else {
+            return;
+        };
+        let cookie_session = state
+            .store
+            .create_guest_session()
+            .await
+            .expect("cookie session should create");
+        let header_session = state
+            .store
+            .create_guest_session()
+            .await
+            .expect("header session should create");
+        let mut headers = cookie_headers(cookie_session.id);
+        headers.insert(
+            "x-wfchat-session",
+            header_session
+                .id
+                .to_string()
+                .parse()
+                .expect("session id should be a valid header value"),
+        );
+
+        let (_, Json(response)) = current_user(State(state), headers)
+            .await
+            .expect("cookie session should resolve first");
+
+        assert_eq!(response.session_id, cookie_session.id);
+    }
+
+    #[tokio::test]
+    async fn logout_rotates_to_a_guest_session_cookie() {
+        let Some(state) = test_state(None).await else {
+            return;
+        };
+
+        let (headers, Json(response)) = logout(State(state))
+            .await
+            .expect("logout should create a replacement guest session");
+
+        assert_eq!(response.kind, "guest");
+        let cookie = headers
+            .get(SET_COOKIE)
+            .expect("logout should set a replacement session cookie")
+            .to_str()
+            .expect("set-cookie should be readable");
+        assert!(cookie.contains(&format!("wfchat_session={}", response.session_id)));
+        assert!(cookie.contains("HttpOnly"));
+        assert!(cookie.contains("SameSite=Lax"));
     }
 
     #[tokio::test]

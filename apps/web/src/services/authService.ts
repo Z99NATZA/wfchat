@@ -1,7 +1,5 @@
 import { apiClient } from "@/services/apiClient";
-import { readStorageItem, writeStorageItem } from "@/services/storageService";
-
-const sessionStorageKey = "wfchat.sessionId";
+import { ensureCookieSession, markCookieSessionReady } from "@/services/sessionService";
 
 type ApiSessionResponse = {
 	user_id: string;
@@ -32,57 +30,35 @@ export type AuthProfile = {
 };
 
 export async function fetchCurrentSession(): Promise<AuthSession> {
-	const sessionId = await ensureGuestSession();
-	const response = await apiClient.get<ApiSessionResponse>("/api/auth/me", {
-		headers: sessionHeaders(sessionId)
-	});
-	writeStorageItem(sessionStorageKey, response.data.session_id);
+	const response = await apiClient.get<ApiSessionResponse>("/api/auth/me");
+	markCookieSessionReady();
 	return toAuthSession(response.data);
 }
 
 export async function loginWithGoogle(idToken: string): Promise<AuthSession> {
-	const sessionId = await ensureGuestSession();
-	const response = await apiClient.post<ApiSessionResponse>(
-		"/api/auth/google",
-		{ id_token: idToken },
-		{ headers: sessionHeaders(sessionId) }
-	);
-	writeStorageItem(sessionStorageKey, response.data.session_id);
+	await ensureCookieSession();
+	const response = await apiClient.post<ApiSessionResponse>("/api/auth/google", { id_token: idToken });
+	markCookieSessionReady();
 	return toAuthSession(response.data);
 }
 
 export async function logoutSession(): Promise<AuthSession> {
 	const response = await apiClient.post<ApiSessionResponse>("/api/auth/logout");
-	writeStorageItem(sessionStorageKey, response.data.session_id);
+	markCookieSessionReady();
 	return toAuthSession(response.data);
 }
 
 export async function updateProfile(displayName: string, avatarUrl: string): Promise<AuthSession> {
-	const sessionId = await ensureGuestSession();
+	await ensureCookieSession();
 	const response = await apiClient.patch<ApiSessionResponse>(
 		"/api/auth/profile",
 		{
 			display_name: displayName,
 			avatar_url: avatarUrl || null
-		},
-		{ headers: sessionHeaders(sessionId) }
+		}
 	);
-	writeStorageItem(sessionStorageKey, response.data.session_id);
+	markCookieSessionReady();
 	return toAuthSession(response.data);
-}
-
-async function ensureGuestSession(): Promise<string> {
-	const existingSessionId = readStorageItem(sessionStorageKey);
-	if (existingSessionId) {
-		return existingSessionId;
-	}
-	const response = await apiClient.post<ApiSessionResponse>("/api/auth/guest");
-	writeStorageItem(sessionStorageKey, response.data.session_id);
-	return response.data.session_id;
-}
-
-function sessionHeaders(sessionId: string) {
-	return { "X-WFChat-Session": sessionId };
 }
 
 function toAuthSession(value: ApiSessionResponse): AuthSession {

@@ -25,7 +25,13 @@ apps/web/src/main.tsx
       -> apps/web/src/pages/Model2DPage.tsx
 ```
 
-The chat UI uses `apps/web/src/features/chat/services/chatApiService.ts` to create a guest session, create/load a chat, and send messages through the Rust backend. Message sends try the SSE streaming endpoint first and fall back to the non-streaming endpoint if the stream fails before it starts.
+The chat UI uses `apps/web/src/features/chat/services/chatApiService.ts` to
+create/load chats and send messages through the Rust backend. Browser auth uses
+the backend-issued HTTP-only `wfchat_session` cookie; frontend services call
+`apps/web/src/services/sessionService.ts` only to bootstrap that cookie and keep
+a non-secret `wfchat.sessionCookieReady` sessionStorage marker. Message sends
+try the SSE streaming endpoint first and fall back to the non-streaming endpoint
+if the stream fails before it starts.
 
 Local chat image attachments are supported for PNG, JPEG, WebP, and GIF files.
 The composer can select images from the device, paste clipboard images, and

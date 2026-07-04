@@ -59,12 +59,14 @@ Use a `POST` endpoint that returns `text/event-stream`:
 POST /api/chats/:chat_id/messages/stream
 Content-Type: application/json
 Accept: text/event-stream
-X-WFChat-Session: <session uuid>
+Cookie: wfchat_session=<session uuid>
 
 { "content": "..." }
 ```
 
-This should be read with `fetch()` and `ReadableStream` on the frontend, not `EventSource`, because the current API needs a request body and custom session header.
+This should be read with `fetch()` and `ReadableStream` on the frontend, not
+`EventSource`, because the current API needs a request body and included
+credentials.
 
 The streaming route shares the chat-message rate-limit bucket with the regular
 send route. If that bucket is exceeded, the backend returns `429 Too Many
@@ -319,7 +321,8 @@ export async function streamChatMessage(
 
 Implementation notes:
 
-- use `ensureGuestSession()` and `sessionHeaders()` exactly like existing chat calls
+- call `ensureCookieSession()` before the stream request and include browser
+  credentials
 - use `fetch` or Axios response streaming only if browser support is confirmed; plain `fetch` is the likely minimal path
 - parse SSE frames from `response.body.getReader()`
 - keep `sendChatMessage()` unchanged as fallback

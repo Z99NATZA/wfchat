@@ -29,6 +29,7 @@ use crate::{
     characters,
     error::{AppError, AppResult},
     rate_limit::{RateLimitFamily, RateLimitIdentity},
+    session::session_id_from_headers,
     state::AppState,
     store::{ChatAttachmentRecord, ChatRecord, NewChatAttachmentRecord, OwnerScope, StoredMessage},
     voice::{SpeechAudioStreamBody, VoiceService},
@@ -707,13 +708,6 @@ fn audio_signature(bytes: &[u8]) -> String {
         .map(|byte| format!("{byte:02x}"))
         .collect::<Vec<_>>()
         .join("")
-}
-
-fn session_id_from_headers(headers: &HeaderMap) -> Option<Uuid> {
-    headers
-        .get("x-wfchat-session")
-        .and_then(|value| value.to_str().ok())
-        .and_then(|value| Uuid::parse_str(value).ok())
 }
 
 fn enforce_sensitive_rate_limit(

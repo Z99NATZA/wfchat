@@ -84,7 +84,7 @@ Status: implemented.
 ```text
 POST /api/chat/attachments
 Content-Type: multipart/form-data
-X-WFChat-Session: <session uuid>
+Cookie: wfchat_session=<session uuid>
 ```
 
 Request fields:
@@ -118,7 +118,7 @@ Status: implemented.
 
 ```text
 DELETE /api/chat/attachments/:attachment_id
-X-WFChat-Session: <session uuid>
+Cookie: wfchat_session=<session uuid>
 ```
 
 Rules:
@@ -133,7 +133,7 @@ Status: implemented.
 
 ```text
 GET /api/chat/attachments/:attachment_id/preview
-X-WFChat-Session: <session uuid>
+Cookie: wfchat_session=<session uuid>
 ```
 
 Rules:
@@ -292,7 +292,8 @@ Status: implemented for message thumbnails, in-app preview dialog, and missing-i
 - User bubbles render attached image thumbnails.
 - Assistant bubbles keep current Markdown rendering.
 - Copy-message action copies text only.
-- Thumbnail rendering fetches the backend preview URL with the session header and renders a browser `blob:` URL.
+- Thumbnail rendering fetches the backend preview URL with included credentials
+  and renders a browser `blob:` URL.
 - Image click opens an in-app preview dialog instead of a new browser tab.
 - Preview dialog uses authenticated backend preview bytes for sent attachments
   and local `blob:` URLs for pending attachments. Implemented.

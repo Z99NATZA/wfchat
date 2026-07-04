@@ -84,7 +84,9 @@ The sync system is designed to:
 `Session`
 
 - Backend user session identifier.
-- Sent by the frontend with `X-WFChat-Session`.
+- Browser requests identify it with the HTTP-only `wfchat_session` cookie.
+- `X-WFChat-Session` is only a compatibility fallback for non-browser or
+  legacy local callers.
 
 `Account owner`
 
@@ -153,7 +155,6 @@ Primary key:
 Local storage keys:
 
 - `wfchat-auth-state`
-- `wfchat.sessionId`
 - `wfchat-theme`
 - `wfchat-font`
 - `wfchat.locale`
@@ -166,6 +167,10 @@ Local storage keys:
 - `wfchat-memory-deletes-cache`
 - `wfchat-chat-sessions-cache`
 - `wfchat-chat-messages-cache`
+
+Session storage keys:
+
+- `wfchat.sessionCookieReady`
 
 `wfchat-sync-meta` stores per-setting timestamps:
 
@@ -557,7 +562,7 @@ and tombstone behavior.
 Recommended cases:
 
 1. Queue flush success:
-   - seed `wfchat.sessionId`
+   - seed `wfchat.sessionCookieReady`
    - seed one queued operation
    - mock `POST /api/sync/preview` and `POST /api/sync/commit`
    - assert the first operation is removed after commit

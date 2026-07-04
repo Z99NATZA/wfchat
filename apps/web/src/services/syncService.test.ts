@@ -34,7 +34,7 @@ import {
 } from "@/services/syncService";
 import type { ChatMessage, ChatSessionSummary, MemoryFact, MemorySummary } from "@/types/chat";
 
-const sessionStorageKey = "wfchat.sessionId";
+const sessionCookieReadyKey = "wfchat.sessionCookieReady";
 const syncQueueStorageKey = "wfchat-sync-queue";
 const syncCursorStorageKey = "wfchat-sync-cursor";
 const syncMetaStorageKey = "wfchat-sync-meta";
@@ -84,6 +84,7 @@ function findQueuedItem(itemId: string): SyncItem | undefined {
 beforeEach(() => {
 	installLocalStorageMock();
 	window.localStorage.clear();
+	window.sessionStorage.clear();
 	apiClientMock.get.mockReset();
 	apiClientMock.post.mockReset();
 	vi.restoreAllMocks();
@@ -92,6 +93,7 @@ beforeEach(() => {
 afterEach(() => {
 	vi.restoreAllMocks();
 	window.localStorage.clear();
+	window.sessionStorage.clear();
 });
 
 describe("syncService queue helpers", () => {
@@ -163,7 +165,7 @@ describe("syncService queue helpers", () => {
 	});
 
 	it("flushes the first queued operation and removes it after commit succeeds", async () => {
-		window.localStorage.setItem(sessionStorageKey, "session-1");
+		window.sessionStorage.setItem(sessionCookieReadyKey, "true");
 		writeQueue([
 			{
 				operation_id: "op-1",
@@ -206,8 +208,7 @@ describe("syncService queue helpers", () => {
 						payload: { key: "theme", value: "dark" }
 					}
 				]
-			},
-			{ headers: { "X-WFChat-Session": "session-1" } }
+			}
 		);
 		expect(apiClientMock.post).toHaveBeenNthCalledWith(
 			2,
@@ -223,15 +224,14 @@ describe("syncService queue helpers", () => {
 						payload: { key: "theme", value: "dark" }
 					}
 				]
-			},
-			{ headers: { "X-WFChat-Session": "session-1" } }
+			}
 		);
 		expect(result?.merged_count).toBe(1);
 		expect(readQueue()).toEqual([]);
 	});
 
 	it("keeps a failed operation queued and marks retry metadata", async () => {
-		window.localStorage.setItem(sessionStorageKey, "session-1");
+		window.sessionStorage.setItem(sessionCookieReadyKey, "true");
 		writeQueue([
 			{
 				operation_id: "op-1",
@@ -451,7 +451,7 @@ describe("syncService queue helpers", () => {
 	it("flushes local delete tombstones immediately when possible", async () => {
 		vi.spyOn(Date, "now").mockReturnValue(350_000);
 		vi.spyOn(Math, "random").mockReturnValue(0);
-		window.localStorage.setItem(sessionStorageKey, "session-1");
+		window.sessionStorage.setItem(sessionCookieReadyKey, "true");
 		markMemoryFactDeleted("fact-1");
 		markChatMessagesDeleted("chat-1", ["message-1"]);
 		apiClientMock.post
@@ -483,14 +483,13 @@ describe("syncService queue helpers", () => {
 						deleted_at: 350
 					})
 				])
-			},
-			{ headers: { "X-WFChat-Session": "session-1" } }
+			}
 		);
 		expect(readQueue()).toEqual([]);
 	});
 
 	it("pulls cloud changes into settings and memory/chat caches", async () => {
-		window.localStorage.setItem(sessionStorageKey, "session-1");
+		window.sessionStorage.setItem(sessionCookieReadyKey, "true");
 		window.localStorage.setItem(syncCursorStorageKey, "5");
 		const onLocaleChange = vi.fn();
 		const onBackgroundImageUrlChange = vi.fn();
@@ -595,7 +594,6 @@ describe("syncService queue helpers", () => {
 
 		expect(apiClientMock.get).toHaveBeenCalledWith("/api/sync/changes", {
 			params: { cursor: 5, limit: 100 },
-			headers: { "X-WFChat-Session": "session-1" }
 		});
 		expect(appliedCount).toBe(8);
 		expect(window.localStorage.getItem(themeStorageKey)).toBe("dark");
@@ -630,7 +628,7 @@ describe("syncService queue helpers", () => {
 	});
 
 	it("does not let stale cloud theme overwrite a newer local theme", async () => {
-		window.localStorage.setItem(sessionStorageKey, "session-1");
+		window.sessionStorage.setItem(sessionCookieReadyKey, "true");
 		window.localStorage.setItem(themeStorageKey, "dark");
 		window.localStorage.setItem(syncMetaStorageKey, JSON.stringify({ "settings.theme": 20 }));
 		const onThemeChange = vi.fn();
@@ -658,7 +656,7 @@ describe("syncService queue helpers", () => {
 	});
 
 	it("does not let stale cloud settings overwrite newer local settings", async () => {
-		window.localStorage.setItem(sessionStorageKey, "session-1");
+		window.sessionStorage.setItem(sessionCookieReadyKey, "true");
 		window.localStorage.setItem(fontStorageKey, "inter");
 		window.localStorage.setItem(localeStorageKey, "en");
 		window.localStorage.setItem(backgroundImageUrlStorageKey, "https://example.com/local.png");
@@ -722,7 +720,7 @@ describe("syncService queue helpers", () => {
 	});
 
 	it("applies tombstones by removing memory and chat cache entries", async () => {
-		window.localStorage.setItem(sessionStorageKey, "session-1");
+		window.sessionStorage.setItem(sessionCookieReadyKey, "true");
 		window.localStorage.setItem(
 			memoryFactsCacheKey,
 			JSON.stringify([

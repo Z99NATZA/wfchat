@@ -9,6 +9,7 @@ use uuid::Uuid;
 
 use crate::{
     error::{AppError, AppResult},
+    session::session_id_from_headers,
     state::AppState,
     store::{MemoryFactRecord, MemorySummaryRecord, OwnerScope},
 };
@@ -274,11 +275,4 @@ fn memory_summary_response(summary: MemorySummaryRecord) -> MemorySummaryRespons
         source_chat_id: summary.source_chat_id,
         created_at: summary.created_at,
     }
-}
-
-fn session_id_from_headers(headers: &HeaderMap) -> Option<Uuid> {
-    headers
-        .get("x-wfchat-session")
-        .and_then(|value| value.to_str().ok())
-        .and_then(|value| Uuid::parse_str(value).ok())
 }

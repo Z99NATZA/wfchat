@@ -142,11 +142,12 @@ these endpoint families:
 - `POST /api/chat/transcription`: 6 requests per minute.
 - `POST /api/chat/attachments`: 12 requests per minute.
 
-Rate-limit keys prefer `X-WFChat-Session` when present. If no valid session
-header is available, the limiter falls back to the client IP reported by
-`X-Forwarded-For` or `X-Real-IP`, then to a shared unknown-client bucket. When a
-bucket is exceeded, the route returns `429 Too Many Requests` using the normal
-JSON error body:
+Rate-limit keys prefer the `wfchat_session` cookie, then fall back to
+`X-WFChat-Session` for compatibility. If no valid session identifier is
+available, the limiter falls back to the client IP reported by `X-Forwarded-For`
+or `X-Real-IP`, then to a shared unknown-client bucket. When a bucket is
+exceeded, the route returns `429 Too Many Requests` using the normal JSON error
+body:
 
 ```json
 { "error": "too many requests" }
@@ -160,7 +161,10 @@ registered can chat and sync across browsers/devices through account-scoped owne
 admin      can access admin AI profile/provider endpoints and is the role for future management flows
 ```
 
-Auth uses an HTTP-only session cookie plus the `X-WFChat-Session` header for API ownership resolution. Frontend code should not store API keys or admin secrets.
+Auth uses the HTTP-only `wfchat_session` cookie as the primary API ownership
+boundary. The `X-WFChat-Session` header remains a compatibility fallback for
+non-browser or legacy local callers. Frontend code should not store session ids,
+API keys, or admin secrets in browser-readable storage.
 
 Google identity and editable app profile are separate:
 

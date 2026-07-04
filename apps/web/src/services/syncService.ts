@@ -1,4 +1,5 @@
 import { apiClient } from "@/services/apiClient";
+import { ensureCookieSession } from "@/services/sessionService";
 import { readStorageItem, removeStorageItem, writeStorageItem } from "@/services/storageService";
 import { readSyncUpdatedAt, recordSyncUpdatedAt } from "@/stores/syncStateStore";
 import { applyThemeToDocument, writeTheme } from "@/stores/themeStore";
@@ -12,7 +13,6 @@ import type { ChatMessage, ChatSessionSummary, MemoryFact, MemorySummary } from 
 import type { AppFont } from "@/types/font";
 import type { Theme } from "@/types/theme";
 
-const sessionStorageKey = "wfchat.sessionId";
 const syncQueueStorageKey = "wfchat-sync-queue";
 const syncCursorStorageKey = "wfchat-sync-cursor";
 const localeStorageKey = "wfchat.locale";
@@ -26,10 +26,6 @@ const chatSessionsCacheKey = "wfchat-chat-sessions-cache";
 const chatMessagesCacheKey = "wfchat-chat-messages-cache";
 const maxRetryDelaySeconds = 300;
 const maxQueueLength = 20;
-
-type ApiSessionResponse = {
-	session_id: string;
-};
 
 type SyncPreviewResponse = {
 	to_create: number;
@@ -212,7 +208,7 @@ export async function flushGuestSyncQueue(
 		return null;
 	}
 
-	const sessionId = await ensureGuestSession();
+	await ensureCookieSession();
 	const now = Math.floor(Date.now() / 1000);
 	const operation = queue[0];
 	if (!options.force && operation.next_retry_at > now) {
@@ -220,16 +216,11 @@ export async function flushGuestSyncQueue(
 	}
 	const items = compactItems(operation.items);
 
-	await apiClient.post<SyncPreviewResponse>(
-		"/api/sync/preview",
-		{ items },
-		{ headers: sessionHeaders(sessionId) }
-	);
+	await apiClient.post<SyncPreviewResponse>("/api/sync/preview", { items });
 
 	const commit = await apiClient.post<SyncCommitResponse>(
 		"/api/sync/commit",
-		{ operation_id: operation.operation_id, items },
-		{ headers: sessionHeaders(sessionId) }
+		{ operation_id: operation.operation_id, items }
 	);
 	queue.shift();
 	writeSyncQueue(queue);
@@ -269,11 +260,10 @@ export async function pullSyncChanges(
 	onThemeChange?: (theme: Theme) => void,
 	onFontChange?: (font: AppFont) => void
 ): Promise<number> {
-	const sessionId = await ensureGuestSession();
+	await ensureCookieSession();
 	const cursor = Number(readStorageItem(syncCursorStorageKey) ?? "0");
 	const response = await apiClient.get<SyncChangesResponse>("/api/sync/changes", {
-		params: { cursor, limit: 100 },
-		headers: sessionHeaders(sessionId)
+		params: { cursor, limit: 100 }
 	});
 
 	for (const item of response.data.items) {
@@ -350,25 +340,6 @@ export function readChatMessagesCache(chatId: string): ChatMessage[] {
 			time: item.time
 		}))
 		.sort((a, b) => a.createdAt - b.createdAt);
-}
-
-async function ensureGuestSession(): Promise<string> {
-	const existingSessionId = readStorageItem(sessionStorageKey);
-
-	if (existingSessionId) {
-		return existingSessionId;
-	}
-
-	const response = await apiClient.post<ApiSessionResponse>("/api/auth/guest");
-	writeStorageItem(sessionStorageKey, response.data.session_id);
-
-	return response.data.session_id;
-}
-
-function sessionHeaders(sessionId: string) {
-	return {
-		"X-WFChat-Session": sessionId
-	};
 }
 
 function buildSyncItems(): SyncItem[] {
