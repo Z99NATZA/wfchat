@@ -305,10 +305,7 @@ async fn upload_chat_attachment(
             },
         )
         .await
-        .map_err(|error| {
-            let error = AppError::database("save chat attachment metadata", error);
-            error
-        });
+        .map_err(|error| AppError::database("save chat attachment metadata", error));
 
     let attachment = match attachment {
         Ok(attachment) => attachment,

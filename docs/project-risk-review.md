@@ -70,30 +70,30 @@ Priority:
 
 Fix before multiple deployed environments exist.
 
-### 2. No CI Gate Found
+### 2. CI Enforcement Depends on Branch Protection
 
 Files:
 
-- root repo, missing `.github/workflows/*`
+- `.github/workflows/ci.yml`
 - `package.json`
 - `apps/web/package.json`
 - `apps/api/Cargo.toml`
 
-The repo has tests, but no root CI workflow was found. Without CI, test quality depends on local discipline.
+The repo now has a root GitHub Actions CI workflow for frontend tests, frontend
+production build, backend tests, Rust formatting, and Rust clippy. The remaining
+operational risk is making sure protected branches and deployment platforms
+require this CI workflow to pass before merge or production deployment.
 
-Recommended fix:
+Recommended follow-up:
 
-- Add GitHub Actions or equivalent CI.
-- Run:
-  - `npm --prefix apps/web test`
-  - `npm --prefix apps/web run build`
-  - `cargo test --manifest-path apps/api/Cargo.toml`
-  - `cargo fmt --check`
-  - `cargo clippy --manifest-path apps/api/Cargo.toml -- -D warnings`
+- Configure branch protection for the main branch.
+- Require the CI workflow checks before merge.
+- Gate any automatic deployment on successful CI.
 
 Priority:
 
-Fix before accepting outside contributions or making larger changes.
+Basic CI is done. Enforce it before accepting outside contributions or enabling
+automatic production deployment.
 
 ### 3. No Frontend Lint/Format Gate
 
