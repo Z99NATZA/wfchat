@@ -8,6 +8,8 @@ apps/api/data
 !.env.example
 npm-debug.log*
 .codex-*.log
+apps/web/playwright-report/
+apps/web/test-results/
 Dockerfile.*
 .VSCodeCounter/
 me/

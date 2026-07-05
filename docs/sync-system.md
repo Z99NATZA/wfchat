@@ -49,6 +49,9 @@ The sync system is designed to:
   and update React state through pulled-setting callbacks.
 - Web sync flow tests for enqueue/flush/pull, retry, stale pulled settings, and
   tombstone pull behavior.
+- Minimal Playwright browser E2E foundation with a dedicated `test:e2e`
+  command, network-mocked sync helpers, and an authenticated boot smoke test
+  that verifies remote setting pull into local sync state.
 
 ### Not Done Yet
 
@@ -61,7 +64,7 @@ The sync system is designed to:
 - Accurate `conflict_count` from `/api/sync/commit`.
 - Cursor checkpointing for partial local apply failures.
 - Deterministic pagination for many items sharing the same `updated_at`.
-- Browser-level web E2E sync coverage.
+- Full browser-level web E2E sync coverage beyond the initial smoke foundation.
 - Production-grade metrics and alerting.
 
 ### Important Limitation
@@ -817,9 +820,9 @@ Recommended cases:
 
 ### Web E2E Tests
 
-No web E2E sync suite exists yet. Follow the `Sync E2E Rollout Plan` above and
-prefer real browser tests that control local storage and mock API responses at
-the network boundary for the first milestone.
+A minimal Playwright browser E2E suite exists under `apps/web/e2e`. Follow the
+`Sync E2E Rollout Plan` above and prefer real browser tests that control local
+storage and mock API responses at the network boundary for the first milestone.
 
 Recommended flows:
 
@@ -882,8 +885,7 @@ cargo test
 npm --prefix apps/web test
 ```
 
-Once the web E2E suite exists, add the dedicated browser test command here, for
-example:
+Web E2E:
 
 ```powershell
 npm --prefix apps/web run test:e2e
@@ -900,6 +902,9 @@ Backend:
 
 Frontend:
 
+- `apps/web/playwright.config.ts`
+- `apps/web/e2e/helpers/syncE2eHelpers.ts`
+- `apps/web/e2e/sync-smoke.spec.ts`
 - `apps/web/src/services/syncService.ts`
 - `apps/web/src/stores/syncStateStore.ts`
 - `apps/web/src/stores/themeStore.ts`
