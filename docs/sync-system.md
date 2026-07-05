@@ -61,7 +61,7 @@ The sync system is designed to:
 - Accurate `conflict_count` from `/api/sync/commit`.
 - Cursor checkpointing for partial local apply failures.
 - Deterministic pagination for many items sharing the same `updated_at`.
-- Browser-level web e2e sync coverage.
+- Browser-level web E2E sync coverage.
 - Production-grade metrics and alerting.
 
 ### Important Limitation
@@ -504,7 +504,7 @@ sync.
 
 Existing coverage includes queue helper tests, web sync flow tests, API handler
 tests for preview/commit/changes, registered-owner sync coverage, and auth
-promotion coverage. Missing coverage includes browser-level web e2e flows and
+promotion coverage. Missing coverage includes browser-level web E2E flows and
 full Google verifier integration mocking.
 
 ### 8. Observability is not production-grade
@@ -519,7 +519,7 @@ adding new providers or UX surface area.
 
 In scope:
 
-1. Add browser-level web e2e tests for:
+1. Add browser-level web E2E tests for:
    - queue flush success
    - retry/backoff after failed flush
    - pull applying settings/chat/memory cache
@@ -551,6 +551,167 @@ Later scope:
 - Field-level merge and conflict preview details.
 - User-facing conflict resolution.
 - Production metrics, dashboards, and alerts.
+
+## Sync E2E Rollout Plan
+
+The first browser-level sync E2E milestone should be a small deterministic
+suite that catches regressions in the flows most likely to lose data, show
+stale data, or resurrect deleted data. Start with browser tests that mock the
+network boundary; add backend/database-backed E2E only after the frontend sync
+lifecycle is covered.
+
+Milestone 1 is done when the project has:
+
+- a runnable web E2E command that is separate from unit tests
+- helpers for auth state, session readiness, local storage sync state, API
+  mocks, and shared fake remote sync state
+- passing coverage for guest-to-login sync, cross-browser pull, and tombstone
+  application
+- assertions that clearly separate browser-visible state from storage-only sync
+  state
+
+### Phase 1: Minimal E2E Foundation
+
+- Check whether Playwright or another browser E2E runner already exists, and
+  add the smallest setup needed if none exists.
+- Add a separate script, such as `test:e2e`, so browser tests can run without
+  changing the unit test workflow or CI requirements yet.
+- Add helpers for the test seams below.
+
+Auth and session helpers:
+
+- Seed local storage and session storage before the app boots, using
+  `page.addInitScript` or the E2E runner's equivalent before navigation. This
+  matters for `wfchat-auth-state`, `wfchat.sessionCookieReady`, sync queue,
+  sync metadata, and sync caches because app startup effects read them early.
+- For tests that exercise login, start with `wfchat-auth-state` containing
+  `user: null` and `hasPendingGuestSync: true`; mock Google's browser script
+  with a local fake script that renders a test button and calls the captured
+  credential callback with a fake token. The app should then call the real
+  `POST /api/auth/google` client path, which the test mocks as a registered
+  account. This covers the login UI transition without calling real Google
+  OAuth.
+- For tests that bypass login, seed `wfchat-auth-state` with a registered user
+  and `hasPendingGuestSync: true` when the test needs the `Sync now` action to
+  be visible.
+- Seed `sessionStorage["wfchat.sessionCookieReady"] = "true"` when the test
+  should bypass `ensureCookieSession()`.
+- Mock `GET /api/auth/me` for app mount and cookie-session fallback.
+- Mock `POST /api/auth/google` for login. Do not load Google's real script or
+  call real Google OAuth in Milestone 1.
+- Mock `POST /api/auth/logout` for flows that exercise logout/login
+  transitions.
+- For sync lifecycle tests that do not care about login UI, seed authenticated
+  state directly instead of clicking the Google button.
+
+API mock matrix:
+
+- Always mock `/api/sync/preview`, `/api/sync/commit`, and
+  `/api/sync/changes`.
+- Mock `/api/chat-ui/config` for app/chat startup.
+- Mock `/api/personas/:personaId/chats` and `/api/chats/:chatId` when a flow
+  asserts chat list, chat selection, stale chat cleanup, or cache fallback.
+- If a flow creates chats or sends messages through the composer, also mock
+  `POST /api/personas/:personaId/chats`, `POST /api/chats/:chatId/messages`,
+  and `/api/chats/:chatId/messages/stream` as applicable.
+- Mock `/api/personas/:personaId/memory/facts` and
+  `/api/personas/:personaId/memory/summaries` when a flow asserts memory cache
+  behavior.
+- Mock concrete delete endpoints and follow-up list/get endpoints when testing
+  tombstones through the UI, so refresh behavior is deterministic:
+  `/api/chats/:chatId`, `/api/chats/:chatId/messages`,
+  `/api/memory/facts/:factId`, and `/api/memory/summaries/:summaryId`.
+
+Local state helpers:
+
+- Seed and read `wfchat-sync-queue`, `wfchat-sync-cursor`,
+  `wfchat-sync-meta`, settings keys, chat cache keys, memory cache keys, and
+  tombstone caches.
+- Provide assertions for queue state, cursor state, cache state, and metadata
+  state without requiring every item to be visible in the UI.
+
+Remote sync helper:
+
+- Use a shared in-memory fake sync server for browser-context tests that claim
+  context A writes data and context B later pulls it.
+- If a test uses a fixed `/api/sync/changes` fixture for context B instead,
+  describe it as a pull fixture test, not as proof that context A committed
+  data consumed by context B.
+
+### Phase 2: First High-Value Browser Flows
+
+1. Guest-to-login sync:
+   - seed guest settings and representative chat or memory cache
+   - mock `GET /api/auth/me` as guest before login
+   - intercept `https://accounts.google.com/gsi/client` with the local fake
+     Google script, then click the fake Google button to produce a fake
+     credential
+   - mock `POST /api/auth/google` as a registered account after login
+   - seed `hasPendingGuestSync: true` so `Sync now` is visible
+   - when seeding chat cache, include a non-empty `lastMessage` and wait for
+     ChatPage to load and merge cached state into the mounted snapshot before
+     clicking `Sync now`
+   - run `Sync now`
+   - assert preview and commit are called
+   - assert the queue is cleared, the sync metadata is stable, and local user
+     data remains available
+2. Cross-browser pull:
+   - use two browser contexts representing the same account
+   - use the shared fake sync server when context A is expected to affect
+     context B
+   - trigger pull in the second context
+   - assert UI-visible items through the UI and storage-only items through local
+     storage or cache readers
+   - when testing font or locale, create the remote item through manual
+     `Sync now` or a remote fixture; do not assume authenticated font/locale
+     changes flush immediately
+3. Delete tombstone propagation:
+   - seed local chat or memory cache
+   - mock pulled tombstone sync items
+   - mock backend list/get endpoints after refresh so deleted items are not
+     reintroduced by unrelated API fixtures
+   - assert matching cached items are removed from local storage
+   - assert UI-visible deleted items do not reappear after refresh where the
+     product renders those items
+4. Stale pulled setting guard:
+   - seed a newer local setting and matching `wfchat-sync-meta`
+   - mock an older cloud setting from `/api/sync/changes`
+   - assert the older cloud value does not overwrite local storage, app state,
+     or visible UI where the setting is visible
+
+### Phase 3: Failure And Retry Flows
+
+- Preview failure keeps the queued operation intact.
+- Commit failure keeps the queued operation intact.
+- Retry metadata increments the attempt count and records `next_retry_at > now`.
+  Use a controlled clock and `Math.random()` stub if asserting the exact retry
+  timestamp.
+- Browser `online` event starts queue flush and pull work. Do not assert strict
+  flush-before-pull ordering unless the implementation is changed to await that
+  sequence.
+- API unavailable after a previous pull still allows chat or memory cache
+  fallback where the product expects it.
+
+### Phase 4: Post-Hardening Acceptance Tests
+
+- Multiple sync items sharing the same `updated_at` do not get skipped after the
+  cursor pagination algorithm is hardened.
+- Partial pull apply failures have a tested recovery path after cursor
+  checkpointing is designed.
+- Two browser contexts committing the same account item close together do not
+  create stale or duplicated visible state.
+- Mounted-state sync limitations are explicitly covered so `Sync now`
+  expectations stay accurate.
+
+Before those hardening changes exist, write characterization tests for the
+current behavior instead of acceptance tests that expect the future behavior.
+
+Out of scope for Milestone 1:
+
+- Real Google OAuth verification in browser tests.
+- Full backend/database-backed E2E coverage.
+- Real-time multi-device sync.
+- Field-level conflict resolution UI.
 
 ## Test Plan
 
@@ -656,20 +817,36 @@ Recommended cases:
 
 ### Web E2E Tests
 
-No web e2e sync suite exists yet. When adding one, prefer a real browser test
-that controls local storage and mocks API responses at the network boundary.
+No web E2E sync suite exists yet. Follow the `Sync E2E Rollout Plan` above and
+prefer real browser tests that control local storage and mock API responses at
+the network boundary for the first milestone.
 
 Recommended flows:
 
 1. Guest changes theme to dark, logs in, clicks `Sync now`, and the queued
-   setting is committed.
+   setting is committed. Preconditions: mock guest `/api/auth/me`, mock
+   `https://accounts.google.com/gsi/client` with a local fake Google script,
+   mock registered `/api/auth/google`, seed `wfchat.sessionCookieReady`, and
+   make `hasPendingGuestSync` true after login. If the fixture includes chat
+   cache, include a non-empty `lastMessage` and wait for mounted chat state
+   before clicking `Sync now`.
 2. Logged-in user changes theme, logs out, logs back in, and stale cloud light
-   does not overwrite newer local dark.
-3. Second browser/session pulls theme, locale, font, background, chat cache,
-   and memory cache for the same account.
-4. Failed preview/commit leaves the queue intact and shows retry metadata.
-5. Browser online event flushes pending queue and pulls remote changes.
-6. Pulled tombstones remove cached chat/memory items.
+   does not overwrite newer local dark. Preconditions: mock `/api/auth/logout`
+   and the second `/api/auth/google` login response, or seed authenticated state
+   directly if the test is only covering the stale setting guard.
+3. Second browser/session pulls theme, background, chat cache, and memory cache
+   for the same account using either a shared fake sync server or a fixed remote
+   fixture. Locale and font should come from manual `Sync now` or a remote
+   fixture, not from assumed immediate authenticated setting sync.
+4. Failed preview/commit leaves the queue intact and shows retry metadata. For
+   retry timing, assert `attempt` and `next_retry_at > now` unless the test
+   controls time and random jitter.
+5. Browser online event starts both pending-queue flush and remote pull work,
+   without asserting a strict order between the two operations.
+6. Pulled tombstones remove cached chat/memory items. When asserting that an
+   item does not reappear after refresh, mock the related list/get endpoints as
+   well as `/api/sync/changes`; when the UI flow performs deletion, mock the
+   concrete chat or memory delete endpoint too.
 7. API unavailable after previous pull still allows cache fallback for
    chat/memory screens.
 
@@ -703,6 +880,13 @@ Relevant commands:
 ```powershell
 cargo test
 npm --prefix apps/web test
+```
+
+Once the web E2E suite exists, add the dedicated browser test command here, for
+example:
+
+```powershell
+npm --prefix apps/web run test:e2e
 ```
 
 ## Reference Files
