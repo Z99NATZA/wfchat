@@ -52,6 +52,9 @@ The sync system is designed to:
 - Minimal Playwright browser E2E foundation with a dedicated `test:e2e`
   command, network-mocked sync helpers, and an authenticated boot smoke test
   that verifies remote setting pull into local sync state.
+- Browser E2E coverage for guest-to-login manual sync with a fake Google
+  Identity script, mocked guest-to-registered auth transition, and assertions
+  that the queued local setting is committed and the local queue clears.
 
 ### Not Done Yet
 
@@ -820,9 +823,10 @@ Recommended cases:
 
 ### Web E2E Tests
 
-A minimal Playwright browser E2E suite exists under `apps/web/e2e`. Follow the
-`Sync E2E Rollout Plan` above and prefer real browser tests that control local
-storage and mock API responses at the network boundary for the first milestone.
+A minimal Playwright browser E2E suite exists under `apps/web/e2e`. It covers
+authenticated boot pull and guest-to-login manual sync. Follow the `Sync E2E
+Rollout Plan` above and prefer real browser tests that control local storage
+and mock API responses at the network boundary for the first milestone.
 
 Recommended flows:
 
@@ -904,6 +908,7 @@ Frontend:
 
 - `apps/web/playwright.config.ts`
 - `apps/web/e2e/helpers/syncE2eHelpers.ts`
+- `apps/web/e2e/sync-guest-login.spec.ts`
 - `apps/web/e2e/sync-smoke.spec.ts`
 - `apps/web/src/services/syncService.ts`
 - `apps/web/src/stores/syncStateStore.ts`

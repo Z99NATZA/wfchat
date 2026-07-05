@@ -38,6 +38,18 @@ export type E2eSyncItem = {
 	payload: Record<string, unknown> | null;
 };
 
+export type E2eApiSession = {
+	user_id: string;
+	session_id: string;
+	kind: "guest" | "registered" | "admin";
+	email?: string | null;
+	name?: string | null;
+	profile?: {
+		display_name: string;
+		avatar_url?: string | null;
+	} | null;
+};
+
 type SeedBrowserStateOptions = {
 	authState?: E2eAuthState;
 	sessionCookieReady?: boolean;
@@ -46,17 +58,8 @@ type SeedBrowserStateOptions = {
 };
 
 type MockAppApisOptions = {
-	session?: {
-		user_id: string;
-		session_id: string;
-		kind: "guest" | "registered" | "admin";
-		email?: string | null;
-		name?: string | null;
-		profile?: {
-			display_name: string;
-			avatar_url?: string | null;
-		} | null;
-	};
+	session?: E2eApiSession | (() => E2eApiSession);
+	onGoogleLogin?: () => void;
 	personaId?: string;
 	syncServer?: FakeRemoteSyncState;
 };
@@ -158,6 +161,13 @@ export function registeredAuthState(overrides: Partial<E2eAuthUser> = {}): E2eAu
 	};
 }
 
+export function guestAuthState(): E2eAuthState {
+	return {
+		user: null,
+		hasPendingGuestSync: true
+	};
+}
+
 export async function seedBrowserState(page: Page, options: SeedBrowserStateOptions = {}) {
 	await page.addInitScript(({ keys, seed }) => {
 		if (seed.authState) {
@@ -179,22 +189,17 @@ export async function mockBaseAppApis(page: Page, options: MockAppApisOptions = 
 	const personaId = options.personaId ?? "aiko";
 	const session = options.session ?? registeredApiSession();
 	const syncServer = options.syncServer ?? new FakeRemoteSyncState();
+	const currentSession = () => (typeof session === "function" ? session() : session);
 
 	await page.route("**/api/auth/me", async (route) => {
-		await fulfillJson(route, session);
+		await fulfillJson(route, currentSession());
 	});
 	await page.route("**/api/auth/google", async (route) => {
-		await fulfillJson(route, session);
+		options.onGoogleLogin?.();
+		await fulfillJson(route, currentSession());
 	});
 	await page.route("**/api/auth/logout", async (route) => {
-		await fulfillJson(route, {
-			user_id: "guest-e2e",
-			session_id: "session-e2e",
-			kind: "guest",
-			email: null,
-			name: null,
-			profile: null
-		});
+		await fulfillJson(route, guestApiSession());
 	});
 	await page.route("**/api/chat-ui/config", async (route) => {
 		await fulfillJson(route, chatUiConfigFixture(personaId));
@@ -211,6 +216,54 @@ export async function mockBaseAppApis(page: Page, options: MockAppApisOptions = 
 	await page.route("**/api/sync/preview", (route) => syncServer.routePreview(route));
 	await page.route("**/api/sync/commit", (route) => syncServer.routeCommit(route));
 	await page.route("**/api/sync/changes**", (route) => syncServer.routeChanges(route));
+}
+
+export async function mockGuestToRegisteredAppApis(
+	page: Page,
+	options: Omit<MockAppApisOptions, "session" | "onGoogleLogin"> = {}
+) {
+	let isRegistered = false;
+	await mockBaseAppApis(page, {
+		...options,
+		session: () => (isRegistered ? registeredApiSession() : guestApiSession()),
+		onGoogleLogin: () => {
+			isRegistered = true;
+		}
+	});
+
+	return {
+		isRegistered: () => isRegistered
+	};
+}
+
+export async function mockGoogleIdentityScript(page: Page, credential = "fake-google-id-token") {
+	await page.route("https://accounts.google.com/gsi/client", async (route) => {
+		await route.fulfill({
+			status: 200,
+			contentType: "application/javascript",
+			body: `
+				window.google = {
+					accounts: {
+						id: {
+							initialize(options) {
+								window.__wfchatE2eGoogleCredentialCallback = options.callback;
+							},
+							renderButton(element) {
+								const button = document.createElement("button");
+								button.type = "button";
+								button.textContent = "Continue with fake Google";
+								button.setAttribute("data-testid", "fake-google-login");
+								button.addEventListener("click", () => {
+									window.__wfchatE2eGoogleCredentialCallback?.({ credential: ${JSON.stringify(credential)} });
+								});
+								element.appendChild(button);
+							}
+						}
+					}
+				};
+			`
+		});
+	});
 }
 
 export async function readLocalStorageItem(page: Page, key: string): Promise<string | null> {
@@ -230,7 +283,18 @@ export async function expectSyncCursor(page: Page, value: number) {
 	await expectLocalStorageItem(page, storageKeys.syncCursor, String(value));
 }
 
-function registeredApiSession() {
+export function guestApiSession(): E2eApiSession {
+	return {
+		user_id: "guest-e2e",
+		session_id: "session-e2e",
+		kind: "guest",
+		email: null,
+		name: null,
+		profile: null
+	};
+}
+
+export function registeredApiSession(): E2eApiSession {
 	return {
 		user_id: "user-e2e",
 		session_id: "session-e2e",
