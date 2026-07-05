@@ -8,13 +8,13 @@ function isTheme(value: string | null): value is Theme {
 	return value === "light" || value === "dark";
 }
 
-function getSystemTheme(): Theme {
-	if (typeof window === "undefined") {
-		return "light";
-	}
+// function getSystemTheme(): Theme {
+// 	if (typeof window === "undefined") {
+// 		return "light";
+// 	}
 
-	return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-}
+// 	return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+// }
 
 export function resolveInitialTheme(): Theme {
 	const storedTheme = readStorageItem(THEME_STORAGE_KEY);
@@ -23,7 +23,7 @@ export function resolveInitialTheme(): Theme {
 		return storedTheme;
 	}
 
-	return getSystemTheme();
+	return "dark";
 }
 
 export function persistTheme(theme: Theme): void {
