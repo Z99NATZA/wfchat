@@ -42,12 +42,6 @@ docker compose down
 # api: http://localhost:8080
 ```
 
-To open the Docker app from another device on the same Wi-Fi, use this machine's LAN IP:
-
-```bash
-docker compose up -d --build
-```
-
 Open `http://<LAN_IP>:5173` from the other device. The Docker web container proxies `/api` to the API container internally, so the browser only needs to reach port `5173`.
 
 More Docker details: [docs/docker.md](docs/docker.md).
