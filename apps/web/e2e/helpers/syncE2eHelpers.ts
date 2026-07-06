@@ -66,6 +66,7 @@ type MockAppApisOptions = {
 
 export class FakeRemoteSyncState {
 	private readonly items = new Map<string, E2eSyncItem>();
+	private nextPreviewFailureStatus: number | null = null;
 
 	previewRequests: E2eSyncItem[][] = [];
 	commitRequests: Array<{ operation_id: string; items: E2eSyncItem[] }> = [];
@@ -77,10 +78,28 @@ export class FakeRemoteSyncState {
 		}
 	}
 
+	failNextPreview(status = 500) {
+		this.nextPreviewFailureStatus = status;
+	}
+
 	async routePreview(route: Route) {
 		const body = route.request().postDataJSON() as { items?: E2eSyncItem[] };
 		const items = body.items ?? [];
 		this.previewRequests.push(items);
+
+		if (this.nextPreviewFailureStatus !== null) {
+			const status = this.nextPreviewFailureStatus;
+			this.nextPreviewFailureStatus = null;
+			await route.fulfill({
+				status,
+				contentType: "application/json",
+				body: JSON.stringify({ error: "sync_preview_failed" }),
+				headers: {
+					"access-control-allow-origin": "*"
+				}
+			});
+			return;
+		}
 
 		let toCreate = 0;
 		let toUpdate = 0;

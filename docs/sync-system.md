@@ -62,6 +62,10 @@ The sync system is designed to:
   app boot seeds local chat cache, pulls a matching tombstone, removes the
   cached session from local storage, and verifies the deleted chat does not
   reappear after page refresh.
+- Browser E2E coverage for failed manual sync preview: a registered browser
+  clicks `Sync now`, the preview request fails, the local queued setting remains
+  in `wfchat-sync-queue`, and retry metadata records an incremented attempt
+  with a future `next_retry_at`.
 
 ### Not Done Yet
 
@@ -832,9 +836,10 @@ Recommended cases:
 
 A minimal Playwright browser E2E suite exists under `apps/web/e2e`. It covers
 authenticated boot pull, guest-to-login manual sync, cross-browser setting
-pull, and pulled chat tombstone propagation. Follow the `Sync E2E Rollout Plan`
-above and prefer real browser tests that control local storage and mock API
-responses at the network boundary for the first milestone.
+pull, pulled chat tombstone propagation, and failed flush retry metadata.
+Follow the `Sync E2E Rollout Plan` above and prefer real browser tests that
+control local storage and mock API responses at the network boundary for the
+first milestone.
 
 Recommended flows:
 

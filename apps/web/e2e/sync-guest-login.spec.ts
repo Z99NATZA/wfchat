@@ -2,9 +2,11 @@ import { expect, test } from "@playwright/test";
 import {
 	FakeRemoteSyncState,
 	guestAuthState,
+	mockBaseAppApis,
 	mockGoogleIdentityScript,
 	mockGuestToRegisteredAppApis,
 	readLocalStorageJson,
+	registeredAuthState,
 	seedBrowserState,
 	storageKeys
 } from "./helpers/syncE2eHelpers";
@@ -61,6 +63,76 @@ test("guest login can commit local setting through Sync now", async ({ page }) =
 		.toMatchObject({
 			user: { id: "user-e2e" },
 			hasPendingGuestSync: false
-		});
+	});
 	await expect.poll(() => page.evaluate((key) => window.localStorage.getItem(key), storageKeys.theme)).toBe("dark");
+});
+
+test("failed Sync now preview keeps queued setting and records retry metadata", async ({ page }) => {
+	const localThemeUpdatedAt = 1_780_325_800;
+	const syncServer = new FakeRemoteSyncState();
+	syncServer.failNextPreview();
+
+	await seedBrowserState(page, {
+		authState: registeredAuthState(),
+		sessionCookieReady: true,
+		localStorage: {
+			[storageKeys.theme]: "dark",
+			[storageKeys.syncMeta]: JSON.stringify({
+				"settings.theme": localThemeUpdatedAt
+			}),
+			[storageKeys.syncQueue]: "[]"
+		}
+	});
+	await mockBaseAppApis(page, { syncServer });
+
+	await page.goto("/chat");
+	await expect(page.getByText("Aiko").first()).toBeVisible();
+	await page.locator("button:has(svg.lucide-user)").click();
+	await expect(page.getByRole("heading", { name: "Profile", exact: true })).toBeVisible();
+
+	const beforeSyncNowSeconds = Math.floor(Date.now() / 1000);
+	await page.getByRole("button", { name: "Sync now" }).click();
+
+	await expect.poll(() => syncServer.previewRequests.length).toBeGreaterThanOrEqual(1);
+	await expect.poll(() => syncServer.commitRequests.length).toBe(0);
+	type E2eQueuedOperation = {
+		attempt: number;
+		next_retry_at: number;
+		items: Array<{
+			item_id: string;
+			item_type: string;
+			updated_at: number;
+			deleted_at: number | null;
+			payload: Record<string, string>;
+		}>;
+	};
+	await expect
+		.poll(async () => {
+			const queue = await readLocalStorageJson<E2eQueuedOperation[]>(page, storageKeys.syncQueue);
+			return queue?.length ?? 0;
+		})
+		.toBe(1);
+	const queuedOperations = await readLocalStorageJson<E2eQueuedOperation[]>(
+		page,
+		storageKeys.syncQueue
+	);
+	expect(queuedOperations).not.toBeNull();
+	const [operation] = queuedOperations ?? [];
+	if (!operation) {
+		throw new Error("expected failed sync operation to remain queued");
+	}
+	expect(operation.attempt).toBe(1);
+	expect(operation.next_retry_at).toBeGreaterThan(beforeSyncNowSeconds);
+	expect(operation.items).toContainEqual(
+		expect.objectContaining({
+			item_id: "settings.theme",
+			item_type: "setting",
+			updated_at: localThemeUpdatedAt,
+			deleted_at: null,
+			payload: {
+				key: "theme",
+				value: "dark"
+			}
+		})
+	);
 });
