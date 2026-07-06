@@ -66,6 +66,10 @@ The sync system is designed to:
   clicks `Sync now`, the preview request fails, the local queued setting remains
   in `wfchat-sync-queue`, and retry metadata records an incremented attempt
   with a future `next_retry_at`.
+- Browser E2E coverage for cross-browser pulled background, chat, and memory
+  cache fixtures: a registered browser pulls remote background image, chat
+  session/message cache, memory fact cache, and memory summary cache, then
+  verifies local storage plus naturally rendered chat and memory UI.
 
 ### Not Done Yet
 
@@ -836,10 +840,10 @@ Recommended cases:
 
 A minimal Playwright browser E2E suite exists under `apps/web/e2e`. It covers
 authenticated boot pull, guest-to-login manual sync, cross-browser setting
-pull, pulled chat tombstone propagation, and failed flush retry metadata.
-Follow the `Sync E2E Rollout Plan` above and prefer real browser tests that
-control local storage and mock API responses at the network boundary for the
-first milestone.
+pull, cross-browser pulled background/chat/memory cache fixtures, pulled chat
+tombstone propagation, and failed flush retry metadata. Follow the Sync E2E
+Rollout Plan above and prefer real browser tests that control local storage and
+mock API responses at the network boundary for the first milestone.
 
 Recommended flows:
 
