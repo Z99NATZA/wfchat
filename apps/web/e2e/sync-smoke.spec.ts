@@ -232,6 +232,63 @@ test("authenticated app boot applies pulled memory tombstones to local cache", a
 	await expect.poll(() => hasStorageEntry(page, storageKeys.memorySummariesCache, deletedSummaryId)).toBe(false);
 });
 
+test("authenticated app uses synced cache when persona list APIs are unavailable", async ({ page }) => {
+	const previousSyncCursor = 1_780_325_850;
+	const cachedChatId = "33333333-3333-4333-8333-333333333333";
+	const cachedChatLastMessage = "Cached chat survives unavailable list API";
+	const cachedMemoryFact = "Aiko remembers the cached fallback fact.";
+	const cachedMemorySummary = "Cached fallback summary remains visible.";
+	const syncServer = new FakeRemoteSyncState();
+
+	await seedBrowserState(page, {
+		authState: registeredAuthState(),
+		sessionCookieReady: true,
+		localStorage: {
+			[storageKeys.syncCursor]: String(previousSyncCursor),
+			[storageKeys.syncQueue]: "[]",
+			[storageKeys.chatSessionsCache]: JSON.stringify([
+				{
+					id: cachedChatId,
+					characterId: "aiko",
+					createdAt: String(previousSyncCursor - 200),
+					updatedAt: String(previousSyncCursor - 100),
+					lastMessage: cachedChatLastMessage
+				}
+			]),
+			[storageKeys.memoryFactsCache]: JSON.stringify([
+				{
+					id: "cached-fallback-fact",
+					characterId: "aiko",
+					content: cachedMemoryFact,
+					confidence: "0.92",
+					sourceChatId: cachedChatId,
+					updatedAt: String(previousSyncCursor - 50)
+				}
+			]),
+			[storageKeys.memorySummariesCache]: JSON.stringify([
+				{
+					id: "cached-fallback-summary",
+					characterId: "aiko",
+					summary: cachedMemorySummary,
+					sourceChatId: cachedChatId,
+					createdAt: String(previousSyncCursor - 40)
+				}
+			])
+		}
+	});
+	await mockBaseAppApis(page, { syncServer, failPersonaLists: true });
+	await page.setViewportSize({ width: 1440, height: 900 });
+
+	await page.goto("/chat");
+	await expect(page.getByText("Aiko").first()).toBeVisible();
+
+	await expect(page.getByText(cachedChatLastMessage)).toBeVisible();
+	await expect(page.getByText(cachedMemoryFact)).toBeVisible();
+	await expect(page.getByText(cachedMemorySummary)).toBeVisible();
+	await expectSyncCursor(page, previousSyncCursor);
+	await expect.poll(() => syncServer.changesRequests.length).toBeGreaterThanOrEqual(1);
+});
+
 test("authenticated browser online event flushes pending queue and pulls remote changes", async ({ page }) => {
 	const localThemeUpdatedAt = 1_780_325_900;
 	const remoteBackgroundUpdatedAt = localThemeUpdatedAt + 10;

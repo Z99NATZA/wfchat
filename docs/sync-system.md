@@ -87,6 +87,11 @@ The sync system is designed to:
   background fixture, dispatches `online`, then verifies preview/commit and
   changes requests increase, the queue clears, and the remote background is
   applied locally.
+- Browser E2E coverage for API-unavailable cache fallback after a previous
+  pull: an authenticated app boot seeds local chat, memory fact, and memory
+  summary cache with a nonzero sync cursor, forces persona list APIs to fail,
+  verifies cached chat and memory content remain visible, and verifies the
+  sync pull sees no newer remote items.
 
 ### Not Done Yet
 
@@ -860,9 +865,10 @@ authenticated boot pull, guest-to-login manual sync, cross-browser setting
 pull, cross-browser pulled background/chat/memory cache fixtures, pulled chat
 and memory tombstone propagation, stale pulled theme guard, and failed flush
 retry metadata for preview and commit failures, and authenticated browser
-`online` event sync work. Follow the Sync E2E Rollout Plan above and prefer
-real browser tests that control local storage and mock API responses at the
-network boundary for the first milestone.
+`online` event sync work, and API-unavailable chat/memory cache fallback.
+Follow the Sync E2E Rollout Plan above and prefer real browser tests that
+control local storage and mock API responses at the network boundary for the
+first milestone.
 
 Recommended flows:
 

@@ -62,6 +62,7 @@ type MockAppApisOptions = {
 	onGoogleLogin?: () => void;
 	personaId?: string;
 	syncServer?: FakeRemoteSyncState;
+	failPersonaLists?: boolean;
 };
 
 export class FakeRemoteSyncState {
@@ -247,12 +248,24 @@ export async function mockBaseAppApis(page: Page, options: MockAppApisOptions = 
 		await fulfillJson(route, chatUiConfigFixture(personaId));
 	});
 	await page.route(`**/api/personas/${personaId}/chats`, async (route) => {
+		if (options.failPersonaLists) {
+			await fulfillApiUnavailable(route);
+			return;
+		}
 		await fulfillJson(route, []);
 	});
 	await page.route(`**/api/personas/${personaId}/memory/facts`, async (route) => {
+		if (options.failPersonaLists) {
+			await fulfillApiUnavailable(route);
+			return;
+		}
 		await fulfillJson(route, []);
 	});
 	await page.route(`**/api/personas/${personaId}/memory/summaries`, async (route) => {
+		if (options.failPersonaLists) {
+			await fulfillApiUnavailable(route);
+			return;
+		}
 		await fulfillJson(route, []);
 	});
 	await page.route("**/api/sync/preview", (route) => syncServer.routePreview(route));
@@ -378,6 +391,17 @@ async function fulfillJson(route: Route, body: unknown) {
 		status: 200,
 		contentType: "application/json",
 		body: JSON.stringify(body),
+		headers: {
+			"access-control-allow-origin": "*"
+		}
+	});
+}
+
+async function fulfillApiUnavailable(route: Route) {
+	await route.fulfill({
+		status: 503,
+		contentType: "application/json",
+		body: JSON.stringify({ error: "api_unavailable" }),
 		headers: {
 			"access-control-allow-origin": "*"
 		}
