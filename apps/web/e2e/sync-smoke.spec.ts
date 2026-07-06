@@ -148,6 +148,96 @@ test("authenticated app boot applies pulled chat tombstones to local cache", asy
 	await expect(page.getByText(deletedChatLastMessage)).toHaveCount(0);
 });
 
+test("authenticated browser online event flushes pending queue and pulls remote changes", async ({ page }) => {
+	const localThemeUpdatedAt = 1_780_325_900;
+	const remoteBackgroundUpdatedAt = localThemeUpdatedAt + 10;
+	const remoteBackgroundUrl = "https://example.test/e2e-online-background.png";
+	const syncServer = new FakeRemoteSyncState();
+
+	await seedBrowserState(page, {
+		authState: registeredAuthState(),
+		sessionCookieReady: true,
+		localStorage: {
+			[storageKeys.theme]: "light",
+			[storageKeys.syncMeta]: JSON.stringify({
+				"settings.theme": localThemeUpdatedAt
+			}),
+			[storageKeys.syncCursor]: "0",
+			[storageKeys.syncQueue]: "[]"
+		}
+	});
+	await mockBaseAppApis(page, { syncServer });
+
+	await page.goto("/chat");
+	await expect(page.getByText("Aiko").first()).toBeVisible();
+	await expect.poll(() => syncServer.changesRequests.length).toBeGreaterThanOrEqual(1);
+
+	const baselinePreviewCount = syncServer.previewRequests.length;
+	const baselineCommitCount = syncServer.commitRequests.length;
+	const baselineChangesCount = syncServer.changesRequests.length;
+	syncServer.upsertItem({
+		item_id: "settings.backgroundImageUrl",
+		item_type: "setting",
+		updated_at: remoteBackgroundUpdatedAt,
+		deleted_at: null,
+		payload: {
+			key: "backgroundImageUrl",
+			value: remoteBackgroundUrl
+		}
+	});
+	await page.evaluate(
+		({ queueKey, themeKey, queue }) => {
+			window.localStorage.setItem(themeKey, "dark");
+			window.localStorage.setItem(queueKey, JSON.stringify(queue));
+		},
+		{
+			queueKey: storageKeys.syncQueue,
+			themeKey: storageKeys.theme,
+			queue: [
+				{
+					operation_id: "e2e-online-sync-operation",
+					attempt: 0,
+					next_retry_at: 0,
+					items: [
+						{
+							item_id: "settings.theme",
+							item_type: "setting",
+							updated_at: localThemeUpdatedAt,
+							deleted_at: null,
+							payload: {
+								key: "theme",
+								value: "dark"
+							}
+						}
+					]
+				}
+			]
+		}
+	);
+
+	await page.evaluate(() => window.dispatchEvent(new Event("online")));
+
+	await expect.poll(() => syncServer.previewRequests.length).toBeGreaterThan(baselinePreviewCount);
+	await expect.poll(() => syncServer.commitRequests.length).toBeGreaterThan(baselineCommitCount);
+	await expect.poll(() => syncServer.changesRequests.length).toBeGreaterThan(baselineChangesCount);
+	await expect.poll(() => readLocalStorageJson<unknown[]>(page, storageKeys.syncQueue)).toEqual([]);
+	const committedItems = syncServer.commitRequests.at(-1)?.items ?? [];
+	expect(committedItems).toContainEqual(
+		expect.objectContaining({
+			item_id: "settings.theme",
+			item_type: "setting",
+			updated_at: localThemeUpdatedAt,
+			deleted_at: null,
+			payload: {
+				key: "theme",
+				value: "dark"
+			}
+		})
+	);
+	await expectLocalStorageItem(page, storageKeys.backgroundImageUrl, remoteBackgroundUrl);
+	await expectSyncCursor(page, remoteBackgroundUpdatedAt);
+});
+
 async function isDocumentDark(page: Page) {
 	return page.evaluate(() => document.documentElement.classList.contains("dark"));
 }

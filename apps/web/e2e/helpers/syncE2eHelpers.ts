@@ -87,6 +87,10 @@ export class FakeRemoteSyncState {
 		this.nextCommitFailureStatus = status;
 	}
 
+	upsertItem(item: E2eSyncItem) {
+		this.items.set(item.item_id, item);
+	}
+
 	async routePreview(route: Route) {
 		const body = route.request().postDataJSON() as { items?: E2eSyncItem[] };
 		const items = body.items ?? [];

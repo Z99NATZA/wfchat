@@ -77,6 +77,11 @@ The sync system is designed to:
 - Browser E2E coverage for stale pulled theme guard: an authenticated app boot
   seeds a newer local dark theme, pulls an older cloud light theme, keeps local
   storage and document state dark, and still advances the sync cursor.
+- Browser E2E coverage for the authenticated browser `online` event: after
+  initial boot pull settles, the test seeds a queued local setting and a remote
+  background fixture, dispatches `online`, then verifies preview/commit and
+  changes requests increase, the queue clears, and the remote background is
+  applied locally.
 
 ### Not Done Yet
 
@@ -849,9 +854,10 @@ A minimal Playwright browser E2E suite exists under `apps/web/e2e`. It covers
 authenticated boot pull, guest-to-login manual sync, cross-browser setting
 pull, cross-browser pulled background/chat/memory cache fixtures, pulled chat
 tombstone propagation, stale pulled theme guard, and failed flush retry
-metadata for preview and commit failures. Follow the Sync E2E Rollout Plan
-above and prefer real browser tests that control local storage and mock API
-responses at the network boundary for the first milestone.
+metadata for preview and commit failures, and authenticated browser `online`
+event sync work. Follow the Sync E2E Rollout Plan above and prefer real browser
+tests that control local storage and mock API responses at the network boundary
+for the first milestone.
 
 Recommended flows:
 
