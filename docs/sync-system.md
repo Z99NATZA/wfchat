@@ -58,6 +58,10 @@ The sync system is designed to:
 - Browser E2E coverage for cross-browser setting pull using two registered
   browser contexts and one shared fake remote sync server, so the second
   context pulls the item committed by the first context.
+- Browser E2E coverage for pulled chat tombstone propagation: an authenticated
+  app boot seeds local chat cache, pulls a matching tombstone, removes the
+  cached session from local storage, and verifies the deleted chat does not
+  reappear after page refresh.
 
 ### Not Done Yet
 
@@ -827,10 +831,10 @@ Recommended cases:
 ### Web E2E Tests
 
 A minimal Playwright browser E2E suite exists under `apps/web/e2e`. It covers
-authenticated boot pull, guest-to-login manual sync, and cross-browser setting
-pull. Follow the `Sync E2E Rollout Plan` above and prefer real browser tests
-that control local storage and mock API responses at the network boundary for
-the first milestone.
+authenticated boot pull, guest-to-login manual sync, cross-browser setting
+pull, and pulled chat tombstone propagation. Follow the `Sync E2E Rollout Plan`
+above and prefer real browser tests that control local storage and mock API
+responses at the network boundary for the first milestone.
 
 Recommended flows:
 
