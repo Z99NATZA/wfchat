@@ -67,6 +67,7 @@ type MockAppApisOptions = {
 export class FakeRemoteSyncState {
 	private readonly items = new Map<string, E2eSyncItem>();
 	private nextPreviewFailureStatus: number | null = null;
+	private nextCommitFailureStatus: number | null = null;
 
 	previewRequests: E2eSyncItem[][] = [];
 	commitRequests: Array<{ operation_id: string; items: E2eSyncItem[] }> = [];
@@ -80,6 +81,10 @@ export class FakeRemoteSyncState {
 
 	failNextPreview(status = 500) {
 		this.nextPreviewFailureStatus = status;
+	}
+
+	failNextCommit(status = 500) {
+		this.nextCommitFailureStatus = status;
 	}
 
 	async routePreview(route: Route) {
@@ -130,6 +135,20 @@ export class FakeRemoteSyncState {
 		const operationId = body.operation_id ?? "e2e-operation";
 		const items = body.items ?? [];
 		this.commitRequests.push({ operation_id: operationId, items });
+
+		if (this.nextCommitFailureStatus !== null) {
+			const status = this.nextCommitFailureStatus;
+			this.nextCommitFailureStatus = null;
+			await route.fulfill({
+				status,
+				contentType: "application/json",
+				body: JSON.stringify({ error: "sync_commit_failed" }),
+				headers: {
+					"access-control-allow-origin": "*"
+				}
+			});
+			return;
+		}
 
 		let mergedCount = 0;
 		for (const item of items) {

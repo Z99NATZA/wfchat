@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, type Page, test } from "@playwright/test";
 import {
 	FakeRemoteSyncState,
 	guestAuthState,
@@ -10,6 +10,18 @@ import {
 	seedBrowserState,
 	storageKeys
 } from "./helpers/syncE2eHelpers";
+
+type E2eQueuedOperation = {
+	attempt: number;
+	next_retry_at: number;
+	items: Array<{
+		item_id: string;
+		item_type: string;
+		updated_at: number;
+		deleted_at: number | null;
+		payload: Record<string, string>;
+	}>;
+};
 
 test("guest login can commit local setting through Sync now", async ({ page }) => {
 	const localThemeUpdatedAt = 1_780_325_500;
@@ -95,17 +107,58 @@ test("failed Sync now preview keeps queued setting and records retry metadata", 
 
 	await expect.poll(() => syncServer.previewRequests.length).toBeGreaterThanOrEqual(1);
 	await expect.poll(() => syncServer.commitRequests.length).toBe(0);
-	type E2eQueuedOperation = {
-		attempt: number;
-		next_retry_at: number;
-		items: Array<{
-			item_id: string;
-			item_type: string;
-			updated_at: number;
-			deleted_at: number | null;
-			payload: Record<string, string>;
-		}>;
-	};
+	await expectQueuedThemeRetry(page, beforeSyncNowSeconds, localThemeUpdatedAt);
+});
+
+test("failed Sync now commit keeps queued setting and records retry metadata", async ({ page }) => {
+	const localThemeUpdatedAt = 1_780_325_850;
+	const syncServer = new FakeRemoteSyncState();
+	syncServer.failNextCommit();
+
+	await seedBrowserState(page, {
+		authState: registeredAuthState(),
+		sessionCookieReady: true,
+		localStorage: {
+			[storageKeys.theme]: "dark",
+			[storageKeys.syncMeta]: JSON.stringify({
+				"settings.theme": localThemeUpdatedAt
+			}),
+			[storageKeys.syncQueue]: "[]"
+		}
+	});
+	await mockBaseAppApis(page, { syncServer });
+
+	await page.goto("/chat");
+	await expect(page.getByText("Aiko").first()).toBeVisible();
+	await page.locator("button:has(svg.lucide-user)").click();
+	await expect(page.getByRole("heading", { name: "Profile", exact: true })).toBeVisible();
+
+	const beforeSyncNowSeconds = Math.floor(Date.now() / 1000);
+	await page.getByRole("button", { name: "Sync now" }).click();
+
+	await expect.poll(() => syncServer.previewRequests.length).toBeGreaterThanOrEqual(1);
+	await expect.poll(() => syncServer.commitRequests.length).toBeGreaterThanOrEqual(1);
+	const committedItems = syncServer.commitRequests.at(-1)?.items ?? [];
+	expect(committedItems).toContainEqual(
+		expect.objectContaining({
+			item_id: "settings.theme",
+			item_type: "setting",
+			updated_at: localThemeUpdatedAt,
+			deleted_at: null,
+			payload: {
+				key: "theme",
+				value: "dark"
+			}
+		})
+	);
+	await expectQueuedThemeRetry(page, beforeSyncNowSeconds, localThemeUpdatedAt);
+});
+
+async function expectQueuedThemeRetry(
+	page: Page,
+	beforeSyncNowSeconds: number,
+	localThemeUpdatedAt: number
+) {
 	await expect
 		.poll(async () => {
 			const queue = await readLocalStorageJson<E2eQueuedOperation[]>(page, storageKeys.syncQueue);
@@ -135,4 +188,4 @@ test("failed Sync now preview keeps queued setting and records retry metadata", 
 			}
 		})
 	);
-});
+}
