@@ -148,6 +148,90 @@ test("authenticated app boot applies pulled chat tombstones to local cache", asy
 	await expect(page.getByText(deletedChatLastMessage)).toHaveCount(0);
 });
 
+test("authenticated app boot applies pulled memory tombstones to local cache", async ({ page }) => {
+	const deletedFactId = "memory-fact-tombstone";
+	const deletedSummaryId = "memory-summary-tombstone";
+	const keptFactId = "memory-fact-kept";
+	const keptSummaryId = "memory-summary-kept";
+	const remoteUpdatedAt = 1_780_325_750;
+	const seededFacts = [
+		{
+			id: deletedFactId,
+			characterId: "aiko",
+			content: "Deleted memory fact should leave local cache.",
+			confidence: "0.8",
+			sourceChatId: "",
+			updatedAt: String(remoteUpdatedAt - 200)
+		},
+		{
+			id: keptFactId,
+			characterId: "aiko",
+			content: "Kept memory fact remains local.",
+			confidence: "0.9",
+			sourceChatId: "",
+			updatedAt: String(remoteUpdatedAt - 100)
+		}
+	];
+	const seededSummaries = [
+		{
+			id: deletedSummaryId,
+			characterId: "aiko",
+			summary: "Deleted memory summary should leave local cache.",
+			sourceChatId: "",
+			createdAt: String(remoteUpdatedAt - 200)
+		},
+		{
+			id: keptSummaryId,
+			characterId: "aiko",
+			summary: "Kept memory summary remains local.",
+			sourceChatId: "",
+			createdAt: String(remoteUpdatedAt - 100)
+		}
+	];
+	const syncServer = new FakeRemoteSyncState([
+		{
+			item_id: `memory.fact.${deletedFactId}`,
+			item_type: "memory_fact",
+			updated_at: remoteUpdatedAt,
+			deleted_at: remoteUpdatedAt,
+			payload: {}
+		},
+		{
+			item_id: `memory.summary.${deletedSummaryId}`,
+			item_type: "memory_summary",
+			updated_at: remoteUpdatedAt + 1,
+			deleted_at: remoteUpdatedAt + 1,
+			payload: {}
+		}
+	]);
+
+	await seedBrowserState(page, {
+		authState: registeredAuthState(),
+		sessionCookieReady: true,
+		localStorage: {
+			[storageKeys.syncCursor]: "0",
+			[storageKeys.syncQueue]: "[]",
+			[storageKeys.memoryFactsCache]: JSON.stringify(seededFacts),
+			[storageKeys.memorySummariesCache]: JSON.stringify(seededSummaries)
+		}
+	});
+	await mockBaseAppApis(page, { syncServer });
+
+	await page.goto("/chat");
+	await expect(page.getByText("Aiko").first()).toBeVisible();
+
+	await expect.poll(() => hasStorageEntry(page, storageKeys.memoryFactsCache, deletedFactId)).toBe(false);
+	await expect.poll(() => hasStorageEntry(page, storageKeys.memorySummariesCache, deletedSummaryId)).toBe(false);
+	await expect.poll(() => hasStorageEntry(page, storageKeys.memoryFactsCache, keptFactId)).toBe(true);
+	await expect.poll(() => hasStorageEntry(page, storageKeys.memorySummariesCache, keptSummaryId)).toBe(true);
+	await expectSyncCursor(page, remoteUpdatedAt + 1);
+
+	await page.reload();
+	await expect(page.getByText("Aiko").first()).toBeVisible();
+	await expect.poll(() => hasStorageEntry(page, storageKeys.memoryFactsCache, deletedFactId)).toBe(false);
+	await expect.poll(() => hasStorageEntry(page, storageKeys.memorySummariesCache, deletedSummaryId)).toBe(false);
+});
+
 test("authenticated browser online event flushes pending queue and pulls remote changes", async ({ page }) => {
 	const localThemeUpdatedAt = 1_780_325_900;
 	const remoteBackgroundUpdatedAt = localThemeUpdatedAt + 10;
@@ -240,4 +324,9 @@ test("authenticated browser online event flushes pending queue and pulls remote 
 
 async function isDocumentDark(page: Page) {
 	return page.evaluate(() => document.documentElement.classList.contains("dark"));
+}
+
+async function hasStorageEntry(page: Page, key: string, id: string) {
+	const entries = await readLocalStorageJson<Array<{ id?: string }>>(page, key);
+	return entries?.some((entry) => entry.id === id) ?? false;
 }
