@@ -25,34 +25,34 @@
 
 @layer base {
 	:root {
-		--brand-primary: #4f8ef7;
-		--brand-primary-hover: #3b7ee8;
+		--brand-primary: #315f9f;
+		--brand-primary-hover: #284f86;
 
-		--app-bg: #f8fafc;
-		--app-panel: rgb(255 255 255 / 0.92);
-		--app-soft: rgb(241 245 249 / 0.86);
+		--app-bg: #f5f7fb;
+		--app-panel: rgb(251 252 255 / 0.9);
+		--app-soft: rgb(238 242 248 / 0.82);
 
-		--app-text: #0f172a;
-		--muted: #64748b;
+		--app-text: #202633;
+		--muted: #607087;
 
-		--app-border: rgb(226 232 240 / 0.8);
+		--app-border: rgb(216 222 234 / 0.78);
 
 		--dialog-panel: #ffffff;
-		--dialog-soft: #f1f5f9;
-		--dialog-border: #e2e8f0;
+		--dialog-soft: #f0f3f9;
+		--dialog-border: #d8deea;
 
 		--wfchat-bg-image: none;
 		--wfchat-bg-render-size: cover;
 		--wfchat-bg-root-position: center;
 		--wfchat-surface-bg-position: center;
 		--wfchat-surface-bg-opacity: 0;
-		--app-bg-image-opacity: 0.08;
+		--app-bg-image-opacity: 0.06;
 
-		--action-bg: #4f8ef7;
-		--action-bg-hover: #3b7ee8;
-		--action-border: #4f8ef7;
+		--action-bg: #315f9f;
+		--action-bg-hover: #284f86;
+		--action-border: #315f9f;
 		--action-text: #ffffff;
-		--action-ring: rgb(79 142 247 / 0.35);
+		--action-ring: rgb(49 95 159 / 0.3);
 		--chat-scrollbar-thumb: color-mix(in srgb, var(--brand-primary) 45%, transparent);
 		--chat-scrollbar-thumb-hover: color-mix(in srgb, var(--brand-primary) 68%, transparent);
 

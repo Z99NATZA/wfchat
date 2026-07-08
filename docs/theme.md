@@ -72,14 +72,18 @@ Use these tokens by intent, not by visual similarity.
 Light mode:
 
 ```css
---app-bg: #f6f8fc;
---app-panel: rgb(255 255 255 / 0.82);
---app-soft: rgb(240 244 251 / 0.66);
---app-border: rgb(220 227 239 / 0.52);
+--brand-primary: #315f9f;
+--brand-primary-hover: #284f86;
+--app-bg: #f5f7fb;
+--app-panel: rgb(251 252 255 / 0.9);
+--app-soft: rgb(238 242 248 / 0.82);
+--app-text: #202633;
+--muted: #607087;
+--app-border: rgb(216 222 234 / 0.78);
 --dialog-panel: #ffffff;
---dialog-soft: #f0f4fb;
---dialog-border: #dce3ef;
---app-bg-image-opacity: 0.18;
+--dialog-soft: #f0f3f9;
+--dialog-border: #d8deea;
+--app-bg-image-opacity: 0.06;
 ```
 
 Dark mode:
