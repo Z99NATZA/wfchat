@@ -157,7 +157,9 @@ export async function listPersonaChats(characterId: string): Promise<ChatSession
 	return response.data.map(toSessionSummary);
 }
 
-export async function createPersonaChat(characterId: string): Promise<{ chatId: string; messages: ChatMessage[] }> {
+export async function createPersonaChat(
+	characterId: string
+): Promise<{ chatId: string; messages: ChatMessage[] }> {
 	await ensureCookieSession();
 	const response = await apiClient.post<ApiChat>(`/api/personas/${characterId}/chats`);
 	return {
@@ -166,7 +168,9 @@ export async function createPersonaChat(characterId: string): Promise<{ chatId: 
 	};
 }
 
-export async function getChat(chatId: string): Promise<{ chatId: string; messages: ChatMessage[] }> {
+export async function getChat(
+	chatId: string
+): Promise<{ chatId: string; messages: ChatMessage[] }> {
 	await ensureCookieSession();
 	const response = await apiClient.get<ApiChat>(`/api/chats/${chatId}`);
 	return {
@@ -385,7 +389,9 @@ export async function fetchAssistantMessageSpeech(
 
 export async function listMemoryFacts(characterId: string): Promise<MemoryFact[]> {
 	await ensureCookieSession();
-	const response = await apiClient.get<ApiMemoryFact[]>(`/api/personas/${characterId}/memory/facts`);
+	const response = await apiClient.get<ApiMemoryFact[]>(
+		`/api/personas/${characterId}/memory/facts`
+	);
 	return response.data.map(toMemoryFact);
 }
 
@@ -414,16 +420,18 @@ export async function updateMemoryFact(
 	confidence?: number
 ): Promise<MemoryFact> {
 	await ensureCookieSession();
-	const response = await apiClient.patch<ApiMemoryFact>(
-		`/api/memory/facts/${factId}`,
-		{ content, confidence }
-	);
+	const response = await apiClient.patch<ApiMemoryFact>(`/api/memory/facts/${factId}`, {
+		content,
+		confidence
+	});
 	return toMemoryFact(response.data);
 }
 
 export async function listMemorySummaries(characterId: string): Promise<MemorySummary[]> {
 	await ensureCookieSession();
-	const response = await apiClient.get<ApiMemorySummary[]>(`/api/personas/${characterId}/memory/summaries`);
+	const response = await apiClient.get<ApiMemorySummary[]>(
+		`/api/personas/${characterId}/memory/summaries`
+	);
 	return response.data.map(toMemorySummary);
 }
 
@@ -445,12 +453,14 @@ export async function deleteMemorySummary(summaryId: string): Promise<void> {
 	await apiClient.delete(`/api/memory/summaries/${summaryId}`);
 }
 
-export async function updateMemorySummary(summaryId: string, summary: string): Promise<MemorySummary> {
+export async function updateMemorySummary(
+	summaryId: string,
+	summary: string
+): Promise<MemorySummary> {
 	await ensureCookieSession();
-	const response = await apiClient.patch<ApiMemorySummary>(
-		`/api/memory/summaries/${summaryId}`,
-		{ summary }
-	);
+	const response = await apiClient.patch<ApiMemorySummary>(`/api/memory/summaries/${summaryId}`, {
+		summary
+	});
 	return toMemorySummary(response.data);
 }
 

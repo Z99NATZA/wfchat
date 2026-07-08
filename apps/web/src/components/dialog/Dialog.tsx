@@ -97,7 +97,10 @@ function Dialog({
 	}
 
 	return createPortal(
-		<div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="presentation">
+		<div
+			className="fixed inset-0 z-50 flex items-center justify-center p-4"
+			role="presentation"
+		>
 			<button
 				type="button"
 				className="absolute inset-0 bg-slate-950/45"
@@ -144,14 +147,15 @@ function Dialog({
 					</IconButton>
 				</div>
 				{description && (
-					<p id="wfchat-dialog-description" className="px-5 pt-4 text-sm leading-6 text-muted">
+					<p
+						id="wfchat-dialog-description"
+						className="px-5 pt-4 text-sm leading-6 text-muted"
+					>
 						{description}
 					</p>
 				)}
 				{content && <div className="px-5 pt-4">{content}</div>}
-				<div className="flex justify-end gap-2 px-5 py-5">
-					{actions}
-				</div>
+				<div className="flex justify-end gap-2 px-5 py-5">{actions}</div>
 			</section>
 		</div>,
 		document.body
@@ -159,7 +163,9 @@ function Dialog({
 }
 
 function useDesktopDraggableDialog(isDraggable: boolean) {
-	const [canDragDialog, setCanDragDialog] = useState(() => isDraggable && matchesDesktopDraggableDialog());
+	const [canDragDialog, setCanDragDialog] = useState(
+		() => isDraggable && matchesDesktopDraggableDialog()
+	);
 
 	useEffect(() => {
 		if (!isDraggable) {

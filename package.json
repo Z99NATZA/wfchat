@@ -11,6 +11,8 @@
     "init": "node scripts/init-env.mjs",
     "dev:web": "npm --prefix apps/web run dev",
     "dev:api": "cargo run --manifest-path apps/api/Cargo.toml",
+    "lint:web": "npm --prefix apps/web run lint",
+    "format:web:check": "npm --prefix apps/web run format:check",
     "build:web": "npm --prefix apps/web run build",
     "check:api": "cargo check --manifest-path apps/api/Cargo.toml",
     "build": "npm run build:web && npm run check:api",

@@ -18,13 +18,13 @@ describe("chat SSE parser", () => {
 		const events: ParsedSseEvent[] = [];
 		const parser = createSseEventParser((event) => events.push(event));
 
-		parser.push("event: token\ndata: {\"text\":\"hel");
-		parser.push("lo\"}\n\n");
+		parser.push('event: token\ndata: {"text":"hel');
+		parser.push('lo"}\n\n');
 
 		expect(events).toEqual([
 			{
 				event: "token",
-				data: "{\"text\":\"hello\"}"
+				data: '{"text":"hello"}'
 			}
 		]);
 	});
@@ -34,18 +34,18 @@ describe("chat SSE parser", () => {
 		const parser = createSseEventParser((event) => events.push(event));
 
 		parser.push(
-			"event: message_start\r\ndata: {\"chat_id\":\"chat-1\",\"persona_id\":\"aiko\"}\r\n\r\n" +
-				"event: token\r\ndata: {\"text\":\"hi\"}\r\n\r\n"
+			'event: message_start\r\ndata: {"chat_id":"chat-1","persona_id":"aiko"}\r\n\r\n' +
+				'event: token\r\ndata: {"text":"hi"}\r\n\r\n'
 		);
 
 		expect(events).toEqual([
 			{
 				event: "message_start",
-				data: "{\"chat_id\":\"chat-1\",\"persona_id\":\"aiko\"}"
+				data: '{"chat_id":"chat-1","persona_id":"aiko"}'
 			},
 			{
 				event: "token",
-				data: "{\"text\":\"hi\"}"
+				data: '{"text":"hi"}'
 			}
 		]);
 	});
@@ -68,13 +68,13 @@ describe("chat SSE parser", () => {
 		const events: ParsedSseEvent[] = [];
 		const parser = createSseEventParser((event) => events.push(event));
 
-		parser.push("event: error\ndata: {\"message\":\"failed\"}");
+		parser.push('event: error\ndata: {"message":"failed"}');
 		parser.end();
 
 		expect(events).toEqual([
 			{
 				event: "error",
-				data: "{\"message\":\"failed\"}"
+				data: '{"message":"failed"}'
 			}
 		]);
 	});
@@ -117,7 +117,9 @@ describe("chat image attachment send boundary", () => {
 	});
 
 	it("streams image-only messages with only backend-issued attachment ids", async () => {
-		const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => streamDoneResponse());
+		const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) =>
+			streamDoneResponse()
+		);
 		vi.stubGlobal("fetch", fetchMock);
 
 		await streamChatMessage(
@@ -128,7 +130,8 @@ describe("chat image attachment send boundary", () => {
 					id: "attachment-1",
 					kind: "image",
 					previewUrl: "blob:local-preview",
-					authenticatedPreviewUrl: "http://localhost:8080/api/chat/attachments/attachment-1/preview",
+					authenticatedPreviewUrl:
+						"http://localhost:8080/api/chat/attachments/attachment-1/preview",
 					localPath: "C:\\Users\\znnn\\Pictures\\local.png",
 					fileUrl: "file:///C:/Users/znnn/Pictures/local.png",
 					userImageUrl: "https://example.com/user-image.png",
@@ -174,13 +177,10 @@ describe("chat image attachment send boundary", () => {
 			})
 		]);
 
-		expect(postSpy).toHaveBeenCalledWith(
-			"/api/chats/chat-1/messages",
-			{
-				content: "please describe this",
-				attachments: [{ id: "attachment-2", kind: "image" }]
-			}
-		);
+		expect(postSpy).toHaveBeenCalledWith("/api/chats/chat-1/messages", {
+			content: "please describe this",
+			attachments: [{ id: "attachment-2", kind: "image" }]
+		});
 		const requestBody = JSON.stringify(postSpy.mock.calls[0][1]);
 		expectSendBodyToExcludeUnsafeImagePayload(requestBody);
 	});
@@ -220,7 +220,9 @@ function installLocalStorageMock() {
 	});
 }
 
-function unsafeAttachmentInput<TAttachment extends { id: string; kind: "image" }>(attachment: TAttachment) {
+function unsafeAttachmentInput<TAttachment extends { id: string; kind: "image" }>(
+	attachment: TAttachment
+) {
 	return attachment;
 }
 

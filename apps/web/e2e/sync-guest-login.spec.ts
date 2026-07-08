@@ -66,20 +66,28 @@ test("guest login can commit local setting through Sync now", async ({ page }) =
 			value: "dark"
 		}
 	});
-	await expect.poll(() => readLocalStorageJson<unknown[]>(page, storageKeys.syncQueue)).toEqual([]);
 	await expect
-		.poll(() => readLocalStorageJson<{ user: { id: string } | null; hasPendingGuestSync: boolean }>(
-			page,
-			storageKeys.authState
-		))
+		.poll(() => readLocalStorageJson<unknown[]>(page, storageKeys.syncQueue))
+		.toEqual([]);
+	await expect
+		.poll(() =>
+			readLocalStorageJson<{ user: { id: string } | null; hasPendingGuestSync: boolean }>(
+				page,
+				storageKeys.authState
+			)
+		)
 		.toMatchObject({
 			user: { id: "user-e2e" },
 			hasPendingGuestSync: false
-	});
-	await expect.poll(() => page.evaluate((key) => window.localStorage.getItem(key), storageKeys.theme)).toBe("dark");
+		});
+	await expect
+		.poll(() => page.evaluate((key) => window.localStorage.getItem(key), storageKeys.theme))
+		.toBe("dark");
 });
 
-test("failed Sync now preview keeps queued setting and records retry metadata", async ({ page }) => {
+test("failed Sync now preview keeps queued setting and records retry metadata", async ({
+	page
+}) => {
 	const localThemeUpdatedAt = 1_780_325_800;
 	const syncServer = new FakeRemoteSyncState();
 	syncServer.failNextPreview();
@@ -161,7 +169,10 @@ async function expectQueuedThemeRetry(
 ) {
 	await expect
 		.poll(async () => {
-			const queue = await readLocalStorageJson<E2eQueuedOperation[]>(page, storageKeys.syncQueue);
+			const queue = await readLocalStorageJson<E2eQueuedOperation[]>(
+				page,
+				storageKeys.syncQueue
+			);
 			return queue?.length ?? 0;
 		})
 		.toBe(1);

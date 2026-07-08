@@ -64,7 +64,9 @@ function Model2DSidebar() {
 					<Layers size={20} aria-hidden="true" />
 				</div>
 				<div className="min-w-0">
-					<p className="text-base font-semibold text-app-text">{t("model2d.sidebar.title")}</p>
+					<p className="text-base font-semibold text-app-text">
+						{t("model2d.sidebar.title")}
+					</p>
 					<p className="truncate text-xs text-muted">{t("model2d.sidebar.subtitle")}</p>
 				</div>
 			</div>
@@ -92,7 +94,9 @@ function Model2DSidebar() {
 								<Box size={18} aria-hidden="true" />
 							</span>
 							<span className="min-w-0 flex-1">
-								<span className="block truncate text-sm font-semibold text-app-text">{t(asset.nameKey)}</span>
+								<span className="block truncate text-sm font-semibold text-app-text">
+									{t(asset.nameKey)}
+								</span>
 								<span className="text-xs text-muted">{t(asset.statusKey)}</span>
 							</span>
 						</Button>
@@ -130,8 +134,12 @@ function Model2DStage() {
 						<div className="flex size-24 items-center justify-center rounded-2xl border border-app-border bg-app-soft text-muted">
 							<ScanFace size={42} aria-hidden="true" />
 						</div>
-						<p className="mt-5 text-sm font-semibold text-app-text">{t("model2d.viewport.modelSlot")}</p>
-						<p className="mt-1 text-xs text-muted">{t("model2d.viewport.modelSlotStatus")}</p>
+						<p className="mt-5 text-sm font-semibold text-app-text">
+							{t("model2d.viewport.modelSlot")}
+						</p>
+						<p className="mt-1 text-xs text-muted">
+							{t("model2d.viewport.modelSlotStatus")}
+						</p>
 					</div>
 				</div>
 			</div>
@@ -183,7 +191,9 @@ function Model2DHeader({ controls }: Model2DHeaderProps) {
 					trailingActions={deletePlaceholder}
 				/>
 			}
-			mobileMenuContent={<AppHeaderMobileControls {...controls} actions={deletePlaceholder} />}
+			mobileMenuContent={
+				<AppHeaderMobileControls {...controls} actions={deletePlaceholder} />
+			}
 		/>
 	);
 }
@@ -194,7 +204,9 @@ function Model2DInspector() {
 	return (
 		<aside className="hidden min-h-0 border-l border-app-border bg-app-panel/62 xl:flex xl:flex-col">
 			<div className="border-b border-app-border px-4 py-4">
-				<p className="text-sm font-semibold text-app-text">{t("model2d.inspector.title")}</p>
+				<p className="text-sm font-semibold text-app-text">
+					{t("model2d.inspector.title")}
+				</p>
 				<p className="mt-1 text-xs text-muted">{t("model2d.inspector.subtitle")}</p>
 			</div>
 			<div className="space-y-3 overflow-y-auto p-4">
@@ -202,7 +214,10 @@ function Model2DInspector() {
 					const Icon = row.icon;
 
 					return (
-						<div key={row.labelKey} className="rounded-lg border border-app-border bg-app-soft p-3">
+						<div
+							key={row.labelKey}
+							className="rounded-lg border border-app-border bg-app-soft p-3"
+						>
 							<div className="flex items-center gap-2 text-xs font-semibold text-muted">
 								<Icon size={14} aria-hidden="true" />
 								{t(row.labelKey)}

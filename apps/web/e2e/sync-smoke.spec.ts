@@ -41,9 +41,7 @@ test("authenticated app boot pulls remote sync settings into local state", async
 	await expect(page.getByText("Aiko").first()).toBeVisible();
 	await expectLocalStorageItem(page, storageKeys.theme, "dark");
 	await expectSyncCursor(page, remoteUpdatedAt);
-	await expect
-		.poll(() => syncServer.changesRequests.length)
-		.toBeGreaterThanOrEqual(1);
+	await expect.poll(() => syncServer.changesRequests.length).toBeGreaterThanOrEqual(1);
 });
 
 test("authenticated app boot does not apply stale pulled theme setting", async ({ page }) => {
@@ -220,19 +218,33 @@ test("authenticated app boot applies pulled memory tombstones to local cache", a
 	await page.goto("/chat");
 	await expect(page.getByText("Aiko").first()).toBeVisible();
 
-	await expect.poll(() => hasStorageEntry(page, storageKeys.memoryFactsCache, deletedFactId)).toBe(false);
-	await expect.poll(() => hasStorageEntry(page, storageKeys.memorySummariesCache, deletedSummaryId)).toBe(false);
-	await expect.poll(() => hasStorageEntry(page, storageKeys.memoryFactsCache, keptFactId)).toBe(true);
-	await expect.poll(() => hasStorageEntry(page, storageKeys.memorySummariesCache, keptSummaryId)).toBe(true);
+	await expect
+		.poll(() => hasStorageEntry(page, storageKeys.memoryFactsCache, deletedFactId))
+		.toBe(false);
+	await expect
+		.poll(() => hasStorageEntry(page, storageKeys.memorySummariesCache, deletedSummaryId))
+		.toBe(false);
+	await expect
+		.poll(() => hasStorageEntry(page, storageKeys.memoryFactsCache, keptFactId))
+		.toBe(true);
+	await expect
+		.poll(() => hasStorageEntry(page, storageKeys.memorySummariesCache, keptSummaryId))
+		.toBe(true);
 	await expectSyncCursor(page, remoteUpdatedAt + 1);
 
 	await page.reload();
 	await expect(page.getByText("Aiko").first()).toBeVisible();
-	await expect.poll(() => hasStorageEntry(page, storageKeys.memoryFactsCache, deletedFactId)).toBe(false);
-	await expect.poll(() => hasStorageEntry(page, storageKeys.memorySummariesCache, deletedSummaryId)).toBe(false);
+	await expect
+		.poll(() => hasStorageEntry(page, storageKeys.memoryFactsCache, deletedFactId))
+		.toBe(false);
+	await expect
+		.poll(() => hasStorageEntry(page, storageKeys.memorySummariesCache, deletedSummaryId))
+		.toBe(false);
 });
 
-test("authenticated app uses synced cache when persona list APIs are unavailable", async ({ page }) => {
+test("authenticated app uses synced cache when persona list APIs are unavailable", async ({
+	page
+}) => {
 	const previousSyncCursor = 1_780_325_850;
 	const cachedChatId = "33333333-3333-4333-8333-333333333333";
 	const cachedChatLastMessage = "Cached chat survives unavailable list API";
@@ -289,7 +301,9 @@ test("authenticated app uses synced cache when persona list APIs are unavailable
 	await expect.poll(() => syncServer.changesRequests.length).toBeGreaterThanOrEqual(1);
 });
 
-test("authenticated browser online event flushes pending queue and pulls remote changes", async ({ page }) => {
+test("authenticated browser online event flushes pending queue and pulls remote changes", async ({
+	page
+}) => {
 	const localThemeUpdatedAt = 1_780_325_900;
 	const remoteBackgroundUpdatedAt = localThemeUpdatedAt + 10;
 	const remoteBackgroundUrl = "https://example.test/e2e-online-background.png";
@@ -358,10 +372,16 @@ test("authenticated browser online event flushes pending queue and pulls remote 
 
 	await page.evaluate(() => window.dispatchEvent(new Event("online")));
 
-	await expect.poll(() => syncServer.previewRequests.length).toBeGreaterThan(baselinePreviewCount);
+	await expect
+		.poll(() => syncServer.previewRequests.length)
+		.toBeGreaterThan(baselinePreviewCount);
 	await expect.poll(() => syncServer.commitRequests.length).toBeGreaterThan(baselineCommitCount);
-	await expect.poll(() => syncServer.changesRequests.length).toBeGreaterThan(baselineChangesCount);
-	await expect.poll(() => readLocalStorageJson<unknown[]>(page, storageKeys.syncQueue)).toEqual([]);
+	await expect
+		.poll(() => syncServer.changesRequests.length)
+		.toBeGreaterThan(baselineChangesCount);
+	await expect
+		.poll(() => readLocalStorageJson<unknown[]>(page, storageKeys.syncQueue))
+		.toEqual([]);
 	const committedItems = syncServer.commitRequests.at(-1)?.items ?? [];
 	expect(committedItems).toContainEqual(
 		expect.objectContaining({

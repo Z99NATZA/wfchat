@@ -60,13 +60,19 @@ vi.mock("@/features/chat/components/ChatDetailsPanel", () => ({
 
 vi.mock("@/features/chat/components/ChatComposer", () => ({
 	default: ({ isUserSpeechInputEnabled }: { isUserSpeechInputEnabled?: boolean }) => (
-		<div data-testid="chat-composer" data-user-speech-input-enabled={String(isUserSpeechInputEnabled)} />
+		<div
+			data-testid="chat-composer"
+			data-user-speech-input-enabled={String(isUserSpeechInputEnabled)}
+		/>
 	)
 }));
 
 vi.mock("@/features/chat/components/ChatMessageList", () => ({
 	default: ({ isAssistantSpeechEnabled }: { isAssistantSpeechEnabled?: boolean }) => (
-		<div data-assistant-speech-enabled={String(isAssistantSpeechEnabled)} data-testid="chat-message-list" />
+		<div
+			data-assistant-speech-enabled={String(isAssistantSpeechEnabled)}
+			data-testid="chat-message-list"
+		/>
 	)
 }));
 
@@ -101,7 +107,9 @@ describe("ChatPage assistant speech visibility", () => {
 
 		renderChatPage({ isAssistantSpeechVisible: false });
 
-		expect(screen.getByTestId("chat-message-list").dataset.assistantSpeechEnabled).toBe("false");
+		expect(screen.getByTestId("chat-message-list").dataset.assistantSpeechEnabled).toBe(
+			"false"
+		);
 	});
 
 	it("hides assistant speech actions when backend speech support is unavailable", () => {
@@ -109,7 +117,9 @@ describe("ChatPage assistant speech visibility", () => {
 
 		renderChatPage({ isAssistantSpeechVisible: true });
 
-		expect(screen.getByTestId("chat-message-list").dataset.assistantSpeechEnabled).toBe("false");
+		expect(screen.getByTestId("chat-message-list").dataset.assistantSpeechEnabled).toBe(
+			"false"
+		);
 	});
 
 	it("enables user speech input in the composer when backend support is available", () => {

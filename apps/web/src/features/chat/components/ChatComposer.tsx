@@ -1,4 +1,12 @@
-import { ClipboardEvent, DragEvent, FormEvent, KeyboardEvent, useEffect, useRef, useState } from "react";
+import {
+	ClipboardEvent,
+	DragEvent,
+	FormEvent,
+	KeyboardEvent,
+	useEffect,
+	useRef,
+	useState
+} from "react";
 import { Image, LoaderCircle, Mic, Paperclip, Send, Square, X } from "lucide-react";
 import { useDialog } from "@/components/dialog/DialogProvider";
 import { useI18n } from "@/i18n";
@@ -14,7 +22,9 @@ type ChatComposerProps = {
 	companionName: string;
 	quickPrompts?: string[];
 	onDraftChange: (draft: string) => void;
-	onSend: (imageAttachments?: PendingChatImageAttachment[]) => boolean | void | Promise<boolean | void>;
+	onSend: (
+		imageAttachments?: PendingChatImageAttachment[]
+	) => boolean | void | Promise<boolean | void>;
 	isDisabled?: boolean;
 	isSending?: boolean;
 	isUserSpeechInputEnabled?: boolean;
@@ -167,7 +177,9 @@ function ChatComposer({
 	}
 
 	function handlePaste(event: ClipboardEvent<HTMLTextAreaElement>) {
-		const files = Array.from(event.clipboardData.files).filter((file) => file.type.startsWith("image/"));
+		const files = Array.from(event.clipboardData.files).filter((file) =>
+			file.type.startsWith("image/")
+		);
 		if (files.length === 0) {
 			return;
 		}
@@ -277,7 +289,9 @@ function ChatComposer({
 	const visibleQuickPrompts = quickPrompts.filter((prompt) => prompt.trim().length > 0);
 	const speechStatus = userSpeechInput.status;
 	const isSpeechInputActive =
-		speechStatus === "requesting" || speechStatus === "recording" || speechStatus === "transcribing";
+		speechStatus === "requesting" ||
+		speechStatus === "recording" ||
+		speechStatus === "transcribing";
 	const canUseSpeechInput = isUserSpeechInputEnabled && !isDisabled && !isSending;
 	const speechStatusText = speechInputStatusText(userSpeechInput, t);
 	const canSendMessage = draft.trim().length > 0 || selectedImages.length > 0;
@@ -311,7 +325,10 @@ function ChatComposer({
 				{selectedImages.length > 0 ? (
 					<div className="flex gap-2 overflow-x-auto rounded-lg border border-app-border bg-app-soft/82 p-2">
 						{selectedImages.map((image) => (
-							<div key={image.id} className="relative h-20 w-20 shrink-0 overflow-hidden rounded-md border border-app-border bg-app-panel">
+							<div
+								key={image.id}
+								className="relative h-20 w-20 shrink-0 overflow-hidden rounded-md border border-app-border bg-app-panel"
+							>
 								<button
 									type="button"
 									className="block h-full w-full cursor-zoom-in bg-transparent p-0 text-left focus:outline-none focus:ring-2 focus:ring-primary/35"
@@ -349,7 +366,12 @@ function ChatComposer({
 					className="flex items-center gap-2 rounded-lg border border-app-border bg-app-soft/82 p-2 shadow-soft focus-within:border-primary focus-within:ring-4 focus-within:ring-primary/15"
 					onSubmit={handleSubmit}
 				>
-					<IconButton className="shrink-0" aria-label={t("chat.composer.attachFile")} disabled title={t("common.notSupportedYet")}>
+					<IconButton
+						className="shrink-0"
+						aria-label={t("chat.composer.attachFile")}
+						disabled
+						title={t("common.notSupportedYet")}
+					>
 						<Paperclip size={18} aria-hidden="true" />
 					</IconButton>
 					<input
@@ -424,7 +446,11 @@ function ChatComposer({
 						variant={speechStatus === "recording" ? "danger" : "default"}
 						aria-label={speechInputLabel(speechStatus, t)}
 						aria-pressed={speechStatus === "recording"}
-						disabled={!canUseSpeechInput || speechStatus === "requesting" || speechStatus === "transcribing"}
+						disabled={
+							!canUseSpeechInput ||
+							speechStatus === "requesting" ||
+							speechStatus === "transcribing"
+						}
 						title={
 							isUserSpeechInputEnabled
 								? speechInputLabel(speechStatus, t)
@@ -443,7 +469,11 @@ function ChatComposer({
 					<IconButton
 						className="shrink-0"
 						aria-label={t("chat.composer.attachImage")}
-						disabled={isDisabled || isSending || selectedImages.length >= MAX_IMAGE_ATTACHMENTS}
+						disabled={
+							isDisabled ||
+							isSending ||
+							selectedImages.length >= MAX_IMAGE_ATTACHMENTS
+						}
 						title={t("chat.composer.attachImage")}
 						onClick={handleImagePickerClick}
 					>
@@ -453,7 +483,11 @@ function ChatComposer({
 						type="submit"
 						size="lg"
 						variant="action"
-						aria-label={isSending ? t("chat.composer.waitingForResponse") : t("chat.composer.sendMessage")}
+						aria-label={
+							isSending
+								? t("chat.composer.waitingForResponse")
+								: t("chat.composer.sendMessage")
+						}
 						disabled={isDisabled || isSending || !canSendMessage}
 						title={
 							isSending
@@ -471,7 +505,10 @@ function ChatComposer({
 
 export default ChatComposer;
 
-function speechInputLabel(status: UserSpeechInputState["status"], t: (key: string) => string): string {
+function speechInputLabel(
+	status: UserSpeechInputState["status"],
+	t: (key: string) => string
+): string {
 	if (status === "recording") {
 		return t("chat.composer.stopVoiceMessage");
 	}
@@ -483,10 +520,7 @@ function speechInputLabel(status: UserSpeechInputState["status"], t: (key: strin
 	return t("chat.composer.voiceMessage");
 }
 
-function speechInputStatusText(
-	state: UserSpeechInputState,
-	t: (key: string) => string
-): string {
+function speechInputStatusText(state: UserSpeechInputState, t: (key: string) => string): string {
 	const { errorReason, status } = state;
 
 	switch (status) {
@@ -524,9 +558,10 @@ function formatElapsedTime(totalSeconds: number): string {
 
 function makePendingImageAttachment(file: File): PendingChatImageAttachment {
 	return {
-		id: typeof crypto !== "undefined" && "randomUUID" in crypto
-			? crypto.randomUUID()
-			: `local-image-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+		id:
+			typeof crypto !== "undefined" && "randomUUID" in crypto
+				? crypto.randomUUID()
+				: `local-image-${Date.now()}-${Math.random().toString(16).slice(2)}`,
 		file,
 		name: file.name,
 		previewUrl: URL.createObjectURL(file),

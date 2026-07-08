@@ -6,11 +6,7 @@ const RECORDING_TIMESLICE_MS = 1000;
 
 export type UserSpeechInputStatus = "idle" | "requesting" | "recording" | "transcribing" | "error";
 export type UserSpeechInputErrorReason =
-	| "empty"
-	| "permission"
-	| "recording"
-	| "transcription"
-	| "unsupported";
+	"empty" | "permission" | "recording" | "transcription" | "unsupported";
 
 export type UserSpeechInputState = {
 	errorDetail?: string;
@@ -155,7 +151,9 @@ export function useUserSpeechTranscription(onTranscript: (text: string) => void)
 			}
 
 			const mimeType = preferredRecordingMimeType();
-			const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+			const recorder = mimeType
+				? new MediaRecorder(stream, { mimeType })
+				: new MediaRecorder(stream);
 			resourcesRef.current.stream = stream;
 			resourcesRef.current.recorder = recorder;
 			resourcesRef.current.chunks = [];

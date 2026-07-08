@@ -50,7 +50,11 @@ function AppHeaderBar({
 			<div className="flex min-h-12 items-center justify-between gap-2 sm:h-16 sm:gap-3">
 				<div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
 					{onOpenSidebar && (
-						<IconButton className="lg:hidden" onClick={onOpenSidebar} aria-label={t("chat.header.openSidebar")}>
+						<IconButton
+							className="lg:hidden"
+							onClick={onOpenSidebar}
+							aria-label={t("chat.header.openSidebar")}
+						>
 							<Menu size={18} aria-hidden="true" />
 						</IconButton>
 					)}
@@ -68,11 +72,19 @@ function AppHeaderBar({
 							<h1 className="truncate text-base font-semibold">{title}</h1>
 							{titleAccessory}
 						</div>
-						{subtitle && <p className="hidden truncate text-xs text-muted sm:block">{subtitle}</p>}
+						{subtitle && (
+							<p className="hidden truncate text-xs text-muted sm:block">
+								{subtitle}
+							</p>
+						)}
 					</div>
 				</div>
 
-				{desktopActions && <div className="hidden flex-wrap items-center gap-2 pl-11 sm:flex sm:pl-0">{desktopActions}</div>}
+				{desktopActions && (
+					<div className="hidden flex-wrap items-center gap-2 pl-11 sm:flex sm:pl-0">
+						{desktopActions}
+					</div>
+				)}
 
 				{mobileMenuContent && (
 					<div className="relative ml-auto flex sm:hidden" ref={mobileMenuRef}>

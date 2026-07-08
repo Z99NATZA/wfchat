@@ -22,7 +22,16 @@ const emotionKeywordRules: Array<{ expressionId: AikoEmotionId; keywords: string
 	},
 	{
 		expressionId: "surprised",
-		keywords: ["wow", "whoa", "surprise", "unexpected", "ตกใจ", "ว้าว", "จริงเหรอ", "ไม่น่าเชื่อ"]
+		keywords: [
+			"wow",
+			"whoa",
+			"surprise",
+			"unexpected",
+			"ตกใจ",
+			"ว้าว",
+			"จริงเหรอ",
+			"ไม่น่าเชื่อ"
+		]
 	},
 	{
 		expressionId: "shy",

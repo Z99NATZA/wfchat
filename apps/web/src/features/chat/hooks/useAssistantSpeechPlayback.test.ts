@@ -150,7 +150,9 @@ describe("useAssistantSpeechPlayback", () => {
 	it("starts MediaSource playback before the speech request resolves", async () => {
 		vi.stubEnv("VITE_ENABLE_STREAMING_SPEECH_PLAYBACK", "true");
 		stubMediaSource();
-		vi.mocked(fetchAssistantMessageSpeech).mockReturnValue(new Promise<Response>(() => undefined));
+		vi.mocked(fetchAssistantMessageSpeech).mockReturnValue(
+			new Promise<Response>(() => undefined)
+		);
 		const { result } = renderHook(() => useAssistantSpeechPlayback("chat-1"));
 
 		await act(async () => {

@@ -39,7 +39,9 @@ test("second browser pulls a setting committed by the first browser", async ({ b
 			value: "dark"
 		}
 	});
-	await expect.poll(() => readLocalStorageJson<unknown[]>(firstPage, storageKeys.syncQueue)).toEqual([]);
+	await expect
+		.poll(() => readLocalStorageJson<unknown[]>(firstPage, storageKeys.syncQueue))
+		.toEqual([]);
 
 	const secondPage = await newRegisteredSyncPage(browser, syncServer, {
 		[storageKeys.theme]: "light",
@@ -153,15 +155,20 @@ test("second browser pulls background, chat, and memory cache fixtures", async (
 
 	await expectLocalStorageItem(secondPage, storageKeys.backgroundImageUrl, backgroundImageUrl);
 	await expectSyncCursor(secondPage, remoteBaseUpdatedAt + 4);
-	await expect.poll(() => readLocalStorageJson<Record<string, number>>(
-		secondPage,
-		storageKeys.syncMeta
-	)).toMatchObject({
-		"settings.backgroundImageUrl": remoteBaseUpdatedAt
-	});
-	await expect.poll(() => hasStorageEntry(secondPage, storageKeys.chatSessionsCache, chatId)).toBe(true);
-	await expect.poll(() => hasStorageEntry(secondPage, storageKeys.chatMessagesCache, chatMessageId)).toBe(true);
-	await expect.poll(() => hasStorageEntry(secondPage, storageKeys.memoryFactsCache, "remote-fact")).toBe(true);
+	await expect
+		.poll(() => readLocalStorageJson<Record<string, number>>(secondPage, storageKeys.syncMeta))
+		.toMatchObject({
+			"settings.backgroundImageUrl": remoteBaseUpdatedAt
+		});
+	await expect
+		.poll(() => hasStorageEntry(secondPage, storageKeys.chatSessionsCache, chatId))
+		.toBe(true);
+	await expect
+		.poll(() => hasStorageEntry(secondPage, storageKeys.chatMessagesCache, chatMessageId))
+		.toBe(true);
+	await expect
+		.poll(() => hasStorageEntry(secondPage, storageKeys.memoryFactsCache, "remote-fact"))
+		.toBe(true);
 	await expect
 		.poll(() => hasStorageEntry(secondPage, storageKeys.memorySummariesCache, "remote-summary"))
 		.toBe(true);

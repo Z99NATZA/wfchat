@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { applyFontToDocument, persistFont, resolveInitialFont, writeFont } from "@/stores/fontStore";
+import {
+	applyFontToDocument,
+	persistFont,
+	resolveInitialFont,
+	writeFont
+} from "@/stores/fontStore";
 import type { AppFont } from "@/types/font";
 
 export function useFont() {

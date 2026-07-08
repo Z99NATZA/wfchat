@@ -62,7 +62,9 @@ const AvatarOverlay = forwardRef<HTMLDivElement, AvatarOverlayProps>(function Av
 				</div>
 				<div className="absolute bottom-1.5 right-1.5 z-20 flex max-w-[calc(100%-0.75rem)] items-center gap-1 rounded-md border border-app-border bg-app-soft/92 px-1.5 py-1 text-[10px] text-muted md:bottom-2 md:right-2 md:gap-1.5 md:px-2 md:text-[11px]">
 					<MessageCircle size={12} aria-hidden="true" />
-					<span className="truncate">{t(motionStateShortLabelKey(state.motionState))}</span>
+					<span className="truncate">
+						{t(motionStateShortLabelKey(state.motionState))}
+					</span>
 				</div>
 			</div>
 		</div>

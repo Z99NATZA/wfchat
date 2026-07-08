@@ -1,11 +1,4 @@
-import {
-	createContext,
-	useCallback,
-	useContext,
-	useMemo,
-	useState,
-	type ReactNode
-} from "react";
+import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
 import type {
 	AvatarDrivenBy,
 	AvatarMotionState,
@@ -50,13 +43,16 @@ export function AvatarRuntimeProvider({ children }: AvatarRuntimeProviderProps) 
 		}));
 	}, []);
 
-	const setExpression = useCallback((expressionId: string, drivenBy: AvatarDrivenBy = "manual") => {
-		setState((currentState) => ({
-			...currentState,
-			expressionId,
-			drivenBy
-		}));
-	}, []);
+	const setExpression = useCallback(
+		(expressionId: string, drivenBy: AvatarDrivenBy = "manual") => {
+			setState((currentState) => ({
+				...currentState,
+				expressionId,
+				drivenBy
+			}));
+		},
+		[]
+	);
 
 	const setMotionState = useCallback(
 		(motionState: AvatarMotionState, drivenBy: AvatarDrivenBy = "manual") => {

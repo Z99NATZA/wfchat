@@ -58,14 +58,22 @@ describe("PngTuberPage", () => {
 
 	it("keeps viewport emotion controls above the performer layer and clickable", () => {
 		const { container } = render(
-			<PngTuberPage activityBar={null} backgroundImageUrl="" headerControls={headerControls} />
+			<PngTuberPage
+				activityBar={null}
+				backgroundImageUrl=""
+				headerControls={headerControls}
+			/>
 		);
 		const emotionStrip = container.querySelector<HTMLElement>("[data-pngtuber-emotion-strip]");
 
 		expect(emotionStrip).not.toBeNull();
 		expect(emotionStrip?.className).toContain("z-30");
 
-		fireEvent.click(within(emotionStrip as HTMLElement).getByRole("button", { name: "pngtuber.emotion.happy" }));
+		fireEvent.click(
+			within(emotionStrip as HTMLElement).getByRole("button", {
+				name: "pngtuber.emotion.happy"
+			})
+		);
 
 		expect(runtimeMocks.setExpression).toHaveBeenCalledWith("happy");
 	});

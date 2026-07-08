@@ -1,4 +1,15 @@
-import { ArrowDown, Check, Clipboard, Ellipsis, EyeOff, ImageOff, LoaderCircle, Volume2, VolumeX, Wand2 } from "lucide-react";
+import {
+	ArrowDown,
+	Check,
+	Clipboard,
+	Ellipsis,
+	EyeOff,
+	ImageOff,
+	LoaderCircle,
+	Volume2,
+	VolumeX,
+	Wand2
+} from "lucide-react";
 import {
 	type CSSProperties,
 	type ReactNode,
@@ -86,24 +97,33 @@ function ChatMessageList({
 	const [scrollTop, setScrollTop] = useState(0);
 	const [viewportHeight, setViewportHeight] = useState(DEFAULT_VIEWPORT_HEIGHT);
 	const [virtualTimelineTop, setVirtualTimelineTop] = useState(0);
-	const [measuredRowHeights, setMeasuredRowHeights] = useState<Map<string, number>>(() => new Map());
+	const [measuredRowHeights, setMeasuredRowHeights] = useState<Map<string, number>>(
+		() => new Map()
+	);
 	const userMessageBubbleClassName = "max-w-[min(30rem,72vw)] sm:max-w-[min(32rem,70%)]";
 	const assistantMessageBubbleClassName =
 		"min-w-0 max-w-[calc(100%-2.75rem)] sm:max-w-[min(42rem,calc(100%-2.75rem))] lg:max-w-[min(44rem,calc(100%-2.75rem))]";
 	const visibleMessages = useMemo(
-		() => messages.filter((message) => !(message.author === "user" && hiddenUserMessageIds.has(message.id))),
+		() =>
+			messages.filter(
+				(message) => !(message.author === "user" && hiddenUserMessageIds.has(message.id))
+			),
 		[messages, hiddenUserMessageIds]
 	);
 	const hasStreamingAssistantMessage = visibleMessages.some(isStreamingAssistantMessage);
 	const shouldShowThinkingBubble = isSending && !hasStreamingAssistantMessage;
 	const messageRows = useMemo<MessageRow[]>(() => {
 		return visibleMessages.map((message, index) => {
-			const createdAt = message.createdAt > 0 ? message.createdAt : Math.floor(Date.now() / 1000);
+			const createdAt =
+				message.createdAt > 0 ? message.createdAt : Math.floor(Date.now() / 1000);
 			const messageDate = new Date(createdAt * 1000);
 			const dateKey = formatLocalDateKey(messageDate);
 			const nextMessage = visibleMessages[index + 1];
-			const nextCreatedAt = nextMessage?.createdAt && nextMessage.createdAt > 0 ? nextMessage.createdAt : null;
-			const nextDateKey = nextCreatedAt ? formatLocalDateKey(new Date(nextCreatedAt * 1000)) : null;
+			const nextCreatedAt =
+				nextMessage?.createdAt && nextMessage.createdAt > 0 ? nextMessage.createdAt : null;
+			const nextDateKey = nextCreatedAt
+				? formatLocalDateKey(new Date(nextCreatedAt * 1000))
+				: null;
 			const dateLabel =
 				dateKey === nextDateKey
 					? null
@@ -129,7 +149,13 @@ function ChatMessageList({
 	}, [measuredRowHeights, messageRows]);
 	const virtualScrollTop = Math.max(0, scrollTop - virtualTimelineTop);
 	const virtualRange = useMemo(
-		() => getVirtualRange(rowMetrics.offsets, rowMetrics.heights, virtualScrollTop, viewportHeight),
+		() =>
+			getVirtualRange(
+				rowMetrics.offsets,
+				rowMetrics.heights,
+				virtualScrollTop,
+				viewportHeight
+			),
 		[rowMetrics.heights, rowMetrics.offsets, virtualScrollTop, viewportHeight]
 	);
 	const virtualRows = messageRows.slice(virtualRange.startIndex, virtualRange.endIndex);
@@ -163,53 +189,58 @@ function ChatMessageList({
 
 		setScrollTop(container.scrollTop);
 		lastScrollTopRef.current = container.scrollTop;
-		setViewportHeight(container.clientHeight > 0 ? container.clientHeight : DEFAULT_VIEWPORT_HEIGHT);
+		setViewportHeight(
+			container.clientHeight > 0 ? container.clientHeight : DEFAULT_VIEWPORT_HEIGHT
+		);
 		setVirtualTimelineTop(getVirtualTimelineTop(container, virtualTimelineRef.current));
 	}, []);
 
-	const measureRowHeight = useCallback((rowId: string, height: number) => {
-		if (height < 1) {
-			return;
-		}
-
-		setMeasuredRowHeights((currentHeights) => {
-			const previousHeight = currentHeights.get(rowId);
-
-			if (previousHeight !== undefined && Math.abs(previousHeight - height) < 1) {
-				return currentHeights;
+	const measureRowHeight = useCallback(
+		(rowId: string, height: number) => {
+			if (height < 1) {
+				return;
 			}
+
+			setMeasuredRowHeights((currentHeights) => {
+				const previousHeight = currentHeights.get(rowId);
+
+				if (previousHeight !== undefined && Math.abs(previousHeight - height) < 1) {
+					return currentHeights;
+				}
+
+				const container = scrollContainerRef.current;
+				const hasMeasuredHeight = previousHeight !== undefined;
+				const previousOrEstimatedHeight =
+					previousHeight ??
+					estimateMessageRowHeightFromId(rowId, currentHeights, messageRows);
+				const heightDelta = height - previousOrEstimatedHeight;
+				const rowTop = rowTopByIdRef.current.get(rowId);
+
+				if (
+					container &&
+					hasMeasuredHeight &&
+					rowTop !== undefined &&
+					rowTop < Math.max(0, container.scrollTop - virtualTimelineTop) &&
+					!shouldStickToBottomRef.current
+				) {
+					container.scrollTop += heightDelta;
+					lastScrollTopRef.current = container.scrollTop;
+					setScrollTop(container.scrollTop);
+				}
+
+				const nextHeights = new Map(currentHeights);
+				nextHeights.set(rowId, height);
+				return nextHeights;
+			});
 
 			const container = scrollContainerRef.current;
-			const hasMeasuredHeight = previousHeight !== undefined;
-			const previousOrEstimatedHeight =
-				previousHeight ??
-				estimateMessageRowHeightFromId(rowId, currentHeights, messageRows);
-			const heightDelta = height - previousOrEstimatedHeight;
-			const rowTop = rowTopByIdRef.current.get(rowId);
 
-			if (
-				container &&
-				hasMeasuredHeight &&
-				rowTop !== undefined &&
-				rowTop < Math.max(0, container.scrollTop - virtualTimelineTop) &&
-				!shouldStickToBottomRef.current
-			) {
-				container.scrollTop += heightDelta;
-				lastScrollTopRef.current = container.scrollTop;
-				setScrollTop(container.scrollTop);
+			if (container && shouldStickToBottomRef.current && isNearScrollBottom(container, 8)) {
+				scheduleScrollToBottom("auto");
 			}
-
-			const nextHeights = new Map(currentHeights);
-			nextHeights.set(rowId, height);
-			return nextHeights;
-		});
-
-		const container = scrollContainerRef.current;
-
-		if (container && shouldStickToBottomRef.current && isNearScrollBottom(container, 8)) {
-			scheduleScrollToBottom("auto");
-		}
-	}, [messageRows, scheduleScrollToBottom, virtualTimelineTop]);
+		},
+		[messageRows, scheduleScrollToBottom, virtualTimelineTop]
+	);
 
 	function handleScroll(event: UIEvent<HTMLDivElement>) {
 		const { scrollTop: nextScrollTop, scrollHeight, clientHeight } = event.currentTarget;
@@ -219,7 +250,9 @@ function ChatMessageList({
 		shouldStickToBottomRef.current = isScrollingUp ? false : distanceFromBottom < 80;
 		setScrollTop(nextScrollTop);
 		setViewportHeight(clientHeight > 0 ? clientHeight : DEFAULT_VIEWPORT_HEIGHT);
-		setVirtualTimelineTop(getVirtualTimelineTop(event.currentTarget, virtualTimelineRef.current));
+		setVirtualTimelineTop(
+			getVirtualTimelineTop(event.currentTarget, virtualTimelineRef.current)
+		);
 		setShowJumpToLatest(distanceFromBottom > 180);
 
 		if (distanceFromBottom < 80) {
@@ -251,14 +284,20 @@ function ChatMessageList({
 		const previousRowIds = previousRowIdsRef.current;
 		const nextRowIds = messageRows.map((row) => row.id);
 		const firstPreviousRowId = previousRowIds[0];
-		const previousFirstRowNewIndex = firstPreviousRowId ? nextRowIds.indexOf(firstPreviousRowId) : -1;
+		const previousFirstRowNewIndex = firstPreviousRowId
+			? nextRowIds.indexOf(firstPreviousRowId)
+			: -1;
 		const didPrependRows = previousFirstRowNewIndex > 0;
 		const container = scrollContainerRef.current;
 
 		if (container && didPrependRows && !shouldStickToBottomRef.current) {
 			const prependedHeight = messageRows
 				.slice(0, previousFirstRowNewIndex)
-				.reduce((total, row) => total + (measuredRowHeights.get(row.id) ?? estimateMessageRowHeight(row)), 0);
+				.reduce(
+					(total, row) =>
+						total + (measuredRowHeights.get(row.id) ?? estimateMessageRowHeight(row)),
+					0
+				);
 			container.scrollTop += prependedHeight;
 			setScrollTop(container.scrollTop);
 		}
@@ -371,7 +410,9 @@ function ChatMessageList({
 		await navigator.clipboard?.writeText(message.text);
 		setCopiedAssistantMessageId(message.id);
 		window.setTimeout(() => {
-			setCopiedAssistantMessageId((currentId) => (currentId === message.id ? null : currentId));
+			setCopiedAssistantMessageId((currentId) =>
+				currentId === message.id ? null : currentId
+			);
 		}, 1200);
 	}
 
@@ -396,7 +437,9 @@ function ChatMessageList({
 			!isStreamingAssistantMessage(message) &&
 			Boolean(onToggleAssistantSpeech);
 		const assistantSpeechStatus =
-			assistantSpeechPlayback?.messageId === message.id ? assistantSpeechPlayback.status : "idle";
+			assistantSpeechPlayback?.messageId === message.id
+				? assistantSpeechPlayback.status
+				: "idle";
 		const messageText =
 			isStreamingAssistant && !message.text
 				? t("chat.messageList.thinking", { name: companionName })
@@ -404,7 +447,12 @@ function ChatMessageList({
 
 		return (
 			<div className="space-y-4">
-				<article className={cn("group flex items-end gap-2", isUser ? "justify-end" : "justify-start")}>
+				<article
+					className={cn(
+						"group flex items-end gap-2",
+						isUser ? "justify-end" : "justify-start"
+					)}
+				>
 					{!isUser && (
 						<img
 							className="size-9 shrink-0 rounded-lg object-cover"
@@ -413,7 +461,10 @@ function ChatMessageList({
 						/>
 					)}
 					{isUser && (
-						<div className="relative w-8 shrink-0 self-end" ref={isMenuOpen ? menuContainerRef : null}>
+						<div
+							className="relative w-8 shrink-0 self-end"
+							ref={isMenuOpen ? menuContainerRef : null}
+						>
 							<IconButton
 								size="xs"
 								variant={isMenuOpen ? "selected" : "ghost"}
@@ -471,7 +522,12 @@ function ChatMessageList({
 							theme={theme}
 						/>
 						<div className="mt-2 flex items-center justify-between gap-3">
-							<p className={cn("text-[11px]", isUser ? "text-white/75 dark:text-muted" : "text-muted")}>
+							<p
+								className={cn(
+									"text-[11px]",
+									isUser ? "text-white/75 dark:text-muted" : "text-muted"
+								)}
+							>
 								{message.time}
 							</p>
 
@@ -488,13 +544,24 @@ function ChatMessageList({
 										)}
 										<IconButton
 											size="xs"
-											variant={assistantSpeechStatus === "error" ? "danger" : "ghost"}
-											aria-label={assistantSpeechLabel(assistantSpeechStatus, t)}
+											variant={
+												assistantSpeechStatus === "error"
+													? "danger"
+													: "ghost"
+											}
+											aria-label={assistantSpeechLabel(
+												assistantSpeechStatus,
+												t
+											)}
 											title={assistantSpeechLabel(assistantSpeechStatus, t)}
 											onClick={() => onToggleAssistantSpeech?.(message.id)}
 										>
 											{assistantSpeechStatus === "loading" ? (
-												<LoaderCircle className="animate-spin" size={14} aria-hidden="true" />
+												<LoaderCircle
+													className="animate-spin"
+													size={14}
+													aria-hidden="true"
+												/>
 											) : assistantSpeechStatus === "playing" ? (
 												<VolumeX size={14} aria-hidden="true" />
 											) : (
@@ -547,19 +614,19 @@ function ChatMessageList({
 				ref={scrollContainerRef}
 				onScroll={handleScroll}
 				className="chat-scroll h-full overflow-y-auto px-4 py-6 lg:px-8"
-				style={bottomClearancePx > 0 ? { paddingBottom: `${bottomClearancePx}px` } : undefined}
+				style={
+					bottomClearancePx > 0 ? { paddingBottom: `${bottomClearancePx}px` } : undefined
+				}
 			>
 				<div className="mx-auto flex max-w-3xl items-center gap-3 rounded-lg border border-primary/20 bg-primary/8 p-3 text-sm text-app-text dark:border-app-border dark:bg-app-soft">
 					<div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary text-white">
 						<Wand2 size={17} aria-hidden="true" />
 					</div>
-					<p className="min-w-0 flex-1">{t("chat.messageList.banner", { name: companionName })}</p>
+					<p className="min-w-0 flex-1">
+						{t("chat.messageList.banner", { name: companionName })}
+					</p>
 					{onLoadMarkdownQaMessages && (
-						<Button
-							variant="secondary"
-							size="xs"
-							onClick={onLoadMarkdownQaMessages}
-						>
+						<Button variant="secondary" size="xs" onClick={onLoadMarkdownQaMessages}>
 							{t("chat.messageList.loadMarkdownQa")}
 						</Button>
 					)}
@@ -568,7 +635,9 @@ function ChatMessageList({
 				<div ref={virtualTimelineRef} className="mx-auto mt-5 max-w-3xl">
 					{visibleMessages.length === 0 && !isSending && (
 						<div className="rounded-lg border border-dashed border-app-border bg-app-panel/92 px-5 py-8 text-center">
-							<p className="text-sm font-semibold text-app-text">{t("chat.messageList.emptyTitle", { name: companionName })}</p>
+							<p className="text-sm font-semibold text-app-text">
+								{t("chat.messageList.emptyTitle", { name: companionName })}
+							</p>
 							<p className="mt-2 text-sm text-muted">
 								{t("chat.messageList.emptyDesc")}
 							</p>
@@ -602,7 +671,11 @@ function ChatMessageList({
 					<div className={cn("flex flex-col gap-4", messageRows.length > 0 && "mt-0")}>
 						{shouldShowThinkingBubble && (
 							<article className="flex items-end gap-3 justify-start">
-								<img className="size-9 shrink-0 rounded-lg object-cover" src={companionAvatarUrl} alt="" />
+								<img
+									className="size-9 shrink-0 rounded-lg object-cover"
+									src={companionAvatarUrl}
+									alt=""
+								/>
 								<div
 									data-message-bubble="companion"
 									className={cn(
@@ -610,7 +683,9 @@ function ChatMessageList({
 										"rounded-lg border border-app-border bg-app-panel/92 px-4 py-3 text-app-text shadow-soft"
 									)}
 								>
-									<p className="text-sm leading-6 text-app-text">{t("chat.messageList.thinking", { name: companionName })}</p>
+									<p className="text-sm leading-6 text-app-text">
+										{t("chat.messageList.thinking", { name: companionName })}
+									</p>
 								</div>
 							</article>
 						)}
@@ -716,7 +791,10 @@ function VirtualMessageRow({
 	);
 }
 
-function getVirtualTimelineTop(container: HTMLDivElement, virtualTimeline: HTMLDivElement | null): number {
+function getVirtualTimelineTop(
+	container: HTMLDivElement,
+	virtualTimeline: HTMLDivElement | null
+): number {
 	if (!virtualTimeline) {
 		return 0;
 	}
@@ -742,11 +820,18 @@ function getVirtualRange(
 
 	return {
 		startIndex: Math.max(0, visibleStartIndex - VIRTUAL_OVERSCAN_ROWS),
-		endIndex: Math.min(offsets.length, Math.max(visibleEndIndex + VIRTUAL_OVERSCAN_ROWS, visibleStartIndex + 1))
+		endIndex: Math.min(
+			offsets.length,
+			Math.max(visibleEndIndex + VIRTUAL_OVERSCAN_ROWS, visibleStartIndex + 1)
+		)
 	};
 }
 
-function findFirstRowAtOrAfterOffset(offsets: number[], heights: number[], targetOffset: number): number {
+function findFirstRowAtOrAfterOffset(
+	offsets: number[],
+	heights: number[],
+	targetOffset: number
+): number {
 	let low = 0;
 	let high = offsets.length - 1;
 	let result = offsets.length - 1;
@@ -793,7 +878,11 @@ function estimateMessageRowHeight(row: MessageRow): number {
 		1,
 		text
 			.split("\n")
-			.reduce((lineCount, line) => lineCount + Math.max(1, Math.ceil(line.length / estimatedCharactersPerLine)), 0)
+			.reduce(
+				(lineCount, line) =>
+					lineCount + Math.max(1, Math.ceil(line.length / estimatedCharactersPerLine)),
+				0
+			)
 	);
 	const codeBlockCount = (text.match(/```/g)?.length ?? 0) / 2;
 	const tableLineCount = text.split("\n").filter((line) => line.trim().startsWith("|")).length;
@@ -802,7 +891,12 @@ function estimateMessageRowHeight(row: MessageRow): number {
 	const attachmentExtraHeight =
 		attachmentCount === 0 ? 0 : Math.ceil(attachmentCount / 2) * 112 + 10;
 	const estimatedHeight =
-		74 + textLines * 22 + markdownExtraHeight + attachmentExtraHeight + dateLabelHeight + MESSAGE_ROW_GAP_PX;
+		74 +
+		textLines * 22 +
+		markdownExtraHeight +
+		attachmentExtraHeight +
+		dateLabelHeight +
+		MESSAGE_ROW_GAP_PX;
 
 	return Math.max(108, Math.min(900, estimatedHeight));
 }
@@ -836,7 +930,12 @@ function ChatMessageAttachmentGrid({
 	const { t } = useI18n();
 
 	return (
-		<div className={cn("mb-3 grid gap-2", attachments.length === 1 ? "grid-cols-1" : "grid-cols-2")}>
+		<div
+			className={cn(
+				"mb-3 grid gap-2",
+				attachments.length === 1 ? "grid-cols-1" : "grid-cols-2"
+			)}
+		>
 			{attachments.map((attachment, index) => (
 				<ChatMessageAttachmentPreview
 					key={attachment.id}
@@ -861,9 +960,7 @@ function ChatMessageAttachmentPreview({
 	const { t } = useI18n();
 	const { openCustom } = useDialog();
 	const isLocalPreview = attachment.previewUrl.startsWith("blob:");
-	const [imageUrl, setImageUrl] = useState(() =>
-		isLocalPreview ? attachment.previewUrl : null
-	);
+	const [imageUrl, setImageUrl] = useState(() => (isLocalPreview ? attachment.previewUrl : null));
 	const [didFail, setDidFail] = useState(false);
 	const frameClassName = cn(
 		"block overflow-hidden rounded-md border",

@@ -46,7 +46,13 @@ export function useDialogBackgroundSurface(backgroundImageUrl: string, isOpen: b
 	useLayoutEffect(() => {
 		const surfaceElement = surfaceRef.current;
 
-		if (!isOpen || !surfaceElement || !backgroundImageUrl || !metrics || typeof window === "undefined") {
+		if (
+			!isOpen ||
+			!surfaceElement ||
+			!backgroundImageUrl ||
+			!metrics ||
+			typeof window === "undefined"
+		) {
 			return;
 		}
 
@@ -62,7 +68,10 @@ export function useDialogBackgroundSurface(backgroundImageUrl: string, isOpen: b
 				"--wfchat-surface-bg-position",
 				`${syncedMetrics.originX - rect.left}px ${syncedMetrics.originY - rect.top}px`
 			);
-			syncedSurfaceElement.style.setProperty("--wfchat-surface-bg-opacity", "var(--app-bg-image-opacity)");
+			syncedSurfaceElement.style.setProperty(
+				"--wfchat-surface-bg-opacity",
+				"var(--app-bg-image-opacity)"
+			);
 		}
 
 		function scheduleUpdate() {

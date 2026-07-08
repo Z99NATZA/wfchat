@@ -58,12 +58,17 @@ export function AppSettingsProvider({ children }: AppSettingsProviderProps) {
 	const { theme, setTheme, applyPulledTheme, toggleTheme } = useTheme();
 	const { font, setFont, applyPulledFont } = useFont();
 	const [backgroundImageUrl, setBackgroundImageUrlState] = useState(readBackgroundImageUrl);
-	const [isAvatarOverlayVisible, setAvatarOverlayVisibleState] = useState(readAvatarOverlayVisible);
-	const [avatarOverlayPosition, setAvatarOverlayPositionState] = useState(readAvatarOverlayPosition);
+	const [isAvatarOverlayVisible, setAvatarOverlayVisibleState] =
+		useState(readAvatarOverlayVisible);
+	const [avatarOverlayPosition, setAvatarOverlayPositionState] =
+		useState(readAvatarOverlayPosition);
 	const [avatarOverlaySize, setAvatarOverlaySizeState] = useState(readAvatarOverlaySize);
-	const [isAssistantSpeechVisible, setAssistantSpeechVisibleState] = useState(readAssistantSpeechVisible);
-	const [isAssistantSpeechAutoPlayEnabled, setAssistantSpeechAutoPlayEnabledState] =
-		useState(readAssistantSpeechAutoPlay);
+	const [isAssistantSpeechVisible, setAssistantSpeechVisibleState] = useState(
+		readAssistantSpeechVisible
+	);
+	const [isAssistantSpeechAutoPlayEnabled, setAssistantSpeechAutoPlayEnabledState] = useState(
+		readAssistantSpeechAutoPlay
+	);
 
 	const setBackgroundImageUrl = useCallback((url: string) => {
 		const nextUrl = url.trim();

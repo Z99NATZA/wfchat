@@ -218,10 +218,10 @@ export async function flushGuestSyncQueue(
 
 	await apiClient.post<SyncPreviewResponse>("/api/sync/preview", { items });
 
-	const commit = await apiClient.post<SyncCommitResponse>(
-		"/api/sync/commit",
-		{ operation_id: operation.operation_id, items }
-	);
+	const commit = await apiClient.post<SyncCommitResponse>("/api/sync/commit", {
+		operation_id: operation.operation_id,
+		items
+	});
 	queue.shift();
 	writeSyncQueue(queue);
 
@@ -267,7 +267,13 @@ export async function pullSyncChanges(
 	});
 
 	for (const item of response.data.items) {
-		applySyncItem(item, onLocaleChange, onBackgroundImageUrlChange, onThemeChange, onFontChange);
+		applySyncItem(
+			item,
+			onLocaleChange,
+			onBackgroundImageUrlChange,
+			onThemeChange,
+			onFontChange
+		);
 	}
 
 	writeStorageItem(syncCursorStorageKey, String(response.data.next_cursor));
@@ -642,7 +648,9 @@ function removeChatMessageFromCache(itemId: string) {
 	const messages = readJsonArray(chatMessagesCacheKey);
 	writeStorageItem(
 		chatMessagesCacheKey,
-		JSON.stringify(messages.filter((entry) => !(entry?.chatId === chatId && entry?.id === messageId)))
+		JSON.stringify(
+			messages.filter((entry) => !(entry?.chatId === chatId && entry?.id === messageId))
+		)
 	);
 }
 

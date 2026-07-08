@@ -67,7 +67,9 @@ function preloadImageAsset(assetUrl: string) {
 
 function getAikoPngTuberPreloadAssetUrls() {
 	const assetUrls = AIKO_PNGTUBER_EMOTIONS.map((emotion) => emotion.assetUrl);
-	const neutralAssetUrl = AIKO_PNGTUBER_EMOTIONS.find((emotion) => emotion.id === "neutral")?.assetUrl;
+	const neutralAssetUrl = AIKO_PNGTUBER_EMOTIONS.find(
+		(emotion) => emotion.id === "neutral"
+	)?.assetUrl;
 
 	if (!neutralAssetUrl) {
 		return assetUrls;

@@ -151,7 +151,9 @@ class FakeMediaRecorder extends EventTarget {
 function installAssistantPlaybackMocks() {
 	audioInstances.length = 0;
 	vi.stubGlobal("Audio", MockAudio);
-	vi.spyOn(URL, "createObjectURL").mockImplementation((object) => `blob:${object instanceof Blob ? object.size : 0}`);
+	vi.spyOn(URL, "createObjectURL").mockImplementation(
+		(object) => `blob:${object instanceof Blob ? object.size : 0}`
+	);
 	vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => undefined);
 	mocks.getAssistantMessageSpeech.mockResolvedValue(new Blob(["audio-one"]));
 }
@@ -208,7 +210,10 @@ describe("useChatSession streaming sendMessage", () => {
 
 	it("appends streaming tokens into one optimistic assistant message and replaces with server messages on done", async () => {
 		const avatarEvents: ChatSessionAvatarEvent[] = [];
-		const streamedMessages = [message("server-user", "user", "hello"), message("server-ai", "companion", "hello back")];
+		const streamedMessages = [
+			message("server-user", "user", "hello"),
+			message("server-ai", "companion", "hello back")
+		];
 		let finishStream: (() => void) | undefined;
 		let streamHandlers: Parameters<typeof streamChatMessage>[3] | undefined;
 		mocks.streamChatMessage.mockImplementation((_chatId, _content, _attachments, handlers) => {
@@ -243,12 +248,17 @@ describe("useChatSession streaming sendMessage", () => {
 
 		await waitFor(() => expect(streamHandlers).toBeDefined());
 		await waitFor(() =>
-			expect(result.current.messages.map((item) => ({ author: item.author, text: item.text }))).toEqual([
+			expect(
+				result.current.messages.map((item) => ({ author: item.author, text: item.text }))
+			).toEqual([
 				{ author: "user", text: "hello" },
 				{ author: "companion", text: "hel" }
 			])
 		);
-		expect(avatarEvents.map((event) => event.type)).toEqual(["assistant_waiting", "assistant_streaming"]);
+		expect(avatarEvents.map((event) => event.type)).toEqual([
+			"assistant_waiting",
+			"assistant_streaming"
+		]);
 
 		await act(async () => {
 			finishStream?.();
@@ -258,7 +268,11 @@ describe("useChatSession streaming sendMessage", () => {
 		expect(result.current.messages).toEqual(streamedMessages);
 		expect(result.current.activeChatId).toBe("chat-1");
 		expect(result.current.sessions).toEqual([
-			expect.objectContaining({ id: "chat-1", characterId: "aiko", lastMessage: "hello back" })
+			expect.objectContaining({
+				id: "chat-1",
+				characterId: "aiko",
+				lastMessage: "hello back"
+			})
 		]);
 		expect(avatarEvents).toEqual([
 			{ type: "assistant_waiting", chatId: null, personaId: "aiko" },
@@ -283,7 +297,10 @@ describe("useChatSession streaming sendMessage", () => {
 				}
 			]
 		};
-		const serverMessages = [serverUser, message("server-ai", "companion", "I received the image.")];
+		const serverMessages = [
+			serverUser,
+			message("server-ai", "companion", "I received the image.")
+		];
 		let finishStream: (() => void) | undefined;
 		mocks.streamChatMessage.mockImplementation((_chatId, _content, _attachments, handlers) => {
 			handlers.onStart?.({ chatId: "chat-1", personaId: "aiko" });
@@ -307,7 +324,9 @@ describe("useChatSession streaming sendMessage", () => {
 			await Promise.resolve();
 		});
 
-		await waitFor(() => expect(uploadChatImageAttachment).toHaveBeenCalledWith(localImage.file));
+		await waitFor(() =>
+			expect(uploadChatImageAttachment).toHaveBeenCalledWith(localImage.file)
+		);
 		expect(streamChatMessage).toHaveBeenCalledWith(
 			"chat-1",
 			"",
@@ -319,7 +338,12 @@ describe("useChatSession streaming sendMessage", () => {
 				expect.objectContaining({
 					author: "user",
 					text: "",
-					attachments: [expect.objectContaining({ id: "attachment-1", previewUrl: "blob:local-image" })]
+					attachments: [
+						expect.objectContaining({
+							id: "attachment-1",
+							previewUrl: "blob:local-image"
+						})
+					]
 				})
 			)
 		);
@@ -354,16 +378,21 @@ describe("useChatSession streaming sendMessage", () => {
 		expect(sendChatMessage).toHaveBeenCalledWith("chat-1", "fallback", []);
 		expect(result.current.messages).toEqual(fallbackMessages);
 		expect(deleteChat).not.toHaveBeenCalled();
-		expect(avatarEvents.map((event) => event.type)).toEqual(["assistant_waiting", "assistant_replied"]);
+		expect(avatarEvents.map((event) => event.type)).toEqual([
+			"assistant_waiting",
+			"assistant_replied"
+		]);
 	});
 
 	it("rolls back optimistic messages when streaming fails after starting", async () => {
 		const avatarEvents: ChatSessionAvatarEvent[] = [];
-		mocks.streamChatMessage.mockImplementation(async (_chatId, _content, _attachments, handlers) => {
-			handlers.onStart?.({ chatId: "chat-1", personaId: "aiko" });
-			handlers.onToken?.("partial");
-			throw new Error("stream failed after token");
-		});
+		mocks.streamChatMessage.mockImplementation(
+			async (_chatId, _content, _attachments, handlers) => {
+				handlers.onStart?.({ chatId: "chat-1", personaId: "aiko" });
+				handlers.onToken?.("partial");
+				throw new Error("stream failed after token");
+			}
+		);
 		const { result } = renderHook(() =>
 			useChatSession({ onAvatarChatEvent: (event) => avatarEvents.push(event) })
 		);
@@ -388,11 +417,13 @@ describe("useChatSession streaming sendMessage", () => {
 
 	it("deletes uploaded image attachments when message send fails before persistence", async () => {
 		const localImage = pendingImage("blob:cleanup-image");
-		mocks.streamChatMessage.mockImplementation(async (_chatId, _content, _attachments, handlers) => {
-			handlers.onStart?.({ chatId: "chat-1", personaId: "aiko" });
-			handlers.onToken?.("partial");
-			throw new Error("stream failed after token");
-		});
+		mocks.streamChatMessage.mockImplementation(
+			async (_chatId, _content, _attachments, handlers) => {
+				handlers.onStart?.({ chatId: "chat-1", personaId: "aiko" });
+				handlers.onToken?.("partial");
+				throw new Error("stream failed after token");
+			}
+		);
 		const { result } = renderHook(() => useChatSession());
 
 		await act(async () => {
@@ -412,7 +443,9 @@ describe("useChatSession streaming sendMessage", () => {
 		const localImage = pendingImage("blob:large-image");
 		const uploadError = new Error("request failed with status 413");
 		mocks.uploadChatImageAttachment.mockRejectedValue(uploadError);
-		mocks.isChatApiStatus.mockImplementation((error, status) => error === uploadError && status === 413);
+		mocks.isChatApiStatus.mockImplementation(
+			(error, status) => error === uploadError && status === 413
+		);
 		const { result } = renderHook(() => useChatSession());
 
 		await act(async () => {
@@ -460,7 +493,9 @@ describe("useChatSession streaming sendMessage", () => {
 
 		expect(result.current.activeChatId).toBeNull();
 		expect(result.current.messages.length).toBeGreaterThan(0);
-		expect(result.current.messages.some((item) => item.id === "qa-assistant-markdown-table")).toBe(true);
+		expect(
+			result.current.messages.some((item) => item.id === "qa-assistant-markdown-table")
+		).toBe(true);
 		expect(result.current.messages.some((item) => item.text.includes("<script>"))).toBe(true);
 	});
 
@@ -644,15 +679,17 @@ describe("useChatSession streaming sendMessage", () => {
 			chatId: "chat-1",
 			messages: [message("assistant-1", "companion", "hello")]
 		});
-		mocks.streamChatMessage.mockImplementation(async (_chatId, _content, _attachments, handlers) => {
-			handlers.onStart?.({ chatId: "chat-1", personaId: "aiko" });
-			handlers.onDone?.({
-				chatId: "chat-1",
-				userMessage: serverMessages[0],
-				assistantMessage: serverMessages[1],
-				messages: serverMessages
-			});
-		});
+		mocks.streamChatMessage.mockImplementation(
+			async (_chatId, _content, _attachments, handlers) => {
+				handlers.onStart?.({ chatId: "chat-1", personaId: "aiko" });
+				handlers.onDone?.({
+					chatId: "chat-1",
+					userMessage: serverMessages[0],
+					assistantMessage: serverMessages[1],
+					messages: serverMessages
+				});
+			}
+		);
 		const { result } = renderHook(() => useChatSession());
 
 		await act(async () => {

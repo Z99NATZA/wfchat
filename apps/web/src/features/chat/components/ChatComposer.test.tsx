@@ -144,7 +144,9 @@ describe("ChatComposer", () => {
 			/>
 		);
 
-		expect((screen.getByRole("button", { name: "Suggest a reply" }) as HTMLButtonElement).disabled).toBe(true);
+		expect(
+			(screen.getByRole("button", { name: "Suggest a reply" }) as HTMLButtonElement).disabled
+		).toBe(true);
 	});
 
 	it("disables browser writing corrections in the message input", () => {
@@ -198,7 +200,13 @@ describe("ChatComposer", () => {
 			/>
 		);
 
-		expect((screen.getByRole("button", { name: "chat.composer.voiceMessage" }) as HTMLButtonElement).disabled).toBe(true);
+		expect(
+			(
+				screen.getByRole("button", {
+					name: "chat.composer.voiceMessage"
+				}) as HTMLButtonElement
+			).disabled
+		).toBe(true);
 	});
 
 	it("starts voice input when transcription is available", () => {
@@ -248,7 +256,9 @@ describe("ChatComposer", () => {
 		expect(status.textContent).toBe("0:00");
 		expect(status.textContent).not.toContain("chat.composer.recordingVoiceMessage");
 		expect(screen.getByTestId("chat-composer-recording-timer")).toBeTruthy();
-		expect(screen.getByTestId("chat-composer-speech-cancel").className).toContain("icon-button--sm");
+		expect(screen.getByTestId("chat-composer-speech-cancel").className).toContain(
+			"icon-button--sm"
+		);
 		expect(onToggleSpeechInput).toHaveBeenCalledTimes(1);
 		expect(onCancelSpeechInput).toHaveBeenCalledTimes(1);
 	});
@@ -268,7 +278,9 @@ describe("ChatComposer", () => {
 		expect(screen.queryByTestId("chat-composer-recording-timer")).toBeNull();
 		expect(screen.queryByTestId("chat-composer-speech-cancel")).toBeNull();
 		expect(screen.queryByRole("status")).toBeNull();
-		expect(screen.queryByRole("button", { name: "chat.composer.cancelVoiceMessage" })).toBeNull();
+		expect(
+			screen.queryByRole("button", { name: "chat.composer.cancelVoiceMessage" })
+		).toBeNull();
 	});
 
 	it("shows a specific microphone permission error", () => {
@@ -309,7 +321,9 @@ describe("ChatComposer", () => {
 		const file = new File(["image"], "local.png", { type: "image/png" });
 
 		fireEvent.change(input, { target: { files: [file] } });
-		fireEvent.click(screen.getByRole("button", { name: "chat.composer.removeImageAttachment" }));
+		fireEvent.click(
+			screen.getByRole("button", { name: "chat.composer.removeImageAttachment" })
+		);
 
 		expect(screen.queryByAltText("local.png")).toBeNull();
 		expect(revokeObjectUrl).toHaveBeenCalledWith("blob:image-preview");
@@ -330,18 +344,24 @@ describe("ChatComposer", () => {
 		const file = new File(["image"], "local.png", { type: "image/png" });
 
 		fireEvent.change(input, { target: { files: [file] } });
-		fireEvent.click(screen.getByRole("button", { name: "Open selected preview for local.png" }));
+		fireEvent.click(
+			screen.getByRole("button", { name: "Open selected preview for local.png" })
+		);
 
-		expect(dialogMocks.openCustom).toHaveBeenCalledWith(expect.objectContaining({
-			isDraggable: true,
-			showCancelAction: false,
-			size: "wide",
-			title: "local.png"
-		}));
+		expect(dialogMocks.openCustom).toHaveBeenCalledWith(
+			expect.objectContaining({
+				isDraggable: true,
+				showCancelAction: false,
+				size: "wide",
+				title: "local.png"
+			})
+		);
 
 		const renderPreview = dialogMocks.openCustom.mock.calls[0][0].render;
 		const preview = render(renderPreview());
-		const previewImage = preview.container.querySelector('img[alt="local.png"]') as HTMLImageElement;
+		const previewImage = preview.container.querySelector(
+			'img[alt="local.png"]'
+		) as HTMLImageElement;
 		expect(previewImage.src).toBe("blob:image-preview");
 	});
 

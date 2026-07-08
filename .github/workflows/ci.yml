@@ -28,6 +28,12 @@ jobs:
       - name: Install web dependencies
         run: npm ci --prefix apps/web
 
+      - name: Run web lint
+        run: npm --prefix apps/web run lint
+
+      - name: Check web formatting
+        run: npm --prefix apps/web run format:check
+
       - name: Run web tests
         run: npm --prefix apps/web test
 

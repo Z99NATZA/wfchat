@@ -25,6 +25,8 @@ If measured against a stricter public SaaS production bar:
 These checks passed during review:
 
 - Frontend tests: 164 passed
+- Frontend lint: passed with warnings for existing hook dependency/Fast Refresh cleanup items
+- Frontend format check: passed
 - Backend tests: 107 passed
 - Frontend production build: passed
 
@@ -85,10 +87,11 @@ Files:
 - `apps/web/package.json`
 - `apps/api/Cargo.toml`
 
-The repo now has a root GitHub Actions CI workflow for frontend tests, frontend
-production build, backend tests, Rust formatting, and Rust clippy. The remaining
-operational risk is making sure protected branches and deployment platforms
-require this CI workflow to pass before merge or production deployment.
+The repo now has a root GitHub Actions CI workflow for frontend linting,
+frontend formatting, frontend tests, frontend production build, backend tests,
+Rust formatting, and Rust clippy. The remaining operational risk is making sure
+protected branches and deployment platforms require this CI workflow to pass
+before merge or production deployment.
 
 Recommended follow-up:
 
@@ -103,22 +106,26 @@ automatic production deployment.
 
 ### 3. No Frontend Lint/Format Gate
 
+Status: addressed after this review.
+
 Files:
 
 - `apps/web/package.json`
 
-The frontend uses TypeScript strict mode and tests, which is good. However, no ESLint or Prettier scripts were found. This can allow style drift and common React mistakes to slip through.
+The frontend uses TypeScript strict mode and tests. ESLint and Prettier are now
+configured under `apps/web`, with `lint`, `format`, and `format:check` scripts
+included in the web package. CI runs lint and format checks before frontend
+tests and production build.
 
-Recommended fix:
+Follow-up:
 
-- Add ESLint for React/TypeScript.
-- Add Prettier or another formatter.
-- Add `lint` and `format:check` scripts.
-- Include them in CI.
+- Clean up the current non-failing lint warnings around hook dependencies and
+  Fast Refresh export boundaries when touching those modules.
 
 Priority:
 
-Medium for team development, low for solo work.
+Done for the initial gate. Remaining warnings are low-priority cleanup unless
+they block future stricter lint policy.
 
 ### 4. Sync Still Needs Post-Hardening E2E Coverage
 
@@ -285,15 +292,16 @@ The number and focus of tests are strong for an MVP:
 ### Phase 1: Reliability and Operations
 
 1. Enforce CI through branch protection and deployment gates.
-2. Add frontend lint/format checks.
 
 ### Phase 2: Maintainability and Polish
 
 1. Add post-hardening browser E2E tests for sync edge cases when the underlying
    behavior is implemented.
 2. Consider avatar proxy/upload behavior if profile avatars become public.
-3. Clean expected warning/log noise from test output.
-4. Monitor frontend bundle size.
+3. Clean frontend lint warnings around hook dependencies and Fast Refresh export
+   boundaries.
+4. Clean expected warning/log noise from test output.
+5. Monitor frontend bundle size.
 
 ## Overall Assessment
 

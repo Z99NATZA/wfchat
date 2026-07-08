@@ -96,20 +96,34 @@ export function getHighlightDebounceMs() {
 }
 
 export function canHighlightCode(code: string, language?: string) {
-	return Boolean(normalizeLanguage(language)) && code.length > 0 && code.length <= maxHighlightCodeLength;
+	return (
+		Boolean(normalizeLanguage(language)) &&
+		code.length > 0 &&
+		code.length <= maxHighlightCodeLength
+	);
 }
 
-export function getCachedHighlightedCode({ code, language, theme }: HighlightCodeOptions): HighlightedCode | null {
+export function getCachedHighlightedCode({
+	code,
+	language,
+	theme
+}: HighlightCodeOptions): HighlightedCode | null {
 	const normalizedLanguage = normalizeLanguage(language);
 
 	if (!normalizedLanguage || !canHighlightCode(code, normalizedLanguage)) {
 		return null;
 	}
 
-	return highlightedCodeCache.get(createHighlightCacheKey(code, normalizedLanguage, theme)) ?? null;
+	return (
+		highlightedCodeCache.get(createHighlightCacheKey(code, normalizedLanguage, theme)) ?? null
+	);
 }
 
-export async function highlightCode({ code, language, theme }: HighlightCodeOptions): Promise<HighlightedCode | null> {
+export async function highlightCode({
+	code,
+	language,
+	theme
+}: HighlightCodeOptions): Promise<HighlightedCode | null> {
 	const normalizedLanguage = normalizeLanguage(language);
 
 	if (!normalizedLanguage || !canHighlightCode(code, normalizedLanguage)) {

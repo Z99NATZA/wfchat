@@ -37,7 +37,9 @@ export async function fetchCurrentSession(): Promise<AuthSession> {
 
 export async function loginWithGoogle(idToken: string): Promise<AuthSession> {
 	await ensureCookieSession();
-	const response = await apiClient.post<ApiSessionResponse>("/api/auth/google", { id_token: idToken });
+	const response = await apiClient.post<ApiSessionResponse>("/api/auth/google", {
+		id_token: idToken
+	});
 	markCookieSessionReady();
 	return toAuthSession(response.data);
 }
@@ -50,13 +52,10 @@ export async function logoutSession(): Promise<AuthSession> {
 
 export async function updateProfile(displayName: string, avatarUrl: string): Promise<AuthSession> {
 	await ensureCookieSession();
-	const response = await apiClient.patch<ApiSessionResponse>(
-		"/api/auth/profile",
-		{
-			display_name: displayName,
-			avatar_url: avatarUrl || null
-		}
-	);
+	const response = await apiClient.patch<ApiSessionResponse>("/api/auth/profile", {
+		display_name: displayName,
+		avatar_url: avatarUrl || null
+	});
 	markCookieSessionReady();
 	return toAuthSession(response.data);
 }

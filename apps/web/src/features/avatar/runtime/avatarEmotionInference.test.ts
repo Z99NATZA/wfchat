@@ -8,7 +8,9 @@ describe("avatar emotion inference", () => {
 	it("returns neutral for empty or unmatched text", () => {
 		expect(inferExpressionIdFromText("")).toBe(DEFAULT_CHAT_EXPRESSION_ID);
 		expect(inferExpressionIdFromText("   ")).toBe(DEFAULT_CHAT_EXPRESSION_ID);
-		expect(inferExpressionIdFromText("Here is the next step.")).toBe(DEFAULT_CHAT_EXPRESSION_ID);
+		expect(inferExpressionIdFromText("Here is the next step.")).toBe(
+			DEFAULT_CHAT_EXPRESSION_ID
+		);
 	});
 
 	it("matches English keywords case-insensitively", () => {

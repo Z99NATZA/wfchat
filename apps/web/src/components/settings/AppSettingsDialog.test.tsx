@@ -64,10 +64,7 @@ describe("AppSettingsDialog", () => {
 
 	it("shows configured voice credits without adding controls", () => {
 		render(
-			<AppSettingsDialog
-				{...baseProps}
-				voiceCredits={[{ text: "VOICEVOX: Test Speaker" }]}
-			/>
+			<AppSettingsDialog {...baseProps} voiceCredits={[{ text: "VOICEVOX: Test Speaker" }]} />
 		);
 
 		expect(screen.getByText("Credits")).toBeTruthy();

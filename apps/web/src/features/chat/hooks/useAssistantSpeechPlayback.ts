@@ -56,7 +56,13 @@ export function useAssistantSpeechPlayback(activeChatId: string | null) {
 	}, [releaseResources]);
 
 	const registerAudio = useCallback(
-		(audio: HTMLAudioElement, objectUrl: string, messageId: string, cacheKey: string, token: number) => {
+		(
+			audio: HTMLAudioElement,
+			objectUrl: string,
+			messageId: string,
+			cacheKey: string,
+			token: number
+		) => {
 			resourcesRef.current.objectUrl = objectUrl;
 			resourcesRef.current.audio = audio;
 
@@ -83,7 +89,13 @@ export function useAssistantSpeechPlayback(activeChatId: string | null) {
 	);
 
 	const startAudio = useCallback(
-		async (audio: HTMLAudioElement, objectUrl: string, messageId: string, cacheKey: string, token: number) => {
+		async (
+			audio: HTMLAudioElement,
+			objectUrl: string,
+			messageId: string,
+			cacheKey: string,
+			token: number
+		) => {
 			registerAudio(audio, objectUrl, messageId, cacheKey, token);
 			await audio.play();
 
@@ -190,7 +202,13 @@ export function useAssistantSpeechPlayback(activeChatId: string | null) {
 
 			void playAssistantSpeech(activeChatId, messageId);
 		},
-		[activeChatId, playAssistantSpeech, playback.messageId, playback.status, stopAssistantSpeech]
+		[
+			activeChatId,
+			playAssistantSpeech,
+			playback.messageId,
+			playback.status,
+			stopAssistantSpeech
+		]
 	);
 
 	useEffect(() => {
@@ -215,7 +233,12 @@ type StreamAndPlayAssistantSpeechOptions = {
 	cacheKey: string;
 	chatId: string;
 	messageId: string;
-	playBlob: (audioBlob: Blob, messageId: string, cacheKey: string, token: number) => Promise<void>;
+	playBlob: (
+		audioBlob: Blob,
+		messageId: string,
+		cacheKey: string,
+		token: number
+	) => Promise<void>;
 	registerAudio: (
 		audio: HTMLAudioElement,
 		objectUrl: string,

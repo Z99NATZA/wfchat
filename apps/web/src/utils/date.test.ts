@@ -10,9 +10,15 @@ describe("date utilities", () => {
 		vi.useFakeTimers();
 		vi.setSystemTime(new Date(2026, 0, 21, 12));
 
-		expect(formatMessageDateLabel(new Date(2026, 0, 21, 8), "วันนี้", "เมื่อวาน")).toBe("วันนี้");
-		expect(formatMessageDateLabel(new Date(2026, 0, 20, 23), "วันนี้", "เมื่อวาน")).toBe("เมื่อวาน");
-		expect(formatMessageDateLabel(new Date(2026, 0, 19, 12), "วันนี้", "เมื่อวาน")).toBe("2026-01-19");
+		expect(formatMessageDateLabel(new Date(2026, 0, 21, 8), "วันนี้", "เมื่อวาน")).toBe(
+			"วันนี้"
+		);
+		expect(formatMessageDateLabel(new Date(2026, 0, 20, 23), "วันนี้", "เมื่อวาน")).toBe(
+			"เมื่อวาน"
+		);
+		expect(formatMessageDateLabel(new Date(2026, 0, 19, 12), "วันนี้", "เมื่อวาน")).toBe(
+			"2026-01-19"
+		);
 
 		vi.useRealTimers();
 	});

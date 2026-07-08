@@ -212,20 +212,23 @@ export function guestAuthState(): E2eAuthState {
 }
 
 export async function seedBrowserState(page: Page, options: SeedBrowserStateOptions = {}) {
-	await page.addInitScript(({ keys, seed }) => {
-		if (seed.authState) {
-			window.localStorage.setItem(keys.authState, JSON.stringify(seed.authState));
-		}
-		for (const [key, value] of Object.entries(seed.localStorage ?? {})) {
-			window.localStorage.setItem(key, value);
-		}
-		if (seed.sessionCookieReady) {
-			window.sessionStorage.setItem(keys.sessionCookieReady, "true");
-		}
-		for (const [key, value] of Object.entries(seed.sessionStorage ?? {})) {
-			window.sessionStorage.setItem(key, value);
-		}
-	}, { keys: storageKeys, seed: options });
+	await page.addInitScript(
+		({ keys, seed }) => {
+			if (seed.authState) {
+				window.localStorage.setItem(keys.authState, JSON.stringify(seed.authState));
+			}
+			for (const [key, value] of Object.entries(seed.localStorage ?? {})) {
+				window.localStorage.setItem(key, value);
+			}
+			if (seed.sessionCookieReady) {
+				window.sessionStorage.setItem(keys.sessionCookieReady, "true");
+			}
+			for (const [key, value] of Object.entries(seed.sessionStorage ?? {})) {
+				window.sessionStorage.setItem(key, value);
+			}
+		},
+		{ keys: storageKeys, seed: options }
+	);
 }
 
 export async function mockBaseAppApis(page: Page, options: MockAppApisOptions = {}) {
@@ -325,7 +328,10 @@ export async function readLocalStorageItem(page: Page, key: string): Promise<str
 	return page.evaluate((storageKey) => window.localStorage.getItem(storageKey), key);
 }
 
-export async function readLocalStorageJson<TValue>(page: Page, key: string): Promise<TValue | null> {
+export async function readLocalStorageJson<TValue>(
+	page: Page,
+	key: string
+): Promise<TValue | null> {
 	const raw = await readLocalStorageItem(page, key);
 	return raw ? (JSON.parse(raw) as TValue) : null;
 }

@@ -44,7 +44,8 @@ function ChatDetailsPanel({
 	const [editingFactDraft, setEditingFactDraft] = useState("");
 	const [editingSummaryDraft, setEditingSummaryDraft] = useState("");
 	const actionMenuRootRef = useRef<HTMLDivElement>(null);
-	const toneItemsByLocale = locale === "th" ? ["สุขุม", "อบอุ่น", "ขี้เล่นเล็กน้อย", "ให้เกียรติ"] : toneItems;
+	const toneItemsByLocale =
+		locale === "th" ? ["สุขุม", "อบอุ่น", "ขี้เล่นเล็กน้อย", "ให้เกียรติ"] : toneItems;
 
 	useEffect(() => {
 		if (!openFactMenuId && !openSummaryMenuId) {
@@ -114,9 +115,14 @@ function ChatDetailsPanel({
 				</div>
 			</div>
 
-			<div ref={actionMenuRootRef} className="chat-scroll flex-1 space-y-5 overflow-y-auto p-5">
+			<div
+				ref={actionMenuRootRef}
+				className="chat-scroll flex-1 space-y-5 overflow-y-auto p-5"
+			>
 				<section>
-					<h3 className="text-sm font-semibold">{t("chat.details.about", { name: persona.name })}</h3>
+					<h3 className="text-sm font-semibold">
+						{t("chat.details.about", { name: persona.name })}
+					</h3>
 					<p className="mt-3 rounded-lg border border-app-border bg-app-soft p-4 text-sm leading-6 text-muted">
 						{t("chat.details.aboutText", { name: persona.name })}
 					</p>
@@ -144,9 +150,13 @@ function ChatDetailsPanel({
 								<Languages size={18} aria-hidden="true" />
 							</div>
 							<div>
-								<p className="text-sm font-medium">{t("chat.details.repliesInLanguage")}</p>
+								<p className="text-sm font-medium">
+									{t("chat.details.repliesInLanguage")}
+								</p>
 								<p className="text-xs text-muted">
-									{t("chat.details.repliesInLanguageDesc", { name: persona.name })}
+									{t("chat.details.repliesInLanguageDesc", {
+										name: persona.name
+									})}
 								</p>
 							</div>
 						</div>
@@ -155,8 +165,12 @@ function ChatDetailsPanel({
 								<Sparkles size={18} aria-hidden="true" />
 							</div>
 							<div>
-								<p className="text-sm font-medium">{t("chat.details.gentleMode")}</p>
-								<p className="text-xs text-muted">{t("chat.details.gentleModeDesc")}</p>
+								<p className="text-sm font-medium">
+									{t("chat.details.gentleMode")}
+								</p>
+								<p className="text-xs text-muted">
+									{t("chat.details.gentleModeDesc")}
+								</p>
 							</div>
 						</div>
 					</div>
@@ -171,7 +185,9 @@ function ChatDetailsPanel({
 						<input
 							value={memoryDraft}
 							onChange={(event) => setMemoryDraft(event.target.value)}
-							placeholder={t("chat.details.memoryPlaceholder", { name: persona.name })}
+							placeholder={t("chat.details.memoryPlaceholder", {
+								name: persona.name
+							})}
 							className="h-9 min-w-0 flex-1 rounded-lg border border-app-border bg-app-soft px-3 text-sm text-app-text outline-none focus:border-primary"
 						/>
 						<Button
@@ -185,13 +201,18 @@ function ChatDetailsPanel({
 					</form>
 					<div className="mt-3 space-y-2">
 						{memoryFacts.slice(0, 8).map((fact) => (
-							<div key={fact.id} className="relative flex items-start gap-2 rounded-lg border border-app-border bg-app-soft p-3">
+							<div
+								key={fact.id}
+								className="relative flex items-start gap-2 rounded-lg border border-app-border bg-app-soft p-3"
+							>
 								<div className="min-w-0 flex-1">
 									{editingFactId === fact.id ? (
 										<div className="space-y-2">
 											<input
 												value={editingFactDraft}
-												onChange={(event) => setEditingFactDraft(event.target.value)}
+												onChange={(event) =>
+													setEditingFactDraft(event.target.value)
+												}
 												className="h-8 w-full rounded-md border border-app-border bg-app-panel px-2 text-xs text-app-text outline-none focus:border-primary"
 											/>
 											<div className="flex gap-2">
@@ -212,13 +233,19 @@ function ChatDetailsPanel({
 											</div>
 										</div>
 									) : (
-										<p className="text-xs leading-5 text-app-text">{fact.content}</p>
+										<p className="text-xs leading-5 text-app-text">
+											{fact.content}
+										</p>
 									)}
 								</div>
 								<IconButton
 									size="xs"
 									variant="ghost"
-									onClick={() => setOpenFactMenuId((current) => (current === fact.id ? null : fact.id))}
+									onClick={() =>
+										setOpenFactMenuId((current) =>
+											current === fact.id ? null : fact.id
+										)
+									}
 									aria-label={t("chat.details.memoryActions")}
 								>
 									<Ellipsis size={14} aria-hidden="true" />
@@ -266,7 +293,9 @@ function ChatDetailsPanel({
 
 				<section>
 					<div className="flex items-center justify-between gap-2">
-						<h3 className="text-sm font-semibold">{t("chat.details.memorySummaries")}</h3>
+						<h3 className="text-sm font-semibold">
+							{t("chat.details.memorySummaries")}
+						</h3>
 						<span className="text-xs text-muted">{memorySummaries.length}</span>
 					</div>
 					<form className="mt-3 flex gap-2" onSubmit={handleSaveSummary}>
@@ -287,18 +316,25 @@ function ChatDetailsPanel({
 					</form>
 					<div className="mt-3 space-y-2">
 						{memorySummaries.slice(0, 6).map((summary) => (
-							<div key={summary.id} className="relative flex items-start gap-2 rounded-lg border border-app-border bg-app-soft p-3">
+							<div
+								key={summary.id}
+								className="relative flex items-start gap-2 rounded-lg border border-app-border bg-app-soft p-3"
+							>
 								<div className="min-w-0 flex-1">
 									{editingSummaryId === summary.id ? (
 										<div className="space-y-2">
 											<input
 												value={editingSummaryDraft}
-												onChange={(event) => setEditingSummaryDraft(event.target.value)}
+												onChange={(event) =>
+													setEditingSummaryDraft(event.target.value)
+												}
 												className="h-8 w-full rounded-md border border-app-border bg-app-panel px-2 text-xs text-app-text outline-none focus:border-primary"
 											/>
 											<div className="flex gap-2">
 												<Button
-													onClick={() => void handleSaveSummaryEdit(summary.id)}
+													onClick={() =>
+														void handleSaveSummaryEdit(summary.id)
+													}
 													variant="primary"
 													size="xs"
 												>
@@ -314,14 +350,18 @@ function ChatDetailsPanel({
 											</div>
 										</div>
 									) : (
-										<p className="text-xs leading-5 text-app-text">{summary.summary}</p>
+										<p className="text-xs leading-5 text-app-text">
+											{summary.summary}
+										</p>
 									)}
 								</div>
 								<IconButton
 									size="xs"
 									variant="ghost"
 									onClick={() =>
-										setOpenSummaryMenuId((current) => (current === summary.id ? null : summary.id))
+										setOpenSummaryMenuId((current) =>
+											current === summary.id ? null : summary.id
+										)
 									}
 									aria-label={t("chat.details.memoryActions")}
 								>

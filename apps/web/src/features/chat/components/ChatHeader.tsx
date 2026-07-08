@@ -97,7 +97,9 @@ function ChatHeader({
 					trailingActions={clearChatAction}
 				/>
 			}
-			mobileMenuContent={<AppHeaderMobileControls {...controlProps} actions={clearChatAction} />}
+			mobileMenuContent={
+				<AppHeaderMobileControls {...controlProps} actions={clearChatAction} />
+			}
 		/>
 	);
 }

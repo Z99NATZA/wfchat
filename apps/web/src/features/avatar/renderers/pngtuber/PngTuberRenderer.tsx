@@ -13,7 +13,10 @@ function PngTuberRenderer({ alt, className, emotion, motionState }: PngTuberRend
 	return (
 		<div
 			key={emotion.id}
-			className={cn("pngtuber-avatar-expression relative z-10 h-full max-h-full w-full", className)}
+			className={cn(
+				"pngtuber-avatar-expression relative z-10 h-full max-h-full w-full",
+				className
+			)}
 		>
 			<img
 				src={emotion.assetUrl}

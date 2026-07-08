@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { AVATAR_BINDINGS, resolveAvatarBinding, type AvatarBinding } from "@/features/avatar/runtime/avatarBindings";
+import {
+	AVATAR_BINDINGS,
+	resolveAvatarBinding,
+	type AvatarBinding
+} from "@/features/avatar/runtime/avatarBindings";
 
 describe("avatar bindings", () => {
 	it("binds Aiko to the current PNGTuber avatar", () => {

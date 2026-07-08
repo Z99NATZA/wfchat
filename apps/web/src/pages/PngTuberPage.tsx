@@ -40,7 +40,11 @@ type PngTuberPageProps = {
 const pngTuberAssets = [
 	{ nameKey: "pngtuber.assets.aikoPngTuber", statusKey: "pngtuber.assets.ready", active: true },
 	{ nameKey: "pngtuber.assets.expressionSet", statusKey: "pngtuber.assets.ready", active: false },
-	{ nameKey: "pngtuber.assets.aiStateBridge", statusKey: "pngtuber.assets.markerOnly", active: false }
+	{
+		nameKey: "pngtuber.assets.aiStateBridge",
+		statusKey: "pngtuber.assets.markerOnly",
+		active: false
+	}
 ];
 
 const pngTuberMotionControls: Array<{
@@ -66,8 +70,11 @@ function PngTuberPage({ activityBar, backgroundImageUrl, headerControls }: PngTu
 	const motionState = runtimeState.motionState;
 
 	function handleCycleExpression() {
-		const activeIndex = AIKO_PNGTUBER_EMOTIONS.findIndex((emotion) => emotion.id === activeEmotionId);
-		const nextEmotion = AIKO_PNGTUBER_EMOTIONS[(activeIndex + 1) % AIKO_PNGTUBER_EMOTIONS.length];
+		const activeIndex = AIKO_PNGTUBER_EMOTIONS.findIndex(
+			(emotion) => emotion.id === activeEmotionId
+		);
+		const nextEmotion =
+			AIKO_PNGTUBER_EMOTIONS[(activeIndex + 1) % AIKO_PNGTUBER_EMOTIONS.length];
 		setExpression(nextEmotion.id);
 	}
 
@@ -75,7 +82,12 @@ function PngTuberPage({ activityBar, backgroundImageUrl, headerControls }: PngTu
 		<AppLayout
 			activityBar={activityBar}
 			backgroundImageUrl={backgroundImageUrl}
-			sidebar={<PngTuberSidebar activeEmotionId={activeEmotionId} onEmotionChange={setExpression} />}
+			sidebar={
+				<PngTuberSidebar
+					activeEmotionId={activeEmotionId}
+					onEmotionChange={setExpression}
+				/>
+			}
 			header={<PngTuberHeader controls={headerControls} />}
 			details={<PngTuberInspector activeEmotion={activeEmotion} motionState={motionState} />}
 		>
@@ -130,7 +142,9 @@ function PngTuberPage({ activityBar, backgroundImageUrl, headerControls }: PngTu
 							<PngTuberRenderer
 								emotion={activeEmotion}
 								motionState={motionState}
-								alt={t("pngtuber.previewAlt", { expression: t(activeEmotion.labelKey) })}
+								alt={t("pngtuber.previewAlt", {
+									expression: t(activeEmotion.labelKey)
+								})}
 							/>
 							<div className="absolute bottom-4 right-4 z-20 flex items-center gap-2 rounded-lg border border-app-border bg-app-panel/92 px-3 py-2 text-xs text-muted shadow-soft">
 								<MessageCircle size={14} aria-hidden="true" />
@@ -179,7 +193,9 @@ function PngTuberSidebar({ activeEmotionId, onEmotionChange }: PngTuberSidebarPr
 					<UserRound size={20} aria-hidden="true" />
 				</div>
 				<div className="min-w-0">
-					<p className="text-base font-semibold text-app-text">{t("pngtuber.sidebar.title")}</p>
+					<p className="text-base font-semibold text-app-text">
+						{t("pngtuber.sidebar.title")}
+					</p>
 					<p className="truncate text-xs text-muted">{t("pngtuber.sidebar.subtitle")}</p>
 				</div>
 			</div>
@@ -207,7 +223,9 @@ function PngTuberSidebar({ activeEmotionId, onEmotionChange }: PngTuberSidebarPr
 								<UserRound size={18} aria-hidden="true" />
 							</span>
 							<span className="min-w-0 flex-1">
-								<span className="block truncate text-sm font-semibold text-app-text">{t(asset.nameKey)}</span>
+								<span className="block truncate text-sm font-semibold text-app-text">
+									{t(asset.nameKey)}
+								</span>
 								<span className="text-xs text-muted">{t(asset.statusKey)}</span>
 							</span>
 						</Button>
@@ -233,7 +251,9 @@ function PngTuberSidebar({ activeEmotionId, onEmotionChange }: PngTuberSidebarPr
 								<span className="block truncate text-sm font-semibold text-app-text">
 									{t(emotion.labelKey)}
 								</span>
-								<span className="text-xs text-muted">{t(emotion.descriptionKey)}</span>
+								<span className="text-xs text-muted">
+									{t(emotion.descriptionKey)}
+								</span>
 							</span>
 						</Button>
 					))}
@@ -287,7 +307,9 @@ function PngTuberHeader({ controls }: PngTuberHeaderProps) {
 					trailingActions={deletePlaceholder}
 				/>
 			}
-			mobileMenuContent={<AppHeaderMobileControls {...controls} actions={deletePlaceholder} />}
+			mobileMenuContent={
+				<AppHeaderMobileControls {...controls} actions={deletePlaceholder} />
+			}
 		/>
 	);
 }
@@ -309,12 +331,17 @@ function PngTuberInspector({ activeEmotion, motionState }: PngTuberInspectorProp
 	return (
 		<aside className="hidden min-h-0 border-l border-app-border bg-app-panel/62 xl:flex xl:flex-col">
 			<div className="border-b border-app-border px-4 py-4">
-				<p className="text-sm font-semibold text-app-text">{t("pngtuber.inspector.title")}</p>
+				<p className="text-sm font-semibold text-app-text">
+					{t("pngtuber.inspector.title")}
+				</p>
 				<p className="mt-1 text-xs text-muted">{t("pngtuber.inspector.subtitle")}</p>
 			</div>
 			<div className="space-y-3 overflow-y-auto p-4">
 				{inspectorRows.map((row) => (
-					<div key={row.label} className="rounded-lg border border-app-border bg-app-soft p-3">
+					<div
+						key={row.label}
+						className="rounded-lg border border-app-border bg-app-soft p-3"
+					>
 						<p className="text-xs font-semibold text-muted">{row.label}</p>
 						<p className="mt-1 text-sm text-app-text">{row.value}</p>
 					</div>

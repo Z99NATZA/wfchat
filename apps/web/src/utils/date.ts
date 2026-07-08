@@ -12,7 +12,11 @@ export function formatLocalDateKey(date: Date): string {
 	return `${year}-${month}-${day}`;
 }
 
-export function formatMessageDateLabel(date: Date, todayLabel: string, yesterdayLabel: string): string {
+export function formatMessageDateLabel(
+	date: Date,
+	todayLabel: string,
+	yesterdayLabel: string
+): string {
 	const today = new Date();
 	const yesterday = new Date();
 	yesterday.setDate(today.getDate() - 1);

@@ -58,7 +58,9 @@ function installLocalStorageMock() {
 }
 
 function readQueue(): SyncQueueOperation[] {
-	return JSON.parse(window.localStorage.getItem(syncQueueStorageKey) ?? "[]") as SyncQueueOperation[];
+	return JSON.parse(
+		window.localStorage.getItem(syncQueueStorageKey) ?? "[]"
+	) as SyncQueueOperation[];
 }
 
 beforeEach(() => {
@@ -162,7 +164,10 @@ describe("syncService account sync flows", () => {
 						item_type: "setting",
 						updated_at: 2_003,
 						deleted_at: null,
-						payload: { key: "backgroundImageUrl", value: "https://example.com/cloud.png" }
+						payload: {
+							key: "backgroundImageUrl",
+							value: "https://example.com/cloud.png"
+						}
 					},
 					{
 						item_id: "memory.fact.fact-2",
@@ -213,7 +218,13 @@ describe("syncService account sync flows", () => {
 		const onThemeChange = vi.fn();
 		const onFontChange = vi.fn();
 
-		await enqueueGuestSyncWithMemory(memoryFacts, memorySummaries, sessions, messages, "chat-1");
+		await enqueueGuestSyncWithMemory(
+			memoryFacts,
+			memorySummaries,
+			sessions,
+			messages,
+			"chat-1"
+		);
 		const commit = await flushGuestSyncQueue({ force: true });
 		const appliedCount = await pullSyncChanges(
 			onLocaleChange,
@@ -326,7 +337,10 @@ describe("syncService account sync flows", () => {
 						item_type: "setting",
 						updated_at: 2_003,
 						deleted_at: null,
-						payload: { key: "backgroundImageUrl", value: "https://example.com/cloud.png" }
+						payload: {
+							key: "backgroundImageUrl",
+							value: "https://example.com/cloud.png"
+						}
 					}
 				]
 			}
@@ -336,7 +350,12 @@ describe("syncService account sync flows", () => {
 		const onThemeChange = vi.fn();
 		const onFontChange = vi.fn();
 
-		await pullSyncChanges(onLocaleChange, onBackgroundImageUrlChange, onThemeChange, onFontChange);
+		await pullSyncChanges(
+			onLocaleChange,
+			onBackgroundImageUrlChange,
+			onThemeChange,
+			onFontChange
+		);
 
 		expect(window.localStorage.getItem(themeStorageKey)).toBe("dark");
 		expect(window.localStorage.getItem(fontStorageKey)).toBe("inter");

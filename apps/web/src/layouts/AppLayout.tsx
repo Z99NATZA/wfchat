@@ -150,7 +150,12 @@ function useSurfaceBackgroundSync(
 	useLayoutEffect(() => {
 		const layoutElement = layoutRef.current;
 
-		if (!layoutElement || !backgroundImageUrl || !backgroundMetrics || typeof window === "undefined") {
+		if (
+			!layoutElement ||
+			!backgroundImageUrl ||
+			!backgroundMetrics ||
+			typeof window === "undefined"
+		) {
 			return;
 		}
 
@@ -201,7 +206,10 @@ function useSurfaceBackgroundSync(
 		}
 
 		function scheduleTransitionLoop(extraDurationMs: number) {
-			transitionLoopUntil = Math.max(transitionLoopUntil, performance.now() + extraDurationMs);
+			transitionLoopUntil = Math.max(
+				transitionLoopUntil,
+				performance.now() + extraDurationMs
+			);
 			updateSurfacePositions();
 
 			if (transitionFrameId) {

@@ -33,6 +33,8 @@ describe("AvatarOverlay", () => {
 	it("positions itself above the measured composer offset", () => {
 		render(<AvatarOverlay position="bottom-right" size="small" bottomOffsetPx={148} />);
 
-		expect(screen.getByLabelText("pngtuber.header.title").style.bottom).toBe("calc(148px + 0.75rem)");
+		expect(screen.getByLabelText("pngtuber.header.title").style.bottom).toBe(
+			"calc(148px + 0.75rem)"
+		);
 	});
 });

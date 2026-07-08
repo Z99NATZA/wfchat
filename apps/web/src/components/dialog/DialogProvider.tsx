@@ -50,7 +50,9 @@ type CustomDialogState<TResult = unknown> = Omit<CustomDialogOptions<TResult>, "
 type DialogContextValue = {
 	confirm: (options: ConfirmOptions) => Promise<boolean>;
 	alert: (options: AlertOptions) => Promise<void>;
-	openCustom: <TResult = void>(options: CustomDialogOptions<TResult>) => Promise<TResult | undefined>;
+	openCustom: <TResult = void>(
+		options: CustomDialogOptions<TResult>
+	) => Promise<TResult | undefined>;
 };
 
 const DialogContext = createContext<DialogContextValue | null>(null);
@@ -155,11 +157,7 @@ function DialogProvider({ children }: DialogProviderProps) {
 				description={alertState?.description}
 				onClose={closeAlert}
 				actions={
-					<Button
-						surface="dialog"
-						variant="secondary"
-						onClick={closeAlert}
-					>
+					<Button surface="dialog" variant="secondary" onClick={closeAlert}>
 						{alertState?.confirmLabel ?? t("common.ok")}
 					</Button>
 				}
@@ -188,10 +186,7 @@ function DialogProvider({ children }: DialogProviderProps) {
 								{customDialogState?.cancelLabel ?? t("common.cancel")}
 							</Button>
 						)}
-						<Button
-							variant="primary"
-							onClick={() => closeCustom(undefined)}
-						>
+						<Button variant="primary" onClick={() => closeCustom(undefined)}>
 							{customDialogState?.confirmLabel ?? t("common.done")}
 						</Button>
 					</div>

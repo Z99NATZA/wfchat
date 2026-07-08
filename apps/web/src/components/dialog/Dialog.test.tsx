@@ -14,14 +14,7 @@ describe("Dialog", () => {
 	it("enables drag affordance on desktop fine-pointer viewports", () => {
 		mockMatchMedia(true);
 
-		render(
-			<Dialog
-				isOpen
-				title="Delete chat"
-				actions={null}
-				onClose={vi.fn()}
-			/>
-		);
+		render(<Dialog isOpen title="Delete chat" actions={null} onClose={vi.fn()} />);
 
 		expect(screen.getByText("Delete chat").parentElement?.className).toContain("cursor-move");
 	});
@@ -29,16 +22,11 @@ describe("Dialog", () => {
 	it("keeps drag disabled on touch or narrow viewports", () => {
 		mockMatchMedia(false);
 
-		render(
-			<Dialog
-				isOpen
-				title="Delete chat"
-				actions={null}
-				onClose={vi.fn()}
-			/>
-		);
+		render(<Dialog isOpen title="Delete chat" actions={null} onClose={vi.fn()} />);
 
-		expect(screen.getByText("Delete chat").parentElement?.className).not.toContain("cursor-move");
+		expect(screen.getByText("Delete chat").parentElement?.className).not.toContain(
+			"cursor-move"
+		);
 	});
 });
 

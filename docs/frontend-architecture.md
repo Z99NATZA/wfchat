@@ -85,6 +85,9 @@ App-level persisted settings live behind `apps/web/src/app/AppSettingsProvider.t
 
 ## Rules
 
+- Frontend quality gates live in `apps/web/package.json`: `lint`,
+  `format:check`, `test`, and `build`. CI runs lint and format checks before
+  tests and production build.
 - Keep chat UI focused on chats, characters, and messages.
 - Do not expose provider, model, or API key fields in normal chat screens.
 - Use admin screens for AI profile configuration later.

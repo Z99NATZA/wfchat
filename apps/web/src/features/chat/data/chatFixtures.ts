@@ -76,7 +76,7 @@ export const MARKDOWN_QA_MESSAGES: ChatMessage[] = [
 			"## Code QA",
 			"",
 			"```ts",
-			"const value = \"hello\";",
+			'const value = "hello";',
 			"console.log(value);",
 			"```",
 			"",
@@ -93,7 +93,7 @@ export const MARKDOWN_QA_MESSAGES: ChatMessage[] = [
 		text: [
 			"## Raw HTML QA",
 			"",
-			"<script>alert(\"xss\")</script>",
+			'<script>alert("xss")</script>',
 			"",
 			"<img src=x onerror=alert(1)>",
 			"",

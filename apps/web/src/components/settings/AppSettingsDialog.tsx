@@ -84,7 +84,9 @@ function AppSettingsDialog({
 			>
 				<header className="flex items-start justify-between gap-4 border-b border-dialog-border px-5 py-4">
 					<div>
-						<h2 className="text-xl font-semibold text-app-text">{t("settings.title")}</h2>
+						<h2 className="text-xl font-semibold text-app-text">
+							{t("settings.title")}
+						</h2>
 					</div>
 					<IconButton
 						variant="ghostDanger"
@@ -99,7 +101,9 @@ function AppSettingsDialog({
 				<div className="chat-scroll flex-1 overflow-y-auto px-5 py-4">
 					<section className="space-y-4">
 						<div>
-							<h3 className="text-sm font-semibold text-app-text">{t("settings.background.title")}</h3>
+							<h3 className="text-sm font-semibold text-app-text">
+								{t("settings.background.title")}
+							</h3>
 						</div>
 
 						<div className="overflow-hidden rounded-xl border border-dialog-border bg-dialog-soft">
@@ -130,18 +134,10 @@ function AppSettingsDialog({
 								/>
 							</label>
 							<div className="grid grid-cols-2 gap-2">
-								<Button
-									variant="destructive"
-									size="lg"
-									onClick={handleClear}
-								>
+								<Button variant="destructive" size="lg" onClick={handleClear}>
 									{t("settings.background.clear")}
 								</Button>
-								<Button
-									type="submit"
-									variant="primary"
-									size="lg"
-								>
+								<Button type="submit" variant="primary" size="lg">
 									{t("settings.background.apply")}
 								</Button>
 							</div>
@@ -175,7 +171,10 @@ function AppSettingsDialog({
 								</p>
 								<ul className="mt-2 space-y-1">
 									{voiceCredits.map((credit) => (
-										<li key={credit.text} className="text-sm font-semibold text-app-text">
+										<li
+											key={credit.text}
+											className="text-sm font-semibold text-app-text"
+										>
 											{credit.text}
 										</li>
 									))}

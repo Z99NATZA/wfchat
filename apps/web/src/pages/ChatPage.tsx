@@ -142,7 +142,9 @@ function ChatPage({
 		const measuredOverlayElement: HTMLDivElement = overlayElement;
 
 		function updateOverlayHeight() {
-			setAvatarOverlayHeight(Math.ceil(measuredOverlayElement.getBoundingClientRect().height));
+			setAvatarOverlayHeight(
+				Math.ceil(measuredOverlayElement.getBoundingClientRect().height)
+			);
 		}
 
 		updateOverlayHeight();
@@ -162,7 +164,11 @@ function ChatPage({
 		const didFinishSending = wasSendingRef.current && !chat.isSending;
 		wasSendingRef.current = chat.isSending;
 
-		if (!didFinishSending || !isAssistantSpeechAutoPlayEnabled || !isAssistantSpeechActionEnabled) {
+		if (
+			!didFinishSending ||
+			!isAssistantSpeechAutoPlayEnabled ||
+			!isAssistantSpeechActionEnabled
+		) {
 			return;
 		}
 
@@ -186,59 +192,59 @@ function ChatPage({
 
 	return (
 		<AppLayout
-				activityBar={activityBar}
-				backgroundImageUrl={backgroundImageUrl}
-				sidebar={
-					<ChatSidebar
-						personas={chat.personas}
-						sessions={chat.sessions}
-						activeSessionId={chat.activeChatId}
-						activePersonaId={chat.activePersona.id}
-						isOpen={chat.isSidebarOpen}
-						isCreatingSession={chat.isCreatingSession}
-						searchQuery={chat.chatSearchQuery}
-						onCreateSession={chat.createNewSession}
-						onSearchQueryChange={chat.setChatSearchQuery}
-						onCloseSidebar={chat.closeSidebar}
-						onDeleteSession={chat.removeSession}
-						onSelectPersona={chat.selectPersona}
-						onSelectSession={chat.selectSession}
-					/>
-				}
-				header={
-					<ChatHeader
-						persona={chat.activePersona}
-						theme={theme}
-						font={font}
-						canClearChat={!chat.isActiveChatReadOnly && chat.messages.length > 0}
-						isClearing={chat.isClearing}
-						onClearChat={chat.clearChat}
-						onFontChange={onFontChange}
-						onOpenSidebar={chat.openSidebar}
-						onToggleTheme={onToggleTheme}
-						isAuthenticated={auth.isAuthenticated}
-						hasPendingGuestSync={auth.isAuthenticated && auth.hasPendingGuestSync}
-						userAvatarUrl={auth.user?.avatarUrl}
-						onOpenProfile={onOpenProfile}
-						onOpenSettings={onOpenSettings}
-					/>
-				}
-				details={
-					<ChatDetailsPanel
-						persona={chat.activePersona}
-						memoryFacts={chat.memoryFacts}
-						memorySummaries={chat.memorySummaries}
-						isSavingMemoryFact={chat.isSavingMemoryFact}
-						isSavingMemorySummary={chat.isSavingMemorySummary}
-						onSaveMemoryFact={chat.saveMemoryFact}
-						onSaveMemorySummary={chat.saveMemorySummary}
-						onDeleteMemoryFact={chat.removeMemoryFact}
-						onDeleteMemorySummary={chat.removeMemorySummary}
-						onEditMemoryFact={chat.editMemoryFact}
-						onEditMemorySummary={chat.editMemorySummary}
-					/>
-				}
-			>
+			activityBar={activityBar}
+			backgroundImageUrl={backgroundImageUrl}
+			sidebar={
+				<ChatSidebar
+					personas={chat.personas}
+					sessions={chat.sessions}
+					activeSessionId={chat.activeChatId}
+					activePersonaId={chat.activePersona.id}
+					isOpen={chat.isSidebarOpen}
+					isCreatingSession={chat.isCreatingSession}
+					searchQuery={chat.chatSearchQuery}
+					onCreateSession={chat.createNewSession}
+					onSearchQueryChange={chat.setChatSearchQuery}
+					onCloseSidebar={chat.closeSidebar}
+					onDeleteSession={chat.removeSession}
+					onSelectPersona={chat.selectPersona}
+					onSelectSession={chat.selectSession}
+				/>
+			}
+			header={
+				<ChatHeader
+					persona={chat.activePersona}
+					theme={theme}
+					font={font}
+					canClearChat={!chat.isActiveChatReadOnly && chat.messages.length > 0}
+					isClearing={chat.isClearing}
+					onClearChat={chat.clearChat}
+					onFontChange={onFontChange}
+					onOpenSidebar={chat.openSidebar}
+					onToggleTheme={onToggleTheme}
+					isAuthenticated={auth.isAuthenticated}
+					hasPendingGuestSync={auth.isAuthenticated && auth.hasPendingGuestSync}
+					userAvatarUrl={auth.user?.avatarUrl}
+					onOpenProfile={onOpenProfile}
+					onOpenSettings={onOpenSettings}
+				/>
+			}
+			details={
+				<ChatDetailsPanel
+					persona={chat.activePersona}
+					memoryFacts={chat.memoryFacts}
+					memorySummaries={chat.memorySummaries}
+					isSavingMemoryFact={chat.isSavingMemoryFact}
+					isSavingMemorySummary={chat.isSavingMemorySummary}
+					onSaveMemoryFact={chat.saveMemoryFact}
+					onSaveMemorySummary={chat.saveMemorySummary}
+					onDeleteMemoryFact={chat.removeMemoryFact}
+					onDeleteMemorySummary={chat.removeMemorySummary}
+					onEditMemoryFact={chat.editMemoryFact}
+					onEditMemorySummary={chat.editMemorySummary}
+				/>
+			}
+		>
 			<div className="relative flex min-h-0 flex-1 flex-col">
 				<div className="relative z-10 flex min-h-0 flex-1 flex-col">
 					<ChatMessageList
@@ -283,7 +289,7 @@ function ChatPage({
 					/>
 				) : null}
 			</div>
-			</AppLayout>
+		</AppLayout>
 	);
 }
 

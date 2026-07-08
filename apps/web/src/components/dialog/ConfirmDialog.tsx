@@ -36,17 +36,10 @@ function ConfirmDialog({
 			onClose={onCancel}
 			actions={
 				<>
-					<Button
-						surface="dialog"
-						variant="secondary"
-						onClick={onCancel}
-					>
+					<Button surface="dialog" variant="secondary" onClick={onCancel}>
 						{cancelLabel ?? t("common.cancel")}
 					</Button>
-					<Button
-						variant={isDestructive ? "destructive" : "action"}
-						onClick={onConfirm}
-					>
+					<Button variant={isDestructive ? "destructive" : "action"} onClick={onConfirm}>
 						{confirmLabel ?? t("common.confirm")}
 					</Button>
 				</>

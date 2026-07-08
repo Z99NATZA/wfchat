@@ -20,10 +20,7 @@ class FakeMediaRecorder extends EventTarget {
 	state: RecordingState = "inactive";
 	timeslice?: number;
 
-	constructor(
-		_stream: MediaStream,
-		options: MediaRecorderOptions = {}
-	) {
+	constructor(_stream: MediaStream, options: MediaRecorderOptions = {}) {
 		super();
 		this.mimeType = options.mimeType ?? "audio/webm";
 	}
@@ -64,7 +61,9 @@ describe("useUserSpeechTranscription", () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
 		stoppedTracks.length = 0;
-		FakeMediaRecorder.nextChunk = new Blob([recordedAudioChunk], { type: "audio/webm;codecs=opus" });
+		FakeMediaRecorder.nextChunk = new Blob([recordedAudioChunk], {
+			type: "audio/webm;codecs=opus"
+		});
 		vi.stubGlobal("MediaRecorder", FakeMediaRecorder);
 		Object.defineProperty(navigator, "mediaDevices", {
 			configurable: true,
@@ -102,7 +101,9 @@ describe("useUserSpeechTranscription", () => {
 	});
 
 	it("rejects header-only recordings without uploading audio", async () => {
-		FakeMediaRecorder.nextChunk = new Blob([new Uint8Array(110)], { type: "audio/webm;codecs=opus" });
+		FakeMediaRecorder.nextChunk = new Blob([new Uint8Array(110)], {
+			type: "audio/webm;codecs=opus"
+		});
 		const onTranscript = vi.fn();
 		const { result } = renderHook(() => useUserSpeechTranscription(onTranscript));
 

@@ -106,7 +106,7 @@ export function useChatSession({ onAvatarChatEvent }: UseChatSessionOptions = {}
 	const [debouncedChatSearchQuery, setDebouncedChatSearchQuery] = useState("");
 	const [isSending, setIsSending] = useState(false);
 	const [isClearing, setIsClearing] = useState(false);
-	const [isCreatingSession, setIsCreatingSession] = useState(false);
+	const isCreatingSession = false;
 	const [memoryFacts, setMemoryFacts] = useState<MemoryFact[]>([]);
 	const [memorySummaries, setMemorySummaries] = useState<MemorySummary[]>([]);
 	const [isSavingMemoryFact, setIsSavingMemoryFact] = useState(false);
@@ -296,7 +296,8 @@ export function useChatSession({ onAvatarChatEvent }: UseChatSessionOptions = {}
 			};
 			assistantSpeechAvatarEventKeyRef.current = eventKey;
 			onAvatarChatEvent({
-				type: status === "loading" ? "assistant_speech_loading" : "assistant_speech_playing",
+				type:
+					status === "loading" ? "assistant_speech_loading" : "assistant_speech_playing",
 				chatId: activeChatId,
 				personaId: selectedPersonaId,
 				text: speechText
@@ -340,13 +341,7 @@ export function useChatSession({ onAvatarChatEvent }: UseChatSessionOptions = {}
 				personaId: activeSpeechAvatar.personaId
 			});
 		}
-	}, [
-		activeChatId,
-		assistantSpeechPlayback,
-		messages,
-		onAvatarChatEvent,
-		selectedPersonaId
-	]);
+	}, [activeChatId, assistantSpeechPlayback, messages, onAvatarChatEvent, selectedPersonaId]);
 
 	useEffect(() => {
 		let isCurrent = true;
@@ -520,7 +515,15 @@ export function useChatSession({ onAvatarChatEvent }: UseChatSessionOptions = {}
 		return () => {
 			isCurrent = false;
 		};
-	}, [applyCachedChat, location.pathname, navigateToDraft, refreshVersion, routeChatId, selectedPersonaId, t]);
+	}, [
+		applyCachedChat,
+		location.pathname,
+		navigateToDraft,
+		refreshVersion,
+		routeChatId,
+		selectedPersonaId,
+		t
+	]);
 
 	const refreshRemoteState = useCallback(() => {
 		setRefreshVersion((version) => version + 1);
@@ -613,10 +616,17 @@ export function useChatSession({ onAvatarChatEvent }: UseChatSessionOptions = {}
 
 	async function sendMessage(imageAttachments: PendingChatImageAttachment[] = []) {
 		const trimmedDraft = draft.trim();
-		const pendingImageAttachments = imageAttachments.filter((attachment) => attachment.kind === "image");
+		const pendingImageAttachments = imageAttachments.filter(
+			(attachment) => attachment.kind === "image"
+		);
 		const hasImageAttachments = pendingImageAttachments.length > 0;
 
-		if ((!trimmedDraft && !hasImageAttachments) || isSending || !selectedPersonaId || isActiveChatReadOnly) {
+		if (
+			(!trimmedDraft && !hasImageAttachments) ||
+			isSending ||
+			!selectedPersonaId ||
+			isActiveChatReadOnly
+		) {
 			return false;
 		}
 
@@ -767,11 +777,16 @@ export function useChatSession({ onAvatarChatEvent }: UseChatSessionOptions = {}
 				}
 
 				if (!streamStarted && !streamReceivedToken) {
-					const nextMessages = await sendChatMessage(chatId, trimmedDraft, sendAttachments);
+					const nextMessages = await sendChatMessage(
+						chatId,
+						trimmedDraft,
+						sendAttachments
+					);
 					applyServerMessages(
 						chatId,
 						nextMessages,
-						nextMessages.filter((message) => message.author === "companion").at(-1)?.text ?? ""
+						nextMessages.filter((message) => message.author === "companion").at(-1)
+							?.text ?? ""
 					);
 					return;
 				}
@@ -788,7 +803,8 @@ export function useChatSession({ onAvatarChatEvent }: UseChatSessionOptions = {}
 			}
 			setMessages((currentMessages) =>
 				currentMessages.filter(
-					(message) => message.id !== optimisticMessage.id && message.id !== assistantMessageId
+					(message) =>
+						message.id !== optimisticMessage.id && message.id !== assistantMessageId
 				)
 			);
 			setErrorMessage(t("chat.session.aiNoResponse"));
@@ -854,7 +870,12 @@ export function useChatSession({ onAvatarChatEvent }: UseChatSessionOptions = {}
 		}
 		setIsSavingMemoryFact(true);
 		try {
-			const fact = await createMemoryFact(selectedPersonaId, trimmed, 0.7, activeChatId ?? undefined);
+			const fact = await createMemoryFact(
+				selectedPersonaId,
+				trimmed,
+				0.7,
+				activeChatId ?? undefined
+			);
 			setMemoryFacts((current) => [fact, ...current]);
 			return true;
 		} catch {
@@ -881,7 +902,9 @@ export function useChatSession({ onAvatarChatEvent }: UseChatSessionOptions = {}
 		}
 		try {
 			const updated = await updateMemoryFact(factId, trimmed, 0.7);
-			setMemoryFacts((current) => current.map((fact) => (fact.id === factId ? updated : fact)));
+			setMemoryFacts((current) =>
+				current.map((fact) => (fact.id === factId ? updated : fact))
+			);
 			return true;
 		} catch {
 			return false;
@@ -895,7 +918,11 @@ export function useChatSession({ onAvatarChatEvent }: UseChatSessionOptions = {}
 		}
 		setIsSavingMemorySummary(true);
 		try {
-			const created = await createMemorySummary(selectedPersonaId, trimmed, activeChatId ?? undefined);
+			const created = await createMemorySummary(
+				selectedPersonaId,
+				trimmed,
+				activeChatId ?? undefined
+			);
 			setMemorySummaries((current) => [created, ...current]);
 			return true;
 		} catch {
@@ -960,8 +987,8 @@ export function useChatSession({ onAvatarChatEvent }: UseChatSessionOptions = {}
 			const fallbackSession = nextSessions[0];
 			if (fallbackSession) {
 				await selectSession(fallbackSession.id);
-			return;
-		}
+				return;
+			}
 
 			setActiveChatId(null);
 			setMessages([]);
@@ -1027,11 +1054,14 @@ export function useChatSession({ onAvatarChatEvent }: UseChatSessionOptions = {}
 		removeMemorySummary,
 		editMemoryFact,
 		editMemorySummary,
-		removeSession,
+		removeSession
 	};
 }
 
-function mergeChatSessions(primary: ChatSessionSummary[], secondary: ChatSessionSummary[]): ChatSessionSummary[] {
+function mergeChatSessions(
+	primary: ChatSessionSummary[],
+	secondary: ChatSessionSummary[]
+): ChatSessionSummary[] {
 	const map = new Map<string, ChatSessionSummary>();
 	for (const item of secondary) {
 		map.set(item.id, item);
@@ -1073,7 +1103,9 @@ function mergeDraftWithTranscript(currentDraft: string, transcript: string): str
 		return trimmedTranscript;
 	}
 
-	return /\s$/.test(currentDraft) ? `${currentDraft}${trimmedTranscript}` : `${currentDraft} ${trimmedTranscript}`;
+	return /\s$/.test(currentDraft)
+		? `${currentDraft}${trimmedTranscript}`
+		: `${currentDraft} ${trimmedTranscript}`;
 }
 
 async function cleanupUploadedAttachments(attachments: ChatMessageAttachment[]) {
@@ -1113,7 +1145,10 @@ function mergeMemoryFacts(primary: MemoryFact[], secondary: MemoryFact[]): Memor
 	return [...map.values()].sort((a, b) => b.updatedAt - a.updatedAt);
 }
 
-function mergeMemorySummaries(primary: MemorySummary[], secondary: MemorySummary[]): MemorySummary[] {
+function mergeMemorySummaries(
+	primary: MemorySummary[],
+	secondary: MemorySummary[]
+): MemorySummary[] {
 	const map = new Map<string, MemorySummary>();
 	for (const item of secondary) {
 		map.set(item.id, item);

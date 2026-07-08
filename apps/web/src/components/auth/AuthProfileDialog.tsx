@@ -108,9 +108,15 @@ function AuthProfileDialog({
 				<header className="flex items-start justify-between gap-4 border-b border-dialog-border px-5 py-4">
 					<div>
 						<h2 className="text-xl font-semibold text-app-text">
-							{isAuthenticated ? t("auth.profile.titleMember") : t("auth.profile.titleGuest")}
+							{isAuthenticated
+								? t("auth.profile.titleMember")
+								: t("auth.profile.titleGuest")}
 						</h2>
-						{!isAuthenticated && <p className="mt-1 text-sm text-muted">{t("auth.profile.guestDescription")}</p>}
+						{!isAuthenticated && (
+							<p className="mt-1 text-sm text-muted">
+								{t("auth.profile.guestDescription")}
+							</p>
+						)}
 					</div>
 					<IconButton
 						variant="ghostDanger"
@@ -138,18 +144,16 @@ function AuthProfileDialog({
 									)}
 								</div>
 								<div className="min-w-0">
-									<p className="truncate text-base font-semibold text-app-text">{profileLabel}</p>
+									<p className="truncate text-base font-semibold text-app-text">
+										{profileLabel}
+									</p>
 									<p className="mt-1 truncate text-sm text-muted">
 										{isAuthenticated ? email : t("auth.profile.guestMode")}
 									</p>
 								</div>
 							</div>
 							{isAuthenticated && (
-								<Button
-									variant="destructive"
-									size="md"
-									onClick={onLogout}
-								>
+								<Button variant="destructive" size="md" onClick={onLogout}>
 									<LogOut size={16} aria-hidden="true" />
 									{t("auth.profile.logout")}
 								</Button>
@@ -160,7 +164,9 @@ function AuthProfileDialog({
 					{!isAuthenticated ? (
 						<section className="space-y-3">
 							<div className="rounded-2xl border border-dialog-border bg-dialog-soft p-4 text-sm text-muted">
-								<p className="font-semibold text-app-text">{t("auth.profile.beforeLoginTitle")}</p>
+								<p className="font-semibold text-app-text">
+									{t("auth.profile.beforeLoginTitle")}
+								</p>
 								<ul className="mt-3 list-disc space-y-2 pl-5">
 									<li>{t("auth.profile.beforeLoginItemSync")}</li>
 									<li>{t("auth.profile.beforeLoginItemResume")}</li>
@@ -185,7 +191,9 @@ function AuthProfileDialog({
 											className="mt-1 w-full rounded-xl border border-dialog-border bg-dialog-soft px-3 py-3 text-sm text-app-text outline-none transition placeholder:text-muted/70 focus:border-primary"
 											value={displayNameDraft}
 											placeholder={t("auth.profile.displayNamePlaceholder")}
-											onChange={(event) => setDisplayNameDraft(event.target.value)}
+											onChange={(event) =>
+												setDisplayNameDraft(event.target.value)
+											}
 										/>
 									</label>
 									<label className="block">
@@ -197,7 +205,9 @@ function AuthProfileDialog({
 											className="mt-1 w-full rounded-xl border border-dialog-border bg-dialog-soft px-3 py-3 text-sm text-app-text outline-none transition placeholder:text-muted/70 focus:border-primary"
 											value={avatarUrlDraft}
 											placeholder={t("auth.profile.avatarUrlPlaceholder")}
-											onChange={(event) => setAvatarUrlDraft(event.target.value)}
+											onChange={(event) =>
+												setAvatarUrlDraft(event.target.value)
+											}
 										/>
 									</label>
 									<Button
@@ -217,7 +227,9 @@ function AuthProfileDialog({
 											{profileMessage}
 										</p>
 									)}
-									{profileError && <p className="text-xs text-red-500">{profileError}</p>}
+									{profileError && (
+										<p className="text-xs text-red-500">{profileError}</p>
+									)}
 								</form>
 							</section>
 
@@ -230,7 +242,9 @@ function AuthProfileDialog({
 										<h3 className="text-sm font-semibold text-app-text">
 											{t("auth.profile.syncSection")}
 										</h3>
-										<p className="mt-1 text-sm text-muted">{t("auth.profile.syncReady")}</p>
+										<p className="mt-1 text-sm text-muted">
+											{t("auth.profile.syncReady")}
+										</p>
 									</div>
 								</div>
 								{hasPendingGuestSync && (
@@ -242,9 +256,13 @@ function AuthProfileDialog({
 											onClick={onSyncNow}
 											disabled={isSyncing}
 										>
-											{isSyncing ? t("auth.profile.syncing") : t("auth.profile.syncNow")}
+											{isSyncing
+												? t("auth.profile.syncing")
+												: t("auth.profile.syncNow")}
 										</Button>
-										{syncError && <p className="text-xs text-red-500">{syncError}</p>}
+										{syncError && (
+											<p className="text-xs text-red-500">{syncError}</p>
+										)}
 									</div>
 								)}
 							</section>

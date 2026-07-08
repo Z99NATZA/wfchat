@@ -71,7 +71,9 @@ describe("ChatMessageList streaming state", () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
 		HTMLElement.prototype.scrollTo = vi.fn();
-		vi.mocked(fetchChatAttachmentPreview).mockResolvedValue(new Blob(["image"], { type: "image/png" }));
+		vi.mocked(fetchChatAttachmentPreview).mockResolvedValue(
+			new Blob(["image"], { type: "image/png" })
+		);
 		Object.defineProperty(URL, "createObjectURL", {
 			configurable: true,
 			value: vi.fn(() => "blob:fetched-preview")
@@ -143,7 +145,11 @@ describe("ChatMessageList streaming state", () => {
 			<ChatMessageList
 				messages={[
 					message("user-1", "user", "hello"),
-					message("assistant-1", "companion", "| Feature | Status |\n| --- | --- |\n| Markdown | Ready |")
+					message(
+						"assistant-1",
+						"companion",
+						"| Feature | Status |\n| --- | --- |\n| Markdown | Ready |"
+					)
 				]}
 				companionName="Aiko"
 				companionAvatarUrl="/images/aiko-avatar.png"
@@ -193,9 +199,7 @@ describe("ChatMessageList streaming state", () => {
 	it("copies raw assistant message text", async () => {
 		render(
 			<ChatMessageList
-				messages={[
-					message("assistant-1", "companion", "## Heading\n\n- Item")
-				]}
+				messages={[message("assistant-1", "companion", "## Heading\n\n- Item")]}
 				companionName="Aiko"
 				companionAvatarUrl="/images/aiko-avatar.png"
 			/>
@@ -233,7 +237,8 @@ describe("ChatMessageList streaming state", () => {
 								byteSize: 12,
 								width: 2,
 								height: 3,
-								previewUrl: "http://localhost:8080/api/chat/attachments/attachment-1/preview"
+								previewUrl:
+									"http://localhost:8080/api/chat/attachments/attachment-1/preview"
 							}
 						]
 					}
@@ -243,7 +248,7 @@ describe("ChatMessageList streaming state", () => {
 			/>
 		);
 
-		const image = await screen.findByRole("img", { name: "Image 1" }) as HTMLImageElement;
+		const image = (await screen.findByRole("img", { name: "Image 1" })) as HTMLImageElement;
 		expect(fetchChatAttachmentPreview).toHaveBeenCalledWith("attachment-1");
 		expect(image.src).toBe("blob:fetched-preview");
 	});
@@ -262,7 +267,8 @@ describe("ChatMessageList streaming state", () => {
 								byteSize: 12,
 								width: 2,
 								height: 3,
-								previewUrl: "http://localhost:8080/api/chat/attachments/attachment-1/preview"
+								previewUrl:
+									"http://localhost:8080/api/chat/attachments/attachment-1/preview"
 							}
 						]
 					}
@@ -275,12 +281,14 @@ describe("ChatMessageList streaming state", () => {
 		await screen.findByRole("img", { name: "Image 1" });
 		fireEvent.click(screen.getByRole("button", { name: "Open preview for Image 1" }));
 
-		expect(dialogMocks.openCustom).toHaveBeenCalledWith(expect.objectContaining({
-			title: "Image 1",
-			isDraggable: true,
-			showCancelAction: false,
-			size: "wide"
-		}));
+		expect(dialogMocks.openCustom).toHaveBeenCalledWith(
+			expect.objectContaining({
+				title: "Image 1",
+				isDraggable: true,
+				showCancelAction: false,
+				size: "wide"
+			})
+		);
 		expect(dialogMocks.openCustom.mock.calls[0][0].render).toEqual(expect.any(Function));
 	});
 
@@ -300,7 +308,8 @@ describe("ChatMessageList streaming state", () => {
 								byteSize: 12,
 								width: 2,
 								height: 3,
-								previewUrl: "http://localhost:8080/api/chat/attachments/attachment-missing/preview"
+								previewUrl:
+									"http://localhost:8080/api/chat/attachments/attachment-missing/preview"
 							}
 						]
 					}
@@ -332,7 +341,8 @@ describe("ChatMessageList streaming state", () => {
 								byteSize: 12,
 								width: 2,
 								height: 3,
-								previewUrl: "http://localhost:8080/api/chat/attachments/attachment-bad-image/preview"
+								previewUrl:
+									"http://localhost:8080/api/chat/attachments/attachment-bad-image/preview"
 							}
 						]
 					}
@@ -405,10 +415,12 @@ describe("ChatMessageList streaming state", () => {
 		fireEvent.click(screen.getByRole("button", { name: "Open preview for Image 1" }));
 
 		expect(fetchChatAttachmentPreview).not.toHaveBeenCalled();
-		expect(dialogMocks.openCustom).toHaveBeenCalledWith(expect.objectContaining({
-			title: "Image 1",
-			size: "wide"
-		}));
+		expect(dialogMocks.openCustom).toHaveBeenCalledWith(
+			expect.objectContaining({
+				title: "Image 1",
+				size: "wide"
+			})
+		);
 	});
 
 	it("keeps pending local blob previews unchanged after image error events", () => {
@@ -566,7 +578,9 @@ describe("ChatMessageList streaming state", () => {
 		);
 
 		const mountedRows = container.querySelectorAll("[data-virtual-message-row]");
-		const virtualList = container.querySelector("[data-virtualized-message-list]") as HTMLDivElement;
+		const virtualList = container.querySelector(
+			"[data-virtualized-message-list]"
+		) as HTMLDivElement;
 
 		expect(mountedRows.length).toBeGreaterThan(0);
 		expect(mountedRows.length).toBeLessThan(longConversation.length);
@@ -589,7 +603,10 @@ describe("ChatMessageList streaming state", () => {
 		const scrollContainer = container.querySelector(".chat-scroll") as HTMLDivElement;
 
 		Object.defineProperty(scrollContainer, "clientHeight", { configurable: true, value: 500 });
-		Object.defineProperty(scrollContainer, "scrollHeight", { configurable: true, value: 2_000 });
+		Object.defineProperty(scrollContainer, "scrollHeight", {
+			configurable: true,
+			value: 2_000
+		});
 		scrollContainer.scrollTop = 1_500;
 		fireEvent.scroll(scrollContainer);
 		await new Promise((resolve) => requestAnimationFrame(resolve));
@@ -599,7 +616,10 @@ describe("ChatMessageList streaming state", () => {
 		fireEvent.scroll(scrollContainer);
 		rerender(
 			<ChatMessageList
-				messages={[...initialMessages, message("assistant-new", "companion", "new message")]}
+				messages={[
+					...initialMessages,
+					message("assistant-new", "companion", "new message")
+				]}
 				companionName="Aiko"
 				companionAvatarUrl="/images/aiko-avatar.png"
 			/>
@@ -627,7 +647,10 @@ describe("ChatMessageList streaming state", () => {
 		const scrollContainer = container.querySelector(".chat-scroll") as HTMLDivElement;
 
 		Object.defineProperty(scrollContainer, "clientHeight", { configurable: true, value: 500 });
-		Object.defineProperty(scrollContainer, "scrollHeight", { configurable: true, value: 2_000 });
+		Object.defineProperty(scrollContainer, "scrollHeight", {
+			configurable: true,
+			value: 2_000
+		});
 		scrollContainer.scrollTop = 1_500;
 		fireEvent.scroll(scrollContainer);
 		await new Promise((resolve) => requestAnimationFrame(resolve));

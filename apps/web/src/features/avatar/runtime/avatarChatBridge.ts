@@ -1,9 +1,7 @@
 import { useCallback, useEffect, useRef } from "react";
 import { resolveAvatarBinding } from "@/features/avatar/runtime/avatarBindings";
 import { useAvatarRuntime } from "@/features/avatar/runtime/avatarRuntimeStore";
-import {
-	inferExpressionIdFromText
-} from "@/features/avatar/runtime/avatarEmotionInference";
+import { inferExpressionIdFromText } from "@/features/avatar/runtime/avatarEmotionInference";
 
 export type ChatAvatarEvent =
 	| { type: "assistant_waiting"; chatId: string | null; personaId: string }

@@ -70,7 +70,9 @@ function writeQueue(queue: SyncQueueOperation[]) {
 }
 
 function readQueue(): SyncQueueOperation[] {
-	return JSON.parse(window.localStorage.getItem(syncQueueStorageKey) ?? "[]") as SyncQueueOperation[];
+	return JSON.parse(
+		window.localStorage.getItem(syncQueueStorageKey) ?? "[]"
+	) as SyncQueueOperation[];
 }
 
 function readQueuedItems(): SyncItem[] {
@@ -99,14 +101,31 @@ afterEach(() => {
 describe("syncService queue helpers", () => {
 	it("keeps newest item per item_id", () => {
 		const items: SyncItem[] = [
-			{ item_id: "settings.theme", item_type: "setting", updated_at: 10, payload: { value: "light" } },
-			{ item_id: "settings.theme", item_type: "setting", updated_at: 20, payload: { value: "dark" } },
-			{ item_id: "settings.font", item_type: "setting", updated_at: 12, payload: { value: "inter" } }
+			{
+				item_id: "settings.theme",
+				item_type: "setting",
+				updated_at: 10,
+				payload: { value: "light" }
+			},
+			{
+				item_id: "settings.theme",
+				item_type: "setting",
+				updated_at: 20,
+				payload: { value: "dark" }
+			},
+			{
+				item_id: "settings.font",
+				item_type: "setting",
+				updated_at: 12,
+				payload: { value: "inter" }
+			}
 		];
 
 		const result = compactItems(items);
 		expect(result).toHaveLength(2);
-		expect(result.find((item) => item.item_id === "settings.theme")?.payload.value).toBe("dark");
+		expect(result.find((item) => item.item_id === "settings.theme")?.payload.value).toBe(
+			"dark"
+		);
 	});
 
 	it("compacts every operation in queue", () => {
@@ -195,37 +214,29 @@ describe("syncService queue helpers", () => {
 
 		const result = await flushGuestSyncQueue({ force: true });
 
-		expect(apiClientMock.post).toHaveBeenNthCalledWith(
-			1,
-			"/api/sync/preview",
-			{
-				items: [
-					{
-						item_id: "settings.theme",
-						item_type: "setting",
-						updated_at: 10,
-						deleted_at: null,
-						payload: { key: "theme", value: "dark" }
-					}
-				]
-			}
-		);
-		expect(apiClientMock.post).toHaveBeenNthCalledWith(
-			2,
-			"/api/sync/commit",
-			{
-				operation_id: "op-1",
-				items: [
-					{
-						item_id: "settings.theme",
-						item_type: "setting",
-						updated_at: 10,
-						deleted_at: null,
-						payload: { key: "theme", value: "dark" }
-					}
-				]
-			}
-		);
+		expect(apiClientMock.post).toHaveBeenNthCalledWith(1, "/api/sync/preview", {
+			items: [
+				{
+					item_id: "settings.theme",
+					item_type: "setting",
+					updated_at: 10,
+					deleted_at: null,
+					payload: { key: "theme", value: "dark" }
+				}
+			]
+		});
+		expect(apiClientMock.post).toHaveBeenNthCalledWith(2, "/api/sync/commit", {
+			operation_id: "op-1",
+			items: [
+				{
+					item_id: "settings.theme",
+					item_type: "setting",
+					updated_at: 10,
+					deleted_at: null,
+					payload: { key: "theme", value: "dark" }
+				}
+			]
+		});
 		expect(result?.merged_count).toBe(1);
 		expect(readQueue()).toEqual([]);
 	});
@@ -321,7 +332,13 @@ describe("syncService queue helpers", () => {
 			}
 		];
 
-		await enqueueGuestSyncWithMemory(memoryFacts, memorySummaries, sessions, messages, "chat-1");
+		await enqueueGuestSyncWithMemory(
+			memoryFacts,
+			memorySummaries,
+			sessions,
+			messages,
+			"chat-1"
+		);
 
 		expect(readQueue()).toHaveLength(1);
 		expect(readQueue()[0]).toMatchObject({
@@ -467,24 +484,20 @@ describe("syncService queue helpers", () => {
 
 		await syncLocalDeletesNow();
 
-		expect(apiClientMock.post).toHaveBeenNthCalledWith(
-			1,
-			"/api/sync/preview",
-			{
-				items: expect.arrayContaining([
-					expect.objectContaining({
-						item_id: "memory.fact.fact-1",
-						item_type: "memory_fact",
-						deleted_at: 350
-					}),
-					expect.objectContaining({
-						item_id: "chat.message.chat-1.message-1",
-						item_type: "chat_message",
-						deleted_at: 350
-					})
-				])
-			}
-		);
+		expect(apiClientMock.post).toHaveBeenNthCalledWith(1, "/api/sync/preview", {
+			items: expect.arrayContaining([
+				expect.objectContaining({
+					item_id: "memory.fact.fact-1",
+					item_type: "memory_fact",
+					deleted_at: 350
+				}),
+				expect.objectContaining({
+					item_id: "chat.message.chat-1.message-1",
+					item_type: "chat_message",
+					deleted_at: 350
+				})
+			])
+		});
 		expect(readQueue()).toEqual([]);
 	});
 
@@ -593,7 +606,7 @@ describe("syncService queue helpers", () => {
 		);
 
 		expect(apiClientMock.get).toHaveBeenCalledWith("/api/sync/changes", {
-			params: { cursor: 5, limit: 100 },
+			params: { cursor: 5, limit: 100 }
 		});
 		expect(appliedCount).toBe(8);
 		expect(window.localStorage.getItem(themeStorageKey)).toBe("dark");
@@ -616,7 +629,11 @@ describe("syncService queue helpers", () => {
 			expect.objectContaining({ id: "fact-1", characterId: "aiko", content: "Likes tea" })
 		]);
 		expect(readMemorySummariesCache()).toEqual([
-			expect.objectContaining({ id: "summary-1", characterId: "aiko", summary: "Met the user" })
+			expect.objectContaining({
+				id: "summary-1",
+				characterId: "aiko",
+				summary: "Met the user"
+			})
 		]);
 		expect(readChatSessionsCache()).toEqual([
 			expect.objectContaining({ id: "chat-1", characterId: "aiko", lastMessage: "hello" })
@@ -694,7 +711,10 @@ describe("syncService queue helpers", () => {
 						item_type: "setting",
 						updated_at: 12,
 						deleted_at: null,
-						payload: { key: "backgroundImageUrl", value: "https://example.com/cloud.png" }
+						payload: {
+							key: "backgroundImageUrl",
+							value: "https://example.com/cloud.png"
+						}
 					}
 				]
 			}

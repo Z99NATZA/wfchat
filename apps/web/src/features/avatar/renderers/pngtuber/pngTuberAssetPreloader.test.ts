@@ -29,7 +29,9 @@ describe("pngTuberAssetPreloader", () => {
 	it("preloads every Aiko PNGTuber asset with neutral first", async () => {
 		const loadedAssetUrls: string[] = [];
 		stubImageConstructor(loadedAssetUrls);
-		const neutralAssetUrl = AIKO_PNGTUBER_EMOTIONS.find((emotion) => emotion.id === "neutral")?.assetUrl;
+		const neutralAssetUrl = AIKO_PNGTUBER_EMOTIONS.find(
+			(emotion) => emotion.id === "neutral"
+		)?.assetUrl;
 		expect(neutralAssetUrl).toBeDefined();
 		const expectedAssetUrls = [
 			neutralAssetUrl as string,

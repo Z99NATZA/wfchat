@@ -45,13 +45,17 @@ export function AppHeaderDesktopControls({
 	return (
 		<>
 			{leadingActions}
-			<label className={`relative inline-flex h-9 w-[5.5rem] shrink-0 items-center rounded-lg border border-app-border bg-app-soft pl-2 pr-1 text-xs font-semibold text-app-text transition hover:border-primary focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/35 sm:h-10 sm:w-[6.25rem] ${headerFieldClassName}`}>
+			<label
+				className={`relative inline-flex h-9 w-[5.5rem] shrink-0 items-center rounded-lg border border-app-border bg-app-soft pl-2 pr-1 text-xs font-semibold text-app-text transition hover:border-primary focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/35 sm:h-10 sm:w-[6.25rem] ${headerFieldClassName}`}
+			>
 				<Globe size={18} aria-hidden="true" />
 				<select
 					value={locale}
 					aria-label={t("chat.header.language")}
 					title={t("chat.header.language")}
-					onChange={(event) => setLocale(event.target.value as (typeof SUPPORTED_LOCALES)[number]["code"])}
+					onChange={(event) =>
+						setLocale(event.target.value as (typeof SUPPORTED_LOCALES)[number]["code"])
+					}
 					className="h-full min-w-0 flex-1 cursor-pointer appearance-none bg-transparent pl-2 pr-6 uppercase text-app-text outline-none"
 				>
 					{SUPPORTED_LOCALES.map((language) => (
@@ -61,7 +65,9 @@ export function AppHeaderDesktopControls({
 					))}
 				</select>
 			</label>
-			<label className={`relative inline-flex h-9 w-28 shrink-0 items-center rounded-lg border border-app-border bg-app-soft pl-2 pr-1 text-xs font-semibold text-app-text transition hover:border-primary focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/35 sm:h-10 sm:w-40 ${headerFieldClassName}`}>
+			<label
+				className={`relative inline-flex h-9 w-28 shrink-0 items-center rounded-lg border border-app-border bg-app-soft pl-2 pr-1 text-xs font-semibold text-app-text transition hover:border-primary focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/35 sm:h-10 sm:w-40 ${headerFieldClassName}`}
+			>
 				<Type size={18} aria-hidden="true" />
 				<select
 					value={font}
@@ -78,10 +84,18 @@ export function AppHeaderDesktopControls({
 				</select>
 			</label>
 			<IconButton onClick={onToggleTheme} aria-label={nextThemeLabel}>
-				{theme === "dark" ? <Sun size={18} aria-hidden="true" /> : <Moon size={18} aria-hidden="true" />}
+				{theme === "dark" ? (
+					<Sun size={18} aria-hidden="true" />
+				) : (
+					<Moon size={18} aria-hidden="true" />
+				)}
 			</IconButton>
 			{trailingActions}
-			<IconButton className="hidden md:flex" aria-label={t("chat.header.settings")} onClick={onOpenSettings}>
+			<IconButton
+				className="hidden md:flex"
+				aria-label={t("chat.header.settings")}
+				onClick={onOpenSettings}
+			>
 				<Settings size={18} aria-hidden="true" />
 			</IconButton>
 			<ProfileButton
@@ -121,7 +135,9 @@ export function AppHeaderMobileControls({
 					value={locale}
 					aria-label={t("chat.header.language")}
 					title={t("chat.header.language")}
-					onChange={(event) => setLocale(event.target.value as (typeof SUPPORTED_LOCALES)[number]["code"])}
+					onChange={(event) =>
+						setLocale(event.target.value as (typeof SUPPORTED_LOCALES)[number]["code"])
+					}
 					className="h-full min-w-0 flex-1 cursor-pointer appearance-none bg-transparent pl-2 pr-6 uppercase text-app-text outline-none"
 				>
 					{SUPPORTED_LOCALES.map((language) => (
@@ -157,7 +173,11 @@ export function AppHeaderMobileControls({
 					<Settings size={18} aria-hidden="true" />
 				</IconButton>
 				<IconButton onClick={onToggleTheme} aria-label={nextThemeLabel}>
-					{theme === "dark" ? <Sun size={18} aria-hidden="true" /> : <Moon size={18} aria-hidden="true" />}
+					{theme === "dark" ? (
+						<Sun size={18} aria-hidden="true" />
+					) : (
+						<Moon size={18} aria-hidden="true" />
+					)}
 				</IconButton>
 				{actions}
 			</div>
@@ -178,7 +198,12 @@ function ProfileButton({ avatarUrl, hasAttentionBadge, onOpenProfile }: ProfileB
 			onClick={onOpenProfile}
 		>
 			{avatarUrl ? (
-				<img src={avatarUrl} alt="" className="h-full w-full object-cover" aria-hidden="true" />
+				<img
+					src={avatarUrl}
+					alt=""
+					className="h-full w-full object-cover"
+					aria-hidden="true"
+				/>
 			) : (
 				<User size={16} aria-hidden="true" />
 			)}

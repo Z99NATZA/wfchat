@@ -70,7 +70,9 @@ describe("ChatMessageContent", () => {
 	});
 
 	it("renders assistant headings with compact heading elements", () => {
-		render(<ChatMessageContent author="companion" text={"## Plan\n\nShort detail.\n\n### Notes"} />);
+		render(
+			<ChatMessageContent author="companion" text={"## Plan\n\nShort detail.\n\n### Notes"} />
+		);
 
 		expect(screen.getByRole("heading", { level: 2, name: "Plan" })).toBeTruthy();
 		expect(screen.getByRole("heading", { level: 3, name: "Notes" })).toBeTruthy();
@@ -92,7 +94,10 @@ describe("ChatMessageContent", () => {
 
 	it("renders assistant blockquotes", () => {
 		const { container } = render(
-			<ChatMessageContent author="companion" text={"> Important note\n> with a second line.\n\nNormal text."} />
+			<ChatMessageContent
+				author="companion"
+				text={"> Important note\n> with a second line.\n\nNormal text."}
+			/>
 		);
 
 		const quote = container.querySelector("blockquote");
@@ -120,7 +125,9 @@ describe("ChatMessageContent", () => {
 		const { container } = render(
 			<ChatMessageContent
 				author="companion"
-				text={'<script>alert("xss")</script>\n\n<img src=x onerror=alert(1)>\n\n<strong>raw strong</strong>'}
+				text={
+					'<script>alert("xss")</script>\n\n<img src=x onerror=alert(1)>\n\n<strong>raw strong</strong>'
+				}
 			/>
 		);
 
@@ -142,7 +149,7 @@ describe("ChatMessageContent", () => {
 		const { container } = render(
 			<ChatMessageContent
 				author="companion"
-				text={"```ts\nconst value = \"hello\";\nconsole.log(value);\n```"}
+				text={'```ts\nconst value = "hello";\nconsole.log(value);\n```'}
 			/>
 		);
 
@@ -152,7 +159,9 @@ describe("ChatMessageContent", () => {
 
 		fireEvent.click(screen.getByRole("button", { name: "Copy code" }));
 
-		expect(navigator.clipboard.writeText).toHaveBeenCalledWith('const value = "hello";\nconsole.log(value);');
+		expect(navigator.clipboard.writeText).toHaveBeenCalledWith(
+			'const value = "hello";\nconsole.log(value);'
+		);
 	});
 
 	it("renders plain code immediately before async syntax highlighting completes", async () => {
@@ -160,25 +169,29 @@ describe("ChatMessageContent", () => {
 		const { container } = render(
 			<ChatMessageContent
 				author="companion"
-				text={"```ts\nconst value = \"hello\";\nconsole.log(value);\n```"}
+				text={'```ts\nconst value = "hello";\nconsole.log(value);\n```'}
 			/>
 		);
 
 		expect(screen.getByText(/const value/)).toBeTruthy();
-		expect(container.querySelector("code")?.getAttribute("data-markdown-code-highlighted")).toBe("false");
+		expect(
+			container.querySelector("code")?.getAttribute("data-markdown-code-highlighted")
+		).toBe("false");
 	});
 
 	it("enhances fenced code blocks with async syntax highlighting", async () => {
 		const { container } = render(
 			<ChatMessageContent
 				author="companion"
-				text={"```ts\nconst value = \"hello\";\nconsole.log(value);\n```"}
+				text={'```ts\nconst value = "hello";\nconsole.log(value);\n```'}
 				theme="light"
 			/>
 		);
 
 		await waitFor(() =>
-			expect(container.querySelector("code")?.getAttribute("data-markdown-code-highlighted")).toBe("true")
+			expect(
+				container.querySelector("code")?.getAttribute("data-markdown-code-highlighted")
+			).toBe("true")
 		);
 
 		expect(highlighterMock.highlightCode).toHaveBeenCalledWith({
@@ -186,7 +199,9 @@ describe("ChatMessageContent", () => {
 			language: "ts",
 			theme: "light"
 		});
-		expect(container.querySelector("code")?.getAttribute("data-markdown-code-highlighted")).toBe("true");
+		expect(
+			container.querySelector("code")?.getAttribute("data-markdown-code-highlighted")
+		).toBe("true");
 		expect(container.querySelector("code span")?.getAttribute("style")).toContain("color");
 	});
 
@@ -207,7 +222,9 @@ describe("ChatMessageContent", () => {
 			/>
 		);
 
-		expect(container.querySelector("code")?.getAttribute("data-markdown-code-highlighted")).toBe("true");
+		expect(
+			container.querySelector("code")?.getAttribute("data-markdown-code-highlighted")
+		).toBe("true");
 		expect(container.querySelector("code span")?.getAttribute("style")).toContain("color");
 		await new Promise((resolve) => window.setTimeout(resolve, 0));
 		expect(highlighterMock.highlightCode).not.toHaveBeenCalled();
@@ -218,7 +235,7 @@ describe("ChatMessageContent", () => {
 			<ChatMessageContent
 				author="companion"
 				isStreaming
-				text={"```ts\nconst value = \"hello\";\n```"}
+				text={'```ts\nconst value = "hello";\n```'}
 			/>
 		);
 
@@ -231,24 +248,25 @@ describe("ChatMessageContent", () => {
 	it("keeps code plain when syntax highlighting is not eligible", async () => {
 		highlighterMock.canHighlightCode.mockReturnValue(false);
 		const { container } = render(
-			<ChatMessageContent
-				author="companion"
-				text={"```unknown-language\nhello\n```"}
-			/>
+			<ChatMessageContent author="companion" text={"```unknown-language\nhello\n```"} />
 		);
 
 		await new Promise((resolve) => window.setTimeout(resolve, 0));
 
 		expect(screen.getByText("hello")).toBeTruthy();
 		expect(highlighterMock.highlightCode).not.toHaveBeenCalled();
-		expect(container.querySelector("code")?.getAttribute("data-markdown-code-highlighted")).toBe("false");
+		expect(
+			container.querySelector("code")?.getAttribute("data-markdown-code-highlighted")
+		).toBe("false");
 	});
 
 	it("renders GFM tables inside a scroll container", () => {
 		const { container } = render(
 			<ChatMessageContent
 				author="companion"
-				text={"| Feature | Status |\n| --- | --- |\n| Markdown | Ready |\n| Attachments | Later |"}
+				text={
+					"| Feature | Status |\n| --- | --- |\n| Markdown | Ready |\n| Attachments | Later |"
+				}
 			/>
 		);
 
@@ -258,7 +276,9 @@ describe("ChatMessageContent", () => {
 	});
 
 	it("renders task-list syntax as disabled task controls", () => {
-		render(<ChatMessageContent author="companion" text={"- [x] Done item\n- [ ] Pending item"} />);
+		render(
+			<ChatMessageContent author="companion" text={"- [x] Done item\n- [ ] Pending item"} />
+		);
 
 		expect((screen.getByLabelText("Completed task") as HTMLInputElement).disabled).toBe(true);
 		expect((screen.getByLabelText("Pending task") as HTMLInputElement).disabled).toBe(true);
@@ -272,7 +292,9 @@ describe("ChatMessageContent", () => {
 	});
 
 	it("renders a partial code fence inside a code block surface", () => {
-		const { container } = render(<ChatMessageContent author="companion" text={"```ts\nconst value ="} />);
+		const { container } = render(
+			<ChatMessageContent author="companion" text={"```ts\nconst value ="} />
+		);
 
 		expect(container.querySelector("[data-markdown-code-block]")).toBeTruthy();
 		expect(screen.getByText(/const value =/)).toBeTruthy();

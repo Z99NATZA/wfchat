@@ -21,7 +21,13 @@ type ChatMessageContentProps = {
 	theme?: Theme;
 };
 
-function createMarkdownComponents({ isStreaming, theme }: { isStreaming: boolean; theme: Theme }): Components {
+function createMarkdownComponents({
+	isStreaming,
+	theme
+}: {
+	isStreaming: boolean;
+	theme: Theme;
+}): Components {
 	return {
 		a({ children, href, ...props }) {
 			return (
@@ -59,7 +65,14 @@ function createMarkdownComponents({ isStreaming, theme }: { isStreaming: boolean
 				);
 			}
 
-			return <CodeBlock code={codeText} isStreaming={isStreaming} language={language} theme={theme} />;
+			return (
+				<CodeBlock
+					code={codeText}
+					isStreaming={isStreaming}
+					language={language}
+					theme={theme}
+				/>
+			);
 		},
 		h1({ children }) {
 			return <h2 className="text-base font-semibold leading-6 text-app-text">{children}</h2>;
@@ -94,7 +107,12 @@ function createMarkdownComponents({ isStreaming, theme }: { isStreaming: boolean
 		},
 		li({ children, className }) {
 			return (
-				<li className={cn("pl-1", className?.includes("task-list-item") && "list-none pl-0")}>
+				<li
+					className={cn(
+						"pl-1",
+						className?.includes("task-list-item") && "list-none pl-0"
+					)}
+				>
 					{children}
 				</li>
 			);
@@ -110,8 +128,13 @@ function createMarkdownComponents({ isStreaming, theme }: { isStreaming: boolean
 		},
 		table({ children }) {
 			return (
-				<div className="max-w-full overflow-x-auto rounded-lg border border-app-border" data-markdown-table-scroll>
-					<table className="min-w-full border-collapse text-left text-xs">{children}</table>
+				<div
+					className="max-w-full overflow-x-auto rounded-lg border border-app-border"
+					data-markdown-table-scroll
+				>
+					<table className="min-w-full border-collapse text-left text-xs">
+						{children}
+					</table>
 				</div>
 			);
 		},
@@ -122,14 +145,23 @@ function createMarkdownComponents({ isStreaming, theme }: { isStreaming: boolean
 			return <td className="border-app-border px-3 py-2 align-top">{children}</td>;
 		},
 		th({ children }) {
-			return <th className="border-b border-app-border bg-app-soft px-3 py-2 font-semibold">{children}</th>;
+			return (
+				<th className="border-b border-app-border bg-app-soft px-3 py-2 font-semibold">
+					{children}
+				</th>
+			);
 		},
 		thead({ children }) {
 			return <thead>{children}</thead>;
 		},
 		ul({ children, className }) {
 			return (
-				<ul className={cn("list-disc space-y-1 pl-5", className?.includes("contains-task-list") && "list-none pl-0")}>
+				<ul
+					className={cn(
+						"list-disc space-y-1 pl-5",
+						className?.includes("contains-task-list") && "list-none pl-0"
+					)}
+				>
 					{children}
 				</ul>
 			);
@@ -137,7 +169,12 @@ function createMarkdownComponents({ isStreaming, theme }: { isStreaming: boolean
 	};
 }
 
-function ChatMessageContent({ author, isStreaming = false, text, theme = "light" }: ChatMessageContentProps) {
+function ChatMessageContent({
+	author,
+	isStreaming = false,
+	text,
+	theme = "light"
+}: ChatMessageContentProps) {
 	if (author === "user") {
 		return <PlainMessageContent text={text} />;
 	}
@@ -145,7 +182,15 @@ function ChatMessageContent({ author, isStreaming = false, text, theme = "light"
 	return <AssistantMarkdownContent isStreaming={isStreaming} text={text} theme={theme} />;
 }
 
-function AssistantMarkdownContent({ isStreaming, text, theme }: { isStreaming: boolean; text: string; theme: Theme }) {
+function AssistantMarkdownContent({
+	isStreaming,
+	text,
+	theme
+}: {
+	isStreaming: boolean;
+	text: string;
+	theme: Theme;
+}) {
 	const markdownComponents = createMarkdownComponents({ isStreaming, theme });
 
 	return (
@@ -234,7 +279,10 @@ function CodeBlock({
 	}
 
 	return (
-		<div className="overflow-hidden rounded-lg border border-app-border bg-app-soft" data-markdown-code-block>
+		<div
+			className="overflow-hidden rounded-lg border border-app-border bg-app-soft"
+			data-markdown-code-block
+		>
 			<div className="flex min-h-9 items-center justify-between gap-3 border-b border-app-border px-3 py-1.5">
 				<span className="min-w-0 truncate font-mono text-[11px] font-medium uppercase tracking-normal text-muted">
 					{language ?? "code"}
@@ -245,12 +293,23 @@ function CodeBlock({
 					aria-label={copyState === "copied" ? "Code copied" : "Copy code"}
 					onClick={copyCode}
 				>
-					{copyState === "copied" ? <Check size={14} aria-hidden="true" /> : <Clipboard size={14} aria-hidden="true" />}
+					{copyState === "copied" ? (
+						<Check size={14} aria-hidden="true" />
+					) : (
+						<Clipboard size={14} aria-hidden="true" />
+					)}
 				</IconButton>
 			</div>
 			<pre className="max-w-full overflow-x-auto p-3 text-xs leading-5">
-				<code className="font-mono" data-markdown-code-highlighted={highlightedCode ? "true" : "false"}>
-					{highlightedCode ? <HighlightedCodeLines highlightedCode={highlightedCode} /> : code}
+				<code
+					className="font-mono"
+					data-markdown-code-highlighted={highlightedCode ? "true" : "false"}
+				>
+					{highlightedCode ? (
+						<HighlightedCodeLines highlightedCode={highlightedCode} />
+					) : (
+						code
+					)}
 				</code>
 			</pre>
 		</div>
@@ -269,7 +328,8 @@ function HighlightedCodeLines({ highlightedCode }: { highlightedCode: Highlighte
 								color: token.color,
 								fontStyle: token.fontStyle === "italic" ? "italic" : undefined,
 								fontWeight: token.fontStyle === "bold" ? 600 : undefined,
-								textDecoration: token.fontStyle === "underline" ? "underline" : undefined
+								textDecoration:
+									token.fontStyle === "underline" ? "underline" : undefined
 							}}
 						>
 							{token.content}
