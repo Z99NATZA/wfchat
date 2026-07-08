@@ -104,7 +104,8 @@ The sync system is designed to:
 - Accurate `conflict_count` from `/api/sync/commit`.
 - Cursor checkpointing for partial local apply failures.
 - Deterministic pagination for many items sharing the same `updated_at`.
-- Full browser-level web E2E sync coverage beyond the initial smoke foundation.
+- Post-hardening browser E2E coverage for cursor tie cases, partial pull
+  recovery, concurrent same-item commits, and mounted-state sync limitations.
 - Production-grade metrics and alerting.
 
 ### Important Limitation
@@ -546,9 +547,11 @@ sync.
 ### 7. Test coverage is not complete
 
 Existing coverage includes queue helper tests, web sync flow tests, API handler
-tests for preview/commit/changes, registered-owner sync coverage, and auth
-promotion coverage. Missing coverage includes browser-level web E2E flows and
-full Google verifier integration mocking.
+tests for preview/commit/changes, registered-owner sync coverage, auth
+promotion coverage, and browser-level Playwright E2E flows for the first sync
+rollout. Missing coverage includes post-hardening browser E2E flows, full
+backend/database-backed E2E coverage, and full Google verifier integration
+mocking.
 
 ### 8. Observability is not production-grade
 
@@ -562,24 +565,24 @@ adding new providers or UX surface area.
 
 In scope:
 
-1. Add browser-level web E2E tests for:
-   - queue flush success
-   - retry/backoff after failed flush
-   - pull applying settings/chat/memory cache
-   - tombstone application for memory/chat deletes
-2. Add API/integration coverage for Google login verification using a mockable
+1. Add API/integration coverage for Google login verification using a mockable
    verifier boundary.
-3. Define the source-of-truth strategy for chat and memory:
+2. Define the source-of-truth strategy for chat and memory:
    - keep sync as a client cache layer, or
    - materialize sync items into canonical backend tables.
-4. Make chat/memory sync enumeration explicit:
+3. Make chat/memory sync enumeration explicit:
    - all loaded local cache only, or
    - all server-known account data, or
    - all personas/chats/messages through a dedicated export endpoint.
-5. Harden cursor/pull:
+4. Harden cursor/pull:
    - checkpoint applied batches
    - support deterministic pagination when timestamps tie
    - retry safely after partial apply failures
+5. Add post-hardening browser E2E coverage for the hardened behavior:
+   - same-timestamp cursor pagination
+   - partial pull apply recovery
+   - concurrent same-account item commits
+   - mounted-state sync limitations
 
 Out of scope for the next milestone:
 
@@ -597,13 +600,12 @@ Later scope:
 
 ## Sync E2E Rollout Plan
 
-The first browser-level sync E2E milestone should be a small deterministic
-suite that catches regressions in the flows most likely to lose data, show
-stale data, or resurrect deleted data. Start with browser tests that mock the
-network boundary; add backend/database-backed E2E only after the frontend sync
-lifecycle is covered.
+The first browser-level sync E2E milestone is implemented as a small
+deterministic suite that catches regressions in the flows most likely to lose
+data, show stale data, or resurrect deleted data. The current browser tests
+mock the network boundary; backend/database-backed E2E remains later scope.
 
-Milestone 1 is done when the project has:
+Milestone 1 is complete. The project has:
 
 - a runnable web E2E command that is separate from unit tests
 - helpers for auth state, session readiness, local storage sync state, API
@@ -612,6 +614,9 @@ Milestone 1 is done when the project has:
   application
 - assertions that clearly separate browser-visible state from storage-only sync
   state
+
+The rollout details below are kept as maintenance guidance for the existing
+suite and as the checklist for future hardening coverage.
 
 ### Phase 1: Minimal E2E Foundation
 
