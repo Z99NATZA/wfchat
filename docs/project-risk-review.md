@@ -30,9 +30,9 @@ These checks passed during review:
 
 Approximate source size excluding dependencies/build output:
 
-- `apps/api`: 23 files, 8,436 lines
-- `apps/web`: 84 files, 15,105 lines
-- `docs`: 29 files, 4,258 lines
+- `apps/api/src`: 24 files, 9,108 lines
+- `apps/web/src`: 87 files, 15,483 lines
+- `docs`: 39 files, 5,175 lines
 - `scripts`: 1 file, 61 lines
 
 ## Risk Levels
@@ -120,28 +120,43 @@ Priority:
 
 Medium for team development, low for solo work.
 
-### 4. Sync Has Known Missing E2E Coverage
+### 4. Sync Still Needs Post-Hardening E2E Coverage
 
 Files:
 
 - `docs/sync-system.md`
 - `apps/web/src/services/syncService.ts`
 - `apps/api/src/sync.rs`
+- `apps/web/e2e/sync-smoke.spec.ts`
+- `apps/web/e2e/sync-guest-login.spec.ts`
+- `apps/web/e2e/sync-cross-browser.spec.ts`
 
-The sync system has unit and flow tests, but docs already note missing browser-level E2E coverage. Sync logic is easy to break because it spans local storage, remote ownership, account promotion, conflict handling, and offline behavior.
+The sync system now has unit tests, flow tests, API coverage, and a Playwright
+browser E2E suite for the first sync rollout. Covered browser flows include
+guest-to-login manual sync, cross-browser pull, pulled settings/cache,
+tombstone propagation, stale pulled settings, failed preview/commit retry
+metadata, the browser `online` event, and cache fallback when persona list APIs
+are unavailable.
+
+The remaining risk is post-hardening coverage for behavior that is either not
+implemented yet or intentionally limited. Sync logic is still easy to break
+because it spans local storage, remote ownership, account promotion, conflict
+handling, and offline behavior.
 
 Recommended fix:
 
-- Add Playwright tests for:
-  - guest local changes
-  - login promotion
-  - sync across two browser contexts
-  - delete propagation
-  - conflict behavior
+- Add post-hardening Playwright tests when the underlying behavior is designed:
+  - deterministic cursor pagination for same-timestamp items
+  - partial pull apply recovery
+  - concurrent same-account same-item commits
+  - mounted-state sync limitations
+- Add API/integration coverage for Google login verification through a mockable
+  verifier boundary.
 
 Priority:
 
-Medium, especially before changing sync logic.
+Medium before changing sync hardening or auth verification behavior. Lower for
+ordinary UI work that does not touch sync/auth lifecycles.
 
 ### 5. Profile Avatar URL Is Not Strictly Validated
 
@@ -183,17 +198,21 @@ Priority:
 
 Low.
 
-### 7. Test Output Contains Expected Error Logs
+### 7. Test Output Contains Expected Warning Logs
 
 Files:
 
 - `apps/web/src/features/chat/hooks/useUserSpeechTranscription.test.ts`
+- `apps/web/src/features/chat/hooks/useUserSpeechTranscription.ts`
 
-Frontend tests pass, but some tests intentionally log errors for microphone denial and transcription failure. This is not a functional issue, but it can make real test noise harder to spot.
+Frontend tests pass, but some tests intentionally exercise microphone denial and
+transcription failure paths. The hook logs expected warning output for
+transcription failure. This is not a functional issue, but it can make real
+test noise harder to spot.
 
 Recommended fix:
 
-- Mock `console.error` in tests that intentionally trigger errors.
+- Mock `console.warn` in tests that intentionally trigger warning paths.
 - Assert that the expected log happened, then restore the console mock.
 
 Priority:
@@ -261,9 +280,10 @@ The number and focus of tests are strong for an MVP:
 
 ### Phase 2: Maintainability and Polish
 
-1. Add browser E2E tests for sync and auth flows.
+1. Add post-hardening browser E2E tests for sync edge cases when the underlying
+   behavior is implemented.
 2. Validate profile avatar URLs.
-3. Clean expected error logs from test output.
+3. Clean expected warning/log noise from test output.
 4. Monitor frontend bundle size.
 
 ## Overall Assessment
@@ -273,6 +293,6 @@ WFChat has a better foundation than the phrase "vibe coding" suggests. The proje
 The main gap is not that the system is poorly built. The main gap is that it still needs more production discipline around:
 
 - migration and CI discipline
-- browser-level E2E coverage for sync/auth flows
+- post-hardening E2E coverage for sync/auth edge cases
 
 After those are addressed, this project can move from strong MVP quality toward production-ready quality.
