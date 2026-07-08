@@ -1,5 +1,47 @@
 # Backend Auth Behavior History
 
+## 2026-07-08 - Profile avatar URL validation
+
+Status: Active
+
+Previous behavior:
+
+- Registered profile updates accepted `avatar_url` as trimmed free text.
+
+Problem observed:
+
+- Unsafe or malformed image URL schemes could be stored and later rendered by
+  the UI.
+
+Decision:
+
+- Validate user-supplied profile avatar URLs in `auth.rs` before persistence.
+- Accept `https` URLs.
+- Accept `http` only for localhost or loopback development URLs.
+- Reject empty, malformed, `data:`, `javascript:`, and non-local plain `http`
+  values.
+- Preserve the existing avatar when profile updates omit `avatar_url`.
+
+Why:
+
+- Profile image URLs are displayed by the frontend and can create security or
+  privacy risk if arbitrary schemes are stored.
+
+Regression guard:
+
+- Backend auth tests cover valid HTTPS/local HTTP, unsafe schemes, malformed
+  values, successful profile update, and avatar preservation.
+
+Related current contract:
+
+- `docs/backend-architecture.md`
+- `docs/project-risk-review.md`
+
+Related implementation:
+
+- `apps/api/src/auth.rs`
+- `apps/api/src/store.rs`
+
 ## 2026-07-04 - Cookie-first session ownership
 
 Status: Active

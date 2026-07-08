@@ -4,6 +4,7 @@ use axum::{
     routing::{get, patch, post},
     Json, Router,
 };
+use reqwest::Url;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -218,6 +219,7 @@ async fn update_profile(
             "display_name must not be empty".to_owned(),
         ));
     }
+    let avatar_url = validate_profile_avatar_url(payload.avatar_url)?;
 
     state
         .store
@@ -225,11 +227,45 @@ async fn update_profile(
         .await?;
     state
         .store
-        .update_user_profile(session.user_id, payload.display_name, payload.avatar_url)
+        .update_user_profile(session.user_id, payload.display_name, avatar_url)
         .await?
         .ok_or_else(|| AppError::BadRequest("could not update profile".to_owned()))?;
 
     Ok(Json(session_response(&state, &session).await?))
+}
+
+fn validate_profile_avatar_url(avatar_url: Option<String>) -> AppResult<Option<String>> {
+    let Some(avatar_url) = avatar_url else {
+        return Ok(None);
+    };
+    let trimmed = avatar_url.trim();
+    if trimmed.is_empty() {
+        return Err(AppError::BadRequest(
+            "avatar_url must be a valid http(s) URL".to_owned(),
+        ));
+    }
+
+    let parsed = Url::parse(trimmed)
+        .map_err(|_| AppError::BadRequest("avatar_url must be a valid http(s) URL".to_owned()))?;
+    match parsed.scheme() {
+        "https" => Ok(Some(trimmed.to_owned())),
+        "http" if is_local_avatar_host(parsed.host_str()) => Ok(Some(trimmed.to_owned())),
+        _ => Err(AppError::BadRequest(
+            "avatar_url must use https, or http for localhost".to_owned(),
+        )),
+    }
+}
+
+fn is_local_avatar_host(host: Option<&str>) -> bool {
+    let Some(host) = host else {
+        return false;
+    };
+    let normalized_host = host.to_ascii_lowercase();
+    if normalized_host == "localhost" || normalized_host.ends_with(".localhost") {
+        return true;
+    }
+    host.parse::<std::net::IpAddr>()
+        .is_ok_and(|address| address.is_loopback())
 }
 
 async fn verify_google_id_token(
@@ -554,6 +590,139 @@ mod tests {
         };
 
         assert_eq!(error.to_string(), "forbidden");
+    }
+
+    #[test]
+    fn profile_avatar_url_validation_accepts_https_and_local_http() {
+        assert_eq!(
+            validate_profile_avatar_url(Some(" https://example.com/aiko.png ".to_owned()))
+                .expect("https avatar should validate"),
+            Some("https://example.com/aiko.png".to_owned())
+        );
+        assert_eq!(
+            validate_profile_avatar_url(Some("http://localhost:5173/avatar.png".to_owned()))
+                .expect("localhost avatar should validate"),
+            Some("http://localhost:5173/avatar.png".to_owned())
+        );
+        assert_eq!(
+            validate_profile_avatar_url(Some("http://127.0.0.1/avatar.png".to_owned()))
+                .expect("loopback avatar should validate"),
+            Some("http://127.0.0.1/avatar.png".to_owned())
+        );
+    }
+
+    #[test]
+    fn profile_avatar_url_validation_rejects_unsafe_or_malformed_values() {
+        for value in [
+            " ",
+            "not-a-url",
+            "/images/aiko-avatar.png",
+            "data:image/png;base64,AAAA",
+            "javascript:alert(1)",
+            "http://example.com/aiko.png",
+        ] {
+            let error = validate_profile_avatar_url(Some(value.to_owned()))
+                .expect_err("unsafe avatar URL should fail");
+            assert!(
+                error.to_string().starts_with("bad request: avatar_url"),
+                "unexpected error for {value:?}: {error}"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn registered_profile_update_validates_avatar_url_and_preserves_existing_avatar() {
+        let Some(state) = test_state(None).await else {
+            return;
+        };
+        let guest = state
+            .store
+            .create_guest_session()
+            .await
+            .expect("guest session should create");
+        let user_id = Uuid::new_v4();
+        let session = state
+            .store
+            .promote_session_to_registered(guest.id, user_id)
+            .await
+            .expect("session should promote")
+            .expect("promoted session should exist");
+
+        let Json(response) = update_profile(
+            State(state.clone()),
+            session_headers(session.id),
+            Json(UpdateProfileRequest {
+                display_name: Some("Profile User".to_owned()),
+                avatar_url: Some(" https://example.com/custom-avatar.png ".to_owned()),
+            }),
+        )
+        .await
+        .expect("valid profile update should succeed");
+        assert_eq!(response.name.as_deref(), Some("Profile User"));
+        assert_eq!(
+            response
+                .profile
+                .as_ref()
+                .and_then(|profile| profile.avatar_url.as_deref()),
+            Some("https://example.com/custom-avatar.png")
+        );
+
+        let Json(response) = update_profile(
+            State(state),
+            session_headers(session.id),
+            Json(UpdateProfileRequest {
+                display_name: Some("Renamed User".to_owned()),
+                avatar_url: None,
+            }),
+        )
+        .await
+        .expect("profile update without avatar should preserve avatar");
+        assert_eq!(response.name.as_deref(), Some("Renamed User"));
+        assert_eq!(
+            response
+                .profile
+                .as_ref()
+                .and_then(|profile| profile.avatar_url.as_deref()),
+            Some("https://example.com/custom-avatar.png")
+        );
+    }
+
+    #[tokio::test]
+    async fn registered_profile_update_rejects_unsafe_avatar_url() {
+        let Some(state) = test_state(None).await else {
+            return;
+        };
+        let guest = state
+            .store
+            .create_guest_session()
+            .await
+            .expect("guest session should create");
+        let user_id = Uuid::new_v4();
+        let session = state
+            .store
+            .promote_session_to_registered(guest.id, user_id)
+            .await
+            .expect("session should promote")
+            .expect("promoted session should exist");
+
+        let result = update_profile(
+            State(state),
+            session_headers(session.id),
+            Json(UpdateProfileRequest {
+                display_name: Some("Profile User".to_owned()),
+                avatar_url: Some("javascript:alert(1)".to_owned()),
+            }),
+        )
+        .await;
+        let error = match result {
+            Ok(_) => panic!("unsafe avatar URL should fail"),
+            Err(error) => error,
+        };
+
+        assert_eq!(
+            error.to_string(),
+            "bad request: avatar_url must use https, or http for localhost"
+        );
     }
 
     #[tokio::test]

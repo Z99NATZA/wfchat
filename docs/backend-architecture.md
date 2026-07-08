@@ -179,6 +179,11 @@ user_profiles stores editable display_name/avatar_url used by the app UI
 
 On first Google login, the backend seeds `user_profiles` from Google. Later logins update `auth_identities` but do not overwrite custom profile fields.
 
+Editable `avatar_url` values are validated before profile updates are stored.
+User-supplied avatar URLs must be `https`; `http` is accepted only for
+localhost or loopback development URLs. Empty, malformed, `data:`,
+`javascript:`, and non-local plain `http` values are rejected.
+
 ## AI Profiles
 
 The chat UI sends `chat_id`, `character_id`, message content, and

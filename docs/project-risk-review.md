@@ -160,22 +160,31 @@ ordinary UI work that does not touch sync/auth lifecycles.
 
 ### 5. Profile Avatar URL Is Not Strictly Validated
 
+Status: scheme validation addressed after this review. Remote avatar hotlinking
+is still a product/privacy decision if profiles become public or widely shared.
+
 Files:
 
 - `apps/api/src/auth.rs`
 - `apps/api/src/store.rs`
 
-Profile update accepts `avatar_url` as free text and stores it after trimming. React will escape text in normal rendering, but image URL fields can still create privacy or tracking issues if arbitrary third-party URLs are displayed.
+Profile update now validates user-supplied `avatar_url` before storing profile
+updates. The backend accepts `https` URLs and allows `http` only for
+localhost/loopback development URLs. It rejects malformed URLs, empty
+whitespace-only values, `data:`, `javascript:`, and non-local plain `http`.
+React will escape text in normal rendering, but image URL fields can still
+create privacy or tracking issues if arbitrary third-party HTTPS URLs are
+displayed.
 
-Recommended fix:
+Recommended follow-up:
 
-- Validate allowed URL schemes: `https`, maybe `http` only for local development.
-- Consider disallowing `data:` and `javascript:` explicitly.
-- Consider proxying or uploading avatars instead of hotlinking remote URLs.
+- Consider proxying or uploading avatars instead of hotlinking remote URLs if
+  profile avatars become public or shared across users.
 
 Priority:
 
-Medium if profiles are public or shared. Low if only local/personal.
+Validation is done. Remaining hotlink/privacy follow-up is medium if profiles
+are public or shared, and low if only local/personal.
 
 ## Low Risks
 
@@ -282,7 +291,7 @@ The number and focus of tests are strong for an MVP:
 
 1. Add post-hardening browser E2E tests for sync edge cases when the underlying
    behavior is implemented.
-2. Validate profile avatar URLs.
+2. Consider avatar proxy/upload behavior if profile avatars become public.
 3. Clean expected warning/log noise from test output.
 4. Monitor frontend bundle size.
 
