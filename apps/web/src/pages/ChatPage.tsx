@@ -77,6 +77,8 @@ function ChatPage({
 	const latestFinalAssistantMessage = findLatestFinalAssistantMessage(chat.messages);
 	const wasSendingRef = useRef(false);
 	const lastAutoPlayedAssistantMessageIdRef = useRef<string | null>(null);
+	const isSending = chat.isSending;
+	const toggleAssistantSpeech = chat.toggleAssistantSpeech;
 
 	useEffect(() => {
 		onChatSyncSnapshotChange({
@@ -161,8 +163,8 @@ function ChatPage({
 	}, [avatarOverlaySize, isAvatarOverlayVisible]);
 
 	useEffect(() => {
-		const didFinishSending = wasSendingRef.current && !chat.isSending;
-		wasSendingRef.current = chat.isSending;
+		const didFinishSending = wasSendingRef.current && !isSending;
+		wasSendingRef.current = isSending;
 
 		if (
 			!didFinishSending ||
@@ -181,10 +183,10 @@ function ChatPage({
 		}
 
 		lastAutoPlayedAssistantMessageIdRef.current = latestFinalAssistantMessage.id;
-		chat.toggleAssistantSpeech(latestFinalAssistantMessage.id);
+		toggleAssistantSpeech(latestFinalAssistantMessage.id);
 	}, [
-		chat.isSending,
-		chat.toggleAssistantSpeech,
+		isSending,
+		toggleAssistantSpeech,
 		isAssistantSpeechActionEnabled,
 		isAssistantSpeechAutoPlayEnabled,
 		latestFinalAssistantMessage

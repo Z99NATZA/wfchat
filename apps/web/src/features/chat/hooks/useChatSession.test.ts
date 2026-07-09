@@ -51,13 +51,13 @@ vi.mock("react-router-dom", () => ({
 	useNavigate: () => mocks.navigate
 }));
 
-vi.mock("@/i18n", () => ({
+vi.mock("@/i18n/i18nContext", () => ({
 	useI18n: () => ({
 		t: mocks.t
 	})
 }));
 
-vi.mock("@/components/dialog/DialogProvider", () => ({
+vi.mock("@/components/dialog/DialogContext", () => ({
 	useDialog: () => ({
 		confirm: mocks.confirm
 	})

@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { CHAT_PERSONAS, MARKDOWN_QA_MESSAGES } from "@/features/chat/data/chatFixtures";
 import { useAssistantSpeechPlayback } from "@/features/chat/hooks/useAssistantSpeechPlayback";
 import { useUserSpeechTranscription } from "@/features/chat/hooks/useUserSpeechTranscription";
-import { useI18n } from "@/i18n";
+import { useI18n } from "@/i18n/i18nContext";
 import {
 	clearChatMessages,
 	createMemoryFact,
@@ -37,7 +37,7 @@ import {
 	readMemorySummariesCache,
 	syncLocalDeletesNow
 } from "@/services/syncService";
-import { useDialog } from "@/components/dialog/DialogProvider";
+import { useDialog } from "@/components/dialog/DialogContext";
 import type {
 	ChatMessage,
 	ChatMessageAttachment,

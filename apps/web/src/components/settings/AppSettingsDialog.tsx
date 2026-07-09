@@ -3,7 +3,7 @@ import { type FormEvent, useEffect, useState } from "react";
 import { useDialogBackgroundSurface } from "@/components/dialog/useDialogBackgroundSurface";
 import Button from "@/components/ui/Button";
 import IconButton from "@/components/ui/IconButton";
-import { useI18n } from "@/i18n";
+import { useI18n } from "@/i18n/i18nContext";
 import type { AvatarOverlayPosition, AvatarOverlaySize } from "@/stores/avatarOverlayStore";
 
 type AppSettingsDialogProps = {

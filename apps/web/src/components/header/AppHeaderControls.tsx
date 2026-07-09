@@ -3,7 +3,7 @@ import { Globe, Moon, Settings, Sun, Type, User } from "lucide-react";
 import IconButton from "@/components/ui/IconButton";
 import { FONT_OPTIONS, type AppFont } from "@/types/font";
 import type { Theme } from "@/types/theme";
-import { SUPPORTED_LOCALES, useI18n } from "@/i18n";
+import { SUPPORTED_LOCALES, useI18n } from "@/i18n/i18nContext";
 
 export type AppHeaderControlProps = {
 	theme: Theme;

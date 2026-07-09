@@ -7,7 +7,7 @@ import {
 import Button from "@/components/ui/Button";
 import IconButton from "@/components/ui/IconButton";
 import AppLayout from "@/layouts/AppLayout";
-import { useI18n } from "@/i18n";
+import { useI18n } from "@/i18n/i18nContext";
 import {
 	Bell,
 	Box,

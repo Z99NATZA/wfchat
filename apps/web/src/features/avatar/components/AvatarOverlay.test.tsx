@@ -9,7 +9,7 @@ vi.mock("@/features/avatar/renderers/pngtuber/PngTuberRenderer", () => ({
 	default: ({ alt }: { alt: string }) => <img alt={alt} />
 }));
 
-vi.mock("@/features/avatar/runtime/avatarRuntimeStore", () => ({
+vi.mock("@/features/avatar/runtime/avatarRuntimeContext", () => ({
 	useAvatarRuntime: () => ({
 		state: {
 			rendererKind: "pngtuber",
@@ -19,7 +19,7 @@ vi.mock("@/features/avatar/runtime/avatarRuntimeStore", () => ({
 	})
 }));
 
-vi.mock("@/i18n", () => ({
+vi.mock("@/i18n/i18nContext", () => ({
 	useI18n: () => ({
 		t: (key: string) => key
 	})

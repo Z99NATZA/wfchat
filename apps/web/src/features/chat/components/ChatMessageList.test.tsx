@@ -12,7 +12,7 @@ const dialogMocks = vi.hoisted(() => ({
 	openCustom: vi.fn()
 }));
 
-vi.mock("@/i18n", () => ({
+vi.mock("@/i18n/i18nContext", () => ({
 	useI18n: () => ({
 		t: (key: string, params?: Record<string, string | number>) => {
 			if (key === "chat.messageList.thinking") {
@@ -56,7 +56,7 @@ vi.mock("@/i18n", () => ({
 	})
 }));
 
-vi.mock("@/components/dialog/DialogProvider", () => ({
+vi.mock("@/components/dialog/DialogContext", () => ({
 	useDialog: () => ({
 		confirm: dialogMocks.confirm,
 		openCustom: dialogMocks.openCustom

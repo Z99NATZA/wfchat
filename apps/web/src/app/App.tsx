@@ -3,10 +3,10 @@ import AuthProfileDialog from "@/components/auth/AuthProfileDialog";
 import ActivityBar from "@/components/navigation/ActivityBar";
 import DialogProvider from "@/components/dialog/DialogProvider";
 import AppSettingsDialog from "@/components/settings/AppSettingsDialog";
-import { useAppSettings } from "@/app/AppSettingsProvider";
+import { useAppSettings } from "@/app/AppSettingsContext";
 import { useAuthSession } from "@/hooks/useAuthSession";
-import { useDialog } from "@/components/dialog/DialogProvider";
-import { useI18n } from "@/i18n";
+import { useDialog } from "@/components/dialog/DialogContext";
+import { useI18n } from "@/i18n/i18nContext";
 import { AvatarRuntimeProvider } from "@/features/avatar/runtime/avatarRuntimeStore";
 import { scheduleAikoPngTuberAssetPreload } from "@/features/avatar/renderers/pngtuber/pngTuberAssetPreloader";
 import ChatPage, { type ChatSyncSnapshot } from "@/pages/ChatPage";
@@ -27,6 +27,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 function App() {
 	const settings = useAppSettings();
 	const auth = useAuthSession();
+	const { isAuthenticated, markGuestSyncDone } = auth;
 	const { applyPulledLocale, t } = useI18n();
 	const { alert } = useDialog();
 	const [isProfileOpen, setIsProfileOpen] = useState(false);
@@ -35,7 +36,7 @@ function App() {
 	const [syncError, setSyncError] = useState<string | null>(null);
 	const [voiceCredits, setVoiceCredits] = useState<VoiceCredit[]>([]);
 	const chatSyncSnapshotRef = useRef<ChatSyncSnapshot | null>(null);
-	const wasAuthenticatedRef = useRef(auth.isAuthenticated);
+	const wasAuthenticatedRef = useRef(isAuthenticated);
 	const activityBar = <ActivityBar />;
 	const refreshMountedChat = useCallback(() => {
 		chatSyncSnapshotRef.current?.refreshRemoteState();
@@ -67,22 +68,22 @@ function App() {
 	}, []);
 
 	useEffect(() => {
-		if (!wasAuthenticatedRef.current && auth.isAuthenticated) {
+		if (!wasAuthenticatedRef.current && isAuthenticated) {
 			setIsProfileOpen(true);
 		}
 
-		wasAuthenticatedRef.current = auth.isAuthenticated;
-	}, [auth.isAuthenticated]);
+		wasAuthenticatedRef.current = isAuthenticated;
+	}, [isAuthenticated]);
 
 	useEffect(() => {
-		if (!auth.isAuthenticated || !hasPendingSyncQueue()) {
+		if (!isAuthenticated || !hasPendingSyncQueue()) {
 			return;
 		}
 
 		void flushGuestSyncQueue()
 			.then(async (result) => {
 				if (result) {
-					auth.markGuestSyncDone();
+					markGuestSyncDone();
 					await pullSyncChanges(
 						applyPulledLocale,
 						settings.applyPulledBackgroundImageUrl,
@@ -96,8 +97,8 @@ function App() {
 				markSyncRetry();
 			});
 	}, [
-		auth.isAuthenticated,
-		auth.markGuestSyncDone,
+		isAuthenticated,
+		markGuestSyncDone,
 		applyPulledLocale,
 		refreshMountedChat,
 		settings.applyPulledBackgroundImageUrl,
@@ -106,7 +107,7 @@ function App() {
 	]);
 
 	useEffect(() => {
-		if (!auth.isAuthenticated) {
+		if (!isAuthenticated) {
 			return;
 		}
 		void pullSyncChanges(
@@ -116,7 +117,7 @@ function App() {
 			settings.applyPulledFont
 		).then(() => refreshMountedChat());
 	}, [
-		auth.isAuthenticated,
+		isAuthenticated,
 		applyPulledLocale,
 		refreshMountedChat,
 		settings.applyPulledBackgroundImageUrl,
@@ -125,7 +126,7 @@ function App() {
 	]);
 
 	useEffect(() => {
-		if (!auth.isAuthenticated) {
+		if (!isAuthenticated) {
 			return;
 		}
 
@@ -133,7 +134,7 @@ function App() {
 			void flushGuestSyncQueue()
 				.then((result) => {
 					if (result) {
-						auth.markGuestSyncDone();
+						markGuestSyncDone();
 					}
 				})
 				.catch(() => {
@@ -150,8 +151,8 @@ function App() {
 		window.addEventListener("online", handleOnline);
 		return () => window.removeEventListener("online", handleOnline);
 	}, [
-		auth.isAuthenticated,
-		auth.markGuestSyncDone,
+		isAuthenticated,
+		markGuestSyncDone,
 		applyPulledLocale,
 		refreshMountedChat,
 		settings.applyPulledBackgroundImageUrl,

@@ -12,7 +12,7 @@ import {
 	type AikoPngTuberEmotion
 } from "@/features/avatar/data/aikoPngTuber";
 import PngTuberRenderer from "@/features/avatar/renderers/pngtuber/PngTuberRenderer";
-import { useAvatarRuntime } from "@/features/avatar/runtime/avatarRuntimeStore";
+import { useAvatarRuntime } from "@/features/avatar/runtime/avatarRuntimeContext";
 import type { AvatarMotionState } from "@/features/avatar/runtime/avatarRuntimeTypes";
 import AppLayout from "@/layouts/AppLayout";
 import { useMemo, type ReactNode } from "react";
@@ -29,7 +29,7 @@ import {
 	Trash2,
 	UserRound
 } from "lucide-react";
-import { useI18n } from "@/i18n";
+import { useI18n } from "@/i18n/i18nContext";
 
 type PngTuberPageProps = {
 	activityBar: ReactNode;

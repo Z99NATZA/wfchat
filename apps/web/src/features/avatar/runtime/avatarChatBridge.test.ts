@@ -9,7 +9,7 @@ const mocks = vi.hoisted(() => ({
 	updateRuntimeState: vi.fn()
 }));
 
-vi.mock("@/features/avatar/runtime/avatarRuntimeStore", () => ({
+vi.mock("@/features/avatar/runtime/avatarRuntimeContext", () => ({
 	useAvatarRuntime: () => ({
 		updateRuntimeState: mocks.updateRuntimeState
 	})

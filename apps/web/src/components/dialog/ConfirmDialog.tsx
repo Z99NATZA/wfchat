@@ -1,6 +1,6 @@
 import Dialog from "@/components/dialog/Dialog";
 import Button from "@/components/ui/Button";
-import { useI18n } from "@/i18n";
+import { useI18n } from "@/i18n/i18nContext";
 
 type ConfirmTone = "default" | "destructive";
 

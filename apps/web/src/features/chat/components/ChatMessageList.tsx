@@ -21,12 +21,12 @@ import {
 	useRef,
 	useState
 } from "react";
-import { useDialog } from "@/components/dialog/DialogProvider";
+import { useDialog } from "@/components/dialog/DialogContext";
 import Button from "@/components/ui/Button";
 import IconButton from "@/components/ui/IconButton";
 import ChatMessageContent from "@/features/chat/components/ChatMessageContent";
 import { fetchChatAttachmentPreview } from "@/features/chat/services/chatApiService";
-import { useI18n } from "@/i18n";
+import { useI18n } from "@/i18n/i18nContext";
 import type { ChatMessage, ChatMessageAttachment } from "@/types/chat";
 import type { AssistantSpeechPlaybackState } from "@/features/chat/hooks/useAssistantSpeechPlayback";
 import type { Theme } from "@/types/theme";
@@ -84,6 +84,7 @@ function ChatMessageList({
 	const menuContainerRef = useRef<HTMLDivElement>(null);
 	const shouldStickToBottomRef = useRef(true);
 	const lastScrollTopRef = useRef(0);
+	const latestMessageCountRef = useRef(messages.length);
 	const previousMessageCountRef = useRef(messages.length);
 	const previousRowIdsRef = useRef<string[]>([]);
 	const shouldAutoScrollAfterChatChangeRef = useRef(false);
@@ -103,6 +104,7 @@ function ChatMessageList({
 	const userMessageBubbleClassName = "max-w-[min(30rem,72vw)] sm:max-w-[min(32rem,70%)]";
 	const assistantMessageBubbleClassName =
 		"min-w-0 max-w-[calc(100%-2.75rem)] sm:max-w-[min(42rem,calc(100%-2.75rem))] lg:max-w-[min(44rem,calc(100%-2.75rem))]";
+	latestMessageCountRef.current = messages.length;
 	const visibleMessages = useMemo(
 		() =>
 			messages.filter(
@@ -268,7 +270,7 @@ function ChatMessageList({
 		shouldStickToBottomRef.current = true;
 		shouldAutoScrollAfterChatChangeRef.current = true;
 		lastScrollTopRef.current = 0;
-		previousMessageCountRef.current = messages.length;
+		previousMessageCountRef.current = latestMessageCountRef.current;
 		previousRowIdsRef.current = [];
 		setHiddenUserMessageIds(new Set());
 		setActiveMessageMenuId(null);

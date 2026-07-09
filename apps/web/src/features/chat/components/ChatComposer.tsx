@@ -8,8 +8,8 @@ import {
 	useState
 } from "react";
 import { Image, LoaderCircle, Mic, Paperclip, Send, Square, X } from "lucide-react";
-import { useDialog } from "@/components/dialog/DialogProvider";
-import { useI18n } from "@/i18n";
+import { useDialog } from "@/components/dialog/DialogContext";
+import { useI18n } from "@/i18n/i18nContext";
 import Button from "@/components/ui/Button";
 import IconButton from "@/components/ui/IconButton";
 import type { UserSpeechInputState } from "@/features/chat/hooks/useUserSpeechTranscription";

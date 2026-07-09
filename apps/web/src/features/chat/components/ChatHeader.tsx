@@ -6,7 +6,7 @@ import {
 } from "@/components/header/AppHeaderControls";
 import IconButton from "@/components/ui/IconButton";
 import StatusDot from "@/components/ui/StatusDot";
-import { useI18n } from "@/i18n";
+import { useI18n } from "@/i18n/i18nContext";
 import type { AppFont } from "@/types/font";
 import type { ChatPersona } from "@/types/chat";
 import type { Theme } from "@/types/theme";

@@ -5,7 +5,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import AppSettingsDialog from "@/components/settings/AppSettingsDialog";
 
-vi.mock("@/i18n", () => ({
+vi.mock("@/i18n/i18nContext", () => ({
 	useI18n: () => ({
 		t: (key: string) => {
 			if (key === "settings.assistantSpeech.showInChat") {

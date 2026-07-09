@@ -2,7 +2,7 @@ import { FormEvent, useEffect, useRef, useState } from "react";
 import { Ellipsis, Languages, Pencil, Sparkles, Trash2 } from "lucide-react";
 import Button from "@/components/ui/Button";
 import IconButton from "@/components/ui/IconButton";
-import { useI18n } from "@/i18n";
+import { useI18n } from "@/i18n/i18nContext";
 import type { ChatPersona, MemoryFact, MemorySummary } from "@/types/chat";
 
 type ChatDetailsPanelProps = {

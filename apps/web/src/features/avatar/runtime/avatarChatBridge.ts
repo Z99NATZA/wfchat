@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef } from "react";
 import { resolveAvatarBinding } from "@/features/avatar/runtime/avatarBindings";
-import { useAvatarRuntime } from "@/features/avatar/runtime/avatarRuntimeStore";
+import { useAvatarRuntime } from "@/features/avatar/runtime/avatarRuntimeContext";
 import { inferExpressionIdFromText } from "@/features/avatar/runtime/avatarEmotionInference";
 
 export type ChatAvatarEvent =

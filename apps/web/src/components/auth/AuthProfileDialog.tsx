@@ -2,7 +2,7 @@ import GoogleSignInButton from "@/components/auth/GoogleSignInButton";
 import { useDialogBackgroundSurface } from "@/components/dialog/useDialogBackgroundSurface";
 import Button from "@/components/ui/Button";
 import IconButton from "@/components/ui/IconButton";
-import { useI18n } from "@/i18n";
+import { useI18n } from "@/i18n/i18nContext";
 import { CheckCircle2, LogOut, Mail, RefreshCw, User, X } from "lucide-react";
 import { type FormEvent, useEffect, useMemo, useState } from "react";
 

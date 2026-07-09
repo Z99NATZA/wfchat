@@ -25,7 +25,7 @@ If measured against a stricter public SaaS production bar:
 These checks passed during review:
 
 - Frontend tests: 164 passed
-- Frontend lint: passed with warnings for existing hook dependency/Fast Refresh cleanup items
+- Frontend lint: passed warning-free with warnings treated as failures
 - Frontend format check: passed
 - Backend tests: 107 passed
 - Frontend production build: passed
@@ -115,17 +115,17 @@ Files:
 The frontend uses TypeScript strict mode and tests. ESLint and Prettier are now
 configured under `apps/web`, with `lint`, `format`, and `format:check` scripts
 included in the web package. CI runs lint and format checks before frontend
-tests and production build.
+tests and production build. The lint script runs with `--max-warnings=0`, so new
+warnings fail the gate.
 
 Follow-up:
 
-- Clean up the current non-failing lint warnings around hook dependencies and
-  Fast Refresh export boundaries when touching those modules.
+- Keep hook dependencies explicit and keep shared hooks/constants/helpers out of
+  component-export files so Fast Refresh boundaries remain warning-free.
 
 Priority:
 
-Done for the initial gate. Remaining warnings are low-priority cleanup unless
-they block future stricter lint policy.
+Done for the current gate. Continue treating lint warnings as build failures.
 
 ### 4. Sync Still Needs Post-Hardening E2E Coverage
 
@@ -298,10 +298,8 @@ The number and focus of tests are strong for an MVP:
 1. Add post-hardening browser E2E tests for sync edge cases when the underlying
    behavior is implemented.
 2. Consider avatar proxy/upload behavior if profile avatars become public.
-3. Clean frontend lint warnings around hook dependencies and Fast Refresh export
-   boundaries.
-4. Clean expected warning/log noise from test output.
-5. Monitor frontend bundle size.
+3. Clean expected warning/log noise from test output.
+4. Monitor frontend bundle size.
 
 ## Overall Assessment
 

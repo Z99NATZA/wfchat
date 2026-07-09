@@ -1,6 +1,6 @@
 import { Layers, MessageCircle, type LucideIcon, UserRound } from "lucide-react";
 import { NavLink } from "react-router-dom";
-import { useI18n } from "@/i18n";
+import { useI18n } from "@/i18n/i18nContext";
 import { cn } from "@/utils/classNames";
 
 export type AppPageId = "chat" | "pngtuber" | "model2d";

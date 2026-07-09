@@ -1,61 +1,27 @@
-import { createContext, ReactNode, useCallback, useContext, useMemo, useState } from "react";
+import { type ReactNode, useCallback, useMemo, useState } from "react";
 import ConfirmDialog from "@/components/dialog/ConfirmDialog";
+import {
+	DialogContext,
+	type AlertOptions,
+	type CustomDialogOptions,
+	type ConfirmOptions
+} from "@/components/dialog/DialogContext";
 import Dialog from "@/components/dialog/Dialog";
 import Button from "@/components/ui/Button";
-import { useI18n } from "@/i18n";
-
-type ConfirmOptions = {
-	title: string;
-	description?: string;
-	confirmLabel?: string;
-	cancelLabel?: string;
-	tone?: "default" | "destructive";
-};
+import { useI18n } from "@/i18n/i18nContext";
 
 type ConfirmState = ConfirmOptions & {
 	resolve: (result: boolean) => void;
-};
-
-type AlertOptions = {
-	title: string;
-	description?: string;
-	confirmLabel?: string;
 };
 
 type AlertState = AlertOptions & {
 	resolve: () => void;
 };
 
-type CustomDialogRenderParams<TResult> = {
-	close: (result: TResult) => void;
-	cancel: () => void;
-};
-
-type CustomDialogOptions<TResult = void> = {
-	title: string;
-	description?: string;
-	confirmLabel?: string;
-	cancelLabel?: string;
-	isDraggable?: boolean;
-	showCancelAction?: boolean;
-	size?: "default" | "wide";
-	render: (params: CustomDialogRenderParams<TResult>) => ReactNode;
-};
-
 type CustomDialogState<TResult = unknown> = Omit<CustomDialogOptions<TResult>, "render"> & {
 	resolve: (result: TResult | undefined) => void;
-	render: (params: CustomDialogRenderParams<TResult>) => ReactNode;
+	render: CustomDialogOptions<TResult>["render"];
 };
-
-type DialogContextValue = {
-	confirm: (options: ConfirmOptions) => Promise<boolean>;
-	alert: (options: AlertOptions) => Promise<void>;
-	openCustom: <TResult = void>(
-		options: CustomDialogOptions<TResult>
-	) => Promise<TResult | undefined>;
-};
-
-const DialogContext = createContext<DialogContextValue | null>(null);
 
 type DialogProviderProps = {
 	children: ReactNode;
@@ -194,16 +160,6 @@ function DialogProvider({ children }: DialogProviderProps) {
 			/>
 		</DialogContext.Provider>
 	);
-}
-
-export function useDialog() {
-	const context = useContext(DialogContext);
-
-	if (!context) {
-		throw new Error("useDialog must be used within DialogProvider");
-	}
-
-	return context;
 }
 
 export default DialogProvider;

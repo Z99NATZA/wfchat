@@ -5,9 +5,9 @@ import {
 	type AikoPngTuberEmotion
 } from "@/features/avatar/data/aikoPngTuber";
 import PngTuberRenderer from "@/features/avatar/renderers/pngtuber/PngTuberRenderer";
-import { useAvatarRuntime } from "@/features/avatar/runtime/avatarRuntimeStore";
+import { useAvatarRuntime } from "@/features/avatar/runtime/avatarRuntimeContext";
 import type { AvatarMotionState } from "@/features/avatar/runtime/avatarRuntimeTypes";
-import { useI18n } from "@/i18n";
+import { useI18n } from "@/i18n/i18nContext";
 import { cn } from "@/utils/classNames";
 import type { AvatarOverlayPosition, AvatarOverlaySize } from "@/stores/avatarOverlayStore";
 

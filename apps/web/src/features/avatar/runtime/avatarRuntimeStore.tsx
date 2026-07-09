@@ -1,29 +1,15 @@
-import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useMemo, useState, type ReactNode } from "react";
+import {
+	AvatarRuntimeContext,
+	DEFAULT_AVATAR_RUNTIME_STATE,
+	type AvatarRuntimeContextValue
+} from "@/features/avatar/runtime/avatarRuntimeContext";
 import type {
 	AvatarDrivenBy,
 	AvatarMotionState,
 	AvatarRuntimeState,
 	AvatarRuntimeUpdate
 } from "@/features/avatar/runtime/avatarRuntimeTypes";
-
-export const DEFAULT_AVATAR_RUNTIME_STATE: AvatarRuntimeState = {
-	avatarId: "aiko-pngtuber",
-	rendererKind: "pngtuber",
-	expressionId: "neutral",
-	motionState: "idle",
-	drivenBy: "manual"
-};
-
-type AvatarRuntimeContextValue = {
-	state: AvatarRuntimeState;
-	resetRuntimeState: () => void;
-	setExpression: (expressionId: string, drivenBy?: AvatarDrivenBy) => void;
-	setMotionState: (motionState: AvatarMotionState, drivenBy?: AvatarDrivenBy) => void;
-	setRuntimeState: (state: AvatarRuntimeState) => void;
-	updateRuntimeState: (update: AvatarRuntimeUpdate) => void;
-};
-
-const AvatarRuntimeContext = createContext<AvatarRuntimeContextValue | null>(null);
 
 type AvatarRuntimeProviderProps = {
 	children: ReactNode;
@@ -89,14 +75,4 @@ export function AvatarRuntimeProvider({ children }: AvatarRuntimeProviderProps) 
 	);
 
 	return <AvatarRuntimeContext.Provider value={value}>{children}</AvatarRuntimeContext.Provider>;
-}
-
-export function useAvatarRuntime() {
-	const context = useContext(AvatarRuntimeContext);
-
-	if (!context) {
-		throw new Error("useAvatarRuntime must be used within AvatarRuntimeProvider");
-	}
-
-	return context;
 }
