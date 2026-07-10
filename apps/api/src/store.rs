@@ -3,7 +3,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use sqlx::{PgPool, Row};
+use sqlx::{PgPool, Postgres, Row, Transaction};
 use uuid::Uuid;
 
 use crate::ai::{AiMessage, AiRole};
@@ -117,6 +117,47 @@ pub struct NewChatAttachmentRecord {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct MemoryItemRecord {
+    pub id: Uuid,
+    pub owner_session_id: Uuid,
+    pub owner_user_id: Option<Uuid>,
+    pub character_id: String,
+    pub memory_key: String,
+    pub kind: String,
+    pub content: String,
+    pub tags: Vec<String>,
+    pub confidence: f32,
+    pub importance: f32,
+    pub last_reinforced_at: u64,
+    pub expires_at: Option<u64>,
+    pub created_at: u64,
+    pub updated_at: u64,
+}
+
+#[derive(Clone, Debug)]
+pub struct NewMemoryItemRecord {
+    pub character_id: String,
+    pub memory_key: String,
+    pub kind: String,
+    pub content: String,
+    pub tags: Vec<String>,
+    pub confidence: f32,
+    pub importance: f32,
+    pub last_reinforced_at: u64,
+    pub expires_at: Option<u64>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct MemorySourceRecord {
+    pub id: Uuid,
+    pub memory_id: Uuid,
+    pub chat_id: Uuid,
+    pub message_id: Option<Uuid>,
+    pub evidence_strength: f32,
+    pub created_at: u64,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct SyncCommitRecord {
     pub operation_id: String,
     pub session_id: Uuid,
@@ -220,12 +261,87 @@ impl ChatStore {
         session_id: Uuid,
         user_id: Uuid,
     ) -> StoreResult<()> {
+        let mut tx = self.db.begin().await?;
+
+        let duplicate_memories = sqlx::query(
+            "select guest.id as guest_id, account.id as account_id
+             from memory_items guest
+             join memory_items account
+               on account.owner_user_id = $2
+              and account.character_id = guest.character_id
+              and account.memory_key = guest.memory_key
+             where guest.owner_session_id = $1 and guest.owner_user_id is null",
+        )
+        .bind(session_id)
+        .bind(user_id)
+        .fetch_all(&mut *tx)
+        .await?;
+
+        for row in duplicate_memories {
+            let guest_id: Uuid = row.get("guest_id");
+            let account_id: Uuid = row.get("account_id");
+
+            sqlx::query(
+                "delete from memory_sources guest_source
+                 using memory_sources account_source
+                 where guest_source.memory_id = $1
+                   and account_source.memory_id = $2
+                   and (
+                     (guest_source.message_id is not null and guest_source.message_id = account_source.message_id)
+                     or
+                     (guest_source.message_id is null and account_source.message_id is null and guest_source.chat_id = account_source.chat_id)
+                   )",
+            )
+            .bind(guest_id)
+            .bind(account_id)
+            .execute(&mut *tx)
+            .await?;
+
+            sqlx::query("update memory_sources set memory_id = $1 where memory_id = $2")
+                .bind(account_id)
+                .bind(guest_id)
+                .execute(&mut *tx)
+                .await?;
+
+            sqlx::query(
+                "update memory_items account
+                 set
+                   kind = case when guest.last_reinforced_at > account.last_reinforced_at then guest.kind else account.kind end,
+                   content = case when guest.last_reinforced_at > account.last_reinforced_at then guest.content else account.content end,
+                   tags = case when guest.last_reinforced_at > account.last_reinforced_at then guest.tags else account.tags end,
+                   confidence = greatest(account.confidence, guest.confidence),
+                   importance = greatest(account.importance, guest.importance),
+                   last_reinforced_at = greatest(account.last_reinforced_at, guest.last_reinforced_at),
+                   expires_at = case when guest.last_reinforced_at > account.last_reinforced_at then guest.expires_at else account.expires_at end,
+                   updated_at = now()
+                 from memory_items guest
+                 where account.id = $1 and guest.id = $2",
+            )
+            .bind(account_id)
+            .bind(guest_id)
+            .execute(&mut *tx)
+            .await?;
+
+            sqlx::query("delete from memory_items where id = $1")
+                .bind(guest_id)
+                .execute(&mut *tx)
+                .await?;
+        }
+
         sqlx::query(
             "update chats set owner_user_id = $1 where owner_session_id = $2 and owner_user_id is null",
         )
         .bind(user_id)
         .bind(session_id)
-        .execute(self.db.as_ref())
+        .execute(&mut *tx)
+        .await?;
+
+        sqlx::query(
+            "update memory_items set owner_user_id = $1 where owner_session_id = $2 and owner_user_id is null",
+        )
+        .bind(user_id)
+        .bind(session_id)
+        .execute(&mut *tx)
         .await?;
 
         sqlx::query(
@@ -233,9 +349,10 @@ impl ChatStore {
         )
         .bind(user_id)
         .bind(session_id)
-        .execute(self.db.as_ref())
+        .execute(&mut *tx)
         .await?;
 
+        tx.commit().await?;
         Ok(())
     }
 
@@ -535,7 +652,7 @@ impl ChatStore {
     ) -> StoreResult<Option<ChatRecord>> {
         let mut tx = self.db.begin().await?;
         let owner_exists = sqlx::query(
-            "select id from chats where id = $1 and (($3::uuid is not null and owner_user_id = $3) or ($3::uuid is null and owner_session_id = $2))",
+            "select id from chats where id = $1 and (($3::uuid is not null and owner_user_id = $3) or ($3::uuid is null and owner_session_id = $2)) for update",
         )
             .bind(chat_id)
             .bind(owner.session_id)
@@ -601,41 +718,294 @@ impl ChatStore {
         owner: OwnerScope,
         chat_id: Uuid,
     ) -> StoreResult<Option<ChatRecord>> {
+        let mut tx = self.db.begin().await?;
         let owner_exists = sqlx::query(
-            "select id from chats where id = $1 and (($3::uuid is not null and owner_user_id = $3) or ($3::uuid is null and owner_session_id = $2))",
+            "select id from chats where id = $1 and (($3::uuid is not null and owner_user_id = $3) or ($3::uuid is null and owner_session_id = $2)) for update",
         )
-            .bind(chat_id)
-            .bind(owner.session_id)
-            .bind(owner.user_id)
-            .fetch_optional(self.db.as_ref())
-            .await?
-            .is_some();
+        .bind(chat_id)
+        .bind(owner.session_id)
+        .bind(owner.user_id)
+        .fetch_optional(&mut *tx)
+        .await?
+        .is_some();
         if !owner_exists {
             return Ok(None);
         }
 
+        let affected_memory_ids = sqlx::query(
+            "select distinct memory_id
+             from memory_sources
+             where chat_id = $1 and message_id is not null",
+        )
+        .bind(chat_id)
+        .fetch_all(&mut *tx)
+        .await?
+        .into_iter()
+        .map(|row| row.get::<Uuid, _>("memory_id"))
+        .collect::<Vec<_>>();
+
         sqlx::query("delete from chat_messages where chat_id = $1")
             .bind(chat_id)
-            .execute(self.db.as_ref())
+            .execute(&mut *tx)
             .await?;
+        cleanup_memory_after_source_removal(&mut tx, &affected_memory_ids).await?;
         sqlx::query("update chats set updated_at = now() where id = $1")
             .bind(chat_id)
-            .execute(self.db.as_ref())
+            .execute(&mut *tx)
             .await?;
 
+        tx.commit().await?;
         self.get_chat(owner, chat_id).await
     }
 
     pub async fn delete_chat(&self, owner: OwnerScope, chat_id: Uuid) -> StoreResult<bool> {
+        let mut tx = self.db.begin().await?;
+        let owner_exists = sqlx::query(
+            "select id from chats where id = $1 and (($3::uuid is not null and owner_user_id = $3) or ($3::uuid is null and owner_session_id = $2)) for update",
+        )
+        .bind(chat_id)
+        .bind(owner.session_id)
+        .bind(owner.user_id)
+        .fetch_optional(&mut *tx)
+        .await?
+        .is_some();
+        if !owner_exists {
+            return Ok(false);
+        }
+
+        let affected_memory_ids =
+            sqlx::query("select distinct memory_id from memory_sources where chat_id = $1")
+                .bind(chat_id)
+                .fetch_all(&mut *tx)
+                .await?
+                .into_iter()
+                .map(|row| row.get::<Uuid, _>("memory_id"))
+                .collect::<Vec<_>>();
+
         let result = sqlx::query(
             "delete from chats where id = $1 and (($3::uuid is not null and owner_user_id = $3) or ($3::uuid is null and owner_session_id = $2))",
         )
-            .bind(chat_id)
+        .bind(chat_id)
+        .bind(owner.session_id)
+        .bind(owner.user_id)
+        .execute(&mut *tx)
+        .await?;
+
+        cleanup_memory_after_source_removal(&mut tx, &affected_memory_ids).await?;
+
+        tx.commit().await?;
+        Ok(result.rows_affected() > 0)
+    }
+
+    pub async fn upsert_memory_item(
+        &self,
+        owner: OwnerScope,
+        item: NewMemoryItemRecord,
+    ) -> StoreResult<MemoryItemRecord> {
+        let id = Uuid::new_v4();
+        let query = if owner.user_id.is_some() {
+            "insert into memory_items (
+                id, owner_session_id, owner_user_id, character_id, memory_key, kind, content,
+                tags, confidence, importance, last_reinforced_at, expires_at
+             ) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, to_timestamp($11),
+                case when $12::bigint is null then null else to_timestamp($12) end)
+             on conflict (owner_user_id, character_id, memory_key) where owner_user_id is not null
+             do update set
+                kind = excluded.kind,
+                content = excluded.content,
+                tags = excluded.tags,
+                confidence = excluded.confidence,
+                importance = excluded.importance,
+                last_reinforced_at = greatest(memory_items.last_reinforced_at, excluded.last_reinforced_at),
+                expires_at = excluded.expires_at,
+                updated_at = now()
+             returning id, owner_session_id, owner_user_id, character_id, memory_key, kind, content,
+                tags, confidence, importance,
+                extract(epoch from last_reinforced_at)::bigint as last_reinforced_at,
+                extract(epoch from expires_at)::bigint as expires_at,
+                extract(epoch from created_at)::bigint as created_at,
+                extract(epoch from updated_at)::bigint as updated_at"
+        } else {
+            "insert into memory_items (
+                id, owner_session_id, owner_user_id, character_id, memory_key, kind, content,
+                tags, confidence, importance, last_reinforced_at, expires_at
+             ) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, to_timestamp($11),
+                case when $12::bigint is null then null else to_timestamp($12) end)
+             on conflict (owner_session_id, character_id, memory_key) where owner_user_id is null
+             do update set
+                kind = excluded.kind,
+                content = excluded.content,
+                tags = excluded.tags,
+                confidence = excluded.confidence,
+                importance = excluded.importance,
+                last_reinforced_at = greatest(memory_items.last_reinforced_at, excluded.last_reinforced_at),
+                expires_at = excluded.expires_at,
+                updated_at = now()
+             returning id, owner_session_id, owner_user_id, character_id, memory_key, kind, content,
+                tags, confidence, importance,
+                extract(epoch from last_reinforced_at)::bigint as last_reinforced_at,
+                extract(epoch from expires_at)::bigint as expires_at,
+                extract(epoch from created_at)::bigint as created_at,
+                extract(epoch from updated_at)::bigint as updated_at"
+        };
+
+        let row = sqlx::query(query)
+            .bind(id)
             .bind(owner.session_id)
             .bind(owner.user_id)
-            .execute(self.db.as_ref())
+            .bind(item.character_id)
+            .bind(item.memory_key)
+            .bind(item.kind)
+            .bind(item.content)
+            .bind(item.tags)
+            .bind(item.confidence as f64)
+            .bind(item.importance as f64)
+            .bind(item.last_reinforced_at as i64)
+            .bind(item.expires_at.map(|value| value as i64))
+            .fetch_one(self.db.as_ref())
             .await?;
-        Ok(result.rows_affected() > 0)
+
+        Ok(memory_item_from_row(row))
+    }
+
+    pub async fn list_memory_items(
+        &self,
+        owner: OwnerScope,
+        character_id: &str,
+    ) -> StoreResult<Vec<MemoryItemRecord>> {
+        let rows = sqlx::query(
+            "select id, owner_session_id, owner_user_id, character_id, memory_key, kind, content,
+                tags, confidence, importance,
+                extract(epoch from last_reinforced_at)::bigint as last_reinforced_at,
+                extract(epoch from expires_at)::bigint as expires_at,
+                extract(epoch from created_at)::bigint as created_at,
+                extract(epoch from updated_at)::bigint as updated_at
+             from memory_items
+             where (($3::uuid is not null and owner_user_id = $3) or ($3::uuid is null and owner_session_id = $1))
+               and character_id = $2
+             order by last_reinforced_at desc, id",
+        )
+        .bind(owner.session_id)
+        .bind(character_id)
+        .bind(owner.user_id)
+        .fetch_all(self.db.as_ref())
+        .await?;
+
+        Ok(rows.into_iter().map(memory_item_from_row).collect())
+    }
+
+    pub async fn add_memory_source(
+        &self,
+        owner: OwnerScope,
+        memory_id: Uuid,
+        chat_id: Uuid,
+        message_id: Option<Uuid>,
+        evidence_strength: f32,
+    ) -> StoreResult<Option<MemorySourceRecord>> {
+        let mut tx = self.db.begin().await?;
+        let valid_source = sqlx::query(
+            "select item.id
+             from memory_items item
+             join chats chat on chat.id = $2 and chat.character_id = item.character_id
+             where item.id = $1
+               and (($4::uuid is not null and item.owner_user_id = $4) or ($4::uuid is null and item.owner_session_id = $3))
+               and (($4::uuid is not null and chat.owner_user_id = $4) or ($4::uuid is null and chat.owner_session_id = $3))
+               and ($5::uuid is null or exists (
+                 select 1 from chat_messages message where message.id = $5 and message.chat_id = chat.id
+               ))",
+        )
+        .bind(memory_id)
+        .bind(chat_id)
+        .bind(owner.session_id)
+        .bind(owner.user_id)
+        .bind(message_id)
+        .fetch_optional(&mut *tx)
+        .await?
+        .is_some();
+        if !valid_source {
+            return Ok(None);
+        }
+
+        let source_id = Uuid::new_v4();
+        let query = if message_id.is_some() {
+            "insert into memory_sources (id, memory_id, chat_id, message_id, evidence_strength)
+             values ($1, $2, $3, $4, $5)
+             on conflict (memory_id, message_id) where message_id is not null
+             do update set evidence_strength = excluded.evidence_strength
+             returning id, memory_id, chat_id, message_id, evidence_strength,
+                extract(epoch from created_at)::bigint as created_at"
+        } else {
+            "insert into memory_sources (id, memory_id, chat_id, message_id, evidence_strength)
+             values ($1, $2, $3, $4, $5)
+             on conflict (memory_id, chat_id) where message_id is null
+             do update set evidence_strength = excluded.evidence_strength
+             returning id, memory_id, chat_id, message_id, evidence_strength,
+                extract(epoch from created_at)::bigint as created_at"
+        };
+        let row = sqlx::query(query)
+            .bind(source_id)
+            .bind(memory_id)
+            .bind(chat_id)
+            .bind(message_id)
+            .bind(evidence_strength as f64)
+            .fetch_one(&mut *tx)
+            .await?;
+
+        sqlx::query(
+            "update memory_items
+             set
+               confidence = evidence.max_strength,
+               last_reinforced_at = evidence.last_reinforced_at,
+               updated_at = now()
+             from (
+               select max(evidence_strength) as max_strength, max(created_at) as last_reinforced_at
+               from memory_sources
+               where memory_id = $1
+             ) evidence
+             where id = $1",
+        )
+        .bind(memory_id)
+        .execute(&mut *tx)
+        .await?;
+
+        tx.commit().await?;
+        Ok(Some(memory_source_from_row(row)))
+    }
+
+    pub async fn list_memory_sources(
+        &self,
+        owner: OwnerScope,
+        memory_id: Uuid,
+    ) -> StoreResult<Vec<MemorySourceRecord>> {
+        let rows = sqlx::query(
+            "select source.id, source.memory_id, source.chat_id, source.message_id,
+                source.evidence_strength, extract(epoch from source.created_at)::bigint as created_at
+             from memory_sources source
+             join memory_items item on item.id = source.memory_id
+             where source.memory_id = $1
+               and (($3::uuid is not null and item.owner_user_id = $3) or ($3::uuid is null and item.owner_session_id = $2))
+             order by source.created_at, source.id",
+        )
+        .bind(memory_id)
+        .bind(owner.session_id)
+        .bind(owner.user_id)
+        .fetch_all(self.db.as_ref())
+        .await?;
+
+        Ok(rows.into_iter().map(memory_source_from_row).collect())
+    }
+
+    pub async fn reset_learned_context(&self, owner: OwnerScope) -> StoreResult<u64> {
+        let result = sqlx::query(
+            "delete from memory_items
+             where (($2::uuid is not null and owner_user_id = $2) or ($2::uuid is null and owner_session_id = $1))",
+        )
+        .bind(owner.session_id)
+        .bind(owner.user_id)
+        .execute(self.db.as_ref())
+        .await?;
+
+        Ok(result.rows_affected())
     }
 
     pub async fn create_chat_attachment(
@@ -1157,6 +1527,76 @@ impl ChatStore {
     }
 }
 
+async fn cleanup_memory_after_source_removal(
+    tx: &mut Transaction<'_, Postgres>,
+    affected_memory_ids: &[Uuid],
+) -> StoreResult<()> {
+    if affected_memory_ids.is_empty() {
+        return Ok(());
+    }
+
+    sqlx::query(
+        "delete from memory_items item
+         where item.id = any($1)
+           and not exists (select 1 from memory_sources source where source.memory_id = item.id)",
+    )
+    .bind(affected_memory_ids)
+    .execute(&mut **tx)
+    .await?;
+
+    sqlx::query(
+        "update memory_items item
+         set
+           confidence = evidence.max_strength,
+           last_reinforced_at = evidence.last_reinforced_at,
+           updated_at = now()
+         from (
+           select memory_id, max(evidence_strength) as max_strength, max(created_at) as last_reinforced_at
+           from memory_sources
+           where memory_id = any($1)
+           group by memory_id
+         ) evidence
+         where item.id = evidence.memory_id",
+    )
+    .bind(affected_memory_ids)
+    .execute(&mut **tx)
+    .await?;
+
+    Ok(())
+}
+
+fn memory_item_from_row(row: sqlx::postgres::PgRow) -> MemoryItemRecord {
+    MemoryItemRecord {
+        id: row.get("id"),
+        owner_session_id: row.get("owner_session_id"),
+        owner_user_id: row.get("owner_user_id"),
+        character_id: row.get("character_id"),
+        memory_key: row.get("memory_key"),
+        kind: row.get("kind"),
+        content: row.get("content"),
+        tags: row.get("tags"),
+        confidence: row.get::<f64, _>("confidence") as f32,
+        importance: row.get::<f64, _>("importance") as f32,
+        last_reinforced_at: row.get::<i64, _>("last_reinforced_at") as u64,
+        expires_at: row
+            .get::<Option<i64>, _>("expires_at")
+            .map(|value| value as u64),
+        created_at: row.get::<i64, _>("created_at") as u64,
+        updated_at: row.get::<i64, _>("updated_at") as u64,
+    }
+}
+
+fn memory_source_from_row(row: sqlx::postgres::PgRow) -> MemorySourceRecord {
+    MemorySourceRecord {
+        id: row.get("id"),
+        memory_id: row.get("memory_id"),
+        chat_id: row.get("chat_id"),
+        message_id: row.get("message_id"),
+        evidence_strength: row.get::<f64, _>("evidence_strength") as f32,
+        created_at: row.get::<i64, _>("created_at") as u64,
+    }
+}
+
 fn chat_attachment_from_row(row: sqlx::postgres::PgRow) -> ChatAttachmentRecord {
     ChatAttachmentRecord {
         id: row.get("id"),
@@ -1255,6 +1695,25 @@ mod integration_tests {
             .create_chat(owner, "aiko".to_owned(), "aiko_default".to_owned())
             .await
             .expect("chat should create")
+    }
+
+    fn test_memory(
+        character_id: &str,
+        memory_key: &str,
+        content: &str,
+        confidence: f32,
+    ) -> NewMemoryItemRecord {
+        NewMemoryItemRecord {
+            character_id: character_id.to_owned(),
+            memory_key: memory_key.to_owned(),
+            kind: "preference".to_owned(),
+            content: content.to_owned(),
+            tags: vec!["travel".to_owned(), "food".to_owned()],
+            confidence,
+            importance: 0.7,
+            last_reinforced_at: now_unix_seconds(),
+            expires_at: None,
+        }
     }
 
     async fn promote_test_session(
@@ -1458,6 +1917,292 @@ mod integration_tests {
         assert_eq!(pulled[0].payload["value"], "light");
 
         cleanup_sessions(&store, &[first_session.id, second_session.id]).await;
+    }
+
+    #[tokio::test]
+    async fn guest_memory_is_owner_scoped() {
+        let Some(store) = test_store().await else {
+            return;
+        };
+        let first_session = create_test_session(&store).await;
+        let second_session = create_test_session(&store).await;
+        let first_owner = OwnerScope::from_session(&first_session);
+        let second_owner = OwnerScope::from_session(&second_session);
+        let second_chat = create_test_chat(&store, second_owner).await;
+
+        let memory = store
+            .upsert_memory_item(
+                first_owner,
+                test_memory(
+                    "aiko",
+                    "travel.food.preference",
+                    "Likes spicy ramen while travelling",
+                    0.8,
+                ),
+            )
+            .await
+            .expect("first guest memory should save");
+
+        let second_items = store
+            .list_memory_items(second_owner, "aiko")
+            .await
+            .expect("second guest memory should list");
+        assert!(second_items.is_empty());
+        let cross_owner_source = store
+            .add_memory_source(second_owner, memory.id, second_chat.id, None, 0.9)
+            .await
+            .expect("cross-owner source validation should query");
+        assert!(cross_owner_source.is_none());
+
+        cleanup_sessions(&store, &[first_session.id, second_session.id]).await;
+    }
+
+    #[tokio::test]
+    async fn account_promotion_merges_duplicate_memory_and_sources() {
+        let Some(store) = test_store().await else {
+            return;
+        };
+        let user_id = Uuid::new_v4();
+        let first_session = create_test_session(&store).await;
+        let first_session =
+            promote_test_session(&store, first_session.id, user_id, "first session").await;
+        store
+            .migrate_session_data_to_user(first_session.id, user_id)
+            .await
+            .expect("first session data should migrate");
+        let first_owner = OwnerScope::from_session(&first_session);
+        let first_chat = create_test_chat(&store, first_owner).await;
+        let account_memory = store
+            .upsert_memory_item(
+                first_owner,
+                test_memory(
+                    "aiko",
+                    "travel.food.preference",
+                    "Likes ramen while travelling",
+                    0.7,
+                ),
+            )
+            .await
+            .expect("account memory should save");
+        store
+            .add_memory_source(first_owner, account_memory.id, first_chat.id, None, 0.7)
+            .await
+            .expect("account source should save")
+            .expect("account source should be valid");
+
+        let second_session = create_test_session(&store).await;
+        let second_guest_owner = OwnerScope::from_session(&second_session);
+        let second_chat = create_test_chat(&store, second_guest_owner).await;
+        let guest_memory = store
+            .upsert_memory_item(
+                second_guest_owner,
+                test_memory(
+                    "aiko",
+                    "travel.food.preference",
+                    "Likes spicy ramen while travelling",
+                    0.9,
+                ),
+            )
+            .await
+            .expect("guest memory should save");
+        store
+            .add_memory_source(
+                second_guest_owner,
+                guest_memory.id,
+                second_chat.id,
+                None,
+                0.9,
+            )
+            .await
+            .expect("guest source should save")
+            .expect("guest source should be valid");
+
+        let second_session =
+            promote_test_session(&store, second_session.id, user_id, "second session").await;
+        store
+            .migrate_session_data_to_user(second_session.id, user_id)
+            .await
+            .expect("second session data should merge");
+        let second_owner = OwnerScope::from_session(&second_session);
+
+        let items = store
+            .list_memory_items(second_owner, "aiko")
+            .await
+            .expect("account memories should list");
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].id, account_memory.id);
+        assert!((items[0].confidence - 0.9).abs() < 0.001);
+        let sources = store
+            .list_memory_sources(second_owner, items[0].id)
+            .await
+            .expect("merged sources should list");
+        assert_eq!(sources.len(), 2);
+
+        cleanup_sessions(&store, &[first_session.id, second_session.id]).await;
+    }
+
+    #[tokio::test]
+    async fn deleting_chats_recalculates_then_removes_sourced_memory() {
+        let Some(store) = test_store().await else {
+            return;
+        };
+        let session = create_test_session(&store).await;
+        let owner = OwnerScope::from_session(&session);
+        let strong_chat = create_test_chat(&store, owner).await;
+        let remaining_chat = create_test_chat(&store, owner).await;
+        let memory = store
+            .upsert_memory_item(
+                owner,
+                test_memory(
+                    "aiko",
+                    "travel.food.preference",
+                    "Likes spicy ramen while travelling",
+                    0.5,
+                ),
+            )
+            .await
+            .expect("memory should save");
+        store
+            .add_memory_source(owner, memory.id, strong_chat.id, None, 0.9)
+            .await
+            .expect("strong source should save")
+            .expect("strong source should be valid");
+        store
+            .add_memory_source(owner, memory.id, remaining_chat.id, None, 0.6)
+            .await
+            .expect("remaining source should save")
+            .expect("remaining source should be valid");
+
+        assert!(store
+            .delete_chat(owner, strong_chat.id)
+            .await
+            .expect("first chat should delete"));
+        let items = store
+            .list_memory_items(owner, "aiko")
+            .await
+            .expect("memory should remain");
+        assert_eq!(items.len(), 1);
+        assert!((items[0].confidence - 0.6).abs() < 0.001);
+        let sources = store
+            .list_memory_sources(owner, memory.id)
+            .await
+            .expect("remaining sources should list");
+        assert_eq!(sources.len(), 1);
+        assert_eq!(sources[0].chat_id, remaining_chat.id);
+
+        assert!(store
+            .delete_chat(owner, remaining_chat.id)
+            .await
+            .expect("second chat should delete"));
+        let items = store
+            .list_memory_items(owner, "aiko")
+            .await
+            .expect("orphan cleanup should list");
+        assert!(items.is_empty());
+
+        cleanup_sessions(&store, &[session.id]).await;
+    }
+
+    #[tokio::test]
+    async fn clearing_chat_messages_removes_message_sourced_memory() {
+        let Some(store) = test_store().await else {
+            return;
+        };
+        let session = create_test_session(&store).await;
+        let owner = OwnerScope::from_session(&session);
+        let chat = create_test_chat(&store, owner).await;
+        let user_message = StoredMessage {
+            id: Uuid::new_v4(),
+            role: AiRole::User,
+            content: "I like spicy ramen".to_owned(),
+            attachments: Vec::new(),
+            created_at: now_unix_seconds(),
+        };
+        let assistant_message = StoredMessage {
+            id: Uuid::new_v4(),
+            role: AiRole::Assistant,
+            content: "I will keep that in mind".to_owned(),
+            attachments: Vec::new(),
+            created_at: now_unix_seconds(),
+        };
+        store
+            .append_chat_messages(owner, chat.id, user_message.clone(), assistant_message)
+            .await
+            .expect("messages should append")
+            .expect("chat should exist");
+        let memory = store
+            .upsert_memory_item(
+                owner,
+                test_memory(
+                    "aiko",
+                    "travel.food.preference",
+                    "Likes spicy ramen while travelling",
+                    0.8,
+                ),
+            )
+            .await
+            .expect("memory should save");
+        store
+            .add_memory_source(owner, memory.id, chat.id, Some(user_message.id), 0.8)
+            .await
+            .expect("message source should save")
+            .expect("message source should be valid");
+
+        let cleared = store
+            .clear_chat_messages(owner, chat.id)
+            .await
+            .expect("chat messages should clear")
+            .expect("chat should remain");
+        assert!(cleared.messages.is_empty());
+        assert!(store
+            .list_memory_items(owner, "aiko")
+            .await
+            .expect("memory should list")
+            .is_empty());
+
+        cleanup_sessions(&store, &[session.id]).await;
+    }
+
+    #[tokio::test]
+    async fn hard_reset_removes_learned_context_but_keeps_chats() {
+        let Some(store) = test_store().await else {
+            return;
+        };
+        let session = create_test_session(&store).await;
+        let owner = OwnerScope::from_session(&session);
+        let chat = create_test_chat(&store, owner).await;
+        store
+            .upsert_memory_item(
+                owner,
+                test_memory("aiko", "travel.food.preference", "Likes ramen", 0.8),
+            )
+            .await
+            .expect("first memory should save");
+        store
+            .upsert_memory_item(
+                owner,
+                test_memory("other", "profile.language", "Prefers Thai", 0.9),
+            )
+            .await
+            .expect("second memory should save");
+
+        let deleted = store
+            .reset_learned_context(owner)
+            .await
+            .expect("learned context should reset");
+        assert_eq!(deleted, 2);
+        assert!(store
+            .list_memory_items(owner, "aiko")
+            .await
+            .expect("aiko memory should list")
+            .is_empty());
+        assert!(store
+            .get_chat(owner, chat.id)
+            .await
+            .expect("chat should query")
+            .is_some());
+
+        cleanup_sessions(&store, &[session.id]).await;
     }
 
     #[tokio::test]

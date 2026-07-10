@@ -15,6 +15,8 @@ Current migration files:
 - `apps/api/migrations/202607040001_initial_schema.sql`
 - `apps/api/migrations/202607100001_remove_manual_memory.sql`
 - `apps/api/migrations/202607100002_remove_manual_memory_sync_entities.sql`
+- `apps/api/migrations/202607100003_automatic_memory_foundation.sql`
+- `apps/api/migrations/202607100004_memory_message_source_lifecycle.sql`
 
 `apps/api/db/init.sql` is retained only as a legacy/manual bootstrap helper. Do
 not treat it as canonical, and do not add new schema changes there unless it is
@@ -70,7 +72,19 @@ The follow-up migration removes retired fact and summary cache items from
 apps/api/migrations/202607100002_remove_manual_memory_sync_entities.sql
 ```
 
-It includes:
+The automatic-memory storage foundation is created by:
+
+```text
+apps/api/migrations/202607100003_automatic_memory_foundation.sql
+```
+
+Message-level provenance cleanup is completed by:
+
+```text
+apps/api/migrations/202607100004_memory_message_source_lifecycle.sql
+```
+
+The baseline migration includes:
 
 - current table definitions
 - current indexes

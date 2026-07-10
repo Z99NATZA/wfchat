@@ -41,9 +41,44 @@ Regression guard:
   retired cache rows from `sync_entities`.
 
 Related current contract:
+- `docs/automatic-memory.md` (planned, not implemented)
 - `docs/chat-sessions.md`
 - `docs/sync-system.md`
 
 Related implementation:
 - `apps/api/src/chat.rs`
 - `apps/web/src/features/chat/hooks/useChatSession.ts`
+
+## 2026-07-10 - Add storage and provenance foundation
+
+Status: Active
+
+Previous behavior:
+- No cross-chat memory persistence existed after the manual system was retired.
+
+Problem observed:
+- Automatic capture could not be added safely without account ownership,
+  multi-chat provenance, deterministic chat-deletion cleanup, and a reset
+  boundary.
+
+Decision:
+- Add internal `memory_items` and `memory_sources` persistence without exposing
+  a manual API or changing AI chat context.
+- Merge duplicate keys and preserve sources during guest-to-account promotion.
+- Remove orphaned learned context transactionally when a source chat is deleted.
+
+Why:
+- Capture and retrieval can build on explicit lifecycle rules without coupling
+  storage to embeddings, browser sync, or user-facing controls.
+
+Regression guard:
+- `cargo test --manifest-path apps/api/Cargo.toml store::integration_tests`
+- `docker compose up -d --build`
+
+Related current contract:
+- `docs/automatic-memory.md`
+- `docs/database-schema.md`
+
+Related implementation:
+- `apps/api/src/store.rs`
+- `apps/api/migrations/202607100003_automatic_memory_foundation.sql`

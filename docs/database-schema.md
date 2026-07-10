@@ -101,6 +101,52 @@ human-readable schema reference.
   - `idx_chat_attachments_message (message_id)`
   - `idx_chat_attachments_chat (chat_id)`
 
+### `memory_items`
+
+- Purpose: normalized learned user context for the automatic-memory foundation.
+- Status: persistence only; automatic capture and retrieval are not implemented.
+- Ownership:
+  - guests use `owner_session_id + character_id + memory_key`
+  - registered users use `owner_user_id + character_id + memory_key`
+- Columns:
+  - `id uuid primary key`
+  - `owner_session_id uuid not null` -> `auth_sessions(id)` (`on delete cascade`)
+  - `owner_user_id uuid null` for registered account ownership
+  - `character_id text not null`
+  - `memory_key text not null`
+  - `kind text not null`
+  - `content text not null`
+  - `tags text[] not null default '{}'`
+  - `confidence double precision not null` constrained to `0..1`
+  - `importance double precision not null` constrained to `0..1`
+  - `last_reinforced_at timestamptz not null default now()`
+  - `expires_at timestamptz null`
+  - `created_at timestamptz not null default now()`
+  - `updated_at timestamptz not null default now()`
+- Indexes:
+  - partial unique guest and registered-account indexes for `memory_key`
+  - owner/character reinforcement-order indexes
+  - GIN index on `tags`
+
+### `memory_sources`
+
+- Purpose: provenance connecting one memory item to one or more source chats.
+- Columns:
+  - `id uuid primary key`
+  - `memory_id uuid not null` -> `memory_items(id)` (`on delete cascade`)
+  - `chat_id uuid not null` -> `chats(id)` (`on delete cascade`)
+  - `message_id uuid null` -> `chat_messages(id)` (`on delete cascade`)
+  - `evidence_strength double precision not null` constrained to `0..1`
+  - `created_at timestamptz not null default now()`
+- Uniqueness:
+  - one source per memory/message when `message_id` is present
+  - one chat-level source per memory/chat when `message_id` is absent
+- Lifecycle:
+  - deleting a chat removes its source rows
+  - clearing chat messages removes message-level source rows
+  - the store deletes affected memory items with no remaining source
+  - retained memory confidence is recalculated from remaining evidence
+
 ### `sync_entities`
 
 - Purpose: latest sync item state for settings and chat cache.
@@ -127,3 +173,5 @@ human-readable schema reference.
 - One registered `user_id` can have one or more external `auth_identities`.
 - One `chat` has many `chat_messages`.
 - Image attachments belong to one owner, may be pending before send, and later become linked to one `chat_message` after successful message completion.
+- One owner + `character_id` has normalized `memory_items` keyed by `memory_key`.
+- One `memory_item` has one or more `memory_sources` across chats.

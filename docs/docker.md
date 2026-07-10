@@ -132,6 +132,11 @@ container is required.
 Migration ownership is tracked in `docs/database-migrations.md`. Ordered files
 under `apps/api/migrations/` are canonical.
 
+The automatic-memory storage foundation uses the same embedded migration path.
+It requires no additional Compose service, volume, port, or environment value;
+`docker compose up -d --build` rebuilds the API with the migration and applies
+it to the existing PostgreSQL volume during API startup.
+
 For local manual bootstrap only, legacy schema SQL remains at
 `apps/api/db/init.sql`:
 

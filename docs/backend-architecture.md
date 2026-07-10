@@ -98,6 +98,11 @@ image attachment upload use separate stricter buckets.
 
 `chat.rs` owns chat routes and the main chat flow.
 
+`store.rs` owns the internal automatic-memory persistence foundation. It exposes
+owner-scoped memory item/source operations, account-promotion merging,
+transactional chat-deletion cleanup, and learned-context reset. There is no
+public memory route, automatic extraction, retrieval, or prompt injection yet.
+
 `characters.rs` owns character-facing endpoints, the current static character registry, and character-specific system prompts.
 
 `admin.rs` owns admin-only AI profile and provider endpoints. It currently exposes list/status endpoints protected by `UserKind::Admin`; write/manage flows are not implemented yet.
