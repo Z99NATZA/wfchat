@@ -26,7 +26,6 @@ const mocks = vi.hoisted(() => ({
 	getAssistantMessageSpeech: vi.fn(),
 	transcribeUserSpeech: vi.fn(),
 	listPersonaChats: vi.fn(),
-	listMemoryFacts: vi.fn(),
 	listMemorySummaries: vi.fn(),
 	createPersonaChat: vi.fn(),
 	streamChatMessage: vi.fn(),
@@ -37,13 +36,7 @@ const mocks = vi.hoisted(() => ({
 	clearChatMessages: vi.fn(),
 	getChat: vi.fn(),
 	isChatApiStatus: vi.fn(),
-	isNotFound: vi.fn(),
-	createMemoryFact: vi.fn(),
-	createMemorySummary: vi.fn(),
-	deleteMemoryFact: vi.fn(),
-	deleteMemorySummary: vi.fn(),
-	updateMemoryFact: vi.fn(),
-	updateMemorySummary: vi.fn()
+	isNotFound: vi.fn()
 }));
 
 vi.mock("react-router-dom", () => ({
@@ -66,24 +59,17 @@ vi.mock("@/components/dialog/DialogContext", () => ({
 vi.mock("@/services/syncService", () => ({
 	markChatMessagesDeleted: vi.fn(),
 	markChatSessionDeleted: vi.fn(),
-	markMemoryFactDeleted: vi.fn(),
-	markMemorySummaryDeleted: vi.fn(),
 	readChatMessagesCache: vi.fn(() => []),
 	readChatSessionsCache: vi.fn(() => []),
-	readMemoryFactsCache: vi.fn(() => []),
 	readMemorySummariesCache: vi.fn(() => []),
 	syncLocalDeletesNow: vi.fn(() => Promise.resolve())
 }));
 
 vi.mock("@/features/chat/services/chatApiService", () => ({
 	clearChatMessages: mocks.clearChatMessages,
-	createMemoryFact: mocks.createMemoryFact,
-	createMemorySummary: mocks.createMemorySummary,
 	createPersonaChat: mocks.createPersonaChat,
 	deleteChat: mocks.deleteChat,
 	deleteChatAttachment: mocks.deleteChatAttachment,
-	deleteMemoryFact: mocks.deleteMemoryFact,
-	deleteMemorySummary: mocks.deleteMemorySummary,
 	getChat: mocks.getChat,
 	getChatUiConfig: mocks.getChatUiConfig,
 	fetchAssistantMessageSpeech: mocks.fetchAssistantMessageSpeech,
@@ -91,14 +77,11 @@ vi.mock("@/features/chat/services/chatApiService", () => ({
 	transcribeUserSpeech: mocks.transcribeUserSpeech,
 	isChatApiStatus: mocks.isChatApiStatus,
 	isNotFound: mocks.isNotFound,
-	listMemoryFacts: mocks.listMemoryFacts,
 	listMemorySummaries: mocks.listMemorySummaries,
 	listPersonaChats: mocks.listPersonaChats,
 	sendChatMessage: mocks.sendChatMessage,
 	streamChatMessage: mocks.streamChatMessage,
-	uploadChatImageAttachment: mocks.uploadChatImageAttachment,
-	updateMemoryFact: mocks.updateMemoryFact,
-	updateMemorySummary: mocks.updateMemorySummary
+	uploadChatImageAttachment: mocks.uploadChatImageAttachment
 }));
 
 const persona: ChatPersona = {
@@ -184,7 +167,6 @@ describe("useChatSession streaming sendMessage", () => {
 			quickPrompts: []
 		});
 		mocks.listPersonaChats.mockResolvedValue([]);
-		mocks.listMemoryFacts.mockResolvedValue([]);
 		mocks.listMemorySummaries.mockResolvedValue([]);
 		mocks.createPersonaChat.mockResolvedValue({ chatId: "chat-1", messages: [] });
 		mocks.deleteChat.mockResolvedValue(undefined);

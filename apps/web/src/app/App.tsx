@@ -16,7 +16,7 @@ import PngTuberPage from "@/pages/PngTuberPage";
 import {
 	clearLocalSyncState,
 	enqueueGuestSync,
-	enqueueGuestSyncWithMemory,
+	enqueueGuestSyncWithChat,
 	flushGuestSyncQueue,
 	hasPendingSyncQueue,
 	markSyncRetry,
@@ -167,9 +167,7 @@ function App() {
 
 		try {
 			if (chatSnapshot) {
-				await enqueueGuestSyncWithMemory(
-					chatSnapshot.memoryFacts,
-					chatSnapshot.memorySummaries,
+				await enqueueGuestSyncWithChat(
 					chatSnapshot.sessions,
 					chatSnapshot.messages,
 					chatSnapshot.activeChatId

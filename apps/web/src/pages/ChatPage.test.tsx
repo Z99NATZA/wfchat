@@ -364,12 +364,8 @@ function chatState({
 		userSpeechInput: { status: "idle" },
 		isClearing: false,
 		isCreatingSession: false,
-		isSavingMemoryFact: false,
-		isSavingMemorySummary: false,
 		isSidebarOpen: false,
 		isSending,
-		memoryFacts: [],
-		memorySummaries: [],
 		messages,
 		openSidebar: vi.fn(),
 		quickPrompts: [],
@@ -388,12 +384,6 @@ function chatState({
 		cancelUserSpeechInput: vi.fn(),
 		toggleUserSpeechInput: vi.fn(),
 		setChatSearchQuery: vi.fn(),
-		saveMemoryFact: vi.fn(),
-		saveMemorySummary: vi.fn(),
-		removeMemoryFact: vi.fn(),
-		removeMemorySummary: vi.fn(),
-		editMemoryFact: vi.fn(),
-		editMemorySummary: vi.fn(),
 		removeSession: vi.fn()
 	};
 }

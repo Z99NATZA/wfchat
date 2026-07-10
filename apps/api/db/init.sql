@@ -77,33 +77,6 @@ create index if not exists idx_chat_attachments_owner_user_created on chat_attac
 create index if not exists idx_chat_attachments_message on chat_attachments(message_id);
 create index if not exists idx_chat_attachments_chat on chat_attachments(chat_id);
 
-create table if not exists memory_facts (
-    id uuid primary key,
-    owner_session_id uuid not null references auth_sessions(id) on delete cascade,
-    owner_user_id uuid,
-    character_id text not null,
-    content text not null,
-    confidence double precision not null default 0.5,
-    source_chat_id uuid references chats(id) on delete set null,
-    created_at timestamptz not null default now(),
-    updated_at timestamptz not null default now()
-);
-
-create table if not exists memory_summaries (
-    id uuid primary key,
-    owner_session_id uuid not null references auth_sessions(id) on delete cascade,
-    owner_user_id uuid,
-    character_id text not null,
-    summary text not null,
-    source_chat_id uuid references chats(id) on delete set null,
-    created_at timestamptz not null default now()
-);
-
-create index if not exists idx_memory_facts_owner_character_updated on memory_facts(owner_session_id, character_id, updated_at desc);
-create index if not exists idx_memory_summaries_owner_character_created on memory_summaries(owner_session_id, character_id, created_at desc);
-create index if not exists idx_memory_facts_owner_user_character_updated on memory_facts(owner_user_id, character_id, updated_at desc);
-create index if not exists idx_memory_summaries_owner_user_character_created on memory_summaries(owner_user_id, character_id, created_at desc);
-
 create table if not exists sync_commits (
     operation_id text not null,
     session_id uuid not null references auth_sessions(id) on delete cascade,

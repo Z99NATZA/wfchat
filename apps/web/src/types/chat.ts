@@ -49,21 +49,3 @@ export type ChatSessionSummary = {
 	updatedAt: number;
 	lastMessage: string;
 };
-
-export type MemoryFact = {
-	id: string;
-	characterId: string;
-	content: string;
-	confidence: number;
-	sourceChatId?: string | null;
-	createdAt: number;
-	updatedAt: number;
-};
-
-export type MemorySummary = {
-	id: string;
-	characterId: string;
-	summary: string;
-	sourceChatId?: string | null;
-	createdAt: number;
-};

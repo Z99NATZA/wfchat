@@ -10,7 +10,7 @@ import { useChatSession } from "@/features/chat/hooks/useChatSession";
 import type { AuthSessionController } from "@/hooks/useAuthSession";
 import type { AppFont } from "@/types/font";
 import type { Theme } from "@/types/theme";
-import type { ChatMessage, ChatSessionSummary, MemoryFact, MemorySummary } from "@/types/chat";
+import type { ChatMessage, ChatSessionSummary } from "@/types/chat";
 import type { AvatarOverlayPosition, AvatarOverlaySize } from "@/stores/avatarOverlayStore";
 import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
 
@@ -18,8 +18,6 @@ export type ChatSyncSnapshot = {
 	activeChatId: string | null;
 	messages: ChatMessage[];
 	sessions: ChatSessionSummary[];
-	memoryFacts: MemoryFact[];
-	memorySummaries: MemorySummary[];
 	refreshRemoteState: () => void;
 	resetToDraft: () => void;
 };
@@ -85,8 +83,6 @@ function ChatPage({
 			activeChatId: chat.activeChatId,
 			messages: chat.messages,
 			sessions: chat.sessions,
-			memoryFacts: chat.memoryFacts,
-			memorySummaries: chat.memorySummaries,
 			refreshRemoteState: chat.refreshRemoteState,
 			resetToDraft: chat.resetToDraft
 		});
@@ -96,8 +92,6 @@ function ChatPage({
 		chat.activeChatId,
 		chat.messages,
 		chat.sessions,
-		chat.memoryFacts,
-		chat.memorySummaries,
 		chat.refreshRemoteState,
 		chat.resetToDraft,
 		onChatSyncSnapshotChange
@@ -231,21 +225,7 @@ function ChatPage({
 					onOpenSettings={onOpenSettings}
 				/>
 			}
-			details={
-				<ChatDetailsPanel
-					persona={chat.activePersona}
-					memoryFacts={chat.memoryFacts}
-					memorySummaries={chat.memorySummaries}
-					isSavingMemoryFact={chat.isSavingMemoryFact}
-					isSavingMemorySummary={chat.isSavingMemorySummary}
-					onSaveMemoryFact={chat.saveMemoryFact}
-					onSaveMemorySummary={chat.saveMemorySummary}
-					onDeleteMemoryFact={chat.removeMemoryFact}
-					onDeleteMemorySummary={chat.removeMemorySummary}
-					onEditMemoryFact={chat.editMemoryFact}
-					onEditMemorySummary={chat.editMemorySummary}
-				/>
-			}
+			details={<ChatDetailsPanel persona={chat.activePersona} />}
 		>
 			<div className="relative flex min-h-0 flex-1 flex-col">
 				<div className="relative z-10 flex min-h-0 flex-1 flex-col">

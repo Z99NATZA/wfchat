@@ -49,7 +49,7 @@ Keep runtime state renderer-neutral. It should describe `avatarId`, `rendererKin
 
 Feature state stays inside the feature boundary:
 
-- Chat sessions, messages, personas, draft text, and chat memory stay in `features/chat`.
+- Chat sessions, messages, personas, and draft text stay in `features/chat`.
 - Avatar workspace selections, pose/expression state, runtime bridge state, and inspector values should stay in the avatar page/feature.
 
 Feature state should not be moved into app-level state unless multiple unrelated pages genuinely need to read or update it.

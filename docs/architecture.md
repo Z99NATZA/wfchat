@@ -25,9 +25,8 @@ browser infrastructure stays in `services`, persisted app-state helpers stay in
 `stores`, and feature behavior stays inside `features/*`.
 
 Backend code keeps request flows close to their owning route modules. `chat.rs`
-owns chat flow, `auth.rs` owns sessions and login, `memory.rs` owns memory APIs,
-`sync.rs` owns sync APIs, `store.rs` owns PostgreSQL persistence, and `ai/*`
-owns provider adapters.
+owns chat flow, `auth.rs` owns sessions and login, `sync.rs` owns sync APIs,
+`store.rs` owns PostgreSQL persistence, and `ai/*` owns provider adapters.
 
 ## Runtime Flow
 
@@ -41,7 +40,7 @@ apps/web/src/main.tsx
 browser
   -> /api/*
       -> apps/api/src/app.rs router
-          -> auth/chat/memory/sync/admin route modules
+          -> auth/chat/sync/admin route modules
           -> apps/api/src/store.rs and apps/api/src/ai/*
 ```
 
@@ -73,7 +72,6 @@ adapters. Provider adapters should not depend on frontend concepts.
 - [Sync system](sync-system.md)
 - [Behavior history](behavior-history/README.md)
 - [Database schema](database-schema.md)
-- [Memory API](memory.md)
 - [PNGTuber and avatar runtime](pngtuber.md)
 - [Theme system](theme.md)
 - [Mobile viewport](mobile-viewport.md)

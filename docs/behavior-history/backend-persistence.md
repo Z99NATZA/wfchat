@@ -39,5 +39,4 @@ Related implementation:
 - `apps/api/src/error.rs`
 - `apps/api/src/auth.rs`
 - `apps/api/src/chat.rs`
-- `apps/api/src/memory.rs`
 - `apps/api/src/sync.rs`

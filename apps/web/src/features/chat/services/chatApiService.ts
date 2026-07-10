@@ -5,9 +5,7 @@ import type {
 	ChatMessage,
 	ChatMessageAttachment,
 	ChatPersona,
-	ChatSessionSummary,
-	MemoryFact,
-	MemorySummary
+	ChatSessionSummary
 } from "@/types/chat";
 import { formatMessageTime } from "@/utils/date";
 
@@ -131,24 +129,6 @@ export type SendChatMessageAttachment = {
 
 export type VoiceCredit = {
 	text: string;
-};
-
-type ApiMemoryFact = {
-	id: string;
-	character_id: string;
-	content: string;
-	confidence: number;
-	source_chat_id?: string | null;
-	created_at: number;
-	updated_at: number;
-};
-
-type ApiMemorySummary = {
-	id: string;
-	character_id: string;
-	summary: string;
-	source_chat_id?: string | null;
-	created_at: number;
 };
 
 export async function listPersonaChats(characterId: string): Promise<ChatSessionSummary[]> {
@@ -387,83 +367,6 @@ export async function fetchAssistantMessageSpeech(
 	return response;
 }
 
-export async function listMemoryFacts(characterId: string): Promise<MemoryFact[]> {
-	await ensureCookieSession();
-	const response = await apiClient.get<ApiMemoryFact[]>(
-		`/api/personas/${characterId}/memory/facts`
-	);
-	return response.data.map(toMemoryFact);
-}
-
-export async function createMemoryFact(
-	characterId: string,
-	content: string,
-	confidence?: number,
-	sourceChatId?: string
-): Promise<MemoryFact> {
-	await ensureCookieSession();
-	const response = await apiClient.post<ApiMemoryFact>(
-		`/api/personas/${characterId}/memory/facts`,
-		{ content, confidence, source_chat_id: sourceChatId }
-	);
-	return toMemoryFact(response.data);
-}
-
-export async function deleteMemoryFact(factId: string): Promise<void> {
-	await ensureCookieSession();
-	await apiClient.delete(`/api/memory/facts/${factId}`);
-}
-
-export async function updateMemoryFact(
-	factId: string,
-	content: string,
-	confidence?: number
-): Promise<MemoryFact> {
-	await ensureCookieSession();
-	const response = await apiClient.patch<ApiMemoryFact>(`/api/memory/facts/${factId}`, {
-		content,
-		confidence
-	});
-	return toMemoryFact(response.data);
-}
-
-export async function listMemorySummaries(characterId: string): Promise<MemorySummary[]> {
-	await ensureCookieSession();
-	const response = await apiClient.get<ApiMemorySummary[]>(
-		`/api/personas/${characterId}/memory/summaries`
-	);
-	return response.data.map(toMemorySummary);
-}
-
-export async function createMemorySummary(
-	characterId: string,
-	summary: string,
-	sourceChatId?: string
-): Promise<MemorySummary> {
-	await ensureCookieSession();
-	const response = await apiClient.post<ApiMemorySummary>(
-		`/api/personas/${characterId}/memory/summaries`,
-		{ summary, source_chat_id: sourceChatId }
-	);
-	return toMemorySummary(response.data);
-}
-
-export async function deleteMemorySummary(summaryId: string): Promise<void> {
-	await ensureCookieSession();
-	await apiClient.delete(`/api/memory/summaries/${summaryId}`);
-}
-
-export async function updateMemorySummary(
-	summaryId: string,
-	summary: string
-): Promise<MemorySummary> {
-	await ensureCookieSession();
-	const response = await apiClient.patch<ApiMemorySummary>(`/api/memory/summaries/${summaryId}`, {
-		summary
-	});
-	return toMemorySummary(response.data);
-}
-
 function toChatMessage(message: ApiMessage): ChatMessage {
 	return {
 		id: message.id,
@@ -689,26 +592,4 @@ function speechAudioExtension(contentType: string | undefined): string {
 		default:
 			return "webm";
 	}
-}
-
-function toMemoryFact(fact: ApiMemoryFact): MemoryFact {
-	return {
-		id: fact.id,
-		characterId: fact.character_id,
-		content: fact.content,
-		confidence: fact.confidence,
-		sourceChatId: fact.source_chat_id,
-		createdAt: fact.created_at,
-		updatedAt: fact.updated_at
-	};
-}
-
-function toMemorySummary(summary: ApiMemorySummary): MemorySummary {
-	return {
-		id: summary.id,
-		characterId: summary.character_id,
-		summary: summary.summary,
-		sourceChatId: summary.source_chat_id,
-		createdAt: summary.created_at
-	};
 }

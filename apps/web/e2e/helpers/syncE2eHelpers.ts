@@ -10,9 +10,7 @@ export const storageKeys = {
 	font: "wfchat-font",
 	locale: "wfchat.locale",
 	backgroundImageUrl: "wfchat.backgroundImageUrl",
-	memoryFactsCache: "wfchat-memory-facts-cache",
-	memorySummariesCache: "wfchat-memory-summaries-cache",
-	memoryDeletesCache: "wfchat-memory-deletes-cache",
+	deletesCache: "wfchat-deletes-cache",
 	chatSessionsCache: "wfchat-chat-sessions-cache",
 	chatMessagesCache: "wfchat-chat-messages-cache"
 } as const;

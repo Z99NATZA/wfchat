@@ -27,6 +27,7 @@ Keep one file per subsystem or behavior family:
 
 - `chat-scroll.md` for chat timeline scrolling, virtualization, jump-to-latest, and active-chat navigation state
 - `chat-sse.md` for chat streaming transport, optimistic streaming state, and SSE fallback behavior
+- `chat-memory.md` for retired or replacement cross-chat memory behavior
 - `sync-system.md` for sync flow, stale cached data, tombstones, and conflict behavior
 - `backend-persistence.md` for backend store, PostgreSQL persistence, and database error handling decisions
 - `backend-auth.md` for backend auth, session ownership, and cookie/header auth decisions

@@ -10,8 +10,8 @@ The sync system is designed to:
 
 - Let users start immediately as guests without requiring login.
 - Promote guest-owned data to an account after Google login.
-- Keep settings, chat cache, and memory cache available across browsers/devices
-  for the same account.
+- Keep settings and chat cache available across browsers/devices for the same
+  account.
 - Avoid blocking the core chat UX when sync is offline or temporarily failing.
 
 ## Current State
@@ -20,7 +20,7 @@ The sync system is designed to:
 
 - Backend guest sessions.
 - In-app auth UI with Google login.
-- Guest-to-account promotion for chat, memory, and sync rows.
+- Guest-to-account promotion for chat and sync rows.
 - Account-scoped ownership through `owner_user_id` for registered users.
 - Sync APIs:
   - `GET /api/sync/changes?cursor=...`
@@ -30,9 +30,8 @@ The sync system is designed to:
 - Cloud-to-local pull into local settings/cache.
 - Sync items for:
   - settings: `theme`, `font`, `locale`, `backgroundImageUrl`
-  - memory cache: facts and summaries
   - chat cache: session summaries and active-chat messages
-  - tombstones for memory/chat deletes
+  - tombstones for chat deletes
 - Automatic pull when the app is authenticated.
 - Automatic queue flush when the app is authenticated and a sync queue already
   exists.
@@ -62,11 +61,6 @@ The sync system is designed to:
   app boot seeds local chat cache, pulls a matching tombstone, removes the
   cached session from local storage, and verifies the deleted chat does not
   reappear after page refresh.
-- Browser E2E coverage for pulled memory tombstone propagation: an
-  authenticated app boot seeds local memory fact and summary cache entries,
-  pulls matching tombstones, removes only the deleted entries from local
-  storage, verifies kept entries remain, and verifies the deleted entries do not
-  reappear after page refresh.
 - Browser E2E coverage for failed manual sync preview: a registered browser
   clicks `Sync now`, the preview request fails, the local queued setting remains
   in `wfchat-sync-queue`, and retry metadata records an incremented attempt
@@ -75,10 +69,9 @@ The sync system is designed to:
   clicks `Sync now`, preview succeeds, commit fails, the local queued setting
   remains in `wfchat-sync-queue`, and retry metadata records an incremented
   attempt with a future `next_retry_at`.
-- Browser E2E coverage for cross-browser pulled background, chat, and memory
-  cache fixtures: a registered browser pulls remote background image, chat
-  session/message cache, memory fact cache, and memory summary cache, then
-  verifies local storage plus naturally rendered chat and memory UI.
+- Browser E2E coverage for cross-browser pulled background and chat cache
+  fixtures: a registered browser pulls a remote background image and chat
+  session/message cache, then verifies local storage and rendered chat UI.
 - Browser E2E coverage for stale pulled theme guard: an authenticated app boot
   seeds a newer local dark theme, pulls an older cloud light theme, keeps local
   storage and document state dark, and still advances the sync cursor.
@@ -87,18 +80,16 @@ The sync system is designed to:
   background fixture, dispatches `online`, then verifies preview/commit and
   changes requests increase, the queue clears, and the remote background is
   applied locally.
-- Browser E2E coverage for API-unavailable cache fallback after a previous
-  pull: an authenticated app boot seeds local chat, memory fact, and memory
-  summary cache with a nonzero sync cursor, forces persona list APIs to fail,
-  verifies cached chat and memory content remain visible, and verifies the
-  sync pull sees no newer remote items.
+- Browser E2E coverage for API-unavailable cache fallback after a previous pull:
+  an authenticated app boot seeds local chat cache with a nonzero sync cursor,
+  forces persona list APIs to fail, verifies cached chat content remains
+  visible, and verifies the sync pull sees no newer remote items.
 
 ### Not Done Yet
 
-- Full canonical chat/memory sync into the backend `chats`, `chat_messages`,
-  `memory_facts`, and `memory_summaries` tables.
-- Full enumeration of every persona, chat session, message, memory fact, and
-  memory summary when creating a sync operation.
+- Full canonical chat sync into the backend `chats` and `chat_messages` tables.
+- Full enumeration of every persona, chat session, and message when creating a
+  sync operation.
 - Field-level merge, detailed conflict payloads, or user-facing conflict
   resolution.
 - Accurate `conflict_count` from `/api/sync/commit`.
@@ -110,10 +101,9 @@ The sync system is designed to:
 
 ### Important Limitation
 
-- Chat and memory sync is a V1 cache/delta layer, not a complete canonical
-  database sync. The sync API writes to `sync_entities`; it does not currently
-  materialize pulled sync items back into the main `chats`, `chat_messages`,
-  `memory_facts`, or `memory_summaries` tables.
+- Chat sync is a V1 cache/delta layer, not a complete canonical database sync.
+  The sync API writes to `sync_entities`; it does not currently materialize
+  pulled sync items back into the main `chats` or `chat_messages` tables.
 
 - Pulled settings use dedicated pulled-setting paths. They do not touch local
   edit metadata, and app-level React state is updated through callbacks.
@@ -206,9 +196,7 @@ Local storage keys:
 - `wfchat-sync-meta`
 - `wfchat-sync-queue`
 - `wfchat-sync-cursor`
-- `wfchat-memory-facts-cache`
-- `wfchat-memory-summaries-cache`
-- `wfchat-memory-deletes-cache`
+- `wfchat-deletes-cache`
 - `wfchat-chat-sessions-cache`
 - `wfchat-chat-messages-cache`
 
@@ -236,7 +224,6 @@ Timestamp behavior:
 - Pulled setting changes call `recordSyncUpdatedAt(...)` with the cloud
   `updated_at`, write local storage without touching the local edit timestamp,
   and notify app-level callbacks when React state must update.
-- Memory sync items use record timestamps.
 - Chat session sync items use session timestamps.
 - Active-chat message sync items currently use enqueue-time timestamps.
 
@@ -253,8 +240,8 @@ Pulled setting behavior:
   pulled i18n locale callback without touching local edit metadata.
 - `backgroundImageUrl`: skipped when stale; otherwise persists the background
   image URL, records the cloud timestamp, and calls the app background callback.
-- memory/chat items: upsert into local sync caches.
-- memory/chat tombstones: remove matching cache entries.
+- chat items: upsert into local sync caches.
+- chat tombstones: remove matching cache entries.
 
 ## API Contract
 
@@ -364,7 +351,7 @@ Not implemented:
 ### Login And Pull
 
 1. A guest opens the app.
-2. The guest changes settings or uses chat/memory features.
+2. The guest changes settings or uses chat features.
 3. Settings are persisted locally and their sync keys are touched.
 4. The user opens the profile UI and logs in with Google.
 5. The backend promotes current-session guest rows to `owner_user_id`.
@@ -378,7 +365,7 @@ Not implemented:
 
 1. The user clicks `Sync now`.
 2. The frontend enqueues settings and, when chat is mounted, the mounted chat
-   and memory snapshot into `wfchat-sync-queue`.
+   snapshot into `wfchat-sync-queue`.
 3. The frontend flushes the first queued operation through `preview -> commit`.
 4. On success, the operation is removed from the queue.
 5. If the queue is empty, pending guest sync is marked done.
@@ -395,11 +382,9 @@ Not implemented:
 The current enqueue scope is intentionally limited to mounted state:
 
 - settings from local storage
-- memory facts for the currently loaded persona
-- memory summaries for the currently loaded persona
 - chat sessions for the currently loaded persona
 - messages for the active chat only
-- locally recorded memory/chat tombstones
+- locally recorded chat tombstones
 
 ### Stale Chat Cleanup
 
@@ -490,7 +475,7 @@ are older than existing rows.
 
 ### 6. Delete tombstones are not guaranteed after failed API deletes
 
-Memory/chat tombstones are usually recorded after a successful delete or a
+Chat tombstones are usually recorded after a successful delete or a
 not-found response. If the API delete fails before local tombstone creation,
 that deletion may not be queued for sync later. Chat sessions that are detected
 as stale during selection do record a tombstone before attempting immediate
@@ -504,25 +489,24 @@ mounted view are not guaranteed to be included in the outgoing operation.
 
 ## Known Gaps
 
-### 1. Chat and memory sync is partial
+### 1. Chat sync is partial
 
-The app syncs memory/chat deltas from currently mounted state only. It does not
-yet enumerate every persona, every chat session, or every message across the
-account when building a sync operation.
+The app syncs chat deltas from currently mounted state only. It does not yet
+enumerate every persona, every chat session, or every message across the account
+when building a sync operation.
 
 ### 2. Data source is not single-source
 
-Chat and memory views still merge API responses with local sync cache and use
-cache fallback when API calls fail. This is useful for resilience, but the
-system does not yet have one canonical source-of-truth strategy for all
-chat/memory data.
+Chat views still merge API responses with local sync cache and use cache
+fallback when API calls fail. This is useful for resilience, but the system does
+not yet have one canonical source-of-truth strategy for all chat data.
 
 ### 3. Sync cache is not materialized into canonical tables
 
 `/api/sync/commit` writes generic sync items to `sync_entities`. It does not
-apply those items into `chats`, `chat_messages`, `memory_facts`, or
-`memory_summaries`. Cross-device chat/memory sync therefore behaves as cache
-rehydration on the client, not as server-side canonical chat/memory migration.
+apply those items into `chats` or `chat_messages`. Cross-device chat sync
+therefore behaves as cache rehydration on the client, not as server-side
+canonical chat migration.
 
 ### 4. Conflict handling is basic
 
@@ -537,7 +521,7 @@ the same timestamp.
 
 ### 6. Deletes are not fully offline-first
 
-Tombstones exist for memory/chat deletes, but most delete flows create
+Tombstones exist for chat deletes, but most delete flows create
 tombstones after the API delete succeeds or after a not-found response. A delete
 that fails before local tombstone creation is not yet guaranteed to sync later.
 Stale chat cleanup is stricter: a chat that cannot be loaded from the backend
@@ -567,10 +551,10 @@ In scope:
 
 1. Add API/integration coverage for Google login verification using a mockable
    verifier boundary.
-2. Define the source-of-truth strategy for chat and memory:
+2. Define the source-of-truth strategy for chat:
    - keep sync as a client cache layer, or
    - materialize sync items into canonical backend tables.
-3. Make chat/memory sync enumeration explicit:
+3. Make chat sync enumeration explicit:
    - all loaded local cache only, or
    - all server-known account data, or
    - all personas/chats/messages through a dedicated export endpoint.
@@ -662,19 +646,14 @@ API mock matrix:
 - If a flow creates chats or sends messages through the composer, also mock
   `POST /api/personas/:personaId/chats`, `POST /api/chats/:chatId/messages`,
   and `/api/chats/:chatId/messages/stream` as applicable.
-- Mock `/api/personas/:personaId/memory/facts` and
-  `/api/personas/:personaId/memory/summaries` when a flow asserts memory cache
-  behavior.
 - Mock concrete delete endpoints and follow-up list/get endpoints when testing
   tombstones through the UI, so refresh behavior is deterministic:
-  `/api/chats/:chatId`, `/api/chats/:chatId/messages`,
-  `/api/memory/facts/:factId`, and `/api/memory/summaries/:summaryId`.
+  `/api/chats/:chatId` and `/api/chats/:chatId/messages`.
 
 Local state helpers:
 
 - Seed and read `wfchat-sync-queue`, `wfchat-sync-cursor`,
-  `wfchat-sync-meta`, settings keys, chat cache keys, memory cache keys, and
-  tombstone caches.
+  `wfchat-sync-meta`, settings keys, chat cache keys, and tombstone caches.
 - Provide assertions for queue state, cursor state, cache state, and metadata
   state without requiring every item to be visible in the UI.
 
@@ -689,7 +668,7 @@ Remote sync helper:
 ### Phase 2: First High-Value Browser Flows
 
 1. Guest-to-login sync:
-   - seed guest settings and representative chat or memory cache
+   - seed guest settings and representative chat cache
    - mock `GET /api/auth/me` as guest before login
    - intercept `https://accounts.google.com/gsi/client` with the local fake
      Google script, then click the fake Google button to produce a fake
@@ -714,7 +693,7 @@ Remote sync helper:
      `Sync now` or a remote fixture; do not assume authenticated font/locale
      changes flush immediately
 3. Delete tombstone propagation:
-   - seed local chat or memory cache
+   - seed local chat cache
    - mock pulled tombstone sync items
    - mock backend list/get endpoints after refresh so deleted items are not
      reintroduced by unrelated API fixtures
@@ -737,8 +716,8 @@ Remote sync helper:
 - Browser `online` event starts queue flush and pull work. Do not assert strict
   flush-before-pull ordering unless the implementation is changed to await that
   sequence.
-- API unavailable after a previous pull still allows chat or memory cache
-  fallback where the product expects it.
+- API unavailable after a previous pull still allows chat cache fallback where
+  the product expects it.
 
 ### Phase 4: Post-Hardening Acceptance Tests
 
@@ -784,18 +763,18 @@ Recommended cases:
    - seed `wfchat-theme`, `wfchat-font`, `wfchat.locale`, and
      `wfchat.backgroundImageUrl`
    - seed or omit `wfchat-sync-meta`
-   - call `enqueueGuestSyncWithMemory(...)`
+   - call `enqueueGuestSyncWithChat(...)`
    - assert setting items use the expected `updated_at` and payload values
 4. Pull applies settings:
    - mock `/api/sync/changes` with theme, font, locale, and background image
    - assert local storage and callbacks are updated
    - assert stale cloud settings do not overwrite newer local metadata
-5. Pull applies memory/chat cache:
-   - mock memory fact, memory summary, chat session, and chat message items
+5. Pull applies chat cache:
+   - mock chat session and chat message items
    - call `pullSyncChanges(...)`
    - assert cache readers return the expected normalized records
 6. Pull applies tombstones:
-   - seed local memory/chat caches
+   - seed local chat caches
    - mock deleted sync items
    - assert matching cache entries are removed
 7. Same-timestamp compaction:
@@ -854,7 +833,7 @@ Recommended cases:
    - assert current cursor behavior and document any skipped same-timestamp
      case before changing the algorithm
 6. Auth promotion:
-   - seed guest chat, memory, and sync rows
+   - seed guest chat and sync rows
    - promote the session through the Google token-info helper
    - assert `owner_user_id` is set and a second session for the same user can
      pull the sync item
@@ -867,10 +846,10 @@ Recommended cases:
 
 A minimal Playwright browser E2E suite exists under `apps/web/e2e`. It covers
 authenticated boot pull, guest-to-login manual sync, cross-browser setting
-pull, cross-browser pulled background/chat/memory cache fixtures, pulled chat
-and memory tombstone propagation, stale pulled theme guard, and failed flush
-retry metadata for preview and commit failures, and authenticated browser
-`online` event sync work, and API-unavailable chat/memory cache fallback.
+pull, cross-browser pulled background/chat cache fixtures, pulled chat tombstone
+propagation, stale pulled theme guard, failed flush retry metadata for preview
+and commit failures, authenticated browser `online` event sync work, and
+API-unavailable chat cache fallback.
 Follow the Sync E2E Rollout Plan above and prefer real browser tests that
 control local storage and mock API responses at the network boundary for the
 first milestone.
@@ -888,21 +867,21 @@ Recommended flows:
    does not overwrite newer local dark. Preconditions: mock `/api/auth/logout`
    and the second `/api/auth/google` login response, or seed authenticated state
    directly if the test is only covering the stale setting guard.
-3. Second browser/session pulls theme, background, chat cache, and memory cache
-   for the same account using either a shared fake sync server or a fixed remote
-   fixture. Locale and font should come from manual `Sync now` or a remote
-   fixture, not from assumed immediate authenticated setting sync.
+3. Second browser/session pulls theme, background, and chat cache for the same
+   account using either a shared fake sync server or a fixed remote fixture.
+   Locale and font should come from manual `Sync now` or a remote fixture, not
+   from assumed immediate authenticated setting sync.
 4. Failed preview/commit leaves the queue intact and shows retry metadata. For
    retry timing, assert `attempt` and `next_retry_at > now` unless the test
    controls time and random jitter.
 5. Browser online event starts both pending-queue flush and remote pull work,
    without asserting a strict order between the two operations.
-6. Pulled tombstones remove cached chat/memory items. When asserting that an
+6. Pulled tombstones remove cached chat items. When asserting that an
    item does not reappear after refresh, mock the related list/get endpoints as
    well as `/api/sync/changes`; when the UI flow performs deletion, mock the
-   concrete chat or memory delete endpoint too.
+   concrete chat delete endpoint too.
 7. API unavailable after previous pull still allows cache fallback for
-   chat/memory screens.
+   chat screens.
 
 ## Manual Test Checklist
 
@@ -923,7 +902,7 @@ Recommended flows:
 10. Open a second browser/session with the same account and verify pulled
    settings/cache are applied.
 11. Temporarily stop the API, reload the web app, and verify previously pulled
-   chat/memory cache can still be displayed as fallback.
+   chat cache can still be displayed as fallback.
 12. Verify a newer local theme is not overwritten by an older cloud theme after
    logout/login and pull.
 

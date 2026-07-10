@@ -9,7 +9,7 @@ import {
 	BACKGROUND_IMAGE_URL_SYNC_KEY,
 	writeBackgroundImageUrl
 } from "@/stores/backgroundStore";
-import type { ChatMessage, ChatSessionSummary, MemoryFact, MemorySummary } from "@/types/chat";
+import type { ChatMessage, ChatSessionSummary } from "@/types/chat";
 import type { AppFont } from "@/types/font";
 import type { Theme } from "@/types/theme";
 
@@ -19,9 +19,7 @@ const localeStorageKey = "wfchat.locale";
 const themeStorageKey = "wfchat-theme";
 const fontStorageKey = "wfchat-font";
 const backgroundImageUrlStorageKey = BACKGROUND_IMAGE_URL_STORAGE_KEY;
-const memoryFactsCacheKey = "wfchat-memory-facts-cache";
-const memorySummariesCacheKey = "wfchat-memory-summaries-cache";
-const memoryDeletesCacheKey = "wfchat-memory-deletes-cache";
+const deletesCacheKey = "wfchat-deletes-cache";
 const chatSessionsCacheKey = "wfchat-chat-sessions-cache";
 const chatMessagesCacheKey = "wfchat-chat-messages-cache";
 const maxRetryDelaySeconds = 300;
@@ -60,26 +58,9 @@ export type SyncQueueOperation = {
 	next_retry_at: number;
 };
 
-type CachedMemoryFact = {
-	id: string;
-	characterId: string;
-	content: string;
-	confidence: string;
-	sourceChatId: string;
-	updatedAt: string;
-};
-
-type CachedMemorySummary = {
-	id: string;
-	characterId: string;
-	summary: string;
-	sourceChatId: string;
-	createdAt: string;
-};
-
-type CachedMemoryDelete = {
+type CachedDelete = {
 	item_id: string;
-	item_type: "memory_fact" | "memory_summary" | "chat_session" | "chat_message";
+	item_type: "chat_session" | "chat_message";
 	deleted_at: number;
 };
 
@@ -109,15 +90,13 @@ export async function enqueueGuestSync(): Promise<void> {
 	writeSyncQueue(trimQueue(queue));
 }
 
-export async function enqueueGuestSyncWithMemory(
-	memoryFacts: MemoryFact[],
-	memorySummaries: MemorySummary[],
+export async function enqueueGuestSyncWithChat(
 	sessions: ChatSessionSummary[],
 	messages: ChatMessage[],
 	activeChatId: string | null
 ): Promise<void> {
 	const items = buildSyncItems()
-		.concat(buildMemorySyncItems(memoryFacts, memorySummaries, readMemoryDeletesCache()))
+		.concat(buildDeleteSyncItems(readDeletesCache()))
 		.concat(buildChatSyncItems(sessions, messages, activeChatId));
 	if (items.length === 0) {
 		return;
@@ -133,7 +112,7 @@ export async function enqueueGuestSyncWithMemory(
 }
 
 export async function syncLocalDeletesNow(): Promise<void> {
-	const items = buildMemorySyncItems([], [], readMemoryDeletesCache());
+	const items = buildDeleteSyncItems(readDeletesCache());
 	if (items.length === 0) {
 		return;
 	}
@@ -159,25 +138,9 @@ export async function syncLocalDeletesNow(): Promise<void> {
 	}
 }
 
-export function markMemoryFactDeleted(id: string): void {
-	upsertMemoryDelete({
-		item_id: `memory.fact.${id}`,
-		item_type: "memory_fact",
-		deleted_at: Math.floor(Date.now() / 1000)
-	});
-}
-
-export function markMemorySummaryDeleted(id: string): void {
-	upsertMemoryDelete({
-		item_id: `memory.summary.${id}`,
-		item_type: "memory_summary",
-		deleted_at: Math.floor(Date.now() / 1000)
-	});
-}
-
 export function markChatSessionDeleted(id: string): void {
 	removeChatSessionFromCache(`chat.session.${id}`);
-	upsertMemoryDelete({
+	upsertDelete({
 		item_id: `chat.session.${id}`,
 		item_type: "chat_session",
 		deleted_at: Math.floor(Date.now() / 1000)
@@ -188,7 +151,7 @@ export function markChatMessagesDeleted(chatId: string, messageIds: string[]): v
 	const deletedAt = Math.floor(Date.now() / 1000);
 	for (const id of messageIds) {
 		removeChatMessageFromCache(`chat.message.${chatId}.${id}`);
-		upsertMemoryDelete({
+		upsertDelete({
 			item_id: `chat.message.${chatId}.${id}`,
 			item_type: "chat_message",
 			deleted_at: deletedAt
@@ -247,9 +210,7 @@ export function hasPendingSyncQueue(): boolean {
 export function clearLocalSyncState(): void {
 	removeStorageItem(syncQueueStorageKey);
 	removeStorageItem(syncCursorStorageKey);
-	removeStorageItem(memoryFactsCacheKey);
-	removeStorageItem(memorySummariesCacheKey);
-	removeStorageItem(memoryDeletesCacheKey);
+	removeStorageItem(deletesCacheKey);
 	removeStorageItem(chatSessionsCacheKey);
 	removeStorageItem(chatMessagesCacheKey);
 }
@@ -280,37 +241,9 @@ export async function pullSyncChanges(
 	return response.data.items.length;
 }
 
-export function readMemoryFactsCache(): MemoryFact[] {
-	return readJsonArray(memoryFactsCacheKey)
-		.map((item) => item as unknown as CachedMemoryFact)
-		.filter((item) => Boolean(item.id && item.characterId && item.content))
-		.map((item) => ({
-			id: item.id,
-			characterId: item.characterId,
-			content: item.content,
-			confidence: Number(item.confidence) || 0.7,
-			sourceChatId: item.sourceChatId || null,
-			createdAt: Number(item.updatedAt) || 0,
-			updatedAt: Number(item.updatedAt) || 0
-		}));
-}
-
-export function readMemorySummariesCache(): MemorySummary[] {
-	return readJsonArray(memorySummariesCacheKey)
-		.map((item) => item as unknown as CachedMemorySummary)
-		.filter((item) => Boolean(item.id && item.characterId && item.summary))
-		.map((item) => ({
-			id: item.id,
-			characterId: item.characterId,
-			summary: item.summary,
-			sourceChatId: item.sourceChatId || null,
-			createdAt: Number(item.createdAt) || 0
-		}));
-}
-
 export function readChatSessionsCache(): ChatSessionSummary[] {
 	const deletedSessionIds = new Set(
-		readMemoryDeletesCache()
+		readDeletesCache()
 			.filter((item) => item.item_type === "chat_session")
 			.map((item) => item.item_id.replace("chat.session.", ""))
 	);
@@ -329,7 +262,7 @@ export function readChatSessionsCache(): ChatSessionSummary[] {
 
 export function readChatMessagesCache(chatId: string): ChatMessage[] {
 	const deletedMessageIds = new Set(
-		readMemoryDeletesCache()
+		readDeletesCache()
 			.filter((item) => item.item_type === "chat_message")
 			.map((item) => item.item_id.replace(`chat.message.${chatId}.`, ""))
 	);
@@ -405,14 +338,6 @@ function applySyncItem(
 	onFontChange?: (font: AppFont) => void
 ) {
 	if (item.deleted_at && item.deleted_at > 0) {
-		if (item.item_type === "memory_fact") {
-			removeMemoryFactFromCache(item.item_id);
-			return;
-		}
-		if (item.item_type === "memory_summary") {
-			removeMemorySummaryFromCache(item.item_id);
-			return;
-		}
 		if (item.item_type === "chat_session") {
 			removeChatSessionFromCache(item.item_id);
 			return;
@@ -421,16 +346,6 @@ function applySyncItem(
 			removeChatMessageFromCache(item.item_id);
 			return;
 		}
-	}
-
-	if (item.item_type === "memory_fact") {
-		upsertMemoryFactCache(item);
-		return;
-	}
-
-	if (item.item_type === "memory_summary") {
-		upsertMemorySummaryCache(item);
-		return;
 	}
 
 	if (item.item_type === "chat_session") {
@@ -491,40 +406,7 @@ function isStaleSettingItem(item: SyncItem, key: string): boolean {
 	return localUpdatedAt !== null && toSyncTimestamp(item.updated_at) < localUpdatedAt;
 }
 
-function buildMemorySyncItems(
-	memoryFacts: MemoryFact[],
-	memorySummaries: MemorySummary[],
-	deletes: CachedMemoryDelete[]
-): SyncItem[] {
-	const factItems = memoryFacts.map((fact) => ({
-		item_id: `memory.fact.${fact.id}`,
-		item_type: "memory_fact",
-		updated_at: toSyncTimestamp(fact.updatedAt),
-		deleted_at: null,
-		payload: {
-			id: fact.id,
-			characterId: fact.characterId,
-			content: fact.content,
-			confidence: String(fact.confidence),
-			sourceChatId: fact.sourceChatId ?? "",
-			updatedAt: String(fact.updatedAt)
-		}
-	}));
-
-	const summaryItems = memorySummaries.map((summary) => ({
-		item_id: `memory.summary.${summary.id}`,
-		item_type: "memory_summary",
-		updated_at: toSyncTimestamp(summary.createdAt),
-		deleted_at: null,
-		payload: {
-			id: summary.id,
-			characterId: summary.characterId,
-			summary: summary.summary,
-			sourceChatId: summary.sourceChatId ?? "",
-			createdAt: String(summary.createdAt)
-		}
-	}));
-
+function buildDeleteSyncItems(deletes: CachedDelete[]): SyncItem[] {
 	const deleteItems = deletes.map((item) => ({
 		item_id: item.item_id,
 		item_type: item.item_type,
@@ -533,7 +415,7 @@ function buildMemorySyncItems(
 		payload: {}
 	}));
 
-	return [...factItems, ...summaryItems, ...deleteItems];
+	return deleteItems;
 }
 
 function buildChatSyncItems(
@@ -576,30 +458,6 @@ function buildChatSyncItems(
 	return [...sessionItems, ...messageItems];
 }
 
-function upsertMemoryFactCache(item: SyncItem) {
-	const facts = readJsonArray(memoryFactsCacheKey);
-	const id = item.payload?.id;
-	if (!id) {
-		return;
-	}
-	const next = facts.filter((entry) => entry?.id !== id);
-	next.push(item.payload);
-	writeStorageItem(memoryFactsCacheKey, JSON.stringify(next));
-	removeMemoryDelete(item.item_id);
-}
-
-function upsertMemorySummaryCache(item: SyncItem) {
-	const summaries = readJsonArray(memorySummariesCacheKey);
-	const id = item.payload?.id;
-	if (!id) {
-		return;
-	}
-	const next = summaries.filter((entry) => entry?.id !== id);
-	next.push(item.payload);
-	writeStorageItem(memorySummariesCacheKey, JSON.stringify(next));
-	removeMemoryDelete(item.item_id);
-}
-
 function upsertChatSessionCache(item: SyncItem) {
 	const sessions = readJsonArray(chatSessionsCacheKey);
 	const id = item.payload?.id;
@@ -609,7 +467,7 @@ function upsertChatSessionCache(item: SyncItem) {
 	const next = sessions.filter((entry) => entry?.id !== id);
 	next.push(item.payload);
 	writeStorageItem(chatSessionsCacheKey, JSON.stringify(next));
-	removeMemoryDelete(item.item_id);
+	removeDelete(item.item_id);
 }
 
 function upsertChatMessageCache(item: SyncItem) {
@@ -625,7 +483,7 @@ function upsertChatMessageCache(item: SyncItem) {
 		updatedAt: String(item.updated_at)
 	});
 	writeStorageItem(chatMessagesCacheKey, JSON.stringify(next));
-	removeMemoryDelete(item.item_id);
+	removeDelete(item.item_id);
 }
 
 function removeChatSessionFromCache(itemId: string) {
@@ -654,46 +512,32 @@ function removeChatMessageFromCache(itemId: string) {
 	);
 }
 
-function removeMemoryFactFromCache(itemId: string) {
-	const id = itemId.replace("memory.fact.", "");
-	const facts = readJsonArray(memoryFactsCacheKey);
-	writeStorageItem(
-		memoryFactsCacheKey,
-		JSON.stringify(facts.filter((entry) => entry?.id !== id))
-	);
-}
-
-function removeMemorySummaryFromCache(itemId: string) {
-	const id = itemId.replace("memory.summary.", "");
-	const summaries = readJsonArray(memorySummariesCacheKey);
-	writeStorageItem(
-		memorySummariesCacheKey,
-		JSON.stringify(summaries.filter((entry) => entry?.id !== id))
-	);
-}
-
-function readMemoryDeletesCache(): CachedMemoryDelete[] {
-	const raw = readStorageItem(memoryDeletesCacheKey);
+function readDeletesCache(): CachedDelete[] {
+	const raw = readStorageItem(deletesCacheKey);
 	if (!raw) {
 		return [];
 	}
 	try {
-		const parsed = JSON.parse(raw) as CachedMemoryDelete[];
-		return Array.isArray(parsed) ? parsed : [];
+		const parsed = JSON.parse(raw) as CachedDelete[];
+		return Array.isArray(parsed)
+			? parsed.filter(
+					(item) => item.item_type === "chat_session" || item.item_type === "chat_message"
+				)
+			: [];
 	} catch {
 		return [];
 	}
 }
 
-function upsertMemoryDelete(entry: CachedMemoryDelete) {
-	const deletes = readMemoryDeletesCache().filter((item) => item.item_id !== entry.item_id);
+function upsertDelete(entry: CachedDelete) {
+	const deletes = readDeletesCache().filter((item) => item.item_id !== entry.item_id);
 	deletes.push(entry);
-	writeStorageItem(memoryDeletesCacheKey, JSON.stringify(deletes));
+	writeStorageItem(deletesCacheKey, JSON.stringify(deletes));
 }
 
-function removeMemoryDelete(itemId: string) {
-	const deletes = readMemoryDeletesCache().filter((item) => item.item_id !== itemId);
-	writeStorageItem(memoryDeletesCacheKey, JSON.stringify(deletes));
+function removeDelete(itemId: string) {
+	const deletes = readDeletesCache().filter((item) => item.item_id !== itemId);
+	writeStorageItem(deletesCacheKey, JSON.stringify(deletes));
 }
 
 function readJsonArray(key: string): Array<Record<string, string>> {

@@ -8,7 +8,7 @@ human-readable schema reference.
 
 ### `auth_sessions`
 
-- Purpose: guest/auth session ownership boundary for chats and memory.
+- Purpose: guest/auth session ownership boundary for chats and sync data.
 - Columns:
   - `id uuid primary key`
   - `user_id uuid not null`
@@ -101,41 +101,9 @@ human-readable schema reference.
   - `idx_chat_attachments_message (message_id)`
   - `idx_chat_attachments_chat (chat_id)`
 
-### `memory_facts`
-
-- Purpose: atomic user memory facts scoped by session + persona.
-- Columns:
-  - `id uuid primary key`
-  - `owner_session_id uuid not null` -> `auth_sessions(id)` (`on delete cascade`)
-  - `owner_user_id uuid null` for registered account ownership
-  - `character_id text not null`
-  - `content text not null`
-  - `confidence double precision not null default 0.5`
-  - `source_chat_id uuid null` -> `chats(id)` (`on delete set null`)
-  - `created_at timestamptz not null default now()`
-  - `updated_at timestamptz not null default now()`
-- Indexes:
-  - `idx_memory_facts_owner_character_updated (owner_session_id, character_id, updated_at desc)`
-  - `idx_memory_facts_owner_user_character_updated (owner_user_id, character_id, updated_at desc)`
-
-### `memory_summaries`
-
-- Purpose: higher-level memory summaries scoped by session + persona.
-- Columns:
-  - `id uuid primary key`
-  - `owner_session_id uuid not null` -> `auth_sessions(id)` (`on delete cascade`)
-  - `owner_user_id uuid null` for registered account ownership
-  - `character_id text not null`
-  - `summary text not null`
-  - `source_chat_id uuid null` -> `chats(id)` (`on delete set null`)
-  - `created_at timestamptz not null default now()`
-- Indexes:
-  - `idx_memory_summaries_owner_character_created (owner_session_id, character_id, created_at desc)`
-  - `idx_memory_summaries_owner_user_character_created (owner_user_id, character_id, created_at desc)`
-
 ### `sync_entities`
 
-- Purpose: latest sync item state for settings, chat cache, and memory cache.
+- Purpose: latest sync item state for settings and chat cache.
 - Ownership:
   - guest rows use `session_id`
   - registered rows also set `owner_user_id` so multiple browser sessions share the same account data
@@ -159,5 +127,3 @@ human-readable schema reference.
 - One registered `user_id` can have one or more external `auth_identities`.
 - One `chat` has many `chat_messages`.
 - Image attachments belong to one owner, may be pending before send, and later become linked to one `chat_message` after successful message completion.
-- One owner + `character_id` has many `memory_facts` and `memory_summaries`.
-- `source_chat_id` on memory tables is optional provenance back to a chat.

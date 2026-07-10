@@ -104,9 +104,4 @@ export const MARKDOWN_QA_MESSAGES: ChatMessage[] = [
 	}
 ];
 
-export const QUICK_PROMPTS = [
-	"Make it sweeter",
-	"Add playful banter",
-	"Suggest a reply",
-	"Save this memory"
-];
+export const QUICK_PROMPTS = ["Make it sweeter", "Add playful banter", "Suggest a reply"];

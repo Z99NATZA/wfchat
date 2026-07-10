@@ -13,6 +13,8 @@ WFChat applies embedded SQLx migrations during API startup through
 Current migration files:
 
 - `apps/api/migrations/202607040001_initial_schema.sql`
+- `apps/api/migrations/202607100001_remove_manual_memory.sql`
+- `apps/api/migrations/202607100002_remove_manual_memory_sync_entities.sql`
 
 `apps/api/db/init.sql` is retained only as a legacy/manual bootstrap helper. Do
 not treat it as canonical, and do not add new schema changes there unless it is
@@ -49,6 +51,23 @@ The baseline migration is:
 
 ```text
 apps/api/migrations/202607040001_initial_schema.sql
+```
+
+The manual memory tables were retired by:
+
+```text
+apps/api/migrations/202607100001_remove_manual_memory.sql
+```
+
+This migration drops the former `memory_facts` and `memory_summaries` tables and
+their data. The baseline remains unchanged because migration files are
+append-only after use.
+
+The follow-up migration removes retired fact and summary cache items from
+`sync_entities`:
+
+```text
+apps/api/migrations/202607100002_remove_manual_memory_sync_entities.sql
 ```
 
 It includes:

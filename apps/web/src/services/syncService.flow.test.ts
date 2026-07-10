@@ -14,18 +14,16 @@ vi.mock("@/services/apiClient", () => ({
 }));
 
 import {
-	enqueueGuestSyncWithMemory,
+	enqueueGuestSyncWithChat,
 	flushGuestSyncQueue,
 	markChatMessagesDeleted,
-	markMemoryFactDeleted,
 	markSyncRetry,
 	pullSyncChanges,
 	readChatMessagesCache,
 	readChatSessionsCache,
-	readMemoryFactsCache,
 	type SyncQueueOperation
 } from "@/services/syncService";
-import type { ChatMessage, ChatSessionSummary, MemoryFact, MemorySummary } from "@/types/chat";
+import type { ChatMessage, ChatSessionSummary } from "@/types/chat";
 
 const sessionCookieReadyKey = "wfchat.sessionCookieReady";
 const syncQueueStorageKey = "wfchat-sync-queue";
@@ -35,7 +33,6 @@ const themeStorageKey = "wfchat-theme";
 const fontStorageKey = "wfchat-font";
 const localeStorageKey = "wfchat.locale";
 const backgroundImageUrlStorageKey = "wfchat.backgroundImageUrl";
-const memoryFactsCacheKey = "wfchat-memory-facts-cache";
 const chatSessionsCacheKey = "wfchat-chat-sessions-cache";
 const chatMessagesCacheKey = "wfchat-chat-messages-cache";
 
@@ -86,26 +83,6 @@ describe("syncService account sync flows", () => {
 		window.localStorage.setItem(fontStorageKey, "inter");
 		window.localStorage.setItem(localeStorageKey, "th");
 		window.localStorage.setItem(backgroundImageUrlStorageKey, "https://example.com/local.png");
-		const memoryFacts: MemoryFact[] = [
-			{
-				id: "fact-1",
-				characterId: "aiko",
-				content: "Likes tea",
-				confidence: 0.8,
-				sourceChatId: "chat-1",
-				createdAt: 900,
-				updatedAt: 901
-			}
-		];
-		const memorySummaries: MemorySummary[] = [
-			{
-				id: "summary-1",
-				characterId: "aiko",
-				summary: "Met the user",
-				sourceChatId: "chat-1",
-				createdAt: 902
-			}
-		];
 		const sessions: ChatSessionSummary[] = [
 			{
 				id: "chat-1",
@@ -125,11 +102,11 @@ describe("syncService account sync flows", () => {
 			}
 		];
 		apiClientMock.post
-			.mockResolvedValueOnce({ data: { to_create: 8, to_update: 0, conflicts: 0 } })
+			.mockResolvedValueOnce({ data: { to_create: 6, to_update: 0, conflicts: 0 } })
 			.mockResolvedValueOnce({
 				data: {
 					operation_id: "op-1",
-					merged_count: 8,
+					merged_count: 6,
 					conflict_count: 0,
 					committed_at: 1_001
 				}
@@ -170,20 +147,6 @@ describe("syncService account sync flows", () => {
 						}
 					},
 					{
-						item_id: "memory.fact.fact-2",
-						item_type: "memory_fact",
-						updated_at: 2_010,
-						deleted_at: null,
-						payload: {
-							id: "fact-2",
-							characterId: "aiko",
-							content: "Likes coffee",
-							confidence: "0.7",
-							sourceChatId: "chat-1",
-							updatedAt: "2010"
-						}
-					},
-					{
 						item_id: "chat.session.chat-2",
 						item_type: "chat_session",
 						updated_at: 2_020,
@@ -218,13 +181,7 @@ describe("syncService account sync flows", () => {
 		const onThemeChange = vi.fn();
 		const onFontChange = vi.fn();
 
-		await enqueueGuestSyncWithMemory(
-			memoryFacts,
-			memorySummaries,
-			sessions,
-			messages,
-			"chat-1"
-		);
+		await enqueueGuestSyncWithChat(sessions, messages, "chat-1");
 		const commit = await flushGuestSyncQueue({ force: true });
 		const appliedCount = await pullSyncChanges(
 			onLocaleChange,
@@ -233,7 +190,7 @@ describe("syncService account sync flows", () => {
 			onFontChange
 		);
 
-		expect(commit?.merged_count).toBe(8);
+		expect(commit?.merged_count).toBe(6);
 		expect(readQueue()).toEqual([]);
 		expect(apiClientMock.post).toHaveBeenNthCalledWith(
 			1,
@@ -241,12 +198,11 @@ describe("syncService account sync flows", () => {
 			expect.objectContaining({
 				items: expect.arrayContaining([
 					expect.objectContaining({ item_id: "settings.theme" }),
-					expect.objectContaining({ item_id: "memory.fact.fact-1" }),
 					expect.objectContaining({ item_id: "chat.message.chat-1.message-1" })
 				])
 			})
 		);
-		expect(appliedCount).toBe(7);
+		expect(appliedCount).toBe(6);
 		expect(window.localStorage.getItem(themeStorageKey)).toBe("light");
 		expect(window.localStorage.getItem(fontStorageKey)).toBe("jetbrains-mono");
 		expect(window.localStorage.getItem(localeStorageKey)).toBe("en");
@@ -263,9 +219,6 @@ describe("syncService account sync flows", () => {
 		expect(onFontChange).toHaveBeenCalledWith("jetbrains-mono");
 		expect(onLocaleChange).toHaveBeenCalledWith("en");
 		expect(onBackgroundImageUrlChange).toHaveBeenCalledWith("https://example.com/cloud.png");
-		expect(readMemoryFactsCache()).toEqual([
-			expect.objectContaining({ id: "fact-2", content: "Likes coffee" })
-		]);
 		expect(readChatSessionsCache()).toEqual([
 			expect.objectContaining({ id: "chat-2", lastMessage: "remote hello" })
 		]);
@@ -281,7 +234,7 @@ describe("syncService account sync flows", () => {
 		apiClientMock.post.mockRejectedValueOnce(new Error("network down"));
 		vi.spyOn(Math, "random").mockReturnValue(0);
 
-		await enqueueGuestSyncWithMemory([], [], [], [], null);
+		await enqueueGuestSyncWithChat([], [], null);
 		await expect(flushGuestSyncQueue({ force: true })).rejects.toThrow("network down");
 		markSyncRetry();
 
@@ -369,21 +322,8 @@ describe("syncService account sync flows", () => {
 		expect(onBackgroundImageUrlChange).not.toHaveBeenCalled();
 	});
 
-	it("pulls tombstones and removes cached chat and memory items", async () => {
+	it("pulls tombstones and removes cached chat items", async () => {
 		window.sessionStorage.setItem(sessionCookieReadyKey, "true");
-		window.localStorage.setItem(
-			memoryFactsCacheKey,
-			JSON.stringify([
-				{
-					id: "fact-1",
-					characterId: "aiko",
-					content: "Likes tea",
-					confidence: "0.8",
-					sourceChatId: "chat-1",
-					updatedAt: "20"
-				}
-			])
-		);
 		window.localStorage.setItem(
 			chatSessionsCacheKey,
 			JSON.stringify([
@@ -410,19 +350,11 @@ describe("syncService account sync flows", () => {
 				}
 			])
 		);
-		markMemoryFactDeleted("fact-local-delete");
 		markChatMessagesDeleted("chat-local-delete", ["message-local-delete"]);
 		apiClientMock.get.mockResolvedValueOnce({
 			data: {
 				next_cursor: 4_000,
 				items: [
-					{
-						item_id: "memory.fact.fact-1",
-						item_type: "memory_fact",
-						updated_at: 3_001,
-						deleted_at: 3_001,
-						payload: {}
-					},
 					{
 						item_id: "chat.session.chat-1",
 						item_type: "chat_session",
@@ -443,7 +375,6 @@ describe("syncService account sync flows", () => {
 
 		await pullSyncChanges();
 
-		expect(readMemoryFactsCache()).toEqual([]);
 		expect(readChatSessionsCache()).toEqual([]);
 		expect(readChatMessagesCache("chat-1")).toEqual([]);
 		expect(window.localStorage.getItem(syncCursorStorageKey)).toBe("4000");

@@ -7,7 +7,6 @@ pub mod characters;
 pub mod chat;
 pub mod config;
 pub mod error;
-pub mod memory;
 pub mod rate_limit;
 pub mod session;
 pub mod state;

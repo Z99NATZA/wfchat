@@ -200,12 +200,7 @@ async fn list_chats_for_persona(
 async fn get_chat_ui_config(State(state): State<AppState>) -> Json<ChatUiConfigResponse> {
     Json(ChatUiConfigResponse {
         personas: characters::list_chat_ui_characters(),
-        quick_prompts: vec![
-            "Make it sweeter",
-            "Add playful banter",
-            "Suggest a reply",
-            "Save this memory",
-        ],
+        quick_prompts: vec!["Make it sweeter", "Add playful banter", "Suggest a reply"],
         voice: ChatVoiceConfigResponse {
             assistant_speech_enabled: matches!(
                 state.config.ai_voice_provider.as_str(),
@@ -788,18 +783,6 @@ async fn prepare_chat_completion_context(
         .iter()
         .map(StoredMessage::to_ai_message)
         .collect::<Vec<_>>();
-    let memory_facts = state
-        .store
-        .list_memory_facts(owner, &chat.character_id)
-        .await?;
-    let memory_summaries = state
-        .store
-        .list_memory_summaries(owner, &chat.character_id)
-        .await?;
-    let memory_context = build_memory_context(&memory_facts, &memory_summaries);
-    if let Some(memory_note) = memory_context {
-        ai_messages.insert(0, AiMessage::system(memory_note));
-    }
     let ai_user_message = build_ai_user_message(state, content, &attachments).await?;
     ai_messages.push(ai_user_message.clone());
 
@@ -1004,39 +987,6 @@ fn stream_error_message(error: &AppError) -> String {
         AppError::Ai(_) => "assistant response failed".to_owned(),
         _ => error.to_string(),
     }
-}
-
-fn build_memory_context(
-    facts: &[crate::store::MemoryFactRecord],
-    summaries: &[crate::store::MemorySummaryRecord],
-) -> Option<String> {
-    if facts.is_empty() && summaries.is_empty() {
-        return None;
-    }
-
-    let mut lines = vec![
-        "Memory notes from past conversations. Use only as soft guidance; if uncertain, ask follow-up."
-            .to_owned(),
-    ];
-
-    if !summaries.is_empty() {
-        lines.push("Summaries:".to_owned());
-        for summary in summaries.iter().take(5) {
-            lines.push(format!("- {}", summary.summary));
-        }
-    }
-
-    if !facts.is_empty() {
-        lines.push("Facts:".to_owned());
-        for fact in facts.iter().take(15) {
-            lines.push(format!(
-                "- {} (confidence {:.2})",
-                fact.content, fact.confidence
-            ));
-        }
-    }
-
-    Some(lines.join("\n"))
 }
 
 #[cfg(test)]

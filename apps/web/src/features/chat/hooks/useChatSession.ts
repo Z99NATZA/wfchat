@@ -6,35 +6,23 @@ import { useUserSpeechTranscription } from "@/features/chat/hooks/useUserSpeechT
 import { useI18n } from "@/i18n/i18nContext";
 import {
 	clearChatMessages,
-	createMemoryFact,
-	createMemorySummary,
 	createPersonaChat,
 	deleteChat,
 	deleteChatAttachment,
-	deleteMemoryFact,
-	deleteMemorySummary,
 	getChat,
 	getChatUiConfig,
 	isChatApiStatus,
 	isNotFound,
-	listMemoryFacts,
-	listMemorySummaries,
 	listPersonaChats,
 	sendChatMessage,
 	streamChatMessage,
-	uploadChatImageAttachment,
-	updateMemoryFact,
-	updateMemorySummary
+	uploadChatImageAttachment
 } from "@/features/chat/services/chatApiService";
 import {
 	markChatMessagesDeleted,
 	markChatSessionDeleted,
-	markMemoryFactDeleted,
-	markMemorySummaryDeleted,
 	readChatMessagesCache,
 	readChatSessionsCache,
-	readMemoryFactsCache,
-	readMemorySummariesCache,
 	syncLocalDeletesNow
 } from "@/services/syncService";
 import { useDialog } from "@/components/dialog/DialogContext";
@@ -42,8 +30,6 @@ import type {
 	ChatMessage,
 	ChatMessageAttachment,
 	ChatSessionSummary,
-	MemoryFact,
-	MemorySummary,
 	PendingChatImageAttachment
 } from "@/types/chat";
 import { formatMessageTime } from "@/utils/date";
@@ -107,10 +93,6 @@ export function useChatSession({ onAvatarChatEvent }: UseChatSessionOptions = {}
 	const [isSending, setIsSending] = useState(false);
 	const [isClearing, setIsClearing] = useState(false);
 	const isCreatingSession = false;
-	const [memoryFacts, setMemoryFacts] = useState<MemoryFact[]>([]);
-	const [memorySummaries, setMemorySummaries] = useState<MemorySummary[]>([]);
-	const [isSavingMemoryFact, setIsSavingMemoryFact] = useState(false);
-	const [isSavingMemorySummary, setIsSavingMemorySummary] = useState(false);
 	const [errorMessage, setErrorMessage] = useState<string | null>(null);
 	const [isActiveChatReadOnly, setIsActiveChatReadOnly] = useState(false);
 	const [isAssistantSpeechEnabled, setIsAssistantSpeechEnabled] = useState(false);
@@ -381,64 +363,6 @@ export function useChatSession({ onAvatarChatEvent }: UseChatSessionOptions = {}
 			return;
 		}
 
-		listMemoryFacts(selectedPersonaId)
-			.then((facts) => {
-				if (isCurrent) {
-					const cachedFacts = readMemoryFactsCache().filter(
-						(item) => item.characterId === selectedPersonaId
-					);
-					setMemoryFacts(mergeMemoryFacts(facts, cachedFacts));
-				}
-			})
-			.catch(() => {
-				if (isCurrent) {
-					const cachedFacts = readMemoryFactsCache().filter(
-						(item) => item.characterId === selectedPersonaId
-					);
-					setMemoryFacts(cachedFacts);
-				}
-			});
-
-		return () => {
-			isCurrent = false;
-		};
-	}, [refreshVersion, selectedPersonaId]);
-
-	useEffect(() => {
-		let isCurrent = true;
-		if (!selectedPersonaId) {
-			return;
-		}
-
-		listMemorySummaries(selectedPersonaId)
-			.then((summaries) => {
-				if (isCurrent) {
-					const cachedSummaries = readMemorySummariesCache().filter(
-						(item) => item.characterId === selectedPersonaId
-					);
-					setMemorySummaries(mergeMemorySummaries(summaries, cachedSummaries));
-				}
-			})
-			.catch(() => {
-				if (isCurrent) {
-					const cachedSummaries = readMemorySummariesCache().filter(
-						(item) => item.characterId === selectedPersonaId
-					);
-					setMemorySummaries(cachedSummaries);
-				}
-			});
-
-		return () => {
-			isCurrent = false;
-		};
-	}, [refreshVersion, selectedPersonaId]);
-
-	useEffect(() => {
-		let isCurrent = true;
-		if (!selectedPersonaId) {
-			return;
-		}
-
 		async function syncFromRoute() {
 			setErrorMessage(null);
 
@@ -536,8 +460,6 @@ export function useChatSession({ onAvatarChatEvent }: UseChatSessionOptions = {}
 		setMessages([]);
 		setDraft("");
 		setSessions([]);
-		setMemoryFacts([]);
-		setMemorySummaries([]);
 		setErrorMessage(null);
 		setIsActiveChatReadOnly(false);
 		navigateToDraft();
@@ -863,101 +785,6 @@ export function useChatSession({ onAvatarChatEvent }: UseChatSessionOptions = {}
 		}
 	}
 
-	async function saveMemoryFact(content: string) {
-		const trimmed = content.trim();
-		if (!trimmed || !selectedPersonaId || isSavingMemoryFact) {
-			return false;
-		}
-		setIsSavingMemoryFact(true);
-		try {
-			const fact = await createMemoryFact(
-				selectedPersonaId,
-				trimmed,
-				0.7,
-				activeChatId ?? undefined
-			);
-			setMemoryFacts((current) => [fact, ...current]);
-			return true;
-		} catch {
-			return false;
-		} finally {
-			setIsSavingMemoryFact(false);
-		}
-	}
-
-	async function removeMemoryFact(factId: string) {
-		try {
-			await deleteMemoryFact(factId);
-			setMemoryFacts((current) => current.filter((fact) => fact.id !== factId));
-			markMemoryFactDeleted(factId);
-		} catch {
-			// no-op
-		}
-	}
-
-	async function editMemoryFact(factId: string, content: string) {
-		const trimmed = content.trim();
-		if (!trimmed) {
-			return false;
-		}
-		try {
-			const updated = await updateMemoryFact(factId, trimmed, 0.7);
-			setMemoryFacts((current) =>
-				current.map((fact) => (fact.id === factId ? updated : fact))
-			);
-			return true;
-		} catch {
-			return false;
-		}
-	}
-
-	async function saveMemorySummary(summary: string) {
-		const trimmed = summary.trim();
-		if (!trimmed || !selectedPersonaId || isSavingMemorySummary) {
-			return false;
-		}
-		setIsSavingMemorySummary(true);
-		try {
-			const created = await createMemorySummary(
-				selectedPersonaId,
-				trimmed,
-				activeChatId ?? undefined
-			);
-			setMemorySummaries((current) => [created, ...current]);
-			return true;
-		} catch {
-			return false;
-		} finally {
-			setIsSavingMemorySummary(false);
-		}
-	}
-
-	async function removeMemorySummary(summaryId: string) {
-		try {
-			await deleteMemorySummary(summaryId);
-			setMemorySummaries((current) => current.filter((summary) => summary.id !== summaryId));
-			markMemorySummaryDeleted(summaryId);
-		} catch {
-			// no-op
-		}
-	}
-
-	async function editMemorySummary(summaryId: string, summary: string) {
-		const trimmed = summary.trim();
-		if (!trimmed) {
-			return false;
-		}
-		try {
-			const updated = await updateMemorySummary(summaryId, trimmed);
-			setMemorySummaries((current) =>
-				current.map((item) => (item.id === summaryId ? updated : item))
-			);
-			return true;
-		} catch {
-			return false;
-		}
-	}
-
 	async function removeSession(sessionId: string) {
 		const targetSession = sessions.find((session) => session.id === sessionId);
 		if (!targetSession) {
@@ -1024,12 +851,8 @@ export function useChatSession({ onAvatarChatEvent }: UseChatSessionOptions = {}
 		userSpeechInput,
 		isClearing,
 		isCreatingSession,
-		isSavingMemoryFact,
-		isSavingMemorySummary,
 		isSidebarOpen,
 		isSending,
-		memoryFacts,
-		memorySummaries,
 		messages,
 		openSidebar: () => setIsSidebarOpen(true),
 		quickPrompts,
@@ -1048,12 +871,6 @@ export function useChatSession({ onAvatarChatEvent }: UseChatSessionOptions = {}
 		cancelUserSpeechInput,
 		toggleUserSpeechInput,
 		setChatSearchQuery,
-		saveMemoryFact,
-		saveMemorySummary,
-		removeMemoryFact,
-		removeMemorySummary,
-		editMemoryFact,
-		editMemorySummary,
 		removeSession
 	};
 }
@@ -1129,35 +946,4 @@ function attachmentUploadErrorMessage(error: unknown, t: (key: string) => string
 	}
 
 	return t("chat.session.attachmentUploadError");
-}
-
-function mergeMemoryFacts(primary: MemoryFact[], secondary: MemoryFact[]): MemoryFact[] {
-	const map = new Map<string, MemoryFact>();
-	for (const item of secondary) {
-		map.set(item.id, item);
-	}
-	for (const item of primary) {
-		const current = map.get(item.id);
-		if (!current || item.updatedAt >= current.updatedAt) {
-			map.set(item.id, item);
-		}
-	}
-	return [...map.values()].sort((a, b) => b.updatedAt - a.updatedAt);
-}
-
-function mergeMemorySummaries(
-	primary: MemorySummary[],
-	secondary: MemorySummary[]
-): MemorySummary[] {
-	const map = new Map<string, MemorySummary>();
-	for (const item of secondary) {
-		map.set(item.id, item);
-	}
-	for (const item of primary) {
-		const current = map.get(item.id);
-		if (!current || item.createdAt >= current.createdAt) {
-			map.set(item.id, item);
-		}
-	}
-	return [...map.values()].sort((a, b) => b.createdAt - a.createdAt);
 }
