@@ -3,6 +3,46 @@
 This file records decisions about cross-chat memory behavior. Automatic capture
 and bounded retrieval are active; raw chat history remains isolated per chat.
 
+## 2026-07-11 - Add a confirmed Settings memory reset
+
+Status: Active
+
+Previous behavior:
+- The store could reset learned context internally, but users had no public
+  control after automatic capture and retrieval became active.
+
+Problem observed:
+- Users need a direct way to make the companion forget learned context without
+  deleting their conversation history.
+- A visible memory manager or explanatory section would make the companion
+  experience feel overly mechanical.
+
+Decision:
+- Expose `DELETE /api/learned-context` for the current guest or account owner.
+- Add one destructive Settings button and a confirmation dialog, without a
+  section heading, description, success modal, or per-memory controls.
+- Use `{aiko}` i18n interpolation populated from character configuration instead
+  of hardcoding the character name in UI strings.
+
+Why:
+- The user gets meaningful privacy control while the normal interface stays
+  quiet and companion-oriented.
+
+Regression guard:
+- `memory::tests::reset_endpoint_clears_only_current_owner_memory_and_keeps_chat_history`
+- `AppSettingsDialog.test.tsx`
+- `automaticMemoryService.test.ts`
+
+Related current contract:
+- `docs/automatic-memory.md`
+- `docs/i18n.md`
+- `docs/components.md`
+
+Related implementation:
+- `apps/api/src/memory.rs`
+- `apps/web/src/components/settings/AppSettingsDialog.tsx`
+- `apps/web/src/services/automaticMemoryService.ts`
+
 ## 2026-07-11 - Add bounded structured retrieval
 
 Status: Active

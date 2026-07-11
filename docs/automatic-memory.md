@@ -30,8 +30,8 @@ Aiko: If I remember correctly, you enjoy spicy ramen when travelling...
 - Aiko uses memory subtly and qualifies uncertain recollections.
 - The system must not store secrets, financial credentials, authentication
   tokens, or unsupported inferences.
-- The backend supports a hard reset of learned context. A future Settings action
-  will expose it when the product flow is ready.
+- The backend and Settings UI support a confirmed learned-context reset while
+  retaining chat history.
 - The replacement must not reuse the retired manual memory API or sync-cache
   contract.
 
@@ -187,16 +187,24 @@ database transaction:
 This provenance rule is required before automatic capture is enabled. A single
 `source_chat_id` column is not sufficient.
 
-## Hard Reset Foundation (Implemented Internally)
+## Learned-Context Reset (Implemented)
 
-A future Settings action should support:
+The Settings action supports:
 
-- Learned-context reset: delete memory items, sources, and derived profile data
-  while retaining chat history.
-- Full reset: delete learned context and chat history.
+- Learned-context reset: delete memory items, sources, and queued extraction
+  jobs while retaining chat history.
+- The same owner boundary for guests and registered accounts.
+- Explicit destructive confirmation before the request is sent.
+- A single action labelled with the active character name; there is no
+  per-memory manager, section heading, or explanatory copy in the normal flow.
 
-The backend store can delete all learned context for an owner while retaining
-chat history. No public API route or Settings UI exposes this operation yet.
+`DELETE /api/learned-context` invokes the owner-scoped store transaction. It
+deletes memory items, sources, and queued extraction jobs while retaining chat
+history. The UI obtains the character name from chat configuration and passes it
+through the `{aiko}` i18n interpolation parameter rather than hardcoding it in
+the translation string.
+
+A full reset that also deletes chat history is not exposed by this action.
 
 ## Implementation Plan
 
@@ -235,12 +243,54 @@ chat history. No public API route or Settings UI exposes this operation yet.
   isolation, expiration, correction precedence, deterministic ordering,
   budgets, and endpoint parity.
 
-### Phase 4: Hardening
+### Phase 4: Production Hardening
 
-- Evaluate retrieval quality with early user conversations.
-- Add confidence decay, expiration, and reinforcement tuning.
-- Add embeddings only if structured retrieval misses relevant memories.
-- Add the Settings hard-reset UI when the product flow is ready.
+Status: in progress. Reset and Control is implemented; the remaining work below
+is expected before automatic memory is treated as production-ready rather than
+optional feature expansion.
+
+#### Reset And Control
+
+- Status: implemented.
+- Settings exposes only a destructive reset button and confirmation dialog,
+  with no memory list, section title, or description.
+- The action deletes learned context and queued extraction work for the current
+  guest or account owner while retaining chat history.
+- Character naming uses the `{aiko}` i18n parameter populated from character
+  configuration; translation values do not hardcode the name.
+
+#### Observability
+
+- Add operational metrics for capture attempts, accepted/rejected candidates,
+  retries, dead jobs, retrieval candidates, selected items, budget usage, and
+  fail-open retrievals.
+- Add dashboards or equivalent operational views and alerts for sustained
+  extraction failures or unusual rejection/retry rates.
+- Keep raw learned content, source messages, credentials, and prompt context out
+  of metrics and logs.
+
+#### Evaluation
+
+- Build a repeatable evaluation set for related retrieval, unrelated-memory
+  exclusion, correction and latest-message precedence, expiration, and
+  uncertain recollection wording.
+- Verify guest, registered-account, and character isolation with both streaming
+  and non-streaming chat paths.
+- Evaluate retrieval quality with representative real conversation patterns
+  before changing scoring weights.
+
+#### Confidence And Lifecycle Tuning
+
+- Tune confidence, reinforcement, recency, and expiration behavior from
+  evaluation results and operational evidence rather than intuition alone.
+- Add confidence decay where stale learned context otherwise remains too
+  authoritative.
+- Preserve deterministic selection, bounded prompts, provenance cleanup, and
+  latest-user-message precedence while tuning.
+
+Optional follow-up: add embeddings or vector search only if evaluation shows
+that structured key/tag/content retrieval consistently misses relevant memory.
+Embeddings are not required to complete the production-hardening work above.
 
 ## Phase 1 Acceptance Criteria
 

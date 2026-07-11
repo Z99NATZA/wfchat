@@ -102,7 +102,9 @@ image attachment upload use separate stricter buckets.
 owner-scoped memory item/source operations, account-promotion merging,
 transactional chat-deletion cleanup, durable extraction jobs, atomic captured
 item/source writes, bounded owner/character retrieval candidates, and
-learned-context reset. There is no public memory route or memory UI.
+learned-context reset. `DELETE /api/learned-context` is the only public
+automatic-memory route; it deletes learned context for the current owner while
+retaining chat history. There is no list, item-management, or retrieval API.
 
 `memory.rs` owns automatic capture and retrieval. The API starts one background
 worker in the existing process. It claims durable jobs, requests strict

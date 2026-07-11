@@ -11,6 +11,7 @@ import { AvatarRuntimeProvider } from "@/features/avatar/runtime/avatarRuntimeSt
 import { scheduleAikoPngTuberAssetPreload } from "@/features/avatar/renderers/pngtuber/pngTuberAssetPreloader";
 import ChatPage, { type ChatSyncSnapshot } from "@/pages/ChatPage";
 import { getChatUiConfig, type VoiceCredit } from "@/features/chat/services/chatApiService";
+import { CHAT_PERSONAS } from "@/features/chat/data/chatFixtures";
 import Model2DPage from "@/pages/Model2DPage";
 import PngTuberPage from "@/pages/PngTuberPage";
 import {
@@ -22,6 +23,7 @@ import {
 	markSyncRetry,
 	pullSyncChanges
 } from "@/services/syncService";
+import { resetLearnedContext } from "@/services/automaticMemoryService";
 import { Navigate, Route, Routes } from "react-router-dom";
 
 function App() {
@@ -35,6 +37,7 @@ function App() {
 	const [isSyncing, setIsSyncing] = useState(false);
 	const [syncError, setSyncError] = useState<string | null>(null);
 	const [voiceCredits, setVoiceCredits] = useState<VoiceCredit[]>([]);
+	const [aikoName, setAikoName] = useState(CHAT_PERSONAS[0]?.name ?? "");
 	const chatSyncSnapshotRef = useRef<ChatSyncSnapshot | null>(null);
 	const wasAuthenticatedRef = useRef(isAuthenticated);
 	const activityBar = <ActivityBar />;
@@ -54,6 +57,7 @@ function App() {
 			.then((config) => {
 				if (isCurrent) {
 					setVoiceCredits(config.voiceCredits);
+					setAikoName(config.personas[0]?.name ?? CHAT_PERSONAS[0]?.name ?? "");
 				}
 			})
 			.catch(() => {
@@ -340,6 +344,7 @@ function App() {
 				isAssistantSpeechAutoPlayEnabled={settings.isAssistantSpeechAutoPlayEnabled}
 				avatarOverlayPosition={settings.avatarOverlayPosition}
 				avatarOverlaySize={settings.avatarOverlaySize}
+				aikoName={aikoName}
 				onClose={() => setIsSettingsOpen(false)}
 				onUpdateBackgroundImageUrl={handleUpdateBackgroundImageUrl}
 				onAvatarOverlayVisibleChange={settings.setAvatarOverlayVisible}
@@ -347,6 +352,7 @@ function App() {
 				onAvatarOverlaySizeChange={settings.setAvatarOverlaySize}
 				onAssistantSpeechVisibleChange={settings.setAssistantSpeechVisible}
 				onAssistantSpeechAutoPlayEnabledChange={settings.setAssistantSpeechAutoPlayEnabled}
+				onResetLearnedContext={resetLearnedContext}
 			/>
 		</AvatarRuntimeProvider>
 	);

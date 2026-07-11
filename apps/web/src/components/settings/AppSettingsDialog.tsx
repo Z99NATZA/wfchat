@@ -3,6 +3,7 @@ import { type FormEvent, useEffect, useState } from "react";
 import { useDialogBackgroundSurface } from "@/components/dialog/useDialogBackgroundSurface";
 import Button from "@/components/ui/Button";
 import IconButton from "@/components/ui/IconButton";
+import { useDialog } from "@/components/dialog/DialogContext";
 import { useI18n } from "@/i18n/i18nContext";
 import type { AvatarOverlayPosition, AvatarOverlaySize } from "@/stores/avatarOverlayStore";
 
@@ -15,6 +16,7 @@ type AppSettingsDialogProps = {
 	isAssistantSpeechAutoPlayEnabled: boolean;
 	avatarOverlayPosition: AvatarOverlayPosition;
 	avatarOverlaySize: AvatarOverlaySize;
+	aikoName: string;
 	onClose: () => void;
 	onUpdateBackgroundImageUrl: (url: string) => void;
 	onAvatarOverlayVisibleChange: (isVisible: boolean) => void;
@@ -22,6 +24,7 @@ type AppSettingsDialogProps = {
 	onAvatarOverlaySizeChange: (size: AvatarOverlaySize) => void;
 	onAssistantSpeechVisibleChange: (isVisible: boolean) => void;
 	onAssistantSpeechAutoPlayEnabledChange: (isEnabled: boolean) => void;
+	onResetLearnedContext: () => Promise<void>;
 };
 
 function AppSettingsDialog({
@@ -33,16 +36,20 @@ function AppSettingsDialog({
 	isAssistantSpeechAutoPlayEnabled,
 	avatarOverlayPosition,
 	avatarOverlaySize,
+	aikoName,
 	onClose,
 	onUpdateBackgroundImageUrl,
 	onAvatarOverlayVisibleChange,
 	onAvatarOverlayPositionChange,
 	onAvatarOverlaySizeChange,
 	onAssistantSpeechVisibleChange,
-	onAssistantSpeechAutoPlayEnabledChange
+	onAssistantSpeechAutoPlayEnabledChange,
+	onResetLearnedContext
 }: AppSettingsDialogProps) {
 	const { t } = useI18n();
+	const { alert, confirm } = useDialog();
 	const [draftUrl, setDraftUrl] = useState(backgroundImageUrl);
+	const [isResettingMemory, setIsResettingMemory] = useState(false);
 	const settingsSurface = useDialogBackgroundSurface(backgroundImageUrl, isOpen);
 
 	useEffect(() => {
@@ -65,6 +72,26 @@ function AppSettingsDialog({
 	function handleClear() {
 		setDraftUrl("");
 		onUpdateBackgroundImageUrl("");
+	}
+
+	async function handleResetLearnedContext() {
+		const shouldReset = await confirm({
+			title: t("settings.memory.resetConfirm", { aiko: aikoName }),
+			confirmLabel: t("settings.memory.reset", { aiko: aikoName }),
+			tone: "destructive"
+		});
+		if (!shouldReset) {
+			return;
+		}
+
+		setIsResettingMemory(true);
+		try {
+			await onResetLearnedContext();
+		} catch {
+			await alert({ title: t("settings.memory.resetError", { aiko: aikoName }) });
+		} finally {
+			setIsResettingMemory(false);
+		}
 	}
 
 	const trimmedDraftUrl = draftUrl.trim();
@@ -222,6 +249,19 @@ function AppSettingsDialog({
 							value={avatarOverlaySize}
 							onChange={onAvatarOverlaySizeChange}
 						/>
+					</section>
+					<section className="mt-6 border-t border-dialog-border pt-5">
+						<Button
+							variant="destructive"
+							size="lg"
+							fullWidth
+							disabled={isResettingMemory}
+							onClick={() => void handleResetLearnedContext()}
+						>
+							{isResettingMemory
+								? t("settings.memory.resetting", { aiko: aikoName })
+								: t("settings.memory.reset", { aiko: aikoName })}
+						</Button>
 					</section>
 				</div>
 			</aside>

@@ -3,12 +3,20 @@ use std::collections::{BTreeSet, HashSet};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+use axum::{
+    extract::State,
+    http::{HeaderMap, StatusCode},
+    routing::delete,
+    Router,
+};
 use serde::Deserialize;
 use serde_json::{json, Value};
 
 use crate::{
     ai::AiMessage,
     config::Config,
+    error::AppResult,
+    session::session_id_from_headers,
     state::AppState,
     store::{
         CapturedMemoryRecord, ChatStore, MemoryExtractionJobRecord, MemoryRetrievalRecord,
@@ -49,6 +57,24 @@ static JOBS_RETRIED: AtomicU64 = AtomicU64::new(0);
 static JOBS_DEAD: AtomicU64 = AtomicU64::new(0);
 static ITEMS_ACCEPTED: AtomicU64 = AtomicU64::new(0);
 static ITEMS_REJECTED: AtomicU64 = AtomicU64::new(0);
+
+pub fn router() -> Router<AppState> {
+    Router::new().route("/learned-context", delete(reset_learned_context))
+}
+
+async fn reset_learned_context(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> AppResult<StatusCode> {
+    let session = state
+        .store
+        .ensure_session(session_id_from_headers(&headers))
+        .await?;
+    let owner = OwnerScope::from_session(&session);
+    let deleted_count = state.store.reset_learned_context(owner).await?;
+    tracing::info!(deleted_count, "reset automatic learned context");
+    Ok(StatusCode::NO_CONTENT)
+}
 
 pub async fn retrieve_memory_context(
     store: &ChatStore,
@@ -718,6 +744,65 @@ fn contains_temporary_detail(value: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use axum::{body::Body, http::Request};
+    use reqwest::Client;
+    use tower::ServiceExt;
+
+    use crate::{
+        app::build_router,
+        rate_limit::RateLimiter,
+        store::{ChatStore, NewMemoryItemRecord},
+    };
+
+    async fn test_state() -> Option<AppState> {
+        let database_url = std::env::var("WFCHAT_TEST_DATABASE_URL").ok()?;
+        let store = ChatStore::connect(&database_url).await.ok()?;
+        Some(AppState {
+            config: Config {
+                app_host: "127.0.0.1".to_owned(),
+                app_port: 0,
+                frontend_origin: "http://localhost:5173".to_owned(),
+                ai_provider: "mock".to_owned(),
+                ai_voice_provider: "disabled".to_owned(),
+                ai_voice_model: "gpt-4o-mini-tts".to_owned(),
+                ai_voice_id: "marin".to_owned(),
+                ai_voice_format: "mp3".to_owned(),
+                ai_voice_instructions: None,
+                ai_voice_speech_text_policy: "original".to_owned(),
+                ai_transcription_provider: "disabled".to_owned(),
+                ai_transcription_model: "gpt-4o-mini-transcribe".to_owned(),
+                ai_transcription_prompt: None,
+                database_url,
+                openai_api_key: None,
+                openai_base_url: "https://api.openai.com/v1".to_owned(),
+                openai_model: "gpt-4.1-mini".to_owned(),
+                lmstudio_base_url: "http://localhost:1234/v1".to_owned(),
+                lmstudio_model: "local-model".to_owned(),
+                xai_api_key: None,
+                xai_base_url: "https://api.x.ai/v1".to_owned(),
+                xai_model: "grok-3-mini".to_owned(),
+                voicevox_base_url: "http://localhost:50021".to_owned(),
+                voicevox_speaker_id: "".to_owned(),
+                voicevox_credit: None,
+                voicevox_speed_scale: None,
+                voicevox_pitch_scale: None,
+                voicevox_intonation_scale: None,
+                voicevox_volume_scale: None,
+                voicevox_pre_phoneme_length: None,
+                voicevox_post_phoneme_length: None,
+                google_client_id: None,
+                chat_attachment_upload_dir: "data/uploads".to_owned(),
+                chat_attachment_max_bytes: 10 * 1024 * 1024,
+                chat_attachment_max_images_per_message: 4,
+                chat_attachment_max_width: 8192,
+                chat_attachment_max_height: 8192,
+                chat_attachment_max_pixels: 20_000_000,
+            },
+            http: Client::new(),
+            rate_limiter: RateLimiter::default(),
+            store,
+        })
+    }
 
     fn retrieval_item(id: u128, key: &str, content: &str, tags: &[&str]) -> MemoryRetrievalRecord {
         MemoryRetrievalRecord {
@@ -747,6 +832,109 @@ mod tests {
             evidence_strength: 0.9,
             evidence: evidence.to_owned(),
         }
+    }
+
+    #[tokio::test]
+    async fn reset_endpoint_clears_only_current_owner_memory_and_keeps_chat_history() {
+        let Some(state) = test_state().await else {
+            return;
+        };
+        let registered_user_id = uuid::Uuid::new_v4();
+        let registered_session = state
+            .store
+            .create_guest_session()
+            .await
+            .expect("registered session should create");
+        let registered_session = state
+            .store
+            .promote_session_to_registered(registered_session.id, registered_user_id)
+            .await
+            .expect("registered session should promote")
+            .expect("registered session should exist");
+        state
+            .store
+            .migrate_session_data_to_user(registered_session.id, registered_user_id)
+            .await
+            .expect("registered data should migrate");
+        let registered_owner = OwnerScope::from_session(&registered_session);
+        let other_session = state
+            .store
+            .create_guest_session()
+            .await
+            .expect("other session should create");
+        let other_owner = OwnerScope::from_session(&other_session);
+        let chat = state
+            .store
+            .create_chat(
+                registered_owner,
+                "aiko".to_owned(),
+                "aiko_default".to_owned(),
+            )
+            .await
+            .expect("chat should create");
+        for (owner, content) in [
+            (registered_owner, "Likes spicy ramen"),
+            (other_owner, "Likes sushi"),
+        ] {
+            state
+                .store
+                .upsert_memory_item(
+                    owner,
+                    NewMemoryItemRecord {
+                        character_id: "aiko".to_owned(),
+                        memory_key: "food.ramen.preference".to_owned(),
+                        kind: "preference".to_owned(),
+                        content: content.to_owned(),
+                        tags: vec!["food".to_owned()],
+                        confidence: 0.9,
+                        importance: 0.8,
+                        last_reinforced_at: now_unix_seconds(),
+                        expires_at: None,
+                    },
+                )
+                .await
+                .expect("memory should save");
+        }
+
+        let response = build_router(state.clone())
+            .oneshot(
+                Request::builder()
+                    .method("DELETE")
+                    .uri("/api/learned-context")
+                    .header(
+                        axum::http::header::COOKIE,
+                        format!("wfchat_session={}", registered_session.id),
+                    )
+                    .body(Body::empty())
+                    .expect("request should build"),
+            )
+            .await
+            .expect("request should run");
+
+        assert_eq!(response.status(), StatusCode::NO_CONTENT);
+        assert!(state
+            .store
+            .list_memory_items(registered_owner, "aiko")
+            .await
+            .expect("registered memories should list")
+            .is_empty());
+        assert_eq!(
+            state
+                .store
+                .list_memory_items(other_owner, "aiko")
+                .await
+                .expect("other memories should list")
+                .len(),
+            1
+        );
+        assert!(state
+            .store
+            .get_chat(registered_owner, chat.id)
+            .await
+            .expect("chat should query")
+            .is_some());
+
+        let _ = state.store.delete_chat(registered_owner, chat.id).await;
     }
 
     #[test]

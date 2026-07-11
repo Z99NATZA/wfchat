@@ -28,6 +28,12 @@ Use `useDialog()` from `DialogProvider` for consistent app-wide behavior:
 
 Shared components should be generic. Do not place chat-specific text, fixtures, or business behavior in this folder.
 
+`AppSettingsDialog` exposes learned-context reset as one destructive button.
+It uses the shared `confirm()` dialog before calling the backend and shows no
+memory section heading, description, or per-item controls. The button and
+confirmation title interpolate the configured character name through the
+`{aiko}` i18n parameter.
+
 Use `Button` for every non-icon button that contains visible text, with or without a leading icon. Pick the smallest variant and size that matches the command intent:
 
 ```tsx
