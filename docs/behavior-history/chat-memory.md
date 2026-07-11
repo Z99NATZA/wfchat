@@ -1,8 +1,50 @@
 # Chat Memory Behavior History
 
-This file records decisions about cross-chat memory behavior. There is no active
-cross-chat memory implementation; current chats only send their own stored
+This file records decisions about cross-chat memory behavior. Automatic capture
+is active, but retrieval is not; current chats still send only their own stored
 message history to the AI provider.
+
+## 2026-07-11 - Add durable selective automatic capture
+
+Status: Active
+
+Previous behavior:
+- Memory items and multi-chat provenance existed, but nothing populated them
+  automatically after a conversation.
+
+Problem observed:
+- Inline extraction would delay chat responses and lose work on API restart.
+- Unvalidated model text could persist secrets, unsupported guesses, or
+  low-value temporary details.
+
+Decision:
+- Enqueue one extraction outbox job atomically with every persisted
+  user/assistant turn and process it in an API background worker.
+- Require strict structured output, exact user-message evidence, bounded
+  candidate values, and sensitive/temporary/low-value rejection.
+- Reinforce matching keys with distinct message sources and replace a value
+  only when extraction explicitly marks newer corrective evidence.
+- Keep retrieval and prompt injection out of this milestone.
+
+Why:
+- Chat delivery remains independent from model extraction failures while the
+  database preserves retryable work across process restarts.
+- Structured validation and provenance keep learned context auditable and
+  removable with its source chat.
+
+Regression guard:
+- `cargo test --manifest-path apps/api/Cargo.toml`
+- `docker compose up -d --build`
+
+Related current contract:
+- `docs/automatic-memory.md`
+- `docs/database-schema.md`
+- `docs/chat-sessions.md`
+
+Related implementation:
+- `apps/api/src/memory.rs`
+- `apps/api/src/store.rs`
+- `apps/api/migrations/202607110001_memory_extraction_outbox.sql`
 
 ## 2026-07-10 - Retire manual facts and summaries
 

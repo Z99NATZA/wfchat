@@ -80,14 +80,12 @@ function ChatSidebar({
 				<div className="flex h-full flex-col">
 					<div className="flex h-16 items-center justify-between border-b border-app-border px-5">
 						<div className="flex items-center gap-3">
-							<div className="flex size-10 items-center justify-center rounded-lg bg-primary text-white shadow-soft">
-								<MessageCircle size={20} aria-hidden="true" />
-							</div>
 							<div>
 								<p className="text-base font-semibold">{t("chat.sidebar.title")}</p>
 								<p className="text-xs text-muted">{t("chat.sidebar.subtitle")}</p>
 							</div>
 						</div>
+
 						<IconButton
 							className="lg:hidden"
 							onClick={onCloseSidebar}

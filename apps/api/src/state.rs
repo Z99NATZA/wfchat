@@ -6,6 +6,7 @@ use crate::{
         cleanup_stale_pending_chat_attachments, PENDING_ATTACHMENT_CLEANUP_INTERVAL_SECONDS,
     },
     config::Config,
+    memory::spawn_memory_capture_worker,
     rate_limit::RateLimiter,
     store::ChatStore,
 };
@@ -23,12 +24,14 @@ impl AppState {
         let store = ChatStore::connect(&config.database_url).await?;
         spawn_pending_attachment_cleanup(config.clone(), store.clone());
 
-        Ok(Self {
+        let state = Self {
             config,
             http: Client::new(),
             rate_limiter: RateLimiter::default(),
             store,
-        })
+        };
+        spawn_memory_capture_worker(state.clone());
+        Ok(state)
     }
 }
 

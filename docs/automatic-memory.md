@@ -1,11 +1,11 @@
 # Automatic Memory
 
-Status: Phase 1 Implemented - Capture And Retrieval Not Implemented
+Status: Phase 2 Implemented - Retrieval Not Implemented
 
 This document defines the intended replacement for the retired manual memory
 system. The internal storage, provenance, chat-deletion cleanup, account
-promotion, and learned-context reset boundaries are implemented. Automatic
-extraction and retrieval are not implemented, so Aiko does not use this data in
+promotion, learned-context reset boundaries, and durable automatic capture are
+implemented. Retrieval is not implemented, so Aiko does not use learned data in
 chat responses yet.
 
 ## Goal
@@ -91,7 +91,7 @@ Provenance connecting one memory to one or more conversations:
 One memory may have multiple sources. This allows repeated statements to
 reinforce a memory without duplicating it.
 
-## Capture Flow (Not Implemented)
+## Capture Flow (Implemented)
 
 Memory extraction runs after a user and assistant turn has been persisted:
 
@@ -105,10 +105,26 @@ persist chat turn
   -> attach source chat/message evidence
 ```
 
-The extractor must return structured JSON rather than free-form text. Extraction
-should run outside the response-critical path so memory work does not delay the
-assistant reply. A database-backed job or outbox should provide retries and
-avoid losing work when the API process restarts.
+The user message, assistant message, attachment links, and one idempotent
+`memory_extraction_jobs` outbox row are committed in the same transaction. The
+API background worker claims jobs with `for update skip locked`, so extraction
+runs outside the response-critical path and survives API restarts. Stale locks
+are reclaimable, retries use bounded backoff, and a third failed attempt moves a
+job to `dead`.
+
+The extractor uses a strict JSON schema with at most five candidates. Every
+response is deserialized with unknown fields denied and then validated again in
+application code. Accepted evidence must be an exact substring of the persisted
+user message. Keys, kinds, tags, lengths, confidence, importance, and evidence
+strength are bounded. Messages or candidates containing secrets, credentials,
+financial identifiers, unsupported evidence, temporary instructions, or
+low-value details are rejected before any memory write.
+
+Accepted candidates and message-level sources are saved atomically. The worker
+logs job ids, attempts, error codes, counts, and process counters only; it never
+logs candidate content or source message text. `AI_PROVIDER=mock` completes jobs
+with no candidates. OpenAI-compatible configured providers use the existing
+backend-owned base URL, model, and credentials for extraction.
 
 ## Deduplication And Conflict Rules
 
@@ -181,12 +197,14 @@ chat history. No public API route or Settings UI exposes this operation yet.
 
 ### Phase 2: Automatic Capture
 
-- Add extraction jobs/outbox records.
-- Define the extractor JSON schema and prompt.
-- Process extraction jobs after successful chat turns.
-- Add validation, sensitive-category filtering, deduplication, and conflict
-  handling.
-- Add logs and metrics without recording raw sensitive content.
+- Status: implemented.
+- Extraction jobs are enqueued atomically with successful persisted turns.
+- A background worker provides bounded retries and restart-safe claiming.
+- Strict structured output, evidence grounding, sensitive-data filtering,
+  deduplication, reinforcement, and explicit correction handling run before
+  atomic persistence.
+- Operational logs and in-process counters exclude raw learned content and
+  source text.
 
 ### Phase 3: Retrieval
 
@@ -215,13 +233,16 @@ chat history. No public API route or Settings UI exposes this operation yet.
   orphaned memory.
 - No retired manual memory UI, API, or browser cache is reintroduced.
 
-## MVP Acceptance Criteria (Not Implemented)
+## Capture Acceptance Criteria
 
-- A durable preference stated in one chat can influence a related later chat.
-- Unrelated topics do not receive that memory.
+- A durable preference stated in a persisted user turn can be captured with
+  message-level provenance.
 - Repeated evidence reinforces rather than duplicates a memory.
 - Corrected preferences replace or supersede stale values.
 - Memory extraction failures never block or lose a successful chat response.
+
+The earlier criteria about influencing a later chat and excluding unrelated
+memory from prompts belong to Phase 3 retrieval and remain not implemented.
 
 ## Non-Goals For The First Version
 

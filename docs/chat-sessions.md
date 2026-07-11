@@ -21,11 +21,15 @@
 - `POST /api/chats/:chat_id/messages/stream`
 - `DELETE /api/chats/:chat_id/messages`
 
+After either message endpoint persists its user/assistant turn, the same
+transaction creates an idempotent automatic-memory extraction job. Background
+capture never delays the normal JSON response or SSE `done` event, and
+extraction failures do not roll back a successfully persisted response.
+
 Deleting a chat through `DELETE /api/chats/:chat_id` also removes automatic
 memory source rows tied to that chat. Affected learned context is deleted when
 no source remains and retained when another chat still supports it. Automatic
-capture and retrieval are not implemented yet; this is a persistence lifecycle
-boundary only.
+capture is implemented; retrieval remains unavailable.
 
 Clearing a chat's messages removes message-level memory sources and applies the
 same orphan cleanup while retaining the chat id.

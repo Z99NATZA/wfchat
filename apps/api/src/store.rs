@@ -157,6 +157,32 @@ pub struct MemorySourceRecord {
     pub created_at: u64,
 }
 
+#[derive(Clone, Debug)]
+pub struct MemoryExtractionJobRecord {
+    pub id: Uuid,
+    pub chat_id: Uuid,
+    pub user_message_id: Uuid,
+    pub assistant_message_id: Uuid,
+    pub owner_session_id: Uuid,
+    pub owner_user_id: Option<Uuid>,
+    pub character_id: String,
+    pub status: String,
+    pub attempts: i32,
+    pub max_attempts: i32,
+    pub user_content: String,
+}
+
+#[derive(Clone, Debug)]
+pub struct CapturedMemoryRecord {
+    pub memory_key: String,
+    pub kind: String,
+    pub content: String,
+    pub tags: Vec<String>,
+    pub importance: f32,
+    pub evidence_strength: f32,
+    pub replaces_existing: bool,
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct SyncCommitRecord {
     pub operation_id: String,
@@ -326,6 +352,8 @@ impl ChatStore {
                 .bind(guest_id)
                 .execute(&mut *tx)
                 .await?;
+
+            recalculate_memory_evidence(&mut tx, &[account_id]).await?;
         }
 
         sqlx::query(
@@ -338,6 +366,16 @@ impl ChatStore {
 
         sqlx::query(
             "update memory_items set owner_user_id = $1 where owner_session_id = $2 and owner_user_id is null",
+        )
+        .bind(user_id)
+        .bind(session_id)
+        .execute(&mut *tx)
+        .await?;
+
+        sqlx::query(
+            "update memory_extraction_jobs
+             set owner_user_id = $1, updated_at = now()
+             where owner_session_id = $2 and owner_user_id is null",
         )
         .bind(user_id)
         .bind(session_id)
@@ -679,6 +717,24 @@ impl ChatStore {
         .execute(&mut *tx)
         .await?;
 
+        sqlx::query(
+            "insert into memory_extraction_jobs (
+                id, chat_id, user_message_id, assistant_message_id,
+                owner_session_id, owner_user_id, character_id
+             )
+             select $1, chat.id, $2, $3, chat.owner_session_id,
+                    chat.owner_user_id, chat.character_id
+             from chats chat
+             where chat.id = $4
+             on conflict (user_message_id) do nothing",
+        )
+        .bind(Uuid::new_v4())
+        .bind(user_message.id)
+        .bind(assistant_message.id)
+        .bind(chat_id)
+        .execute(&mut *tx)
+        .await?;
+
         if !attachment_ids.is_empty() {
             let result = sqlx::query(
                 "update chat_attachments
@@ -951,22 +1007,7 @@ impl ChatStore {
             .fetch_one(&mut *tx)
             .await?;
 
-        sqlx::query(
-            "update memory_items
-             set
-               confidence = evidence.max_strength,
-               last_reinforced_at = evidence.last_reinforced_at,
-               updated_at = now()
-             from (
-               select max(evidence_strength) as max_strength, max(created_at) as last_reinforced_at
-               from memory_sources
-               where memory_id = $1
-             ) evidence
-             where id = $1",
-        )
-        .bind(memory_id)
-        .execute(&mut *tx)
-        .await?;
+        recalculate_memory_evidence(&mut tx, &[memory_id]).await?;
 
         tx.commit().await?;
         Ok(Some(memory_source_from_row(row)))
@@ -996,16 +1037,257 @@ impl ChatStore {
     }
 
     pub async fn reset_learned_context(&self, owner: OwnerScope) -> StoreResult<u64> {
+        let mut tx = self.db.begin().await?;
+        sqlx::query(
+            "delete from memory_extraction_jobs
+             where (($2::uuid is not null and owner_user_id = $2)
+                    or ($2::uuid is null and owner_session_id = $1))",
+        )
+        .bind(owner.session_id)
+        .bind(owner.user_id)
+        .execute(&mut *tx)
+        .await?;
         let result = sqlx::query(
             "delete from memory_items
              where (($2::uuid is not null and owner_user_id = $2) or ($2::uuid is null and owner_session_id = $1))",
         )
         .bind(owner.session_id)
         .bind(owner.user_id)
-        .execute(self.db.as_ref())
+        .execute(&mut *tx)
+        .await?;
+        tx.commit().await?;
+        Ok(result.rows_affected())
+    }
+
+    pub async fn claim_memory_extraction_job(
+        &self,
+    ) -> StoreResult<Option<MemoryExtractionJobRecord>> {
+        self.claim_memory_extraction_job_for_message(None).await
+    }
+
+    async fn claim_memory_extraction_job_for_message(
+        &self,
+        user_message_id: Option<Uuid>,
+    ) -> StoreResult<Option<MemoryExtractionJobRecord>> {
+        let row = sqlx::query(
+            "with candidate as (
+                select id
+                from memory_extraction_jobs
+                where ($1::uuid is null or user_message_id = $1)
+                  and attempts < max_attempts
+                  and (
+                    (status in ('pending', 'retry') and available_at <= now())
+                    or (status = 'processing' and locked_at < now() - interval '5 minutes')
+                  )
+                order by available_at, created_at
+                for update skip locked
+                limit 1
+             ), claimed as (
+                update memory_extraction_jobs job
+                set status = 'processing', attempts = job.attempts + 1,
+                    locked_at = now(), last_error_code = null, updated_at = now()
+                from candidate
+                where job.id = candidate.id
+                returning job.*
+             )
+             select claimed.id, claimed.chat_id, claimed.user_message_id,
+                    claimed.assistant_message_id, claimed.owner_session_id,
+                    claimed.owner_user_id, claimed.character_id, claimed.status,
+                    claimed.attempts, claimed.max_attempts, message.content as user_content
+             from claimed
+             join chat_messages message on message.id = claimed.user_message_id",
+        )
+        .bind(user_message_id)
+        .fetch_optional(self.db.as_ref())
         .await?;
 
-        Ok(result.rows_affected())
+        Ok(row.map(memory_extraction_job_from_row))
+    }
+
+    #[cfg(test)]
+    async fn claim_memory_extraction_job_for_test(
+        &self,
+        user_message_id: Uuid,
+    ) -> StoreResult<Option<MemoryExtractionJobRecord>> {
+        self.claim_memory_extraction_job_for_message(Some(user_message_id))
+            .await
+    }
+
+    pub async fn complete_memory_extraction_job(&self, job_id: Uuid) -> StoreResult<bool> {
+        let result = sqlx::query(
+            "update memory_extraction_jobs
+             set status = 'completed', locked_at = null, last_error_code = null, updated_at = now()
+             where id = $1 and status = 'processing'",
+        )
+        .bind(job_id)
+        .execute(self.db.as_ref())
+        .await?;
+        Ok(result.rows_affected() == 1)
+    }
+
+    pub async fn fail_memory_extraction_job(
+        &self,
+        job_id: Uuid,
+        error_code: &str,
+    ) -> StoreResult<Option<String>> {
+        let row = sqlx::query(
+            "update memory_extraction_jobs
+             set status = case when attempts >= max_attempts then 'dead' else 'retry' end,
+                 available_at = case
+                    when attempts >= max_attempts then available_at
+                    else now() + make_interval(secs => least(60, (2 ^ attempts)::integer))
+                 end,
+                 locked_at = null,
+                 last_error_code = $2,
+                 updated_at = now()
+             where id = $1 and status = 'processing'
+             returning status",
+        )
+        .bind(job_id)
+        .bind(error_code)
+        .fetch_optional(self.db.as_ref())
+        .await?;
+        Ok(row.map(|row| row.get("status")))
+    }
+
+    pub async fn apply_memory_capture(
+        &self,
+        job_id: Uuid,
+        candidates: &[CapturedMemoryRecord],
+    ) -> StoreResult<bool> {
+        let mut tx = self.db.begin().await?;
+        let job = sqlx::query(
+            "select job.chat_id, job.user_message_id, chat.owner_session_id,
+                    chat.owner_user_id, chat.character_id
+             from memory_extraction_jobs job
+             join chats chat on chat.id = job.chat_id
+             join chat_messages message
+               on message.id = job.user_message_id
+              and message.chat_id = job.chat_id
+              and message.role = 'user'
+             where job.id = $1 and job.status = 'processing'
+             for update of job",
+        )
+        .bind(job_id)
+        .fetch_optional(&mut *tx)
+        .await?;
+        let Some(job) = job else {
+            return Ok(false);
+        };
+        let chat_id: Uuid = job.get("chat_id");
+        let message_id: Uuid = job.get("user_message_id");
+        let owner_session_id: Uuid = job.get("owner_session_id");
+        let owner_user_id: Option<Uuid> = job.get("owner_user_id");
+        let character_id: String = job.get("character_id");
+
+        for candidate in candidates {
+            let existing = if owner_user_id.is_some() {
+                sqlx::query(
+                    "select id, content from memory_items
+                     where owner_user_id = $1 and character_id = $2 and memory_key = $3
+                     for update",
+                )
+                .bind(owner_user_id)
+                .bind(&character_id)
+                .bind(&candidate.memory_key)
+                .fetch_optional(&mut *tx)
+                .await?
+            } else {
+                sqlx::query(
+                    "select id, content from memory_items
+                     where owner_user_id is null and owner_session_id = $1
+                       and character_id = $2 and memory_key = $3
+                     for update",
+                )
+                .bind(owner_session_id)
+                .bind(&character_id)
+                .bind(&candidate.memory_key)
+                .fetch_optional(&mut *tx)
+                .await?
+            };
+
+            let memory_id = match existing {
+                Some(row) => {
+                    let memory_id: Uuid = row.get("id");
+                    let old_content: String = row.get("content");
+                    if old_content != candidate.content {
+                        if !candidate.replaces_existing {
+                            continue;
+                        }
+                        sqlx::query("delete from memory_sources where memory_id = $1")
+                            .bind(memory_id)
+                            .execute(&mut *tx)
+                            .await?;
+                    }
+                    sqlx::query(
+                        "update memory_items
+                         set kind = $2, content = $3, tags = $4, importance = $5,
+                             expires_at = null, updated_at = now()
+                         where id = $1",
+                    )
+                    .bind(memory_id)
+                    .bind(&candidate.kind)
+                    .bind(&candidate.content)
+                    .bind(&candidate.tags)
+                    .bind(candidate.importance as f64)
+                    .execute(&mut *tx)
+                    .await?;
+                    memory_id
+                }
+                None => {
+                    let memory_id = Uuid::new_v4();
+                    sqlx::query(
+                        "insert into memory_items (
+                            id, owner_session_id, owner_user_id, character_id,
+                            memory_key, kind, content, tags, confidence, importance
+                         ) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
+                    )
+                    .bind(memory_id)
+                    .bind(owner_session_id)
+                    .bind(owner_user_id)
+                    .bind(&character_id)
+                    .bind(&candidate.memory_key)
+                    .bind(&candidate.kind)
+                    .bind(&candidate.content)
+                    .bind(&candidate.tags)
+                    .bind(candidate.evidence_strength as f64)
+                    .bind(candidate.importance as f64)
+                    .execute(&mut *tx)
+                    .await?;
+                    memory_id
+                }
+            };
+
+            sqlx::query(
+                "insert into memory_sources (
+                    id, memory_id, chat_id, message_id, evidence_strength
+                 ) values ($1, $2, $3, $4, $5)
+                 on conflict (memory_id, message_id) where message_id is not null
+                 do update set evidence_strength = greatest(
+                    memory_sources.evidence_strength, excluded.evidence_strength
+                 )",
+            )
+            .bind(Uuid::new_v4())
+            .bind(memory_id)
+            .bind(chat_id)
+            .bind(message_id)
+            .bind(candidate.evidence_strength as f64)
+            .execute(&mut *tx)
+            .await?;
+
+            recalculate_memory_evidence(&mut tx, &[memory_id]).await?;
+        }
+
+        sqlx::query(
+            "update memory_extraction_jobs
+             set status = 'completed', locked_at = null, last_error_code = null, updated_at = now()
+             where id = $1",
+        )
+        .bind(job_id)
+        .execute(&mut *tx)
+        .await?;
+        tx.commit().await?;
+        Ok(true)
     }
 
     pub async fn create_chat_attachment(
@@ -1544,24 +1826,40 @@ async fn cleanup_memory_after_source_removal(
     .execute(&mut **tx)
     .await?;
 
+    recalculate_memory_evidence(tx, affected_memory_ids).await?;
+
+    Ok(())
+}
+
+async fn recalculate_memory_evidence(
+    tx: &mut Transaction<'_, Postgres>,
+    memory_ids: &[Uuid],
+) -> StoreResult<()> {
+    if memory_ids.is_empty() {
+        return Ok(());
+    }
+
     sqlx::query(
         "update memory_items item
-         set
-           confidence = evidence.max_strength,
-           last_reinforced_at = evidence.last_reinforced_at,
-           updated_at = now()
+         set confidence = least(
+               0.99,
+               evidence.max_strength
+                 + greatest(0, evidence.source_count - 1)::double precision * 0.05
+             ),
+             last_reinforced_at = evidence.last_reinforced_at,
+             updated_at = now()
          from (
-           select memory_id, max(evidence_strength) as max_strength, max(created_at) as last_reinforced_at
+           select memory_id, max(evidence_strength) as max_strength,
+                  count(*) as source_count, max(created_at) as last_reinforced_at
            from memory_sources
            where memory_id = any($1)
            group by memory_id
          ) evidence
          where item.id = evidence.memory_id",
     )
-    .bind(affected_memory_ids)
+    .bind(memory_ids)
     .execute(&mut **tx)
     .await?;
-
     Ok(())
 }
 
@@ -1594,6 +1892,22 @@ fn memory_source_from_row(row: sqlx::postgres::PgRow) -> MemorySourceRecord {
         message_id: row.get("message_id"),
         evidence_strength: row.get::<f64, _>("evidence_strength") as f32,
         created_at: row.get::<i64, _>("created_at") as u64,
+    }
+}
+
+fn memory_extraction_job_from_row(row: sqlx::postgres::PgRow) -> MemoryExtractionJobRecord {
+    MemoryExtractionJobRecord {
+        id: row.get("id"),
+        chat_id: row.get("chat_id"),
+        user_message_id: row.get("user_message_id"),
+        assistant_message_id: row.get("assistant_message_id"),
+        owner_session_id: row.get("owner_session_id"),
+        owner_user_id: row.get("owner_user_id"),
+        character_id: row.get("character_id"),
+        status: row.get("status"),
+        attempts: row.get("attempts"),
+        max_attempts: row.get("max_attempts"),
+        user_content: row.get("user_content"),
     }
 }
 
@@ -1695,6 +2009,46 @@ mod integration_tests {
             .create_chat(owner, "aiko".to_owned(), "aiko_default".to_owned())
             .await
             .expect("chat should create")
+    }
+
+    async fn append_test_turn(
+        store: &ChatStore,
+        owner: OwnerScope,
+        chat_id: Uuid,
+        content: &str,
+    ) -> (StoredMessage, StoredMessage) {
+        let user = StoredMessage {
+            id: Uuid::new_v4(),
+            role: AiRole::User,
+            content: content.to_owned(),
+            attachments: Vec::new(),
+            created_at: now_unix_seconds(),
+        };
+        let assistant = StoredMessage {
+            id: Uuid::new_v4(),
+            role: AiRole::Assistant,
+            content: "Thanks for telling me".to_owned(),
+            attachments: Vec::new(),
+            created_at: now_unix_seconds(),
+        };
+        store
+            .append_chat_messages(owner, chat_id, user.clone(), assistant.clone())
+            .await
+            .expect("turn append should query")
+            .expect("chat should exist");
+        (user, assistant)
+    }
+
+    fn captured_memory(content: &str, replaces_existing: bool) -> CapturedMemoryRecord {
+        CapturedMemoryRecord {
+            memory_key: "food.spice.preference".to_owned(),
+            kind: "preference".to_owned(),
+            content: content.to_owned(),
+            tags: vec!["food".to_owned(), "spicy".to_owned()],
+            importance: 0.8,
+            evidence_strength: 0.8,
+            replaces_existing,
+        }
     }
 
     fn test_memory(
@@ -2031,7 +2385,7 @@ mod integration_tests {
             .expect("account memories should list");
         assert_eq!(items.len(), 1);
         assert_eq!(items[0].id, account_memory.id);
-        assert!((items[0].confidence - 0.9).abs() < 0.001);
+        assert!((items[0].confidence - 0.95).abs() < 0.001);
         let sources = store
             .list_memory_sources(second_owner, items[0].id)
             .await
@@ -2161,6 +2515,206 @@ mod integration_tests {
             .is_empty());
 
         cleanup_sessions(&store, &[session.id]).await;
+    }
+
+    #[tokio::test]
+    async fn persisted_turn_enqueues_exactly_one_extraction_job() {
+        let Some(store) = test_store().await else {
+            return;
+        };
+        let session = create_test_session(&store).await;
+        let owner = OwnerScope::from_session(&session);
+        let chat = create_test_chat(&store, owner).await;
+        let (user, assistant) = append_test_turn(&store, owner, chat.id, "I like ramen").await;
+
+        sqlx::query(
+            "insert into memory_extraction_jobs (
+                id, chat_id, user_message_id, assistant_message_id,
+                owner_session_id, owner_user_id, character_id
+             ) values ($1, $2, $3, $4, $5, $6, 'aiko')
+             on conflict (user_message_id) do nothing",
+        )
+        .bind(Uuid::new_v4())
+        .bind(chat.id)
+        .bind(user.id)
+        .bind(assistant.id)
+        .bind(owner.session_id)
+        .bind(owner.user_id)
+        .execute(store.db.as_ref())
+        .await
+        .expect("duplicate enqueue should be idempotent");
+        let count: i64 = sqlx::query_scalar(
+            "select count(*) from memory_extraction_jobs where user_message_id = $1",
+        )
+        .bind(user.id)
+        .fetch_one(store.db.as_ref())
+        .await
+        .expect("job count should query");
+        assert_eq!(count, 1);
+        cleanup_sessions(&store, &[session.id]).await;
+    }
+
+    #[tokio::test]
+    async fn capture_is_atomic_reinforces_and_replaces_corrected_value() {
+        let Some(store) = test_store().await else {
+            return;
+        };
+        let session = create_test_session(&store).await;
+        let owner = OwnerScope::from_session(&session);
+        let first_chat = create_test_chat(&store, owner).await;
+        let (first_user, _) =
+            append_test_turn(&store, owner, first_chat.id, "I like spicy ramen").await;
+        let first_job = store
+            .claim_memory_extraction_job_for_test(first_user.id)
+            .await
+            .expect("first job should claim")
+            .expect("first job should exist");
+        assert_eq!(first_job.user_message_id, first_user.id);
+        assert!(store
+            .apply_memory_capture(first_job.id, &[captured_memory("Likes spicy ramen", false)])
+            .await
+            .expect("first capture should persist"));
+
+        let second_chat = create_test_chat(&store, owner).await;
+        let (second_user, _) =
+            append_test_turn(&store, owner, second_chat.id, "I still like spicy ramen").await;
+        let second_job = store
+            .claim_memory_extraction_job_for_test(second_user.id)
+            .await
+            .expect("second job should claim")
+            .expect("second job should exist");
+        store
+            .apply_memory_capture(
+                second_job.id,
+                &[captured_memory("Likes spicy ramen", false)],
+            )
+            .await
+            .expect("reinforcement should persist");
+        let items = store
+            .list_memory_items(owner, "aiko")
+            .await
+            .expect("reinforced memory should list");
+        assert_eq!(items.len(), 1);
+        assert!((items[0].confidence - 0.85).abs() < 0.001);
+        assert_eq!(
+            store
+                .list_memory_sources(owner, items[0].id)
+                .await
+                .expect("sources should list")
+                .len(),
+            2
+        );
+
+        let correction_chat = create_test_chat(&store, owner).await;
+        let (correction_user, _) = append_test_turn(
+            &store,
+            owner,
+            correction_chat.id,
+            "Correction: I now prefer mild ramen",
+        )
+        .await;
+        let correction_job = store
+            .claim_memory_extraction_job_for_test(correction_user.id)
+            .await
+            .expect("correction job should claim")
+            .expect("correction job should exist");
+        store
+            .apply_memory_capture(
+                correction_job.id,
+                &[captured_memory("Prefers mild ramen", true)],
+            )
+            .await
+            .expect("correction should persist");
+        let corrected = store
+            .list_memory_items(owner, "aiko")
+            .await
+            .expect("corrected memory should list");
+        assert_eq!(corrected.len(), 1);
+        assert_eq!(corrected[0].content, "Prefers mild ramen");
+        let sources = store
+            .list_memory_sources(owner, corrected[0].id)
+            .await
+            .expect("corrected source should list");
+        assert_eq!(sources.len(), 1);
+        assert_eq!(sources[0].message_id, Some(correction_user.id));
+        cleanup_sessions(&store, &[session.id]).await;
+    }
+
+    #[tokio::test]
+    async fn extraction_job_retries_are_bounded() {
+        let Some(store) = test_store().await else {
+            return;
+        };
+        let session = create_test_session(&store).await;
+        let owner = OwnerScope::from_session(&session);
+        let chat = create_test_chat(&store, owner).await;
+        let (user, _) = append_test_turn(&store, owner, chat.id, "I like ramen").await;
+
+        for attempt in 1..=3 {
+            let job = store
+                .claim_memory_extraction_job_for_test(user.id)
+                .await
+                .expect("job should claim")
+                .expect("retry job should exist");
+            assert_eq!(job.attempts, attempt);
+            let status = store
+                .fail_memory_extraction_job(job.id, "invalid_structured_output")
+                .await
+                .expect("failure should save")
+                .expect("job should update");
+            if attempt < 3 {
+                assert_eq!(status, "retry");
+                sqlx::query("update memory_extraction_jobs set available_at = now() where id = $1")
+                    .bind(job.id)
+                    .execute(store.db.as_ref())
+                    .await
+                    .expect("retry should become available");
+            } else {
+                assert_eq!(status, "dead");
+            }
+        }
+        assert!(store
+            .claim_memory_extraction_job_for_test(user.id)
+            .await
+            .expect("empty queue should query")
+            .is_none());
+        cleanup_sessions(&store, &[session.id]).await;
+    }
+
+    #[tokio::test]
+    async fn pending_guest_capture_follows_account_promotion() {
+        let Some(store) = test_store().await else {
+            return;
+        };
+        let user_id = Uuid::new_v4();
+        let guest = create_test_session(&store).await;
+        let guest_owner = OwnerScope::from_session(&guest);
+        let chat = create_test_chat(&store, guest_owner).await;
+        let (user, _) = append_test_turn(&store, guest_owner, chat.id, "I like spicy ramen").await;
+
+        let registered = promote_test_session(&store, guest.id, user_id, "capture session").await;
+        store
+            .migrate_session_data_to_user(registered.id, user_id)
+            .await
+            .expect("capture ownership should migrate");
+        let registered_owner = OwnerScope::from_session(&registered);
+        let job = store
+            .claim_memory_extraction_job_for_test(user.id)
+            .await
+            .expect("promoted job should claim")
+            .expect("promoted job should exist");
+        assert_eq!(job.owner_user_id, Some(user_id));
+        store
+            .apply_memory_capture(job.id, &[captured_memory("Likes spicy ramen", false)])
+            .await
+            .expect("promoted capture should persist");
+        let items = store
+            .list_memory_items(registered_owner, "aiko")
+            .await
+            .expect("registered memory should list");
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].owner_user_id, Some(user_id));
+        cleanup_sessions(&store, &[guest.id]).await;
     }
 
     #[tokio::test]

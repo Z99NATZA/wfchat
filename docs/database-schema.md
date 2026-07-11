@@ -104,7 +104,7 @@ human-readable schema reference.
 ### `memory_items`
 
 - Purpose: normalized learned user context for the automatic-memory foundation.
-- Status: persistence only; automatic capture and retrieval are not implemented.
+- Status: automatic capture persistence is implemented; retrieval is not.
 - Ownership:
   - guests use `owner_session_id + character_id + memory_key`
   - registered users use `owner_user_id + character_id + memory_key`
@@ -146,6 +146,34 @@ human-readable schema reference.
   - clearing chat messages removes message-level source rows
   - the store deletes affected memory items with no remaining source
   - retained memory confidence is recalculated from remaining evidence
+
+### `memory_extraction_jobs`
+
+- Purpose: durable work records for automatic extraction after a persisted
+  user/assistant turn.
+- Columns:
+  - `id uuid primary key`
+  - `chat_id uuid not null` -> `chats(id)` (`on delete cascade`)
+  - `user_message_id uuid not null` -> `chat_messages(id)` (`on delete cascade`)
+  - `assistant_message_id uuid not null` -> `chat_messages(id)` (`on delete cascade`)
+  - `owner_session_id uuid not null` -> `auth_sessions(id)` (`on delete cascade`)
+  - `owner_user_id uuid null` for registered account ownership
+  - `character_id text not null`
+  - `status text not null` (`pending|processing|retry|completed|dead`)
+  - `attempts integer not null default 0`
+  - `max_attempts integer not null default 3`
+  - `available_at`, optional `locked_at`, `created_at`, and `updated_at`
+  - optional sanitized `last_error_code`; raw model output and source text are
+    never stored in this table
+- Indexes:
+  - unique `user_message_id` for enqueue idempotency
+  - partial claim index for pending, retry, and stale processing jobs
+  - guest and registered-owner operational lookup indexes
+- Lifecycle:
+  - the outbox row is inserted in the same transaction as both chat messages
+  - message/chat deletion cascades remove related work
+  - guest-to-account promotion updates pending and historical job ownership
+  - learned-context reset removes queued jobs so old turns cannot be recaptured
 
 ### `sync_entities`
 

@@ -188,17 +188,15 @@ function PngTuberSidebar({ activeEmotionId, onEmotionChange }: PngTuberSidebarPr
 
 	return (
 		<aside className="hidden h-full w-[18.5rem] shrink-0 border-r border-app-border bg-app-panel/62 lg:flex lg:flex-col">
-			<div className="flex h-16 items-center gap-3 border-b border-app-border px-5">
-				<div className="flex size-10 items-center justify-center rounded-lg bg-primary text-white shadow-soft">
-					<UserRound size={20} aria-hidden="true" />
-				</div>
-				<div className="min-w-0">
+			<div className="flex h-16 items-center border-b border-app-border px-5">
+				<div>
 					<p className="text-base font-semibold text-app-text">
 						{t("pngtuber.sidebar.title")}
 					</p>
 					<p className="truncate text-xs text-muted">{t("pngtuber.sidebar.subtitle")}</p>
 				</div>
 			</div>
+
 			<div className="border-b border-app-border p-4">
 				<div className="grid grid-cols-3 gap-2">
 					<ToolButton icon={Move} label={t("pngtuber.tools.pose")} active />

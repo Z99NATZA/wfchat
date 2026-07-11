@@ -100,8 +100,23 @@ image attachment upload use separate stricter buckets.
 
 `store.rs` owns the internal automatic-memory persistence foundation. It exposes
 owner-scoped memory item/source operations, account-promotion merging,
-transactional chat-deletion cleanup, and learned-context reset. There is no
-public memory route, automatic extraction, retrieval, or prompt injection yet.
+transactional chat-deletion cleanup, durable extraction jobs, atomic captured
+item/source writes, and learned-context reset. There is no public memory route,
+retrieval, or prompt injection yet.
+
+`memory.rs` owns automatic capture. The API starts one background worker in the
+existing process. It claims durable jobs, requests strict structured extraction
+from the configured AI provider, validates evidence and sensitive-data rules,
+and commits accepted items with message provenance. Retry logs contain only job
+metadata, sanitized error codes, and counters—not raw user or learned content.
+
+```text
+persist user + assistant + extraction job (one transaction)
+  -> return chat response / SSE done
+  -> background memory worker
+      -> strict extraction and validation
+      -> atomic memory item + message source persistence
+```
 
 `characters.rs` owns character-facing endpoints, the current static character registry, and character-specific system prompts.
 

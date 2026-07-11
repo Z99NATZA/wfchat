@@ -132,10 +132,14 @@ container is required.
 Migration ownership is tracked in `docs/database-migrations.md`. Ordered files
 under `apps/api/migrations/` are canonical.
 
-The automatic-memory storage foundation uses the same embedded migration path.
-It requires no additional Compose service, volume, port, or environment value;
-`docker compose up -d --build` rebuilds the API with the migration and applies
-it to the existing PostgreSQL volume during API startup.
+Automatic-memory storage and capture use the same embedded migration path. The
+capture worker runs inside the API container and the durable outbox stays in
+PostgreSQL, so no additional Compose service, volume, port, or environment value
+is required. `docker compose up -d --build` rebuilds the API, applies the outbox
+migration to the existing PostgreSQL volume during startup, and then starts the
+worker. With `AI_PROVIDER=mock`, extraction jobs complete without learned
+items; configured OpenAI-compatible providers perform structured extraction
+using their existing backend model and credentials.
 
 For local manual bootstrap only, legacy schema SQL remains at
 `apps/api/db/init.sql`:

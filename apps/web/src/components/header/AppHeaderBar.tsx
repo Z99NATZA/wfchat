@@ -58,14 +58,6 @@ function AppHeaderBar({
 							<Menu size={18} aria-hidden="true" />
 						</IconButton>
 					)}
-					<IconButton
-						className="hidden md:flex"
-						aria-label={t("chat.header.back")}
-						disabled
-						title={t("common.notSupportedYet")}
-					>
-						<ChevronLeft size={18} aria-hidden="true" />
-					</IconButton>
 					{leading}
 					<div className="min-w-0">
 						<div className="flex items-center gap-2">

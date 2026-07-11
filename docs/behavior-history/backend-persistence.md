@@ -4,6 +4,39 @@ This file records backend database persistence decisions. The current contract
 lives in `docs/backend-architecture.md`; read that first when changing store or
 database error behavior.
 
+## 2026-07-11 - Commit memory extraction outbox with chat turns
+
+Status: Active
+
+Previous behavior:
+- A successful chat transaction persisted messages and attachments only.
+
+Problem observed:
+- Enqueuing automatic-memory extraction after commit could lose work if the API
+  stopped between the message commit and enqueue operation.
+
+Decision:
+- Insert the idempotent extraction job inside the existing chat append
+  transaction after both messages are inserted.
+- Process jobs outside the response path with skip-locked claims, bounded
+  retries, stale-lock recovery, and a terminal dead state.
+
+Why:
+- A persisted turn and its durable follow-up work now have one commit boundary,
+  while provider extraction failures remain isolated from chat delivery.
+
+Regression guard:
+- `store::integration_tests::persisted_turn_enqueues_exactly_one_extraction_job`
+- `store::integration_tests::extraction_job_retries_are_bounded`
+
+Related current contract:
+- `docs/automatic-memory.md`
+- `docs/database-migrations.md`
+
+Related implementation:
+- `apps/api/src/store.rs`
+- `apps/api/migrations/202607110001_memory_extraction_outbox.sql`
+
 ## 2026-07-03 - Propagate store database errors explicitly
 
 Status: Active
