@@ -1,12 +1,12 @@
 # Automatic Memory
 
-Status: Phase 2 Implemented - Retrieval Not Implemented
+Status: Phase 3 Implemented - Capture And Retrieval Active
 
 This document defines the intended replacement for the retired manual memory
 system. The internal storage, provenance, chat-deletion cleanup, account
-promotion, learned-context reset boundaries, and durable automatic capture are
-implemented. Retrieval is not implemented, so Aiko does not use learned data in
-chat responses yet.
+promotion, learned-context reset boundaries, durable automatic capture, and
+bounded structured retrieval are implemented. Aiko can use relevant learned
+context across chats for the same owner and character.
 
 ## Goal
 
@@ -135,7 +135,7 @@ backend-owned base URL, model, and credentials for extraction.
 - Temporary plans may use `expires_at` and must not remain permanent facts.
 - Confidence must come from user evidence, not repeated assistant assertions.
 
-## Retrieval Flow (Not Implemented)
+## Retrieval Flow (Implemented)
 
 Before an AI request, retrieve a small set of relevant memory items for the chat
 owner and character:
@@ -148,13 +148,30 @@ current user message
   -> inject the top items within a fixed token budget
 ```
 
-The first version should use structured keys and tags. Embeddings and vector
-search are deferred until real usage shows that metadata retrieval is
-insufficient.
+The first version uses structured keys, tags, and normalized content signals.
+The store prefilters at most 50 candidates using the exact guest/account owner
+boundary, `character_id`, supported kinds, minimum `0.65` confidence,
+non-expiration, and lexical topic overlap. Embeddings and vector search remain
+deferred until real usage shows that metadata retrieval is insufficient.
 
-Memory context remains soft guidance. Aiko should use language such as "if I
-remember correctly" when confidence is not high and should avoid forcing an old
-memory into an unrelated response.
+Application code validates candidates again and assigns deterministic scores
+from lexical relevance, confidence, importance, source reinforcement, and
+recency. Duplicate keys keep the newest corrected value. Stable tie-breakers
+make selection independent of database return order.
+
+The injected `LEARNED_CONTEXT_V1` block is limited to five items, 1,200 Unicode
+characters, and an estimated 300 tokens. It contains normalized memory content,
+stable keys, and a coarse `likely` or `uncertain` label only—never raw source
+messages, provenance text, extraction jobs, or credentials. The block is placed
+after the character prompt and before current-chat messages for both streaming
+and non-streaming requests.
+
+Memory context remains explicitly untrusted soft guidance. Its system wrapper
+tells Aiko to use only relevant items, prefer the latest user message when it
+conflicts, never reveal the context block, and use language such as "if I
+remember correctly" for uncertain items. Retrieval is fail-open: a
+memory-specific database error is logged with metadata only and chat continues
+without learned context.
 
 ## Chat Deletion (Implemented)
 
@@ -208,10 +225,15 @@ chat history. No public API route or Settings UI exposes this operation yet.
 
 ### Phase 3: Retrieval
 
-- Add tag/key candidate lookup and deterministic scoring.
-- Add a strict item and token budget.
-- Inject selected memory after the character prompt and before chat messages.
-- Add tests proving unrelated memories are not injected.
+- Status: implemented.
+- Owner/character candidate lookup filters confidence, kinds, expiration, and
+  topic signals before bounded deterministic scoring.
+- Selection enforces strict item, character, and estimated-token budgets.
+- One shared preparation path injects untrusted soft context after the
+  character prompt for streaming and non-streaming requests.
+- Tests cover related retrieval, unrelated exclusion, ownership, character
+  isolation, expiration, correction precedence, deterministic ordering,
+  budgets, and endpoint parity.
 
 ### Phase 4: Hardening
 
@@ -241,8 +263,15 @@ chat history. No public API route or Settings UI exposes this operation yet.
 - Corrected preferences replace or supersede stale values.
 - Memory extraction failures never block or lose a successful chat response.
 
-The earlier criteria about influencing a later chat and excluding unrelated
-memory from prompts belong to Phase 3 retrieval and remain not implemented.
+## Retrieval Acceptance Criteria
+
+- A relevant durable preference captured in one chat can inform another chat
+  for the same owner and character.
+- Unrelated, expired, weak, unsafe, cross-owner, and cross-character items are
+  not injected.
+- Selection and truncation are deterministic and stay within all budgets.
+- Streaming and non-streaming requests use identical memory preparation.
+- The latest user message overrides conflicting learned context.
 
 ## Non-Goals For The First Version
 

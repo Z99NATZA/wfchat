@@ -39,6 +39,26 @@ React useChatSession
 
 The existing non-streaming endpoint stays in place. Streaming is additive, not a replacement.
 
+## Automatic Memory Context
+
+Streaming and non-streaming requests share the backend
+`prepare_chat_completion_context()` path. Before provider generation, that path
+may add one bounded `LEARNED_CONTEXT_V1` system message for the exact owner and
+character:
+
+```text
+character prompt
+  -> untrusted learned-context block, when relevant
+  -> persisted messages from this chat
+  -> latest user message
+```
+
+Memory selection happens before the SSE stream opens and does not change event
+names or payloads. A memory-specific retrieval error is fail-open, so the stream
+continues without learned context. Provider generation, final persistence, and
+the extraction outbox retain the same success boundaries as the non-streaming
+route.
+
 ## Non-Goals
 
 - Do not add WebSocket.

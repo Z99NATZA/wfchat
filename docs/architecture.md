@@ -72,8 +72,8 @@ adapters. Provider adapters should not depend on frontend concepts.
 - [Sync system](sync-system.md)
 - [Behavior history](behavior-history/README.md)
 - [Database schema](database-schema.md)
-- [Automatic memory](automatic-memory.md) - storage and automatic capture
-  implemented; retrieval not implemented
+- [Automatic memory](automatic-memory.md) - storage, automatic capture, and
+  bounded structured retrieval implemented
 - [PNGTuber and avatar runtime](pngtuber.md)
 - [Theme system](theme.md)
 - [Mobile viewport](mobile-viewport.md)

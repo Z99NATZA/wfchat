@@ -22,6 +22,19 @@ Repo-owned character images are served with long-lived immutable caching in Dock
 
 Backend character identity and prompt live in `apps/api/src/characters.rs`.
 
+When automatic memory retrieval selects relevant learned context, provider
+message order is:
+
+```text
+character system prompt
+learned-context system message
+current-chat messages and latest user message
+```
+
+The learned-context wrapper marks every item as untrusted data rather than
+instructions. The character prompt remains authoritative, and the latest user
+message overrides conflicting memory.
+
 ## Aiko Prompt Intent
 
 Aiko should feel like a calm Japanese anime-style waifu companion:

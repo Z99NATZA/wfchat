@@ -158,6 +158,21 @@ pub struct MemorySourceRecord {
 }
 
 #[derive(Clone, Debug)]
+pub struct MemoryRetrievalRecord {
+    pub id: Uuid,
+    pub memory_key: String,
+    pub kind: String,
+    pub content: String,
+    pub tags: Vec<String>,
+    pub confidence: f32,
+    pub importance: f32,
+    pub last_reinforced_at: u64,
+    pub expires_at: Option<u64>,
+    pub updated_at: u64,
+    pub source_count: u32,
+}
+
+#[derive(Clone, Debug)]
 pub struct MemoryExtractionJobRecord {
     pub id: Uuid,
     pub chat_id: Uuid,
@@ -948,6 +963,64 @@ impl ChatStore {
         .await?;
 
         Ok(rows.into_iter().map(memory_item_from_row).collect())
+    }
+
+    pub async fn find_memory_retrieval_candidates(
+        &self,
+        owner: OwnerScope,
+        character_id: &str,
+        topic_signals: &[String],
+        limit: i64,
+    ) -> StoreResult<Vec<MemoryRetrievalRecord>> {
+        if topic_signals.is_empty() || limit <= 0 {
+            return Ok(Vec::new());
+        }
+
+        let rows = sqlx::query(
+            "select item.id, item.memory_key, item.kind, item.content, item.tags,
+                    item.confidence, item.importance,
+                    extract(epoch from item.last_reinforced_at)::bigint as last_reinforced_at,
+                    extract(epoch from item.expires_at)::bigint as expires_at,
+                    extract(epoch from item.updated_at)::bigint as updated_at,
+                    count(source.id)::bigint as source_count
+             from memory_items item
+             left join memory_sources source on source.memory_id = item.id
+             where (($3::uuid is not null and item.owner_user_id = $3)
+                    or ($3::uuid is null and item.owner_session_id = $1))
+               and item.character_id = $2
+               and item.confidence >= 0.65
+               and item.kind = any($4::text[])
+               and (item.expires_at is null or item.expires_at > now())
+               and (
+                 item.tags && $5::text[]
+                 or exists (
+                   select 1 from unnest($5::text[]) signal
+                   where item.memory_key ilike ('%' || signal || '%')
+                      or item.content ilike ('%' || signal || '%')
+                 )
+               )
+             group by item.id
+             order by item.confidence desc, item.importance desc,
+                      item.last_reinforced_at desc, item.memory_key, item.id
+             limit $6",
+        )
+        .bind(owner.session_id)
+        .bind(character_id)
+        .bind(owner.user_id)
+        .bind(vec![
+            "preference",
+            "profile",
+            "goal",
+            "constraint",
+            "plan",
+            "experience",
+        ])
+        .bind(topic_signals)
+        .bind(limit.min(100))
+        .fetch_all(self.db.as_ref())
+        .await?;
+
+        Ok(rows.into_iter().map(memory_retrieval_from_row).collect())
     }
 
     pub async fn add_memory_source(
@@ -1895,6 +1968,24 @@ fn memory_source_from_row(row: sqlx::postgres::PgRow) -> MemorySourceRecord {
     }
 }
 
+fn memory_retrieval_from_row(row: sqlx::postgres::PgRow) -> MemoryRetrievalRecord {
+    MemoryRetrievalRecord {
+        id: row.get("id"),
+        memory_key: row.get("memory_key"),
+        kind: row.get("kind"),
+        content: row.get("content"),
+        tags: row.get("tags"),
+        confidence: row.get::<f64, _>("confidence") as f32,
+        importance: row.get::<f64, _>("importance") as f32,
+        last_reinforced_at: row.get::<i64, _>("last_reinforced_at") as u64,
+        expires_at: row
+            .get::<Option<i64>, _>("expires_at")
+            .map(|value| value as u64),
+        updated_at: row.get::<i64, _>("updated_at") as u64,
+        source_count: row.get::<i64, _>("source_count") as u32,
+    }
+}
+
 fn memory_extraction_job_from_row(row: sqlx::postgres::PgRow) -> MemoryExtractionJobRecord {
     MemoryExtractionJobRecord {
         id: row.get("id"),
@@ -2312,6 +2403,87 @@ mod integration_tests {
     }
 
     #[tokio::test]
+    async fn retrieval_candidates_enforce_owner_character_and_expiration() {
+        let Some(store) = test_store().await else {
+            return;
+        };
+        let first_session = create_test_session(&store).await;
+        let second_session = create_test_session(&store).await;
+        let first_owner = OwnerScope::from_session(&first_session);
+        let second_owner = OwnerScope::from_session(&second_session);
+
+        store
+            .upsert_memory_item(
+                first_owner,
+                test_memory(
+                    "aiko",
+                    "travel.food.preference",
+                    "Likes spicy ramen while travelling",
+                    0.9,
+                ),
+            )
+            .await
+            .expect("first owner memory should save");
+        store
+            .upsert_memory_item(
+                second_owner,
+                test_memory(
+                    "aiko",
+                    "travel.food.preference",
+                    "Likes sushi while travelling",
+                    0.9,
+                ),
+            )
+            .await
+            .expect("second owner memory should save");
+        store
+            .upsert_memory_item(
+                first_owner,
+                test_memory(
+                    "other",
+                    "travel.food.preference",
+                    "Likes curry while travelling",
+                    0.9,
+                ),
+            )
+            .await
+            .expect("other character memory should save");
+        let mut expired = test_memory(
+            "aiko",
+            "travel.activity.expired",
+            "Likes expired travel tours",
+            0.9,
+        );
+        expired.expires_at = Some(now_unix_seconds().saturating_sub(1));
+        store
+            .upsert_memory_item(first_owner, expired)
+            .await
+            .expect("expired memory should save");
+
+        let signals = vec!["travel".to_owned(), "food".to_owned()];
+        let first = store
+            .find_memory_retrieval_candidates(first_owner, "aiko", &signals, 50)
+            .await
+            .expect("first candidates should query");
+        assert_eq!(first.len(), 1);
+        assert_eq!(first[0].content, "Likes spicy ramen while travelling");
+        let second = store
+            .find_memory_retrieval_candidates(second_owner, "aiko", &signals, 50)
+            .await
+            .expect("second candidates should query");
+        assert_eq!(second.len(), 1);
+        assert_eq!(second[0].content, "Likes sushi while travelling");
+        let other = store
+            .find_memory_retrieval_candidates(first_owner, "other", &signals, 50)
+            .await
+            .expect("other character candidates should query");
+        assert_eq!(other.len(), 1);
+        assert_eq!(other[0].content, "Likes curry while travelling");
+
+        cleanup_sessions(&store, &[first_session.id, second_session.id]).await;
+    }
+
+    #[tokio::test]
     async fn account_promotion_merges_duplicate_memory_and_sources() {
         let Some(store) = test_store().await else {
             return;
@@ -2391,6 +2563,17 @@ mod integration_tests {
             .await
             .expect("merged sources should list");
         assert_eq!(sources.len(), 2);
+        let retrieval = store
+            .find_memory_retrieval_candidates(
+                second_owner,
+                "aiko",
+                &["travel".to_owned(), "food".to_owned()],
+                50,
+            )
+            .await
+            .expect("promoted account retrieval should query");
+        assert_eq!(retrieval.len(), 1);
+        assert_eq!(retrieval[0].id, account_memory.id);
 
         cleanup_sessions(&store, &[first_session.id, second_session.id]).await;
     }

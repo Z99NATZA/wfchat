@@ -626,6 +626,25 @@ mod tests {
     }
 
     #[test]
+    fn build_messages_places_memory_context_after_character_prompt() {
+        let messages = vec![
+            AiMessage::system("LEARNED_CONTEXT_V1\nitems:".to_owned()),
+            AiMessage::user("travel food".to_owned()),
+        ];
+        let payload = serde_json::to_value(build_messages("aiko_default", &messages))
+            .expect("messages should serialize");
+
+        assert_eq!(payload[0]["role"], "system");
+        assert!(payload[0]["content"]
+            .as_str()
+            .expect("character prompt should be text")
+            .contains("Aiko"));
+        assert_eq!(payload[1]["role"], "system");
+        assert_eq!(payload[1]["content"], "LEARNED_CONTEXT_V1\nitems:");
+        assert_eq!(payload[2]["role"], "user");
+    }
+
+    #[test]
     fn build_messages_serializes_image_messages_as_openai_parts() {
         let messages = vec![AiMessage::with_parts(
             AiRole::User,

@@ -141,6 +141,12 @@ worker. With `AI_PROVIDER=mock`, extraction jobs complete without learned
 items; configured OpenAI-compatible providers perform structured extraction
 using their existing backend model and credentials.
 
+Bounded automatic-memory retrieval also runs inside the API container and uses
+the existing PostgreSQL connection. It adds no Compose service, migration,
+volume, port, public API, or environment value. The normal
+`docker compose up -d --build` path is sufficient for both capture and
+retrieval.
+
 For local manual bootstrap only, legacy schema SQL remains at
 `apps/api/db/init.sql`:
 

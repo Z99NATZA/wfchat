@@ -101,14 +101,18 @@ image attachment upload use separate stricter buckets.
 `store.rs` owns the internal automatic-memory persistence foundation. It exposes
 owner-scoped memory item/source operations, account-promotion merging,
 transactional chat-deletion cleanup, durable extraction jobs, atomic captured
-item/source writes, and learned-context reset. There is no public memory route,
-retrieval, or prompt injection yet.
+item/source writes, bounded owner/character retrieval candidates, and
+learned-context reset. There is no public memory route or memory UI.
 
-`memory.rs` owns automatic capture. The API starts one background worker in the
-existing process. It claims durable jobs, requests strict structured extraction
-from the configured AI provider, validates evidence and sensitive-data rules,
-and commits accepted items with message provenance. Retry logs contain only job
-metadata, sanitized error codes, and counters—not raw user or learned content.
+`memory.rs` owns automatic capture and retrieval. The API starts one background
+worker in the existing process. It claims durable jobs, requests strict
+structured extraction from the configured AI provider, validates evidence and
+sensitive-data rules, and commits accepted items with message provenance. For
+new chat requests it derives bounded topic signals, requests owner/character
+candidates from the store, validates and scores them deterministically, and
+builds an untrusted soft-context system message within item/character/token
+budgets. Logs contain only job/request metadata, sanitized error codes, and
+counters—not raw user or learned content.
 
 ```text
 persist user + assistant + extraction job (one transaction)
@@ -116,7 +120,17 @@ persist user + assistant + extraction job (one transaction)
   -> background memory worker
       -> strict extraction and validation
       -> atomic memory item + message source persistence
+
+latest user text
+  -> bounded owner + character candidate query
+  -> relevance/confidence/importance/reinforcement/recency scoring
+  -> character prompt -> learned-context system message -> chat messages
 ```
+
+Both chat endpoints call the same `prepare_chat_completion_context()` function,
+so streaming and non-streaming provider requests receive identical learned
+context. Memory retrieval fails open: the chat proceeds without memory if the
+memory-specific query fails.
 
 `characters.rs` owns character-facing endpoints, the current static character registry, and character-specific system prompts.
 

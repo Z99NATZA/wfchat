@@ -2,7 +2,9 @@
 
 - Data model: `persona -> chats -> messages`
 - One persona can have many chats.
-- Each chat has isolated context; requests only include messages from that chat.
+- Raw conversation history remains isolated per chat. Requests may additionally
+  include a small relevant learned-context block captured from other chats for
+  the same owner and character.
 
 ## URL behavior
 
@@ -26,10 +28,17 @@ transaction creates an idempotent automatic-memory extraction job. Background
 capture never delays the normal JSON response or SSE `done` event, and
 extraction failures do not roll back a successfully persisted response.
 
+Before either message endpoint calls the provider, the backend retrieves a
+bounded set of relevant, unexpired memory items for the exact owner and
+character. The same preparation function injects this soft context after the
+character prompt and before current-chat messages. The public request and
+response contracts do not change, and a retrieval-specific failure falls back
+to chat without memory.
+
 Deleting a chat through `DELETE /api/chats/:chat_id` also removes automatic
 memory source rows tied to that chat. Affected learned context is deleted when
 no source remains and retained when another chat still supports it. Automatic
-capture is implemented; retrieval remains unavailable.
+capture and bounded retrieval are implemented.
 
 Clearing a chat's messages removes message-level memory sources and applies the
 same orphan cleanup while retaining the chat id.

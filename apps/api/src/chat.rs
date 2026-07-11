@@ -28,6 +28,7 @@ use crate::{
     },
     characters,
     error::{AppError, AppResult},
+    memory::retrieve_memory_context,
     rate_limit::{RateLimitFamily, RateLimitIdentity},
     session::session_id_from_headers,
     state::AppState,
@@ -778,11 +779,29 @@ async fn prepare_chat_completion_context(
         .iter()
         .map(|attachment| attachment.id)
         .collect::<Vec<_>>();
-    let mut ai_messages = chat
-        .messages
-        .iter()
-        .map(StoredMessage::to_ai_message)
-        .collect::<Vec<_>>();
+    let mut ai_messages = Vec::new();
+    if !content.is_empty() {
+        match retrieve_memory_context(&state.store, owner, &chat.character_id, content).await {
+            Ok(Some(context)) => {
+                tracing::debug!(
+                    chat_id = %chat.id,
+                    selected_count = context.selected_count,
+                    estimated_tokens = context.estimated_tokens,
+                    "selected automatic memory context"
+                );
+                ai_messages.push(context.message);
+            }
+            Ok(None) => {}
+            Err(_) => {
+                tracing::warn!(
+                    chat_id = %chat.id,
+                    error_code = "memory_retrieval_failed",
+                    "continuing chat without automatic memory context"
+                );
+            }
+        }
+    }
+    ai_messages.extend(chat.messages.iter().map(StoredMessage::to_ai_message));
     let ai_user_message = build_ai_user_message(state, content, &attachments).await?;
     ai_messages.push(ai_user_message.clone());
 
@@ -1000,7 +1019,10 @@ mod tests {
     use image::{DynamicImage, ImageBuffer, ImageFormat, Rgb, Rgba};
     use reqwest::Client;
     use serde_json::Value;
-    use std::io::Cursor;
+    use std::{
+        io::Cursor,
+        time::{SystemTime, UNIX_EPOCH},
+    };
     use tower::ServiceExt;
 
     use crate::{
@@ -1008,7 +1030,7 @@ mod tests {
         attachments::cleanup_stale_pending_chat_attachments,
         config::Config,
         rate_limit::{RateLimitPolicies, RateLimitPolicy, RateLimiter},
-        store::{ChatStore, SessionRecord},
+        store::{ChatStore, NewMemoryItemRecord, SessionRecord},
     };
 
     async fn create_test_session(state: &AppState) -> SessionRecord {
@@ -1987,6 +2009,66 @@ mod tests {
         );
 
         let _ = tokio::fs::remove_dir_all(state.config.chat_attachment_upload_dir).await;
+    }
+
+    #[tokio::test]
+    async fn streaming_and_non_streaming_share_bounded_memory_context_preparation() {
+        let Some(state) = test_state().await else {
+            return;
+        };
+        let session = create_test_session(&state).await;
+        let owner = OwnerScope::from_session(&session);
+        let chat = create_test_chat(&state, owner).await;
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs();
+        state
+            .store
+            .upsert_memory_item(
+                owner,
+                NewMemoryItemRecord {
+                    character_id: "aiko".to_owned(),
+                    memory_key: "travel.food.preference".to_owned(),
+                    kind: "preference".to_owned(),
+                    content: "Likes spicy ramen while travelling".to_owned(),
+                    tags: vec!["travel".to_owned(), "food".to_owned()],
+                    confidence: 0.9,
+                    importance: 0.8,
+                    last_reinforced_at: now,
+                    expires_at: None,
+                },
+            )
+            .await
+            .expect("memory should save");
+        let payload = SendMessageRequest {
+            content: "Recommend travel food in Osaka".to_owned(),
+            attachments: Vec::new(),
+        };
+
+        let non_streaming = prepare_chat_completion_context(&state, owner, chat.id, &payload)
+            .await
+            .expect("non-streaming context should prepare");
+        let streaming = prepare_chat_completion_context(&state, owner, chat.id, &payload)
+            .await
+            .expect("streaming context should prepare");
+        assert_eq!(
+            serde_json::to_value(&non_streaming.ai_messages).unwrap(),
+            serde_json::to_value(&streaming.ai_messages).unwrap()
+        );
+        assert_eq!(non_streaming.ai_messages[0].role, AiRole::System);
+        assert!(non_streaming.ai_messages[0]
+            .text_content()
+            .contains("Likes spicy ramen while travelling"));
+        assert_eq!(
+            non_streaming
+                .ai_messages
+                .last()
+                .map(|message| &message.role),
+            Some(&AiRole::User)
+        );
+
+        let _ = state.store.delete_chat(owner, chat.id).await;
     }
 
     #[tokio::test]

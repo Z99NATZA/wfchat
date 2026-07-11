@@ -1,8 +1,53 @@
 # Chat Memory Behavior History
 
 This file records decisions about cross-chat memory behavior. Automatic capture
-is active, but retrieval is not; current chats still send only their own stored
-message history to the AI provider.
+and bounded retrieval are active; raw chat history remains isolated per chat.
+
+## 2026-07-11 - Add bounded structured retrieval
+
+Status: Active
+
+Previous behavior:
+- Durable learned context was captured with provenance but never used in a
+  later provider request.
+
+Problem observed:
+- Loading every memory would leak unrelated context, weaken owner/character
+  isolation, and create an unbounded prompt.
+- Separate streaming and non-streaming implementations could select different
+  context for the same user turn.
+
+Decision:
+- Prefilter candidates in PostgreSQL by exact owner, character, supported kind,
+  confidence, expiration, and structured lexical topic signals.
+- Rank the bounded set deterministically using relevance, confidence,
+  importance, reinforcement, and recency.
+- Inject at most five items within 1,200 characters and an estimated 300 tokens
+  as untrusted soft context after the character prompt.
+- Use one chat-context preparation path for both endpoints and continue without
+  memory when its retrieval query fails.
+
+Why:
+- Relevant cross-chat context can improve replies without embeddings or broad
+  prompt exposure.
+- Explicit budgets, stable tie-breakers, and fail-open behavior keep chat cost
+  and reliability predictable.
+
+Regression guard:
+- `memory::tests::retrieval_selects_related_memory_and_excludes_unrelated_memory`
+- `store::integration_tests::retrieval_candidates_enforce_owner_character_and_expiration`
+- `chat::tests::streaming_and_non_streaming_share_bounded_memory_context_preparation`
+- `docker compose up -d --build`
+
+Related current contract:
+- `docs/automatic-memory.md`
+- `docs/chat-sessions.md`
+- `docs/backend-architecture.md`
+
+Related implementation:
+- `apps/api/src/memory.rs`
+- `apps/api/src/store.rs`
+- `apps/api/src/chat.rs`
 
 ## 2026-07-11 - Add durable selective automatic capture
 
