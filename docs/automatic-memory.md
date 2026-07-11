@@ -243,11 +243,10 @@ A full reset that also deletes chat history is not exposed by this action.
   isolation, expiration, correction precedence, deterministic ordering,
   budgets, and endpoint parity.
 
-### Phase 4: Production Hardening
+### Phase 4: Validation And Basic Operations
 
-Status: in progress. Reset and Control is implemented; the remaining work below
-is expected before automatic memory is treated as production-ready rather than
-optional feature expansion.
+Status: in progress. Reset and Control and the deterministic Evaluation Suite
+are implemented. Basic Observability and Expiration Tests remain separate work.
 
 #### Reset And Control
 
@@ -259,38 +258,40 @@ optional feature expansion.
 - Character naming uses the `{aiko}` i18n parameter populated from character
   configuration; translation values do not hardcode the name.
 
-#### Observability
+#### Evaluation Suite
 
-- Add operational metrics for capture attempts, accepted/rejected candidates,
-  retries, dead jobs, retrieval candidates, selected items, budget usage, and
-  fail-open retrievals.
-- Add dashboards or equivalent operational views and alerts for sustained
-  extraction failures or unusual rejection/retry rates.
+- Status: implemented.
+- `apps/api/src/memory_evaluation.rs` uses deterministic, synthetic English and
+  Thai fixtures without a live provider or network dependency.
+- Coverage includes related/unrelated/empty retrieval, stable ranking, strict
+  prompt budgets, uncertainty guidance, repeated evidence, corrected-value
+  precedence, and exclusion of credentials and internal provenance metadata.
+- PostgreSQL-backed scenarios verify exact guest, registered-account, and
+  character isolation and the persisted reinforcement/correction lifecycle.
+- The shared chat preparation and OpenAI-compatible payload are checked for
+  streaming/non-streaming parity and this order: character prompt, optional
+  learned context, current-chat history, latest user message.
+- Run this suite independently against the PostgreSQL test database:
+
+```powershell
+$env:WFCHAT_TEST_DATABASE_URL='postgres://postgres:postgres@localhost:5432/wfchat_phase2_test'
+cargo test --manifest-path apps/api/Cargo.toml memory_evaluation -- --test-threads=1
+```
+
+#### Basic Observability
+
+- Record aggregate counts for successful/rejected capture, retry and dead jobs,
+  successful/fail-open retrieval, selected items, and prompt budget usage.
 - Keep raw learned content, source messages, credentials, and prompt context out
   of metrics and logs.
 
-#### Evaluation
+#### Expiration Tests
 
-- Build a repeatable evaluation set for related retrieval, unrelated-memory
-  exclusion, correction and latest-message precedence, expiration, and
-  uncertain recollection wording.
-- Verify guest, registered-account, and character isolation with both streaming
-  and non-streaming chat paths.
-- Evaluate retrieval quality with representative real conversation patterns
-  before changing scoring weights.
-
-#### Confidence And Lifecycle Tuning
-
-- Tune confidence, reinforcement, recency, and expiration behavior from
-  evaluation results and operational evidence rather than intuition alone.
-- Add confidence decay where stale learned context otherwise remains too
-  authoritative.
-- Preserve deterministic selection, bounded prompts, provenance cleanup, and
-  latest-user-message precedence while tuning.
-
-Optional follow-up: add embeddings or vector search only if evaluation shows
-that structured key/tag/content retrieval consistently misses relevant memory.
-Embeddings are not required to complete the production-hardening work above.
+- Verify temporary memory expires at its configured time and is not retrieved
+  afterward.
+- Verify chat deletion and learned-context reset cannot make expired or removed
+  memory active again.
+- Verify queued extraction work removed by reset cannot recreate old memory.
 
 ## Phase 1 Acceptance Criteria
 

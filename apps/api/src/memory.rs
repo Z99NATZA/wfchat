@@ -28,9 +28,9 @@ const WORKER_POLL_INTERVAL: Duration = Duration::from_secs(2);
 const MAX_JOBS_PER_TICK: usize = 10;
 const MAX_CANDIDATES: usize = 5;
 const RETRIEVAL_CANDIDATE_LIMIT: i64 = 50;
-const MEMORY_MAX_ITEMS: usize = 5;
-const MEMORY_MAX_CONTEXT_CHARS: usize = 1_200;
-const MEMORY_MAX_ESTIMATED_TOKENS: usize = 300;
+pub(crate) const MEMORY_MAX_ITEMS: usize = 5;
+pub(crate) const MEMORY_MAX_CONTEXT_CHARS: usize = 1_200;
+pub(crate) const MEMORY_MAX_ESTIMATED_TOKENS: usize = 300;
 const MEMORY_MIN_RELEVANCE: f32 = 0.18;
 
 const MEMORY_CONTEXT_HEADER: &str = "LEARNED_CONTEXT_V1\n\
@@ -96,7 +96,7 @@ pub async fn retrieve_memory_context(
     ))
 }
 
-fn select_memory_context(
+pub(crate) fn select_memory_context(
     mut candidates: Vec<MemoryRetrievalRecord>,
     latest_user_message: &str,
     now: u64,

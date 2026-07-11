@@ -134,6 +134,11 @@ so streaming and non-streaming provider requests receive identical learned
 context. Memory retrieval fails open: the chat proceeds without memory if the
 memory-specific query fails.
 
+`memory_evaluation.rs` is the deterministic automatic-memory evaluation suite.
+It exercises production selection and prompt preparation with synthetic EN/TH
+fixtures and uses the PostgreSQL test database for ownership, character,
+reinforcement, and correction boundaries without calling a live AI provider.
+
 `characters.rs` owns character-facing endpoints, the current static character registry, and character-specific system prompts.
 
 `admin.rs` owns admin-only AI profile and provider endpoints. It currently exposes list/status endpoints protected by `UserKind::Admin`; write/manage flows are not implemented yet.

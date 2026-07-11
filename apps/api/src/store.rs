@@ -1178,12 +1178,21 @@ impl ChatStore {
     }
 
     #[cfg(test)]
-    async fn claim_memory_extraction_job_for_test(
+    pub(crate) async fn claim_memory_extraction_job_for_test(
         &self,
         user_message_id: Uuid,
     ) -> StoreResult<Option<MemoryExtractionJobRecord>> {
         self.claim_memory_extraction_job_for_message(Some(user_message_id))
             .await
+    }
+
+    #[cfg(test)]
+    pub(crate) async fn delete_session_for_test(&self, session_id: Uuid) -> StoreResult<()> {
+        sqlx::query("delete from auth_sessions where id = $1")
+            .bind(session_id)
+            .execute(self.db.as_ref())
+            .await?;
+        Ok(())
     }
 
     pub async fn complete_memory_extraction_job(&self, job_id: Uuid) -> StoreResult<bool> {

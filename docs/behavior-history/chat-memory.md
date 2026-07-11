@@ -3,6 +3,38 @@
 This file records decisions about cross-chat memory behavior. Automatic capture
 and bounded retrieval are active; raw chat history remains isolated per chat.
 
+## 2026-07-12 - Add deterministic automatic-memory evaluation
+
+Status: Active
+
+Previous behavior:
+- Automatic capture and retrieval had focused unit and integration tests, but
+  there was no single independently runnable evaluation contract.
+
+Problem observed:
+- It was difficult to assess EN/TH relevance, isolation, correction, prompt
+  budgets, and transport parity together without relying on scattered tests.
+
+Decision:
+- Add `memory_evaluation` with synthetic provider-free fixtures and real
+  PostgreSQL checks for guest, account, and character boundaries.
+- Exercise the production retrieval, capture persistence, shared chat
+  preparation, and provider-message mapping paths instead of duplicating their
+  behavior in a separate evaluator.
+
+Why:
+- One repeatable suite makes memory quality and privacy regressions visible
+  before scoring or lifecycle behavior is tuned.
+
+Regression guard:
+- `$env:WFCHAT_TEST_DATABASE_URL='postgres://postgres:postgres@localhost:5432/wfchat_phase2_test'; cargo test --manifest-path apps/api/Cargo.toml memory_evaluation -- --test-threads=1`
+
+Related current contract:
+- `docs/automatic-memory.md`
+
+Related implementation:
+- `apps/api/src/memory_evaluation.rs`
+
 ## 2026-07-11 - Add a confirmed Settings memory reset
 
 Status: Active

@@ -813,6 +813,24 @@ async fn prepare_chat_completion_context(
     })
 }
 
+#[cfg(test)]
+pub(crate) async fn prepare_text_context_for_memory_evaluation(
+    state: &AppState,
+    owner: OwnerScope,
+    chat_id: Uuid,
+    content: &str,
+) -> AppResult<Vec<AiMessage>> {
+    let payload = SendMessageRequest {
+        content: content.to_owned(),
+        attachments: Vec::new(),
+    };
+    Ok(
+        prepare_chat_completion_context(state, owner, chat_id, &payload)
+            .await?
+            .ai_messages,
+    )
+}
+
 async fn validate_message_attachment_requests(
     state: &AppState,
     owner: OwnerScope,

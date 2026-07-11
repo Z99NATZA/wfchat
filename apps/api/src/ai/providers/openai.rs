@@ -368,6 +368,15 @@ fn build_messages<'a>(ai_profile_id: &str, messages: &'a [AiMessage]) -> Vec<Pro
     provider_messages
 }
 
+#[cfg(test)]
+pub(crate) fn provider_messages_for_memory_evaluation(
+    ai_profile_id: &str,
+    messages: &[AiMessage],
+) -> serde_json::Value {
+    serde_json::to_value(build_messages(ai_profile_id, messages))
+        .expect("provider messages should serialize")
+}
+
 fn provider_message_content(message: &AiMessage) -> ProviderMessageContent {
     let has_image_parts = message.has_image_parts();
     if !has_image_parts {
