@@ -113,8 +113,15 @@ sensitive-data rules, and commits accepted items with message provenance. For
 new chat requests it derives bounded topic signals, requests owner/character
 candidates from the store, validates and scores them deterministically, and
 builds an untrusted soft-context system message within item/character/token
-budgets. Logs contain only job/request metadata, sanitized error codes, and
-counters—not raw user or learned content.
+budgets. Automatic-memory logs contain only bounded operation metadata,
+sanitized error codes, and aggregate counters—not raw user or learned content.
+
+`AppState` also owns one dependency-free `MemoryTelemetry` instance shared by
+its runtime clones. Process-lifetime atomic counters and stable structured
+events summarize capture and retrieval health and prompt-budget usage. They
+reset on API restart and are not exposed through a public endpoint or persisted
+to PostgreSQL. Telemetry does not contain user content, learned context,
+credentials, ownership identifiers, or chat/job identifiers.
 
 ```text
 persist user + assistant + extraction job (one transaction)

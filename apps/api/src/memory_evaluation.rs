@@ -546,6 +546,7 @@ fn evaluation_state(store: ChatStore) -> AppState {
         http: Client::new(),
         rate_limiter: RateLimiter::default(),
         store,
+        memory_telemetry: crate::memory::MemoryTelemetry::default(),
     }
 }
 

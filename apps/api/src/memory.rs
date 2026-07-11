@@ -1,6 +1,9 @@
 use std::cmp::Ordering as CmpOrdering;
 use std::collections::{BTreeSet, HashSet};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{
+    atomic::{AtomicU64, Ordering},
+    Arc,
+};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use axum::{
@@ -46,17 +49,152 @@ pub struct RetrievedMemoryContext {
     pub estimated_tokens: usize,
 }
 
+#[derive(Clone, Default)]
+pub struct MemoryTelemetry {
+    counters: Arc<MemoryTelemetryCounters>,
+}
+
+#[derive(Default)]
+struct MemoryTelemetryCounters {
+    capture_jobs_claimed: AtomicU64,
+    capture_jobs_completed: AtomicU64,
+    capture_jobs_retried: AtomicU64,
+    capture_jobs_dead: AtomicU64,
+    capture_items_accepted: AtomicU64,
+    capture_items_rejected: AtomicU64,
+    retrieval_attempts: AtomicU64,
+    retrieval_selected: AtomicU64,
+    retrieval_empty: AtomicU64,
+    retrieval_fail_open: AtomicU64,
+    retrieval_candidates: AtomicU64,
+    retrieval_selected_items: AtomicU64,
+    retrieval_context_chars: AtomicU64,
+    retrieval_estimated_tokens: AtomicU64,
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, serde::Serialize)]
+pub(crate) struct MemoryTelemetrySnapshot {
+    pub capture_jobs_claimed: u64,
+    pub capture_jobs_completed: u64,
+    pub capture_jobs_retried: u64,
+    pub capture_jobs_dead: u64,
+    pub capture_items_accepted: u64,
+    pub capture_items_rejected: u64,
+    pub retrieval_attempts: u64,
+    pub retrieval_selected: u64,
+    pub retrieval_empty: u64,
+    pub retrieval_fail_open: u64,
+    pub retrieval_candidates: u64,
+    pub retrieval_selected_items: u64,
+    pub retrieval_context_chars: u64,
+    pub retrieval_estimated_tokens: u64,
+}
+
+impl MemoryTelemetry {
+    fn capture_claimed(&self) {
+        self.counters
+            .capture_jobs_claimed
+            .fetch_add(1, Ordering::Relaxed);
+    }
+
+    fn capture_completed(&self, accepted: u64, rejected: u64) {
+        self.counters
+            .capture_jobs_completed
+            .fetch_add(1, Ordering::Relaxed);
+        self.counters
+            .capture_items_accepted
+            .fetch_add(accepted, Ordering::Relaxed);
+        self.counters
+            .capture_items_rejected
+            .fetch_add(rejected, Ordering::Relaxed);
+    }
+
+    fn capture_retried(&self) {
+        self.counters
+            .capture_jobs_retried
+            .fetch_add(1, Ordering::Relaxed);
+    }
+
+    fn capture_dead(&self) {
+        self.counters
+            .capture_jobs_dead
+            .fetch_add(1, Ordering::Relaxed);
+    }
+
+    fn retrieval_attempted(&self) {
+        self.counters
+            .retrieval_attempts
+            .fetch_add(1, Ordering::Relaxed);
+    }
+
+    fn retrieval_selected(&self, candidate_count: usize, context: &RetrievedMemoryContext) {
+        self.counters
+            .retrieval_selected
+            .fetch_add(1, Ordering::Relaxed);
+        self.counters
+            .retrieval_candidates
+            .fetch_add(candidate_count as u64, Ordering::Relaxed);
+        self.counters
+            .retrieval_selected_items
+            .fetch_add(context.selected_count as u64, Ordering::Relaxed);
+        self.counters.retrieval_context_chars.fetch_add(
+            context.message.text_content().chars().count() as u64,
+            Ordering::Relaxed,
+        );
+        self.counters
+            .retrieval_estimated_tokens
+            .fetch_add(context.estimated_tokens as u64, Ordering::Relaxed);
+    }
+
+    fn retrieval_empty(&self, candidate_count: usize) {
+        self.counters
+            .retrieval_empty
+            .fetch_add(1, Ordering::Relaxed);
+        self.counters
+            .retrieval_candidates
+            .fetch_add(candidate_count as u64, Ordering::Relaxed);
+    }
+
+    fn retrieval_failed_open(&self) {
+        self.counters
+            .retrieval_fail_open
+            .fetch_add(1, Ordering::Relaxed);
+    }
+
+    pub(crate) fn snapshot(&self) -> MemoryTelemetrySnapshot {
+        MemoryTelemetrySnapshot {
+            capture_jobs_claimed: self.counters.capture_jobs_claimed.load(Ordering::Relaxed),
+            capture_jobs_completed: self.counters.capture_jobs_completed.load(Ordering::Relaxed),
+            capture_jobs_retried: self.counters.capture_jobs_retried.load(Ordering::Relaxed),
+            capture_jobs_dead: self.counters.capture_jobs_dead.load(Ordering::Relaxed),
+            capture_items_accepted: self.counters.capture_items_accepted.load(Ordering::Relaxed),
+            capture_items_rejected: self.counters.capture_items_rejected.load(Ordering::Relaxed),
+            retrieval_attempts: self.counters.retrieval_attempts.load(Ordering::Relaxed),
+            retrieval_selected: self.counters.retrieval_selected.load(Ordering::Relaxed),
+            retrieval_empty: self.counters.retrieval_empty.load(Ordering::Relaxed),
+            retrieval_fail_open: self.counters.retrieval_fail_open.load(Ordering::Relaxed),
+            retrieval_candidates: self.counters.retrieval_candidates.load(Ordering::Relaxed),
+            retrieval_selected_items: self
+                .counters
+                .retrieval_selected_items
+                .load(Ordering::Relaxed),
+            retrieval_context_chars: self
+                .counters
+                .retrieval_context_chars
+                .load(Ordering::Relaxed),
+            retrieval_estimated_tokens: self
+                .counters
+                .retrieval_estimated_tokens
+                .load(Ordering::Relaxed),
+        }
+    }
+}
+
 #[derive(Debug)]
 struct ScoredMemory {
     item: MemoryRetrievalRecord,
     score: f32,
 }
-
-static JOBS_COMPLETED: AtomicU64 = AtomicU64::new(0);
-static JOBS_RETRIED: AtomicU64 = AtomicU64::new(0);
-static JOBS_DEAD: AtomicU64 = AtomicU64::new(0);
-static ITEMS_ACCEPTED: AtomicU64 = AtomicU64::new(0);
-static ITEMS_REJECTED: AtomicU64 = AtomicU64::new(0);
 
 pub fn router() -> Router<AppState> {
     Router::new().route("/learned-context", delete(reset_learned_context))
@@ -82,18 +220,88 @@ pub async fn retrieve_memory_context(
     character_id: &str,
     latest_user_message: &str,
 ) -> StoreResult<Option<RetrievedMemoryContext>> {
+    retrieve_memory_context_observed(
+        store,
+        owner,
+        character_id,
+        latest_user_message,
+        &MemoryTelemetry::default(),
+    )
+    .await
+}
+
+pub(crate) async fn retrieve_memory_context_observed(
+    store: &ChatStore,
+    owner: OwnerScope,
+    character_id: &str,
+    latest_user_message: &str,
+    telemetry: &MemoryTelemetry,
+) -> StoreResult<Option<RetrievedMemoryContext>> {
+    telemetry.retrieval_attempted();
     let signals = topic_signals(latest_user_message);
     if signals.is_empty() {
+        telemetry.retrieval_empty(0);
+        let totals = telemetry.snapshot();
+        tracing::debug!(
+            event = "automatic_memory_retrieval_empty",
+            candidate_count = 0,
+            retrieval_attempts = totals.retrieval_attempts,
+            retrieval_empty = totals.retrieval_empty,
+            "automatic memory retrieval returned no context"
+        );
         return Ok(None);
     }
-    let candidates = store
+    let candidates = match store
         .find_memory_retrieval_candidates(owner, character_id, &signals, RETRIEVAL_CANDIDATE_LIMIT)
-        .await?;
-    Ok(select_memory_context(
-        candidates,
-        latest_user_message,
-        now_unix_seconds(),
-    ))
+        .await
+    {
+        Ok(candidates) => candidates,
+        Err(error) => {
+            telemetry.retrieval_failed_open();
+            let totals = telemetry.snapshot();
+            tracing::warn!(
+                event = "automatic_memory_retrieval_fail_open",
+                error_code = "candidate_query_failed",
+                retrieval_attempts = totals.retrieval_attempts,
+                retrieval_fail_open = totals.retrieval_fail_open,
+                "continuing chat without automatic memory context"
+            );
+            return Err(error);
+        }
+    };
+    let candidate_count = candidates.len();
+    let selected = select_memory_context(candidates, latest_user_message, now_unix_seconds());
+    match &selected {
+        Some(context) => {
+            telemetry.retrieval_selected(candidate_count, context);
+            let context_chars = context.message.text_content().chars().count();
+            let totals = telemetry.snapshot();
+            tracing::debug!(
+                event = "automatic_memory_retrieval_selected",
+                candidate_count,
+                selected_count = context.selected_count,
+                context_chars,
+                estimated_tokens = context.estimated_tokens,
+                retrieval_selected = totals.retrieval_selected,
+                retrieval_selected_items = totals.retrieval_selected_items,
+                retrieval_context_chars = totals.retrieval_context_chars,
+                retrieval_estimated_tokens = totals.retrieval_estimated_tokens,
+                "selected automatic memory context"
+            );
+        }
+        None => {
+            telemetry.retrieval_empty(candidate_count);
+            let totals = telemetry.snapshot();
+            tracing::debug!(
+                event = "automatic_memory_retrieval_empty",
+                candidate_count,
+                retrieval_attempts = totals.retrieval_attempts,
+                retrieval_empty = totals.retrieval_empty,
+                "automatic memory retrieval returned no context"
+            );
+        }
+    }
+    Ok(selected)
 }
 
 pub(crate) fn select_memory_context(
@@ -365,7 +573,11 @@ pub fn spawn_memory_capture_worker(state: AppState) {
                     Ok(true) => {}
                     Ok(false) => break,
                     Err(error) => {
-                        tracing::error!(error_code = error, "memory capture worker database error");
+                        tracing::error!(
+                            event = "automatic_memory_capture_worker_error",
+                            error_code = error,
+                            "memory capture worker database error"
+                        );
                         break;
                     }
                 }
@@ -384,6 +596,7 @@ async fn process_next_job(state: &AppState) -> Result<bool, &'static str> {
     let Some(job) = job else {
         return Ok(false);
     };
+    state.memory_telemetry.capture_claimed();
 
     let output = match extract_memories(state, &job).await {
         Ok(output) => output,
@@ -395,20 +608,26 @@ async fn process_next_job(state: &AppState) -> Result<bool, &'static str> {
                 .map_err(|_| "failure_state_update_failed")?;
             match status.as_deref() {
                 Some("dead") => {
-                    JOBS_DEAD.fetch_add(1, Ordering::Relaxed);
+                    state.memory_telemetry.capture_dead();
+                    let totals = state.memory_telemetry.snapshot();
                     tracing::error!(
-                        job_id = %job.id,
+                        event = "automatic_memory_capture_dead",
                         attempts = job.attempts,
                         error_code = error.code,
+                        capture_jobs_claimed = totals.capture_jobs_claimed,
+                        capture_jobs_dead = totals.capture_jobs_dead,
                         "memory extraction job exhausted retries"
                     );
                 }
                 Some(_) => {
-                    JOBS_RETRIED.fetch_add(1, Ordering::Relaxed);
+                    state.memory_telemetry.capture_retried();
+                    let totals = state.memory_telemetry.snapshot();
                     tracing::warn!(
-                        job_id = %job.id,
+                        event = "automatic_memory_capture_retry",
                         attempts = job.attempts,
                         error_code = error.code,
+                        capture_jobs_claimed = totals.capture_jobs_claimed,
+                        capture_jobs_retried = totals.capture_jobs_retried,
                         "memory extraction job scheduled for retry"
                     );
                 }
@@ -429,19 +648,21 @@ async fn process_next_job(state: &AppState) -> Result<bool, &'static str> {
         return Err("capture_job_disappeared");
     }
 
-    JOBS_COMPLETED.fetch_add(1, Ordering::Relaxed);
-    ITEMS_ACCEPTED.fetch_add(accepted_count, Ordering::Relaxed);
-    ITEMS_REJECTED.fetch_add(rejected_count as u64, Ordering::Relaxed);
+    state
+        .memory_telemetry
+        .capture_completed(accepted_count, rejected_count as u64);
+    let totals = state.memory_telemetry.snapshot();
     tracing::info!(
-        job_id = %job.id,
+        event = "automatic_memory_capture_completed",
         attempts = job.attempts,
         accepted_count,
         rejected_count,
-        jobs_completed = JOBS_COMPLETED.load(Ordering::Relaxed),
-        jobs_retried = JOBS_RETRIED.load(Ordering::Relaxed),
-        jobs_dead = JOBS_DEAD.load(Ordering::Relaxed),
-        items_accepted = ITEMS_ACCEPTED.load(Ordering::Relaxed),
-        items_rejected = ITEMS_REJECTED.load(Ordering::Relaxed),
+        capture_jobs_claimed = totals.capture_jobs_claimed,
+        capture_jobs_completed = totals.capture_jobs_completed,
+        capture_jobs_retried = totals.capture_jobs_retried,
+        capture_jobs_dead = totals.capture_jobs_dead,
+        capture_items_accepted = totals.capture_items_accepted,
+        capture_items_rejected = totals.capture_items_rejected,
         "memory extraction job completed"
     );
     Ok(true)
@@ -801,6 +1022,7 @@ mod tests {
             http: Client::new(),
             rate_limiter: RateLimiter::default(),
             store,
+            memory_telemetry: MemoryTelemetry::default(),
         })
     }
 
@@ -1114,5 +1336,183 @@ mod tests {
             .text_content();
         assert!(prompt.contains("Now prefers mild ramen"));
         assert!(!prompt.contains("Likes very spicy ramen"));
+    }
+
+    #[test]
+    fn observability_counter_transitions_are_aggregate_and_test_isolated() {
+        let telemetry = MemoryTelemetry::default();
+        let shared_clone = telemetry.clone();
+        let isolated = MemoryTelemetry::default();
+
+        telemetry.capture_claimed();
+        telemetry.capture_claimed();
+        telemetry.capture_completed(3, 2);
+        telemetry.capture_retried();
+        telemetry.capture_dead();
+
+        let context = select_memory_context(
+            vec![retrieval_item(
+                90,
+                "food.ramen.preference",
+                "Likes spicy ramen",
+                &["food", "ramen"],
+            )],
+            "food ramen",
+            1_000_100,
+        )
+        .expect("telemetry fixture should select context");
+        let context_chars = context.message.text_content().chars().count() as u64;
+        telemetry.retrieval_attempted();
+        telemetry.retrieval_selected(7, &context);
+        telemetry.retrieval_attempted();
+        telemetry.retrieval_empty(3);
+        telemetry.retrieval_attempted();
+        telemetry.retrieval_failed_open();
+
+        let snapshot = telemetry.snapshot();
+        assert_eq!(snapshot.capture_jobs_claimed, 2);
+        assert_eq!(snapshot.capture_jobs_completed, 1);
+        assert_eq!(snapshot.capture_jobs_retried, 1);
+        assert_eq!(snapshot.capture_jobs_dead, 1);
+        assert_eq!(snapshot.capture_items_accepted, 3);
+        assert_eq!(snapshot.capture_items_rejected, 2);
+        assert_eq!(snapshot.retrieval_attempts, 3);
+        assert_eq!(snapshot.retrieval_selected, 1);
+        assert_eq!(snapshot.retrieval_empty, 1);
+        assert_eq!(snapshot.retrieval_fail_open, 1);
+        assert_eq!(snapshot.retrieval_candidates, 10);
+        assert_eq!(snapshot.retrieval_selected_items, 1);
+        assert_eq!(snapshot.retrieval_context_chars, context_chars);
+        assert_eq!(
+            snapshot.retrieval_estimated_tokens,
+            context.estimated_tokens as u64
+        );
+        assert_eq!(shared_clone.snapshot(), snapshot);
+        assert_eq!(isolated.snapshot(), MemoryTelemetrySnapshot::default());
+    }
+
+    #[test]
+    fn observability_snapshot_exposes_only_privacy_safe_aggregate_fields() {
+        let payload = serde_json::to_value(MemoryTelemetry::default().snapshot())
+            .expect("telemetry snapshot should serialize");
+        let fields = payload
+            .as_object()
+            .expect("telemetry snapshot should be an object");
+        let expected = [
+            "capture_items_accepted",
+            "capture_items_rejected",
+            "capture_jobs_claimed",
+            "capture_jobs_completed",
+            "capture_jobs_dead",
+            "capture_jobs_retried",
+            "retrieval_attempts",
+            "retrieval_candidates",
+            "retrieval_context_chars",
+            "retrieval_empty",
+            "retrieval_estimated_tokens",
+            "retrieval_fail_open",
+            "retrieval_selected",
+            "retrieval_selected_items",
+        ];
+        assert_eq!(fields.len(), expected.len());
+        for field in expected {
+            assert!(
+                fields.contains_key(field),
+                "missing aggregate field {field}"
+            );
+            assert!(fields[field].is_number());
+        }
+        let serialized = payload.to_string();
+        for forbidden in [
+            "content",
+            "message",
+            "memory_key",
+            "prompt",
+            "credential",
+            "owner",
+            "session",
+            "chat_id",
+            "job_id",
+            "provider_response",
+        ] {
+            assert!(!serialized.contains(forbidden));
+        }
+    }
+
+    #[tokio::test]
+    async fn observability_records_selected_and_empty_retrieval_budget_totals() {
+        let Some(state) = test_state().await else {
+            return;
+        };
+        let session = state
+            .store
+            .create_guest_session()
+            .await
+            .expect("telemetry test session should create");
+        let owner = OwnerScope::from_session(&session);
+        state
+            .store
+            .upsert_memory_item(
+                owner,
+                NewMemoryItemRecord {
+                    character_id: "aiko".to_owned(),
+                    memory_key: "food.ramen.preference".to_owned(),
+                    kind: "preference".to_owned(),
+                    content: "Likes spicy ramen".to_owned(),
+                    tags: vec!["food".to_owned(), "ramen".to_owned()],
+                    confidence: 0.9,
+                    importance: 0.8,
+                    last_reinforced_at: now_unix_seconds(),
+                    expires_at: None,
+                },
+            )
+            .await
+            .expect("telemetry fixture memory should save");
+
+        let selected = retrieve_memory_context_observed(
+            &state.store,
+            owner,
+            "aiko",
+            "Recommend ramen food",
+            &state.memory_telemetry,
+        )
+        .await
+        .expect("selected retrieval should query")
+        .expect("selected retrieval should return context");
+        assert!(retrieve_memory_context_observed(
+            &state.store,
+            owner,
+            "aiko",
+            "telescope astronomy",
+            &state.memory_telemetry,
+        )
+        .await
+        .expect("empty retrieval should query")
+        .is_none());
+
+        let snapshot = state.memory_telemetry.snapshot();
+        assert_eq!(snapshot.retrieval_attempts, 2);
+        assert_eq!(snapshot.retrieval_selected, 1);
+        assert_eq!(snapshot.retrieval_empty, 1);
+        assert_eq!(snapshot.retrieval_fail_open, 0);
+        assert_eq!(snapshot.retrieval_candidates, 1);
+        assert_eq!(
+            snapshot.retrieval_selected_items,
+            selected.selected_count as u64
+        );
+        assert_eq!(
+            snapshot.retrieval_context_chars,
+            selected.message.text_content().chars().count() as u64
+        );
+        assert_eq!(
+            snapshot.retrieval_estimated_tokens,
+            selected.estimated_tokens as u64
+        );
+
+        state
+            .store
+            .delete_session_for_test(session.id)
+            .await
+            .expect("telemetry test session should clean up");
     }
 }

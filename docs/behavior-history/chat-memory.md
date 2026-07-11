@@ -3,6 +3,44 @@
 This file records decisions about cross-chat memory behavior. Automatic capture
 and bounded retrieval are active; raw chat history remains isolated per chat.
 
+## 2026-07-12 - Add privacy-safe basic memory observability
+
+Status: Active
+
+Previous behavior:
+- Capture logged a few process counters, while retrieval logged selected or
+  fail-open outcomes with chat identifiers and had no aggregate totals.
+
+Problem observed:
+- Runtime capture/retrieval health and prompt-budget usage could not be assessed
+  consistently before tuning confidence or lifecycle behavior.
+- Global static counters would make deterministic parallel tests interfere with
+  each other.
+
+Decision:
+- Give each `AppState` one clone-shared `MemoryTelemetry` instance containing
+  process-lifetime atomic aggregate counters.
+- Emit stable structured capture and retrieval events without content,
+  ownership identifiers, or chat/job identifiers.
+- Keep telemetry dependency-free, non-persistent, and internal to the API.
+
+Why:
+- Operators can distinguish healthy, empty, retrying, dead, and fail-open paths
+  and observe aggregate prompt usage without weakening memory privacy.
+
+Regression guard:
+- `cargo test --manifest-path apps/api/Cargo.toml observability -- --test-threads=1`
+- `cargo test --manifest-path apps/api/Cargo.toml memory_evaluation -- --test-threads=1`
+
+Related current contract:
+- `docs/automatic-memory.md`
+- `docs/backend-architecture.md`
+
+Related implementation:
+- `apps/api/src/memory.rs`
+- `apps/api/src/state.rs`
+- `apps/api/src/chat.rs`
+
 ## 2026-07-12 - Add deterministic automatic-memory evaluation
 
 Status: Active

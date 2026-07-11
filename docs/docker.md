@@ -147,6 +147,11 @@ volume, port, public API, or environment value. The normal
 `docker compose up -d --build` path is sufficient for both capture and
 retrieval.
 
+Automatic-memory observability uses in-process atomic counters and structured
+API logs. It adds no Compose service, dependency, port, volume, migration, or
+environment value. Counters reset when the API container restarts; no public
+metrics endpoint is exposed.
+
 For local manual bootstrap only, legacy schema SQL remains at
 `apps/api/db/init.sql`:
 

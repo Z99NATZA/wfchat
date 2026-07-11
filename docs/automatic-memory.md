@@ -245,8 +245,8 @@ A full reset that also deletes chat history is not exposed by this action.
 
 ### Phase 4: Validation And Basic Operations
 
-Status: in progress. Reset and Control and the deterministic Evaluation Suite
-are implemented. Basic Observability and Expiration Tests remain separate work.
+Status: in progress. Reset and Control, the deterministic Evaluation Suite, and
+Basic Observability are implemented. Expiration Tests remain separate work.
 
 #### Reset And Control
 
@@ -280,10 +280,23 @@ cargo test --manifest-path apps/api/Cargo.toml memory_evaluation -- --test-threa
 
 #### Basic Observability
 
-- Record aggregate counts for successful/rejected capture, retry and dead jobs,
-  successful/fail-open retrieval, selected items, and prompt budget usage.
-- Keep raw learned content, source messages, credentials, and prompt context out
-  of metrics and logs.
+- Status: implemented.
+- One `MemoryTelemetry` instance is owned by `AppState`; cloned runtime state
+  shares process-lifetime atomic counters, while independently constructed test
+  states remain isolated.
+- Capture totals cover claimed, completed, retried, and dead jobs plus accepted
+  and rejected candidates.
+- Retrieval totals cover attempts, selected context, empty results, fail-open
+  errors, candidate and selected-item totals, context characters, and estimated
+  tokens.
+- Stable structured events report completion/failure and selected/empty/fail-open
+  boundaries. Fields contain aggregate counts, bounded per-operation counts,
+  attempts, and sanitized error codes only—never learned content, source/latest
+  messages, memory keys, prompt blocks, credentials, provider bodies, or
+  owner/session/chat/job identifiers.
+- Counters are deliberately dependency-free and reset when the API process
+  restarts. There is no public metrics endpoint, dashboard, database storage,
+  migration, or frontend control.
 
 #### Expiration Tests
 

@@ -28,7 +28,7 @@ use crate::{
     },
     characters,
     error::{AppError, AppResult},
-    memory::retrieve_memory_context,
+    memory::retrieve_memory_context_observed,
     rate_limit::{RateLimitFamily, RateLimitIdentity},
     session::session_id_from_headers,
     state::AppState,
@@ -781,24 +781,16 @@ async fn prepare_chat_completion_context(
         .collect::<Vec<_>>();
     let mut ai_messages = Vec::new();
     if !content.is_empty() {
-        match retrieve_memory_context(&state.store, owner, &chat.character_id, content).await {
-            Ok(Some(context)) => {
-                tracing::debug!(
-                    chat_id = %chat.id,
-                    selected_count = context.selected_count,
-                    estimated_tokens = context.estimated_tokens,
-                    "selected automatic memory context"
-                );
-                ai_messages.push(context.message);
-            }
-            Ok(None) => {}
-            Err(_) => {
-                tracing::warn!(
-                    chat_id = %chat.id,
-                    error_code = "memory_retrieval_failed",
-                    "continuing chat without automatic memory context"
-                );
-            }
+        if let Ok(Some(context)) = retrieve_memory_context_observed(
+            &state.store,
+            owner,
+            &chat.character_id,
+            content,
+            &state.memory_telemetry,
+        )
+        .await
+        {
+            ai_messages.push(context.message);
         }
     }
     ai_messages.extend(chat.messages.iter().map(StoredMessage::to_ai_message));
@@ -2199,6 +2191,7 @@ mod tests {
             http: Client::new(),
             rate_limiter: RateLimiter::default(),
             store,
+            memory_telemetry: crate::memory::MemoryTelemetry::default(),
         })
     }
 

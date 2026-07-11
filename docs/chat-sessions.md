@@ -35,6 +35,10 @@ character prompt and before current-chat messages. The public request and
 response contracts do not change, and a retrieval-specific failure falls back
 to chat without memory.
 
+The shared preparation path also updates privacy-safe process counters for
+selected, empty, and fail-open retrieval outcomes and prompt-budget usage.
+These counters do not change either chat transport or expose user content.
+
 Deleting a chat through `DELETE /api/chats/:chat_id` also removes automatic
 memory source rows tied to that chat. Affected learned context is deleted when
 no source remains and retained when another chat still supports it. Automatic
