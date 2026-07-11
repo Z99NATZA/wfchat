@@ -130,6 +130,8 @@ human-readable schema reference.
 - Retrieval:
   - candidates require supported kinds, confidence of at least `0.65`, and an
     unset or future `expires_at`
+  - `expires_at <= now()` is inactive at the exact query boundary; rows do not
+    require background deletion to remain excluded
   - owner and `character_id` predicates are applied in PostgreSQL before
     relevance scoring
   - structured key/tag/content topic signals prefilter a bounded candidate set

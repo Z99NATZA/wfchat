@@ -496,6 +496,303 @@ async fn memory_evaluation_streaming_and_non_streaming_provider_context_is_ident
     cleanup_sessions(&store, &[session.id]).await;
 }
 
+#[test]
+fn memory_expiration_application_boundary_is_exact_and_deterministic() {
+    struct Scenario {
+        name: &'static str,
+        expires_at: Option<u64>,
+        expected: bool,
+    }
+
+    let scenarios = [
+        Scenario {
+            name: "already expired",
+            expires_at: Some(NOW - 1),
+            expected: false,
+        },
+        Scenario {
+            name: "expires exactly now",
+            expires_at: Some(NOW),
+            expected: false,
+        },
+        Scenario {
+            name: "expires in the future",
+            expires_at: Some(NOW + 1),
+            expected: true,
+        },
+        Scenario {
+            name: "does not expire",
+            expires_at: None,
+            expected: true,
+        },
+    ];
+
+    for (index, scenario) in scenarios.into_iter().enumerate() {
+        let mut item = retrieval_item(
+            700 + index as u128,
+            &format!("food.ramen.expiration_{index}"),
+            "Likes synthetic ramen",
+            &["food", "ramen"],
+        );
+        item.expires_at = scenario.expires_at;
+        let selected = select_memory_context(vec![item], "food ramen", NOW).is_some();
+        assert_eq!(selected, scenario.expected, "{}", scenario.name);
+    }
+}
+
+#[tokio::test]
+async fn memory_expiration_postgres_filters_expired_and_keeps_future_account_memory() {
+    let Some(store) = evaluation_store().await else {
+        return;
+    };
+    let account_id = Uuid::new_v4();
+    let session = registered_session(&store, account_id).await;
+    let owner = OwnerScope::from_session(&session);
+    let now = now_unix_seconds();
+    save_expiring_memory(
+        &store,
+        owner,
+        "aiko",
+        "food.ramen.expired",
+        "Expired synthetic ramen preference",
+        Some(now.saturating_sub(60)),
+    )
+    .await;
+    save_expiring_memory(
+        &store,
+        owner,
+        "aiko",
+        "food.ramen.boundary",
+        "Boundary synthetic ramen preference",
+        Some(now),
+    )
+    .await;
+    let future = save_expiring_memory(
+        &store,
+        owner,
+        "aiko",
+        "food.ramen.future",
+        "Future synthetic ramen preference",
+        Some(now + 3_600),
+    )
+    .await;
+
+    let candidates = store
+        .find_memory_retrieval_candidates(
+            owner,
+            "aiko",
+            &["food".to_owned(), "ramen".to_owned()],
+            50,
+        )
+        .await
+        .expect("expiration candidates should query");
+    assert_eq!(candidates.len(), 1);
+    assert_eq!(candidates[0].id, future.id);
+    let context = retrieve_memory_context(&store, owner, "aiko", "food ramen")
+        .await
+        .expect("expiration retrieval should query")
+        .expect("future memory should be selected");
+    let text = context_text(&context);
+    assert!(text.contains("Future synthetic ramen preference"));
+    assert!(!text.contains("Expired synthetic ramen preference"));
+    assert!(!text.contains("Boundary synthetic ramen preference"));
+
+    cleanup_sessions(&store, &[session.id]).await;
+}
+
+#[tokio::test]
+async fn memory_expiration_source_deletion_never_reactivates_removed_or_expired_context() {
+    let Some(store) = evaluation_store().await else {
+        return;
+    };
+    let session = store
+        .create_guest_session()
+        .await
+        .expect("deletion test session should create");
+    let owner = OwnerScope::from_session(&session);
+    let first_chat = create_chat(&store, owner, "aiko").await;
+    let remaining_chat = create_chat(&store, owner, "aiko").await;
+    let only_first = save_memory(
+        &store,
+        owner,
+        "aiko",
+        "food.ramen.only_first",
+        "Only first chat supports shio ramen",
+    )
+    .await;
+    let shared = save_memory(
+        &store,
+        owner,
+        "aiko",
+        "food.ramen.shared",
+        "Both chats support miso ramen",
+    )
+    .await;
+    let expired_shared = save_expiring_memory(
+        &store,
+        owner,
+        "aiko",
+        "food.ramen.expired_shared",
+        "Expired shared curry ramen",
+        Some(now_unix_seconds().saturating_sub(60)),
+    )
+    .await;
+    for (memory_id, chat_id, strength) in [
+        (only_first.id, first_chat.id, 0.9),
+        (shared.id, first_chat.id, 0.9),
+        (shared.id, remaining_chat.id, 0.8),
+        (expired_shared.id, first_chat.id, 0.9),
+        (expired_shared.id, remaining_chat.id, 0.8),
+    ] {
+        store
+            .add_memory_source(owner, memory_id, chat_id, None, strength)
+            .await
+            .expect("deletion fixture source should save")
+            .expect("deletion fixture source should be valid");
+    }
+
+    let before = retrieve_memory_context(&store, owner, "aiko", "food ramen")
+        .await
+        .expect("pre-deletion retrieval should query")
+        .expect("active pre-deletion memory should exist");
+    let before_text = context_text(&before);
+    assert!(before_text.contains("Only first chat supports shio ramen"));
+    assert!(before_text.contains("Both chats support miso ramen"));
+    assert!(!before_text.contains("Expired shared curry ramen"));
+
+    assert!(store
+        .delete_chat(owner, first_chat.id)
+        .await
+        .expect("first source chat should delete"));
+    let retained_items = store
+        .list_memory_items(owner, "aiko")
+        .await
+        .expect("retained memory should list");
+    assert!(!retained_items.iter().any(|item| item.id == only_first.id));
+    assert!(retained_items.iter().any(|item| item.id == shared.id));
+    assert!(retained_items
+        .iter()
+        .any(|item| item.id == expired_shared.id));
+    let after_first = retrieve_memory_context(&store, owner, "aiko", "food ramen")
+        .await
+        .expect("post-deletion retrieval should query")
+        .expect("remaining supported memory should exist");
+    let after_first_text = context_text(&after_first);
+    assert!(!after_first_text.contains("Only first chat supports shio ramen"));
+    assert!(after_first_text.contains("Both chats support miso ramen"));
+    assert!(!after_first_text.contains("Expired shared curry ramen"));
+
+    assert!(store
+        .delete_chat(owner, remaining_chat.id)
+        .await
+        .expect("remaining source chat should delete"));
+    assert!(store
+        .list_memory_items(owner, "aiko")
+        .await
+        .expect("removed memories should list")
+        .is_empty());
+    assert!(retrieve_memory_context(&store, owner, "aiko", "food ramen")
+        .await
+        .expect("final retrieval should query")
+        .is_none());
+
+    cleanup_sessions(&store, &[session.id]).await;
+}
+
+#[tokio::test]
+async fn memory_expiration_account_reset_removes_memory_and_all_queued_job_states() {
+    let Some(store) = evaluation_store().await else {
+        return;
+    };
+    let account_id = Uuid::new_v4();
+    let first_session = registered_session(&store, account_id).await;
+    let second_session = registered_session(&store, account_id).await;
+    let owner = OwnerScope::from_session(&first_session);
+    let reset_owner = OwnerScope::from_session(&second_session);
+    let chat = create_chat(&store, owner, "aiko").await;
+    save_memory(
+        &store,
+        owner,
+        "aiko",
+        "food.ramen.reset",
+        "Account reset synthetic ramen memory",
+    )
+    .await;
+
+    let pending_user = append_turn(&store, owner, chat.id, "Pending synthetic evidence").await;
+    let retry_user = append_turn(&store, owner, chat.id, "Retry synthetic evidence").await;
+    let processing_user =
+        append_turn(&store, owner, chat.id, "Processing synthetic evidence").await;
+    let retry_job = store
+        .claim_memory_extraction_job_for_test(retry_user.id)
+        .await
+        .expect("retry job should query")
+        .expect("retry job should claim");
+    assert_eq!(
+        store
+            .fail_memory_extraction_job(retry_job.id, "synthetic_retry")
+            .await
+            .expect("retry state should save")
+            .as_deref(),
+        Some("retry")
+    );
+    let processing_job = store
+        .claim_memory_extraction_job_for_test(processing_user.id)
+        .await
+        .expect("processing job should query")
+        .expect("processing job should claim");
+
+    assert!(
+        retrieve_memory_context(&store, reset_owner, "aiko", "food ramen")
+            .await
+            .expect("pre-reset account retrieval should query")
+            .is_some()
+    );
+    assert_eq!(
+        store
+            .reset_learned_context(reset_owner)
+            .await
+            .expect("account learned context should reset"),
+        1
+    );
+    assert!(store
+        .list_memory_items(owner, "aiko")
+        .await
+        .expect("reset memory should list")
+        .is_empty());
+    assert!(retrieve_memory_context(&store, owner, "aiko", "food ramen")
+        .await
+        .expect("post-reset retrieval should query")
+        .is_none());
+    for user_id in [pending_user.id, retry_user.id, processing_user.id] {
+        assert!(store
+            .claim_memory_extraction_job_for_test(user_id)
+            .await
+            .expect("removed job should query")
+            .is_none());
+    }
+    assert!(!store
+        .apply_memory_capture(
+            processing_job.id,
+            &[captured_memory("Stale processing evidence", false)],
+        )
+        .await
+        .expect("stale processing capture should be rejected"));
+    assert!(store
+        .list_memory_items(reset_owner, "aiko")
+        .await
+        .expect("stale capture result should list")
+        .is_empty());
+    let retained_chat = store
+        .get_chat(reset_owner, chat.id)
+        .await
+        .expect("retained account chat should query")
+        .expect("reset should retain chat history");
+    assert_eq!(retained_chat.messages.len(), 6);
+
+    cleanup_sessions(&store, &[first_session.id, second_session.id]).await;
+}
+
 async fn evaluation_store() -> Option<ChatStore> {
     let database_url = std::env::var("WFCHAT_TEST_DATABASE_URL").ok()?;
     ChatStore::connect(&database_url).await.ok()
@@ -625,6 +922,17 @@ async fn save_memory(
     memory_key: &str,
     content: &str,
 ) -> crate::store::MemoryItemRecord {
+    save_expiring_memory(store, owner, character_id, memory_key, content, None).await
+}
+
+async fn save_expiring_memory(
+    store: &ChatStore,
+    owner: OwnerScope,
+    character_id: &str,
+    memory_key: &str,
+    content: &str,
+    expires_at: Option<u64>,
+) -> crate::store::MemoryItemRecord {
     store
         .upsert_memory_item(
             owner,
@@ -637,7 +945,7 @@ async fn save_memory(
                 confidence: 0.9,
                 importance: 0.8,
                 last_reinforced_at: now_unix_seconds(),
-                expires_at: None,
+                expires_at,
             },
         )
         .await

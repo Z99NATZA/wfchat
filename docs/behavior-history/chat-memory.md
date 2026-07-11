@@ -3,6 +3,44 @@
 This file records decisions about cross-chat memory behavior. Automatic capture
 and bounded retrieval are active; raw chat history remains isolated per chat.
 
+## 2026-07-12 - Validate expiration and removal safety
+
+Status: Active
+
+Previous behavior:
+- Expiration, provenance deletion, and reset filtering were implemented and had
+  focused coverage, but their exact boundary and combined stale-job lifecycle
+  were not validated in one independently runnable suite.
+
+Problem observed:
+- A boundary mismatch or surviving queued job could make expired or reset
+  learned context active again even when ordinary retrieval tests passed.
+
+Decision:
+- Extend the deterministic memory evaluation with exact application expiration
+  boundaries and PostgreSQL lifecycle scenarios.
+- Verify guest source deletion and registered-account reset across pending,
+  retry, and processing jobs, including rejection of a stale claimed job id.
+- Keep expiration as query/application filtering; do not add a background
+  scheduler or deletion policy without evidence that one is needed.
+
+Why:
+- Phase 4 can close with explicit proof that time, provenance, and reset
+  boundaries fail safely without expanding runtime complexity.
+
+Regression guard:
+- `$env:WFCHAT_TEST_DATABASE_URL='postgres://postgres:postgres@localhost:5432/wfchat_phase2_test'; cargo test --manifest-path apps/api/Cargo.toml memory_expiration -- --test-threads=1`
+- `$env:WFCHAT_TEST_DATABASE_URL='postgres://postgres:postgres@localhost:5432/wfchat_phase2_test'; cargo test --manifest-path apps/api/Cargo.toml memory_evaluation -- --test-threads=1`
+
+Related current contract:
+- `docs/automatic-memory.md`
+- `docs/database-schema.md`
+
+Related implementation:
+- `apps/api/src/memory_evaluation.rs`
+- `apps/api/src/memory.rs`
+- `apps/api/src/store.rs`
+
 ## 2026-07-12 - Add privacy-safe basic memory observability
 
 Status: Active

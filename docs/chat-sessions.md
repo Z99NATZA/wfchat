@@ -47,6 +47,11 @@ capture and bounded retrieval are implemented.
 Clearing a chat's messages removes message-level memory sources and applies the
 same orphan cleanup while retaining the chat id.
 
+Expired learned context is filtered at retrieval time. Chat/source deletion and
+learned-context reset remain transactional lifecycle boundaries, and reset also
+removes pending, retry, and processing extraction jobs so stale work cannot
+recreate pre-reset memory.
+
 The streaming path is additive. It returns SSE-framed assistant response events and keeps the non-streaming message endpoint available as a fallback.
 
 See `docs/chat-sse-streaming.md` for the completed first-iteration SSE contract.

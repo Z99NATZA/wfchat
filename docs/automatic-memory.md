@@ -1,6 +1,6 @@
 # Automatic Memory
 
-Status: Phase 3 Implemented - Capture And Retrieval Active
+Status: Phase 4 Validation Implemented - Capture And Retrieval Active
 
 This document defines the intended replacement for the retired manual memory
 system. The internal storage, provenance, chat-deletion cleanup, account
@@ -245,8 +245,8 @@ A full reset that also deletes chat history is not exposed by this action.
 
 ### Phase 4: Validation And Basic Operations
 
-Status: in progress. Reset and Control, the deterministic Evaluation Suite, and
-Basic Observability are implemented. Expiration Tests remain separate work.
+Status: implemented. Reset and Control, the deterministic Evaluation Suite,
+Basic Observability, and Expiration Tests are complete.
 
 #### Reset And Control
 
@@ -300,11 +300,28 @@ cargo test --manifest-path apps/api/Cargo.toml memory_evaluation -- --test-threa
 
 #### Expiration Tests
 
-- Verify temporary memory expires at its configured time and is not retrieved
-  afterward.
-- Verify chat deletion and learned-context reset cannot make expired or removed
-  memory active again.
-- Verify queued extraction work removed by reset cannot recreate old memory.
+- Status: implemented.
+- Deterministic application tests prove `expires_at <= now` is inactive while a
+  future timestamp remains eligible, including the exact boundary without
+  sleeping.
+- PostgreSQL tests prove expired and boundary-time rows are excluded while an
+  otherwise-equivalent future row remains retrievable for the exact account and
+  character.
+- Source-deletion tests prove single-source memory is removed, multi-source
+  memory remains only while supported, and expired retained rows never become
+  active during cleanup.
+- Registered-account reset tests cover pending, retry, and processing extraction
+  jobs. Reset retains chat history, removes every job state, and makes a stale
+  claimed job id unable to persist or recreate memory.
+- Run the lifecycle suite independently against the PostgreSQL test database:
+
+```powershell
+$env:WFCHAT_TEST_DATABASE_URL='postgres://postgres:postgres@localhost:5432/wfchat_phase2_test'
+cargo test --manifest-path apps/api/Cargo.toml memory_expiration -- --test-threads=1
+```
+
+Expiration remains retrieval-time filtering plus provenance/reset cleanup. No
+background expiration scheduler or new deletion policy was required.
 
 ## Phase 1 Acceptance Criteria
 

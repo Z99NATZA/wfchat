@@ -152,6 +152,10 @@ API logs. It adds no Compose service, dependency, port, volume, migration, or
 environment value. Counters reset when the API container restarts; no public
 metrics endpoint is exposed.
 
+Memory expiration is enforced by the existing PostgreSQL retrieval query and
+application validation. It requires no cleanup container, scheduler, migration,
+environment value, or additional Compose configuration.
+
 For local manual bootstrap only, legacy schema SQL remains at
 `apps/api/db/init.sql`:
 
