@@ -56,7 +56,7 @@ function Model2DPage({ activityBar, backgroundImageUrl, headerControls }: Model2
 
 function Model2DSidebar() {
 	const { t } = useI18n();
-	
+
 	return (
 		<aside className="hidden h-full w-[18.5rem] shrink-0 border-r border-app-border bg-app-panel/62 lg:flex lg:flex-col">
 			<div className="flex h-16 items-center border-b border-app-border px-5">
