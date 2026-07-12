@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Ellipsis, MessageCircle, Plus, Search, Sparkles, Trash2, X } from "lucide-react";
+import { Ellipsis, Plus, Search, Sparkles, Trash2, X } from "lucide-react";
 import Button from "@/components/ui/Button";
 import IconButton from "@/components/ui/IconButton";
 import { useI18n } from "@/i18n/i18nContext";

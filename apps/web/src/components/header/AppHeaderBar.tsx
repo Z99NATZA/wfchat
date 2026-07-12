@@ -1,5 +1,5 @@
 import { type ReactNode, useEffect, useRef, useState } from "react";
-import { ChevronLeft, Ellipsis, Menu } from "lucide-react";
+import { Ellipsis, Menu } from "lucide-react";
 import IconButton from "@/components/ui/IconButton";
 import { useI18n } from "@/i18n/i18nContext";
 
