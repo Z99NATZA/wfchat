@@ -32,7 +32,27 @@ app -> pages -> layouts/features -> shared layers
 
 ## Formatting
 
-The project uses tabs with width 4. The `.editorconfig` file defines the editor baseline.
+The project uses tabs with width 4. The `.editorconfig` file defines the editor
+baseline. Prettier is the formatter authority for `apps/web`, and Rustfmt is the
+formatter authority for `apps/api`.
+
+Apply formatting:
+
+```powershell
+npm --prefix apps/web run format
+cargo fmt --manifest-path apps/api/Cargo.toml
+```
+
+Check formatting without changing files:
+
+```powershell
+npm --prefix apps/web run format:check
+cargo fmt --manifest-path apps/api/Cargo.toml -- --check
+```
+
+Automatic formatting should be followed by `git diff` so unrelated files are
+not included accidentally. See `docs/ci.md` for the complete local pre-push
+gate.
 
 ## Extending Safely
 
