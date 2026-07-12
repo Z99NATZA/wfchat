@@ -43,6 +43,9 @@ Use ordered SQLx migrations as the source of truth.
 - Store migration files under `apps/api/migrations/`.
 - Keep migration files append-only after they have been applied to any shared or
   deployed database.
+- Keep every migration file byte-stable with LF line endings. SQLx checksums
+  include line-ending bytes, so CRLF conversion makes an unchanged applied
+  migration fail startup validation.
 - Run migrations before serving API traffic.
 - Fail API startup if a migration fails.
 - Keep `apps/api/db/init.sql` only as a non-canonical convenience if it remains
@@ -113,6 +116,11 @@ a fresh database.
 ## Operating Rules
 
 - Every future schema change gets a new migration file.
+- `.gitattributes` enforces `apps/api/migrations/*.sql text eol=lf`; do not
+  remove or override this rule on another platform.
+- Never fix a checksum mismatch by editing `_sqlx_migrations`. First compare the
+  migration bytes and line endings with the committed file. Applied migrations
+  remain immutable; real schema changes require a new migration.
 - Migrations are reviewed with the application code that depends on them.
 - Risky migrations are split into expand/backfill/contract steps when needed.
 - CI should run migrations against an empty database before backend tests.

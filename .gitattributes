@@ -1,0 +1,4 @@
+# SQLx migration checksums include line-ending bytes. Keep migrations stable
+# across Windows and Linux checkouts so an applied migration is never mistaken
+# for a modified migration.
+apps/api/migrations/*.sql text eol=lf

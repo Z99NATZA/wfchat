@@ -4,6 +4,44 @@ This file records backend database persistence decisions. The current contract
 lives in `docs/backend-architecture.md`; read that first when changing store or
 database error behavior.
 
+## 2026-07-12 - Pin SQLx migration line endings
+
+Status: Active
+
+Previous behavior:
+- Migration files had no repository-level line-ending rule while Windows Git
+  could check them out as CRLF.
+
+Problem observed:
+- PostgreSQL recorded an LF-based SQLx checksum, then a Windows CRLF checkout
+  changed the embedded migration bytes without changing SQL content.
+- SQLx rejected API startup as a modified applied migration, leaving the API in
+  a restart loop and causing the web proxy to return `502`.
+
+Decision:
+- Enforce LF for `apps/api/migrations/*.sql` through `.gitattributes`.
+- Normalize local migration bytes to their committed LF form without changing
+  `_sqlx_migrations`, deleting the database volume, or modifying schema.
+
+Why:
+- Applied migrations must be byte-stable across Windows and Linux because SQLx
+  intentionally validates their checksums before serving traffic.
+
+Regression guard:
+- Compare current SHA-384 migration hashes with `_sqlx_migrations.checksum` when
+  diagnosing startup mismatch.
+- `docker compose up -d --build`
+- `GET /api/health`, proxied `GET /api/chat-ui/config`, and proxied
+  `GET /api/auth/me` return `200` after startup.
+
+Related current contract:
+- `docs/database-migrations.md`
+- `docs/docker.md`
+
+Related implementation:
+- `.gitattributes`
+- `apps/api/migrations/*.sql`
+
 ## 2026-07-11 - Commit memory extraction outbox with chat turns
 
 Status: Active
