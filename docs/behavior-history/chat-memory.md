@@ -3,6 +3,60 @@
 This file records decisions about cross-chat memory behavior. Automatic capture
 and bounded retrieval are active; raw chat history remains isolated per chat.
 
+## 2026-07-12 - Add bounded cross-language topic retrieval
+
+Status: Active
+
+Previous behavior:
+- Capture could persist a canonical English memory such as
+  `preference.music.nightcore`, but retrieval compared only raw lexical signals.
+- A later Thai message about `เพลง` therefore failed to find the English
+  `music` tag even though capture, ownership, and persistence were correct.
+
+Problem observed:
+- Runtime inspection confirmed completed extraction jobs and a persisted
+  nightcore preference; PostgreSQL found it for `music` but not for `เพลง`.
+- Existing EN/TH evaluation paired each query with content in the same language
+  and did not cover cross-language retrieval.
+
+Decision:
+- Keep structured memory and add a small backend-owned canonical taxonomy for
+  `music`, `gaming`, `food`, `travel`, `anime`, and `coding` with bounded
+  Thai/English aliases.
+- Build canonical, alias, and lexical signals once per request and reuse that
+  exact set for PostgreSQL prefiltering and application scoring.
+- Normalize provider tags in application code, retain useful specific tags,
+  and resolve legacy aliases at retrieval without a schema or data migration.
+- Rank specific lexical matches before category-only matches. Permit at most
+  two category-only items overall and one for the same canonical topic while
+  retaining the existing five-item/character/token prompt budgets.
+
+Why:
+- The change fixes the demonstrated language mismatch deterministically without
+  embedding cost, vector infrastructure, or broad prompt exposure.
+- Shared signals and broad-category guardrails improve recall without allowing
+  query and scoring stages to disagree or flooding context with weak matches.
+
+Regression guard:
+- `memory::tests::retrieval_cross_language_uses_same_signals_in_store_and_scoring`
+- `memory::tests::retrieval_prefers_specific_music_match_and_limits_broad_topic_context`
+- `memory::tests::extractor_normalizes_canonical_tags_and_keeps_specific_tags`
+- `memory_evaluation::memory_evaluation_table_driven_english_and_thai_retrieval`
+- `$env:WFCHAT_TEST_DATABASE_URL='postgres://postgres:postgres@localhost:5432/wfchat_phase2_test'; cargo test --manifest-path apps/api/Cargo.toml -- --test-threads=1`
+- `docker compose up -d --build`
+
+Related current contract:
+- `docs/automatic-memory.md`
+- `docs/chat-sessions.md`
+- `docs/chat-sse-streaming.md`
+- `docs/backend-architecture.md`
+- `docs/database-schema.md`
+
+Related implementation:
+- `apps/api/src/memory.rs`
+- `apps/api/src/memory_evaluation.rs`
+- `apps/api/src/store.rs`
+
 ## 2026-07-12 - Validate expiration and removal safety
 
 Status: Active

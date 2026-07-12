@@ -5,8 +5,9 @@ Status: Phase 4 Validation Implemented - Capture And Retrieval Active
 This document defines the intended replacement for the retired manual memory
 system. The internal storage, provenance, chat-deletion cleanup, account
 promotion, learned-context reset boundaries, durable automatic capture, and
-bounded structured retrieval are implemented. Aiko can use relevant learned
-context across chats for the same owner and character.
+bounded multilingual structured retrieval are implemented. Aiko can use
+relevant learned context across chats for the same owner and character even
+when the remembered content and the new topic use Thai and English differently.
 
 ## Goal
 
@@ -21,6 +22,15 @@ Example:
 Earlier chat: The user says they like spicy ramen while travelling.
 Later chat: The user asks for Osaka travel recommendations.
 Aiko: If I remember correctly, you enjoy spicy ramen when travelling...
+```
+
+Cross-language example:
+
+```text
+Earlier chat: The user says in Thai that they like nightcore music.
+Stored memory: preference.music.nightcore, tags music + nightcore.
+Later chat: The user starts a new chat and asks in Thai to discuss เพลง.
+Result: the canonical music topic makes the nightcore preference eligible.
 ```
 
 ## Product Rules
@@ -126,6 +136,15 @@ logs candidate content or source message text. `AI_PROVIDER=mock` completes jobs
 with no candidates. OpenAI-compatible configured providers use the existing
 backend-owned base URL, model, and credentials for extraction.
 
+The extractor is asked to use the bounded canonical topic tags `music`,
+`gaming`, `food`, `travel`, `anime`, and `coding` when applicable while keeping
+useful specific tags such as `nightcore`. Application validation remains the
+authority: known Thai/English category aliases are normalized to canonical
+tags, canonical topics visible in keys/content are added, specific lowercase
+ASCII tags are retained, duplicates are removed, and the six-tag limit remains
+enforced. Existing stored tags are normalized during retrieval, so this change
+does not require a data rewrite or migration.
+
 ## Deduplication And Conflict Rules
 
 - Matching key and value: reinforce the existing memory and update confidence.
@@ -149,15 +168,29 @@ current user message
 ```
 
 The first version uses structured keys, tags, and normalized content signals.
+A small backend-owned taxonomy expands bounded Thai/English category aliases,
+for example `เพลง`/`ดนตรี`/`songs` to `music` and `เกม`/`games` to `gaming`.
+Canonical topics and aliases are placed before raw lexical terms within the
+24-signal query budget so long Thai messages cannot truncate the cross-language
+match. The exact same expanded signals drive PostgreSQL candidate selection and
+application scoring.
+
 The store prefilters at most 50 candidates using the exact guest/account owner
 boundary, `character_id`, supported kinds, minimum `0.65` confidence,
-non-expiration, and lexical topic overlap. Embeddings and vector search remain
-deferred until real usage shows that metadata retrieval is insufficient.
+non-expiration, and expanded key/tag/content topic overlap. Query expansion also
+contains bounded legacy aliases, allowing older tags such as `songs` to match a
+canonical `music` query without rewriting stored rows. Embeddings and vector
+search remain deferred until evaluation shows that this deterministic metadata
+retrieval is insufficient.
 
 Application code validates candidates again and assigns deterministic scores
-from lexical relevance, confidence, importance, source reinforcement, and
-recency. Duplicate keys keep the newest corrected value. Stable tie-breakers
-make selection independent of database return order.
+from lexical relevance, canonical-topic relevance, confidence, importance,
+source reinforcement, and recency. A specific lexical match such as
+`nightcore` ranks before a category-only `music` match. Category-only matches
+are limited to at most two items overall and one item for the same canonical
+topic, preventing a broad request such as “talk about music” from injecting
+many weakly related preferences. Duplicate keys keep the newest corrected
+value. Stable tie-breakers make selection independent of database return order.
 
 The injected `LEARNED_CONTEXT_V1` block is limited to five items, 1,200 Unicode
 characters, and an estimated 300 tokens. It contains normalized memory content,
@@ -235,7 +268,10 @@ A full reset that also deletes chat history is not exposed by this action.
 
 - Status: implemented.
 - Owner/character candidate lookup filters confidence, kinds, expiration, and
-  topic signals before bounded deterministic scoring.
+  bounded multilingual canonical/lexical topic signals before deterministic
+  scoring.
+- Candidate lookup and scoring use the same expanded signals; specific matches
+  outrank broad category matches, which have stricter selection limits.
 - Selection enforces strict item, character, and estimated-token budgets.
 - One shared preparation path injects untrusted soft context after the
   character prompt for streaming and non-streaming requests.
@@ -263,9 +299,11 @@ Basic Observability, and Expiration Tests are complete.
 - Status: implemented.
 - `apps/api/src/memory_evaluation.rs` uses deterministic, synthetic English and
   Thai fixtures without a live provider or network dependency.
-- Coverage includes related/unrelated/empty retrieval, stable ranking, strict
-  prompt budgets, uncertainty guidance, repeated evidence, corrected-value
-  precedence, and exclusion of credentials and internal provenance metadata.
+- Coverage includes related/unrelated/empty retrieval, Thai-English retrieval
+  in both directions, canonical and legacy tags, specific-over-broad ranking,
+  broad-category limits, stable ranking, strict prompt budgets, uncertainty
+  guidance, repeated evidence, corrected-value precedence, and exclusion of
+  credentials and internal provenance metadata.
 - PostgreSQL-backed scenarios verify exact guest, registered-account, and
   character isolation and the persisted reinforcement/correction lifecycle.
 - The shared chat preparation and OpenAI-compatible payload are checked for
@@ -348,8 +386,12 @@ background expiration scheduler or new deletion policy was required.
 
 - A relevant durable preference captured in one chat can inform another chat
   for the same owner and character.
+- Thai and English category aliases can retrieve the same canonical memory in
+  either direction without embeddings or a data migration.
 - Unrelated, expired, weak, unsafe, cross-owner, and cross-character items are
   not injected.
+- Specific terms outrank category-only matches, and broad categories cannot
+  inject multiple memories for the same topic.
 - Selection and truncation are deterministic and stay within all budgets.
 - Streaming and non-streaming requests use identical memory preparation.
 - The latest user message overrides conflicting learned context.

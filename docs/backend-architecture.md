@@ -109,12 +109,15 @@ retaining chat history. There is no list, item-management, or retrieval API.
 `memory.rs` owns automatic capture and retrieval. The API starts one background
 worker in the existing process. It claims durable jobs, requests strict
 structured extraction from the configured AI provider, validates evidence and
-sensitive-data rules, and commits accepted items with message provenance. For
-new chat requests it derives bounded topic signals, requests owner/character
-candidates from the store, validates and scores them deterministically, and
-builds an untrusted soft-context system message within item/character/token
-budgets. Automatic-memory logs contain only bounded operation metadata,
-sanitized error codes, and aggregate counters—not raw user or learned content.
+sensitive-data rules, normalizes bounded canonical topic tags, and commits
+accepted items with message provenance. For new chat requests it derives one
+bounded set of canonical Thai/English aliases plus lexical signals, uses it for
+both owner/character candidate selection and deterministic scoring, prioritizes
+specific terms over broad categories, and builds an untrusted soft-context
+system message within item/character/token budgets. Existing legacy aliases are
+normalized at retrieval without a migration. Automatic-memory logs contain
+only bounded operation metadata, sanitized error codes, and aggregate
+counters—not raw user or learned content.
 
 `AppState` also owns one dependency-free `MemoryTelemetry` instance shared by
 its runtime clones. Process-lifetime atomic counters and stable structured
@@ -131,8 +134,9 @@ persist user + assistant + extraction job (one transaction)
       -> atomic memory item + message source persistence
 
 latest user text
-  -> bounded owner + character candidate query
-  -> relevance/confidence/importance/reinforcement/recency scoring
+  -> bounded canonical + lexical topic expansion
+  -> bounded owner + character candidate query with the same signals
+  -> specific/broad relevance + confidence/importance/reinforcement/recency scoring
   -> character prompt -> learned-context system message -> chat messages
 ```
 
@@ -143,11 +147,12 @@ memory-specific query fails.
 
 `memory_evaluation.rs` is the deterministic automatic-memory evaluation suite.
 It exercises production selection and prompt preparation with synthetic EN/TH
-fixtures and uses the PostgreSQL test database for ownership, character,
-reinforcement, correction, expiration, source deletion, and reset/job-state
-boundaries without calling a live AI provider. Expiration is enforced by the
-bounded candidate query and application validation; there is no background
-expiration service.
+and cross-language fixtures, including canonical/legacy tags and
+specific-versus-broad behavior, and uses the PostgreSQL test database for
+ownership, character, reinforcement, correction, expiration, source deletion,
+and reset/job-state boundaries without calling a live AI provider. Expiration
+is enforced by the bounded candidate query and application validation; there
+is no background expiration service.
 
 `characters.rs` owns character-facing endpoints, the current static character registry, and character-specific system prompts.
 

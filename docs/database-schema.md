@@ -134,7 +134,12 @@ human-readable schema reference.
     require background deletion to remain excluded
   - owner and `character_id` predicates are applied in PostgreSQL before
     relevance scoring
-  - structured key/tag/content topic signals prefilter a bounded candidate set
+  - one bounded set of canonical Thai/English aliases and lexical key/tag/content
+    signals prefilters candidates and is reused by application scoring
+  - legacy tag aliases are expanded at query/scoring time; stored rows do not
+    require a multilingual backfill migration
+  - specific lexical matches rank before category-only matches, and broad
+    category-only selection is limited separately from the five-item prompt cap
 
 ### `memory_sources`
 

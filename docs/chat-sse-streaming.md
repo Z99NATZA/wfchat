@@ -57,7 +57,9 @@ Memory selection happens before the SSE stream opens and does not change event
 names or payloads. A memory-specific retrieval error is fail-open, so the stream
 continues without learned context. Provider generation, final persistence, and
 the extraction outbox retain the same success boundaries as the non-streaming
-route.
+route. The shared preparation path also owns canonical Thai/English topic
+expansion, specific-over-broad ranking, and broad-category limits; transport
+choice therefore cannot change multilingual memory selection.
 
 ## Non-Goals
 

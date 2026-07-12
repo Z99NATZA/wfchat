@@ -98,10 +98,50 @@ fn memory_evaluation_table_driven_english_and_thai_retrieval() {
             excluded: Some("ชอบปลูกต้นไม้ในวันหยุด"),
         },
         Scenario {
+            name: "thai query retrieves english canonical music memory",
+            query: "คุยเรื่องเพลงกันไหม",
+            candidates: vec![
+                retrieval_item(
+                    5,
+                    "preference.music.nightcore",
+                    "The user likes listening to nightcore music.",
+                    &["music", "nightcore"],
+                ),
+                retrieval_item(
+                    6,
+                    "preference.gaming.cozy",
+                    "The user likes playing cozy games.",
+                    &["gaming", "cozy"],
+                ),
+            ],
+            expected: Some("nightcore music"),
+            excluded: Some("cozy games"),
+        },
+        Scenario {
+            name: "english query retrieves thai legacy music memory",
+            query: "Can we talk about music?",
+            candidates: vec![
+                retrieval_item(
+                    7,
+                    "preference.audio.nightcore",
+                    "ผู้ใช้ชอบฟังเพลงแนว nightcore",
+                    &["เพลง", "nightcore"],
+                ),
+                retrieval_item(
+                    8,
+                    "preference.gaming.cozy",
+                    "ผู้ใช้ชอบเล่นเกมแนวสบาย ๆ",
+                    &["เกม", "cozy"],
+                ),
+            ],
+            expected: Some("เพลงแนว nightcore"),
+            excluded: Some("เกมแนวสบาย"),
+        },
+        Scenario {
             name: "english empty result",
             query: "Tell me about telescope lenses",
             candidates: vec![retrieval_item(
-                5,
+                9,
                 "music.jazz.preference",
                 "Enjoys quiet jazz playlists",
                 &["music", "jazz"],
@@ -441,12 +481,13 @@ async fn memory_evaluation_streaming_and_non_streaming_provider_context_is_ident
         .await
         .expect("memory source should save")
         .expect("memory source should be valid");
-    save_memory(
+    save_memory_with_tags(
         &store,
         owner,
         "aiko",
         "music.jazz.preference",
         "SYNTHETIC_UNRELATED_PROVIDER_CONTENT",
+        &["music", "jazz"],
     )
     .await;
 
@@ -922,7 +963,42 @@ async fn save_memory(
     memory_key: &str,
     content: &str,
 ) -> crate::store::MemoryItemRecord {
-    save_expiring_memory(store, owner, character_id, memory_key, content, None).await
+    save_memory_with_tags(
+        store,
+        owner,
+        character_id,
+        memory_key,
+        content,
+        &["food", "ramen"],
+    )
+    .await
+}
+
+async fn save_memory_with_tags(
+    store: &ChatStore,
+    owner: OwnerScope,
+    character_id: &str,
+    memory_key: &str,
+    content: &str,
+    tags: &[&str],
+) -> crate::store::MemoryItemRecord {
+    store
+        .upsert_memory_item(
+            owner,
+            NewMemoryItemRecord {
+                character_id: character_id.to_owned(),
+                memory_key: memory_key.to_owned(),
+                kind: "preference".to_owned(),
+                content: content.to_owned(),
+                tags: tags.iter().map(|tag| (*tag).to_owned()).collect(),
+                confidence: 0.9,
+                importance: 0.8,
+                last_reinforced_at: now_unix_seconds(),
+                expires_at: None,
+            },
+        )
+        .await
+        .expect("evaluation memory should save")
 }
 
 async fn save_expiring_memory(

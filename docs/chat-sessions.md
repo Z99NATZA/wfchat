@@ -30,10 +30,14 @@ extraction failures do not roll back a successfully persisted response.
 
 Before either message endpoint calls the provider, the backend retrieves a
 bounded set of relevant, unexpired memory items for the exact owner and
-character. The same preparation function injects this soft context after the
-character prompt and before current-chat messages. The public request and
-response contracts do not change, and a retrieval-specific failure falls back
-to chat without memory.
+character. Bounded Thai/English aliases expand to canonical topics for both the
+database query and deterministic scoring, so a new Thai chat about `เพลง` can
+reuse an English-tagged `music` preference. Specific terms rank ahead of broad
+category matches, and category-only context is limited to prevent unrelated
+preferences from flooding the prompt. The same preparation function injects
+this soft context after the character prompt and before current-chat messages.
+The public request and response contracts do not change, and a
+retrieval-specific failure falls back to chat without memory.
 
 The shared preparation path also updates privacy-safe process counters for
 selected, empty, and fail-open retrieval outcomes and prompt-budget usage.

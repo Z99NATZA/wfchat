@@ -31,6 +31,8 @@ const WORKER_POLL_INTERVAL: Duration = Duration::from_secs(2);
 const MAX_JOBS_PER_TICK: usize = 10;
 const MAX_CANDIDATES: usize = 5;
 const RETRIEVAL_CANDIDATE_LIMIT: i64 = 50;
+const MAX_TOPIC_SIGNALS: usize = 24;
+const MAX_BROAD_ONLY_ITEMS: usize = 2;
 pub(crate) const MEMORY_MAX_ITEMS: usize = 5;
 pub(crate) const MEMORY_MAX_CONTEXT_CHARS: usize = 1_200;
 pub(crate) const MEMORY_MAX_ESTIMATED_TOKENS: usize = 300;
@@ -194,6 +196,67 @@ impl MemoryTelemetry {
 struct ScoredMemory {
     item: MemoryRetrievalRecord,
     score: f32,
+    specific_match: bool,
+    broad_topics: Vec<String>,
+}
+
+struct CanonicalTopic {
+    name: &'static str,
+    aliases: &'static [&'static str],
+}
+
+const CANONICAL_TOPICS: &[CanonicalTopic] = &[
+    CanonicalTopic {
+        name: "anime",
+        aliases: &["anime", "อนิเมะ"],
+    },
+    CanonicalTopic {
+        name: "coding",
+        aliases: &["coding", "code", "programming", "โค้ด", "เขียนโปรแกรม"],
+    },
+    CanonicalTopic {
+        name: "food",
+        aliases: &[
+            "food",
+            "foods",
+            "cuisine",
+            "cuisines",
+            "meal",
+            "meals",
+            "อาหาร",
+            "ของกิน",
+        ],
+    },
+    CanonicalTopic {
+        name: "gaming",
+        aliases: &["gaming", "game", "games", "videogame", "videogames", "เกม"],
+    },
+    CanonicalTopic {
+        name: "music",
+        aliases: &["music", "song", "songs", "เพลง", "ดนตรี"],
+    },
+    CanonicalTopic {
+        name: "travel",
+        aliases: &[
+            "travel",
+            "traveling",
+            "travelling",
+            "trip",
+            "trips",
+            "tourism",
+            "ท่องเที่ยว",
+            "เดินทาง",
+            "เที่ยว",
+        ],
+    },
+];
+
+#[derive(Debug)]
+struct TopicSignals {
+    specific_lexical: HashSet<String>,
+    canonical: HashSet<String>,
+    expanded: HashSet<String>,
+    store_terms: Vec<String>,
 }
 
 pub fn router() -> Router<AppState> {
@@ -238,8 +301,8 @@ pub(crate) async fn retrieve_memory_context_observed(
     telemetry: &MemoryTelemetry,
 ) -> StoreResult<Option<RetrievedMemoryContext>> {
     telemetry.retrieval_attempted();
-    let signals = topic_signals(latest_user_message);
-    if signals.is_empty() {
+    let signals = TopicSignals::from_message(latest_user_message);
+    if signals.store_terms.is_empty() {
         telemetry.retrieval_empty(0);
         let totals = telemetry.snapshot();
         tracing::debug!(
@@ -252,7 +315,12 @@ pub(crate) async fn retrieve_memory_context_observed(
         return Ok(None);
     }
     let candidates = match store
-        .find_memory_retrieval_candidates(owner, character_id, &signals, RETRIEVAL_CANDIDATE_LIMIT)
+        .find_memory_retrieval_candidates(
+            owner,
+            character_id,
+            &signals.store_terms,
+            RETRIEVAL_CANDIDATE_LIMIT,
+        )
         .await
     {
         Ok(candidates) => candidates,
@@ -270,7 +338,12 @@ pub(crate) async fn retrieve_memory_context_observed(
         }
     };
     let candidate_count = candidates.len();
-    let selected = select_memory_context(candidates, latest_user_message, now_unix_seconds());
+    let selected = select_memory_context_with_signals(
+        candidates,
+        latest_user_message,
+        now_unix_seconds(),
+        &signals,
+    );
     match &selected {
         Some(context) => {
             telemetry.retrieval_selected(candidate_count, context);
@@ -304,13 +377,23 @@ pub(crate) async fn retrieve_memory_context_observed(
     Ok(selected)
 }
 
+#[cfg(test)]
 pub(crate) fn select_memory_context(
-    mut candidates: Vec<MemoryRetrievalRecord>,
+    candidates: Vec<MemoryRetrievalRecord>,
     latest_user_message: &str,
     now: u64,
 ) -> Option<RetrievedMemoryContext> {
-    let query_tokens = lexical_tokens(latest_user_message);
-    if query_tokens.is_empty() {
+    let signals = TopicSignals::from_message(latest_user_message);
+    select_memory_context_with_signals(candidates, latest_user_message, now, &signals)
+}
+
+fn select_memory_context_with_signals(
+    mut candidates: Vec<MemoryRetrievalRecord>,
+    latest_user_message: &str,
+    now: u64,
+    signals: &TopicSignals,
+) -> Option<RetrievedMemoryContext> {
+    if signals.expanded.is_empty() {
         return None;
     }
 
@@ -325,13 +408,18 @@ pub(crate) fn select_memory_context(
 
     let mut scored = candidates
         .into_iter()
-        .filter_map(|item| score_memory(item, &query_tokens, latest_user_message, now))
+        .filter_map(|item| score_memory(item, signals, latest_user_message, now))
         .collect::<Vec<_>>();
     scored.sort_by(|left, right| {
         right
-            .score
-            .partial_cmp(&left.score)
-            .unwrap_or(CmpOrdering::Equal)
+            .specific_match
+            .cmp(&left.specific_match)
+            .then_with(|| {
+                right
+                    .score
+                    .partial_cmp(&left.score)
+                    .unwrap_or(CmpOrdering::Equal)
+            })
             .then_with(|| right.item.updated_at.cmp(&left.item.updated_at))
             .then_with(|| left.item.memory_key.cmp(&right.item.memory_key))
             .then_with(|| left.item.id.cmp(&right.item.id))
@@ -339,9 +427,21 @@ pub(crate) fn select_memory_context(
 
     let mut context = MEMORY_CONTEXT_HEADER.to_owned();
     let mut selected_count = 0;
+    let mut broad_only_count = 0;
+    let mut selected_broad_topics = HashSet::new();
     for scored_item in scored {
         if selected_count >= MEMORY_MAX_ITEMS {
             break;
+        }
+        if !scored_item.specific_match
+            && !scored_item.broad_topics.is_empty()
+            && (broad_only_count >= MAX_BROAD_ONLY_ITEMS
+                || scored_item
+                    .broad_topics
+                    .iter()
+                    .all(|topic| selected_broad_topics.contains(topic)))
+        {
+            continue;
         }
         let certainty = if scored_item.item.confidence >= 0.85 {
             "likely"
@@ -364,6 +464,10 @@ pub(crate) fn select_memory_context(
         }
         context.push_str(&line);
         selected_count += 1;
+        if !scored_item.specific_match && !scored_item.broad_topics.is_empty() {
+            broad_only_count += 1;
+            selected_broad_topics.extend(scored_item.broad_topics);
+        }
     }
 
     if selected_count == 0 {
@@ -379,20 +483,42 @@ pub(crate) fn select_memory_context(
 
 fn score_memory(
     item: MemoryRetrievalRecord,
-    query_tokens: &HashSet<String>,
+    signals: &TopicSignals,
     latest_user_message: &str,
     now: u64,
 ) -> Option<ScoredMemory> {
     let key_tokens = lexical_tokens(&item.memory_key);
-    let tag_tokens = item
+    let mut tag_tokens = item
         .tags
         .iter()
         .flat_map(|tag| lexical_tokens(tag))
         .collect::<HashSet<_>>();
     let content_tokens = lexical_tokens(&item.content);
-    let key_overlap = overlap_ratio(query_tokens, &key_tokens);
-    let tag_overlap = overlap_ratio(query_tokens, &tag_tokens);
-    let content_overlap = overlap_ratio(query_tokens, &content_tokens);
+    let candidate_topics = canonical_topics_for_parts(
+        std::iter::once(item.memory_key.as_str())
+            .chain(std::iter::once(item.content.as_str()))
+            .chain(item.tags.iter().map(String::as_str)),
+    );
+    tag_tokens.extend(candidate_topics.iter().cloned());
+    let key_overlap = overlap_ratio(&signals.expanded, &key_tokens);
+    let tag_overlap = overlap_ratio(&signals.expanded, &tag_tokens);
+    let content_overlap = overlap_ratio(&signals.expanded, &content_tokens);
+    let broad_topics = signals
+        .canonical
+        .intersection(&candidate_topics)
+        .cloned()
+        .collect::<Vec<_>>();
+    let candidate_tokens = key_tokens
+        .union(&tag_tokens)
+        .cloned()
+        .collect::<HashSet<_>>()
+        .union(&content_tokens)
+        .cloned()
+        .collect::<HashSet<_>>();
+    let specific_match = signals
+        .specific_lexical
+        .iter()
+        .any(|token| candidate_tokens.contains(token));
     let normalized_query = normalized(latest_user_message);
     let normalized_content = normalized(&item.content);
     let phrase_bonus = if normalized_query.chars().count() >= 4
@@ -403,8 +529,15 @@ fn score_memory(
     } else {
         0.0
     };
-    let relevance =
-        (key_overlap * 0.35 + tag_overlap * 0.45 + content_overlap * 0.25 + phrase_bonus).min(1.0);
+    let canonical_bonus = if broad_topics.is_empty() { 0.0 } else { 0.22 };
+    let specific_bonus = if specific_match { 0.12 } else { 0.0 };
+    let relevance = (key_overlap * 0.35
+        + tag_overlap * 0.45
+        + content_overlap * 0.25
+        + phrase_bonus
+        + canonical_bonus
+        + specific_bonus)
+        .min(1.0);
     if relevance < MEMORY_MIN_RELEVANCE {
         return None;
     }
@@ -417,7 +550,12 @@ fn score_memory(
         + item.importance * 0.12
         + reinforcement * 0.08
         + recency * 0.07;
-    Some(ScoredMemory { item, score })
+    Some(ScoredMemory {
+        item,
+        score,
+        specific_match,
+        broad_topics,
+    })
 }
 
 fn retrieval_item_is_safe(item: &MemoryRetrievalRecord, now: u64) -> bool {
@@ -439,11 +577,97 @@ fn retrieval_item_is_safe(item: &MemoryRetrievalRecord, now: u64) -> bool {
         && !contains_prompt_injection(&item.content)
 }
 
-fn topic_signals(value: &str) -> Vec<String> {
-    let mut signals = lexical_tokens(value).into_iter().collect::<Vec<_>>();
-    signals.sort();
-    signals.truncate(24);
-    signals
+impl TopicSignals {
+    fn from_message(value: &str) -> Self {
+        let lexical = lexical_tokens(value);
+        let specific_lexical = specific_lexical_tokens(value);
+        let canonical = canonical_topics_for_parts(std::iter::once(value));
+        let mut expanded = lexical.clone();
+        expanded.extend(canonical.iter().cloned());
+
+        // PostgreSQL receives canonical topics and their bounded aliases first,
+        // followed by raw lexical signals. This keeps multilingual and legacy
+        // matches available even when a long Thai message produces many
+        // character-window tokens.
+        let mut store_terms = Vec::new();
+        for topic in CANONICAL_TOPICS {
+            if !canonical.contains(topic.name) {
+                continue;
+            }
+            push_unique_signal(&mut store_terms, topic.name);
+            for alias in topic.aliases {
+                push_unique_signal(&mut store_terms, alias);
+            }
+        }
+        let mut lexical_terms = lexical.iter().cloned().collect::<Vec<_>>();
+        lexical_terms.sort();
+        for term in lexical_terms {
+            push_unique_signal(&mut store_terms, &term);
+        }
+        store_terms.truncate(MAX_TOPIC_SIGNALS);
+
+        Self {
+            specific_lexical,
+            canonical,
+            expanded,
+            store_terms,
+        }
+    }
+}
+
+fn push_unique_signal(signals: &mut Vec<String>, value: &str) {
+    if signals.len() < MAX_TOPIC_SIGNALS && !signals.iter().any(|signal| signal == value) {
+        signals.push(value.to_owned());
+    }
+}
+
+fn canonical_topics_for_parts<'a>(parts: impl Iterator<Item = &'a str>) -> HashSet<String> {
+    let values = parts.collect::<Vec<_>>();
+    let lexical = values
+        .iter()
+        .flat_map(|value| lexical_tokens(value))
+        .collect::<HashSet<_>>();
+    let normalized_values = values
+        .iter()
+        .map(|value| normalized(value))
+        .collect::<Vec<_>>();
+    CANONICAL_TOPICS
+        .iter()
+        .filter(|topic| {
+            topic.aliases.iter().any(|alias| {
+                if alias.is_ascii() {
+                    lexical.contains(*alias)
+                } else {
+                    normalized_values.iter().any(|value| value.contains(alias))
+                }
+            })
+        })
+        .map(|topic| topic.name.to_owned())
+        .collect()
+}
+
+fn canonical_topic_for_tag(value: &str) -> Option<&'static str> {
+    CANONICAL_TOPICS
+        .iter()
+        .find_map(|topic| topic.aliases.contains(&value).then_some(topic.name))
+}
+
+fn is_broad_topic_alias(value: &str) -> bool {
+    canonical_topic_for_tag(value).is_some()
+}
+
+fn specific_lexical_tokens(value: &str) -> HashSet<String> {
+    let mut without_non_ascii_aliases = normalized(value);
+    for alias in CANONICAL_TOPICS
+        .iter()
+        .flat_map(|topic| topic.aliases.iter())
+        .filter(|alias| !alias.is_ascii())
+    {
+        without_non_ascii_aliases = without_non_ascii_aliases.replace(alias, " ");
+    }
+    let mut tokens = lexical_tokens(&without_non_ascii_aliases);
+    tokens.retain(|token| !is_broad_topic_alias(token));
+    tokens
 }
 
 fn lexical_tokens(value: &str) -> HashSet<String> {
@@ -749,7 +973,7 @@ fn extraction_provider(config: &Config) -> Result<(&str, Option<&str>, &str), Ex
 }
 
 fn extractor_prompt() -> &'static str {
-    "Extract at most five durable, explicitly stated user facts for future companion conversations. Return only the requested JSON schema. Use stable lowercase dotted memory keys. Allowed kinds: preference, profile, goal, constraint, plan, experience. The evidence field must be a short exact quote from the user message. Use action=reinforce for a new or repeated fact and action=replace only when the user explicitly corrects a prior value. Never extract assistant claims, guesses, secrets, credentials, authentication data, financial data, contact details, medical identifiers, temporary turn instructions, fleeting moods, or low-value details. Return an empty memories array when nothing is safe and durable."
+    "Extract at most five durable, explicitly stated user facts for future companion conversations. Return only the requested JSON schema. Use stable lowercase dotted memory keys. Allowed kinds: preference, profile, goal, constraint, plan, experience. Use broad canonical tags music, gaming, food, travel, anime, and coding whenever applicable, and retain useful specific lowercase ASCII tags such as nightcore. The evidence field must be a short exact quote from the user message. Use action=reinforce for a new or repeated fact and action=replace only when the user explicitly corrects a prior value. Never extract assistant claims, guesses, secrets, credentials, authentication data, financial data, contact details, medical identifiers, temporary turn instructions, fleeting moods, or low-value details. Return an empty memories array when nothing is safe and durable."
 }
 
 fn extractor_json_schema() -> Value {
@@ -845,20 +1069,38 @@ fn validate_candidate(
         return None;
     }
 
-    let mut tags = Vec::new();
+    if candidate.tags.len() > 6 {
+        return None;
+    }
+    let mut canonical_tags = BTreeSet::new();
+    let mut specific_tags = BTreeSet::new();
     for tag in candidate.tags {
-        let tag = tag.trim().to_ascii_lowercase();
-        if tag.is_empty()
-            || tag.len() > 32
-            || !tag
-                .chars()
-                .all(|ch| ch.is_ascii_lowercase() || ch.is_ascii_digit() || ch == '_' || ch == '-')
-            || tags.contains(&tag)
+        let tag = tag.trim().to_lowercase();
+        if tag.is_empty() || tag.chars().count() > 32 {
+            return None;
+        }
+        if let Some(canonical) = canonical_topic_for_tag(&tag) {
+            canonical_tags.insert(canonical.to_owned());
+            continue;
+        }
+        if !tag
+            .chars()
+            .all(|ch| ch.is_ascii_lowercase() || ch.is_ascii_digit() || ch == '_' || ch == '-')
         {
             return None;
         }
-        tags.push(tag);
+        specific_tags.insert(tag);
     }
+    canonical_tags.extend(canonical_topics_for_parts(
+        std::iter::once(memory_key.as_str())
+            .chain(std::iter::once(content.as_str()))
+            .chain(specific_tags.iter().map(String::as_str)),
+    ));
+    let tags = canonical_tags
+        .into_iter()
+        .chain(specific_tags)
+        .take(6)
+        .collect::<Vec<_>>();
 
     Some(CapturedMemoryRecord {
         memory_key,
@@ -1171,6 +1413,22 @@ mod tests {
     }
 
     #[test]
+    fn extractor_normalizes_canonical_tags_and_keeps_specific_tags() {
+        let mut nightcore = candidate("Likes nightcore music", "I like nightcore music");
+        nightcore.memory_key = "preference.music.nightcore".to_owned();
+        nightcore.tags = vec!["เพลง".to_owned(), "nightcore".to_owned()];
+        let (accepted, rejected) = validate_output(
+            ExtractorOutput {
+                memories: vec![nightcore],
+            },
+            "I like nightcore music",
+        );
+        assert_eq!(rejected, 0);
+        assert_eq!(accepted.len(), 1);
+        assert_eq!(accepted[0].tags, vec!["music", "nightcore"]);
+    }
+
+    #[test]
     fn rejects_unsupported_inference_and_low_value_candidate() {
         let mut inferred = candidate("Likes hiking", "I like hiking");
         inferred.importance = 0.2;
@@ -1241,6 +1499,104 @@ mod tests {
         assert!(prompt.contains("Likes spicy ramen while travelling"));
         assert!(!prompt.contains("Likes jazz piano"));
         assert!(prompt.contains("untrusted, possibly outdated"));
+    }
+
+    #[test]
+    fn retrieval_prefers_specific_music_match_and_limits_broad_topic_context() {
+        let nightcore = retrieval_item(
+            20,
+            "preference.music.nightcore",
+            "Likes nightcore music",
+            &["music", "nightcore"],
+        );
+        let jazz = retrieval_item(
+            21,
+            "preference.music.jazz",
+            "Likes jazz music",
+            &["music", "jazz"],
+        );
+        let specific = select_memory_context(
+            vec![jazz.clone(), nightcore.clone()],
+            "เปิดเพลง nightcore กัน",
+            1_000_100,
+        )
+        .expect("specific music context should be selected")
+        .message
+        .text_content();
+        assert!(specific.find("nightcore music") < specific.find("jazz music"));
+
+        let broad = select_memory_context(
+            vec![
+                retrieval_item(
+                    23,
+                    "preference.music.nightcore_th",
+                    "ชอบฟังเพลงแนว nightcore",
+                    &["music", "nightcore"],
+                ),
+                retrieval_item(
+                    24,
+                    "preference.music.jazz_th",
+                    "ชอบฟังเพลงแนว jazz",
+                    &["music", "jazz"],
+                ),
+                retrieval_item(
+                    25,
+                    "preference.music.rock_th",
+                    "ชอบฟังเพลงแนว rock",
+                    &["music", "rock"],
+                ),
+            ],
+            "คุยเรื่องเพลงกัน",
+            1_000_100,
+        )
+        .expect("one broad music context should be selected");
+        assert_eq!(broad.selected_count, 1);
+    }
+
+    #[tokio::test]
+    async fn retrieval_cross_language_uses_same_signals_in_store_and_scoring() {
+        let Some(state) = test_state().await else {
+            return;
+        };
+        let session = state
+            .store
+            .create_guest_session()
+            .await
+            .expect("cross-language session should create");
+        let owner = OwnerScope::from_session(&session);
+        state
+            .store
+            .upsert_memory_item(
+                owner,
+                NewMemoryItemRecord {
+                    character_id: "aiko".to_owned(),
+                    memory_key: "preference.audio.nightcore".to_owned(),
+                    kind: "preference".to_owned(),
+                    content: "The user likes listening to nightcore playlists.".to_owned(),
+                    tags: vec!["songs".to_owned(), "nightcore".to_owned()],
+                    confidence: 0.9,
+                    importance: 0.8,
+                    last_reinforced_at: now_unix_seconds(),
+                    expires_at: None,
+                },
+            )
+            .await
+            .expect("legacy-tag memory should save");
+
+        let context = retrieve_memory_context(&state.store, owner, "aiko", "คุยเรื่องเพลงกันไหม")
+            .await
+            .expect("cross-language retrieval should query")
+            .expect("legacy-tag music memory should be selected");
+        assert!(context
+            .message
+            .text_content()
+            .contains("nightcore playlists"));
+
+        state
+            .store
+            .delete_session_for_test(session.id)
+            .await
+            .expect("cross-language session should clean up");
     }
 
     #[test]
