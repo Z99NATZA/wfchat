@@ -263,6 +263,67 @@ describe("useChatSession streaming sendMessage", () => {
 		]);
 	});
 
+	it("keeps the first optimistic user message when the newly created chat route loads", async () => {
+		const chatId = "11111111-1111-4111-8111-111111111111";
+		const serverMessages = [
+			message("server-user", "user", "first message"),
+			message("server-ai", "companion", "first response")
+		];
+		let finishStream: (() => void) | undefined;
+		mocks.createPersonaChat.mockResolvedValue({ chatId, messages: [] });
+		mocks.getChat.mockResolvedValue({ chatId, messages: [] });
+		mocks.streamChatMessage.mockImplementation((_chatId, _content, _attachments, handlers) => {
+			handlers.onStart?.({ chatId, personaId: "aiko" });
+			return new Promise<void>((resolve) => {
+				finishStream = () => {
+					handlers.onDone?.({
+						chatId,
+						userMessage: serverMessages[0],
+						assistantMessage: serverMessages[1],
+						messages: serverMessages
+					});
+					resolve();
+				};
+			});
+		});
+		const { result, rerender } = renderHook(() => useChatSession());
+
+		await act(async () => {
+			result.current.setDraft("first message");
+		});
+		let sendPromise: Promise<boolean | void> | undefined;
+		await act(async () => {
+			sendPromise = result.current.sendMessage();
+			await Promise.resolve();
+		});
+
+		await waitFor(() => expect(result.current.activeChatId).toBe(chatId));
+		expect(result.current.messages).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({ author: "user", text: "first message" })
+			])
+		);
+
+		mocks.location.pathname = `/chat/${chatId}`;
+		rerender();
+
+		await waitFor(() =>
+			expect(result.current.messages).toEqual(
+				expect.arrayContaining([
+					expect.objectContaining({ author: "user", text: "first message" })
+				])
+			)
+		);
+		expect(mocks.getChat).not.toHaveBeenCalled();
+
+		await act(async () => {
+			finishStream?.();
+			await sendPromise;
+		});
+
+		expect(result.current.messages).toEqual(serverMessages);
+	});
+
 	it("uploads image attachments before streaming and keeps local previews until server messages arrive", async () => {
 		const localImage = pendingImage("blob:local-image");
 		const serverUser = {

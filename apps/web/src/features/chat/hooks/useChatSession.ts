@@ -101,6 +101,7 @@ export function useChatSession({ onAvatarChatEvent }: UseChatSessionOptions = {}
 	const [routeChatId, setRouteChatId] = useState<string | null>(() =>
 		parseChatIdFromPath(location.pathname)
 	);
+	const pendingCreatedChatIdRef = useRef<string | null>(null);
 	const activeAssistantSpeechAvatarRef = useRef<ActiveAssistantSpeechAvatarState | null>(null);
 	const assistantSpeechAvatarEventKeyRef = useRef<string | null>(null);
 	const {
@@ -367,6 +368,10 @@ export function useChatSession({ onAvatarChatEvent }: UseChatSessionOptions = {}
 			setErrorMessage(null);
 
 			if (routeChatId) {
+				if (routeChatId === pendingCreatedChatIdRef.current) {
+					return;
+				}
+
 				try {
 					const chat = await getChat(routeChatId);
 					if (!isCurrent) {
@@ -654,6 +659,7 @@ export function useChatSession({ onAvatarChatEvent }: UseChatSessionOptions = {}
 			const chatId = activeChatId ?? (await createPersonaChat(selectedPersonaId)).chatId;
 			if (!activeChatId) {
 				createdChatId = chatId;
+				pendingCreatedChatIdRef.current = chatId;
 				setActiveChatId(chatId);
 				setIsActiveChatReadOnly(false);
 				navigateToChat(chatId);
@@ -737,6 +743,9 @@ export function useChatSession({ onAvatarChatEvent }: UseChatSessionOptions = {}
 			});
 			return false;
 		} finally {
+			if (pendingCreatedChatIdRef.current === createdChatId) {
+				pendingCreatedChatIdRef.current = null;
+			}
 			setIsSending(false);
 		}
 	}
