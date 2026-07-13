@@ -1,6 +1,6 @@
 # Automatic Memory
 
-Status: Capture And Retrieval Active
+Status: Capture, Retrieval, And New Chat Follow-Up Active
 
 This document defines the current automatic-memory system. Internal storage,
 provenance, chat-deletion cleanup, account promotion, learned-context reset
@@ -44,6 +44,8 @@ Result: the canonical music topic makes the nightcore preference eligible.
   retaining chat history.
 - Learned context has no manual facts/summaries API or browser sync-cache
   contract.
+- The empty New Chat route may show one personalized follow-up only for a
+  meaningful unresolved plan or goal. It does not use a generic fallback.
 
 ## What To Remember
 
@@ -100,6 +102,22 @@ Provenance connecting one memory to one or more conversations:
 
 One memory may have multiple sources. This allows repeated statements to
 reinforce a memory without duplicating it.
+
+### `memory_follow_up_deliveries`
+
+One authoritative record that a learned item was displayed as a New Chat
+follow-up:
+
+- `id uuid primary key`
+- unique `claim_key uuid` for idempotent display claims
+- `memory_id uuid` referencing `memory_items` with `on delete cascade`
+- guest/account owner fields and `character_id`
+- the exact displayed `prompt`
+- `shown_at` for the rolling delivery window
+- optional `chat_id` referencing the chat created from the follow-up
+
+The displayed prompt is stored so retries and the eventual conversation use
+the same wording even if the source memory changes later.
 
 ## Capture Flow
 
@@ -203,6 +221,34 @@ remember correctly" for uncertain items. Retrieval is fail-open: a
 memory-specific database error is logged with metadata only and chat continues
 without learned context.
 
+## New Chat Follow-Up
+
+`POST /api/personas/:persona_id/follow-up` accepts a client-generated
+`claim_key` and locale. For the exact owner and character, the backend considers
+at most 20 undelivered `plan` or `goal` items ordered by importance, confidence,
+reinforcement time, and stable identifiers. A candidate must have confidence at
+least `0.8`, importance at least `0.65`, reinforcement within 30 days, no
+expired timestamp, bounded non-empty content, and no sensitive data, prompt
+injection, or resolved/cancelled marker.
+
+If no candidate satisfies every rule, the endpoint returns `follow_up: null`;
+it never substitutes a generic question. A successful claim writes the display
+record immediately, so merely showing the follow-up starts the rolling 24-hour
+limit for that owner and character. A visit with no candidate writes nothing
+and does not consume the window. The database transaction uses an owner and
+character advisory lock, making the limit authoritative across reloads,
+concurrent requests, and browser instances. Reusing the same `claim_key`
+returns the same delivery, which keeps repeated development renders idempotent.
+A memory item is never selected again after it has a delivery record.
+
+Displaying the follow-up on `/chat` does not create a chat. If the user replies,
+the web app includes the delivery id when creating the chat. The backend
+validates its owner and character, persists the stored prompt as the first
+assistant message, links the delivery to the new chat, and then handles the
+user reply through the normal message flow. Follow-up loading is fail-open in
+the web app: a missing candidate or request failure leaves the empty composer
+usable for a normal send.
+
 ## Chat Deletion
 
 Deleting a chat must remove everything learned only from that chat in the same
@@ -221,18 +267,18 @@ This provenance rule is required before automatic capture is enabled. A single
 
 The Settings action supports:
 
-- Learned-context reset: delete memory items, sources, and queued extraction
-  jobs while retaining chat history.
+- Learned-context reset: delete memory items, sources, follow-up delivery
+  records, and queued extraction jobs while retaining chat history.
 - The same owner boundary for guests and registered accounts.
 - Explicit destructive confirmation before the request is sent.
 - A single action labelled with the active character name; there is no
   per-memory manager, section heading, or explanatory copy in the normal flow.
 
 `DELETE /api/learned-context` invokes the owner-scoped store transaction. It
-deletes memory items, sources, and queued extraction jobs while retaining chat
-history. The UI obtains the character name from chat configuration and passes it
-through the `{aiko}` i18n interpolation parameter rather than hardcoding it in
-the translation string.
+deletes memory items, their cascading sources and follow-up deliveries, and
+queued extraction jobs while retaining chat history. The UI obtains the
+character name from chat configuration and passes it through the `{aiko}` i18n
+interpolation parameter rather than hardcoding it in the translation string.
 
 A full reset that also deletes chat history is not exposed by this action.
 
@@ -240,10 +286,14 @@ A full reset that also deletes chat history is not exposed by this action.
 
 ### Storage And Lifecycle
 
-- PostgreSQL stores learned context in `memory_items` and `memory_sources`.
+- PostgreSQL stores learned context and follow-up delivery state in
+  `memory_items`, `memory_sources`, and `memory_follow_up_deliveries`.
 - Owner-scoped store methods support upsert, list, source attachment, source
   listing, and learned-context reset.
 - Account promotion merges duplicate keys and preserves non-duplicate sources.
+- Account promotion also moves guest follow-up delivery ownership to the
+  registered account and preserves delivery references when duplicate memory
+  items are merged.
 - Chat deletion removes sources, recalculates retained memory confidence, and
   deletes orphaned memories in one transaction.
 - Clearing chat messages applies the same cleanup to message-level sources while
@@ -352,11 +402,14 @@ There is no background expiration scheduler.
 
 - Guest memory is isolated by session ownership.
 - Registered memory is visible across sessions for the same account.
+- Follow-up delivery limits are shared across sessions and browsers for a
+  registered account, and remain session-scoped for guests.
 - Account promotion merges duplicate keys and retains their distinct sources.
 - Deleting the only source chat removes the learned memory.
 - Deleting one of several source chats keeps memory supported elsewhere and
   recalculates confidence from the remaining evidence.
-- Internal learned-context reset removes memory while retaining chat history.
+- Internal learned-context reset removes memory and follow-up delivery state
+  while retaining chat history.
 - Clearing messages removes message-level evidence and cleans up affected
   orphaned memory.
 - There is no manual memory UI, item-management API, or browser memory cache.
@@ -390,3 +443,5 @@ There is no background expiration scheduler.
 - Vector database or full RAG infrastructure.
 - Automatic conversation summaries as the primary memory format.
 - Cross-character memory sharing.
+- Generic or repeated New Chat engagement prompts when no eligible unresolved
+  plan or goal exists.

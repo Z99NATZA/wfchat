@@ -156,6 +156,178 @@ impl ChatStore {
         Ok(rows.into_iter().map(memory_retrieval_from_row).collect())
     }
 
+    pub async fn find_memory_follow_up_candidates(
+        &self,
+        owner: OwnerScope,
+        character_id: &str,
+        limit: i64,
+    ) -> StoreResult<Vec<MemoryItemRecord>> {
+        if limit <= 0 {
+            return Ok(Vec::new());
+        }
+
+        let rows = sqlx::query(
+            "select item.id, item.owner_session_id, item.owner_user_id, item.character_id,
+                    item.memory_key, item.kind, item.content, item.tags, item.confidence,
+                    item.importance,
+                    extract(epoch from item.last_reinforced_at)::bigint as last_reinforced_at,
+                    extract(epoch from item.expires_at)::bigint as expires_at,
+                    extract(epoch from item.created_at)::bigint as created_at,
+                    extract(epoch from item.updated_at)::bigint as updated_at
+             from memory_items item
+             where (($3::uuid is not null and item.owner_user_id = $3)
+                    or ($3::uuid is null and item.owner_session_id = $1))
+               and item.character_id = $2
+               and item.kind = any($4::text[])
+               and item.confidence >= 0.8
+               and item.importance >= 0.65
+               and (item.expires_at is null or item.expires_at > now())
+               and not exists (
+                 select 1 from memory_follow_up_deliveries delivery
+                 where delivery.memory_id = item.id
+               )
+             order by item.importance desc, item.confidence desc,
+                      item.last_reinforced_at desc, item.memory_key, item.id
+             limit $5",
+        )
+        .bind(owner.session_id)
+        .bind(character_id)
+        .bind(owner.user_id)
+        .bind(vec!["plan", "goal"])
+        .bind(limit.min(50))
+        .fetch_all(self.db.as_ref())
+        .await?;
+
+        Ok(rows.into_iter().map(memory_item_from_row).collect())
+    }
+
+    pub async fn get_memory_follow_up_by_claim(
+        &self,
+        owner: OwnerScope,
+        character_id: &str,
+        claim_key: Uuid,
+    ) -> StoreResult<Option<MemoryFollowUpRecord>> {
+        let row = sqlx::query(
+            "select id, memory_id, character_id, prompt,
+                    extract(epoch from shown_at)::bigint as shown_at, chat_id
+             from memory_follow_up_deliveries
+             where claim_key = $1
+               and (($4::uuid is not null and owner_user_id = $4)
+                    or ($4::uuid is null and owner_session_id = $2))
+               and character_id = $3",
+        )
+        .bind(claim_key)
+        .bind(owner.session_id)
+        .bind(character_id)
+        .bind(owner.user_id)
+        .fetch_optional(self.db.as_ref())
+        .await?;
+        Ok(row.map(memory_follow_up_from_row))
+    }
+
+    pub async fn claim_memory_follow_up(
+        &self,
+        owner: OwnerScope,
+        claim_key: Uuid,
+        memory_id: Uuid,
+        character_id: &str,
+        expected_updated_at: u64,
+        prompt: &str,
+        now: u64,
+    ) -> StoreResult<Option<MemoryFollowUpRecord>> {
+        let mut tx = self.db.begin().await?;
+        let owner_key = owner
+            .user_id
+            .map(|user_id| format!("user:{user_id}"))
+            .unwrap_or_else(|| format!("session:{}", owner.session_id));
+        let lock_key = format!("memory-follow-up:{owner_key}:{character_id}");
+        sqlx::query("select pg_advisory_xact_lock(hashtextextended($1, 0))")
+            .bind(lock_key)
+            .execute(&mut *tx)
+            .await?;
+
+        let existing_claim = sqlx::query(
+            "select id, memory_id, character_id, prompt,
+                    extract(epoch from shown_at)::bigint as shown_at, chat_id
+             from memory_follow_up_deliveries
+             where claim_key = $1
+               and (($4::uuid is not null and owner_user_id = $4)
+                    or ($4::uuid is null and owner_session_id = $2))
+               and character_id = $3",
+        )
+        .bind(claim_key)
+        .bind(owner.session_id)
+        .bind(character_id)
+        .bind(owner.user_id)
+        .fetch_optional(&mut *tx)
+        .await?;
+        if let Some(row) = existing_claim {
+            tx.commit().await?;
+            return Ok(Some(memory_follow_up_from_row(row)));
+        }
+
+        let cutoff = now.saturating_sub(86_400) as i64;
+        let recently_shown = sqlx::query(
+            "select 1
+             from memory_follow_up_deliveries
+             where (($3::uuid is not null and owner_user_id = $3)
+                    or ($3::uuid is null and owner_session_id = $1))
+               and character_id = $2
+               and shown_at > to_timestamp($4)
+             limit 1",
+        )
+        .bind(owner.session_id)
+        .bind(character_id)
+        .bind(owner.user_id)
+        .bind(cutoff)
+        .fetch_optional(&mut *tx)
+        .await?
+        .is_some();
+        if recently_shown {
+            return Ok(None);
+        }
+
+        let delivery_id = Uuid::new_v4();
+        let row = sqlx::query(
+            "insert into memory_follow_up_deliveries (
+                id, claim_key, memory_id, owner_session_id, owner_user_id,
+                character_id, prompt, shown_at
+             )
+             select $1, $2, item.id, $3, $4, item.character_id, $5, to_timestamp($6)
+             from memory_items item
+             where item.id = $7
+               and (($4::uuid is not null and item.owner_user_id = $4)
+                    or ($4::uuid is null and item.owner_session_id = $3))
+               and item.character_id = $8
+               and item.kind = any($9::text[])
+               and item.confidence >= 0.8
+               and item.importance >= 0.65
+               and (item.expires_at is null or item.expires_at > to_timestamp($6))
+               and extract(epoch from item.updated_at)::bigint = $10
+               and not exists (
+                 select 1 from memory_follow_up_deliveries previous
+                 where previous.memory_id = item.id
+               )
+             returning id, memory_id, character_id, prompt,
+                       extract(epoch from shown_at)::bigint as shown_at, chat_id",
+        )
+        .bind(delivery_id)
+        .bind(claim_key)
+        .bind(owner.session_id)
+        .bind(owner.user_id)
+        .bind(prompt)
+        .bind(now as i64)
+        .bind(memory_id)
+        .bind(character_id)
+        .bind(vec!["plan", "goal"])
+        .bind(expected_updated_at as i64)
+        .fetch_optional(&mut *tx)
+        .await?;
+
+        tx.commit().await?;
+        Ok(row.map(memory_follow_up_from_row))
+    }
+
     pub async fn add_memory_source(
         &self,
         owner: OwnerScope,
@@ -599,6 +771,17 @@ fn memory_retrieval_from_row(row: sqlx::postgres::PgRow) -> MemoryRetrievalRecor
             .map(|value| value as u64),
         updated_at: row.get::<i64, _>("updated_at") as u64,
         source_count: row.get::<i64, _>("source_count") as u32,
+    }
+}
+
+fn memory_follow_up_from_row(row: sqlx::postgres::PgRow) -> MemoryFollowUpRecord {
+    MemoryFollowUpRecord {
+        id: row.get("id"),
+        memory_id: row.get("memory_id"),
+        character_id: row.get("character_id"),
+        prompt: row.get("prompt"),
+        shown_at: row.get::<i64, _>("shown_at") as u64,
+        chat_id: row.get("chat_id"),
     }
 }
 

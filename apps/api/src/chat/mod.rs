@@ -113,6 +113,12 @@ struct SendMessageRequest {
     attachments: Vec<SendMessageAttachmentRequest>,
 }
 
+#[derive(Default, Deserialize)]
+struct CreateChatRequest {
+    #[serde(default)]
+    follow_up_id: Option<Uuid>,
+}
+
 #[derive(Deserialize)]
 struct SendMessageAttachmentRequest {
     id: Uuid,
@@ -231,6 +237,7 @@ async fn create_chat_for_persona(
     State(state): State<AppState>,
     headers: HeaderMap,
     Path(persona_id): Path<String>,
+    request: Option<Json<CreateChatRequest>>,
 ) -> AppResult<Json<ChatResponse>> {
     let session = state
         .store
@@ -241,12 +248,14 @@ async fn create_chat_for_persona(
         .ok_or_else(|| AppError::BadRequest(format!("unknown character: {persona_id}")))?;
     let chat = state
         .store
-        .create_chat(
+        .create_chat_with_follow_up(
             owner,
             character.id.to_owned(),
             character.ai_profile_id.to_owned(),
+            request.and_then(|Json(request)| request.follow_up_id),
         )
-        .await?;
+        .await?
+        .ok_or_else(|| AppError::BadRequest("follow-up is unavailable".to_owned()))?;
 
     Ok(Json(chat_response(chat)))
 }

@@ -10,7 +10,12 @@
 
 - `/` redirects to `/chat`.
 - `/chat` opens the chat workspace without creating a backend chat yet.
-- The first sent message creates a backend chat for the selected persona, then navigates to `/chat/:chatId`.
+- `/chat` may display one provisional personalized assistant follow-up from
+  automatic memory. Displaying it still does not create a backend chat.
+- The first sent message creates a backend chat for the selected persona, then
+  navigates to `/chat/:chatId`. When replying to a displayed follow-up, chat
+  creation first persists that exact opening as an assistant message so the
+  reply has coherent context.
 - The first optimistic user message remains visible while the newly created chat
   route is active and the assistant response is still pending.
 - `/chat/:chatId` opens that exact chat.
@@ -23,11 +28,26 @@
 
 - `GET /api/personas/:persona_id/chats`
 - `POST /api/personas/:persona_id/chats`
+- `POST /api/personas/:persona_id/follow-up`
 - `GET /api/chats/:chat_id`
 - `POST /api/chats/:chat_id/messages`
 - `POST /api/chats/:chat_id/messages/stream`
 - `DELETE /api/chats/:chat_id`
 - `DELETE /api/chats/:chat_id/messages`
+
+The follow-up endpoint accepts `{ claim_key, locale }` and returns either one
+claimed follow-up or `null`. Display is limited server-side to one per owner and
+character in a rolling 24-hour window and is idempotent for the same claim key.
+No eligible unresolved plan or goal means no prompt; there is no generic
+fallback. A failed request is ignored by the draft UI so normal New Chat sending
+remains available.
+
+`POST /api/personas/:persona_id/chats` accepts an optional `follow_up_id`. When
+present, the backend creates the chat and its initial assistant opening in one
+transaction only if the claimed delivery belongs to the same owner and
+character and has not already been attached to a chat. An unavailable delivery
+rolls back chat creation. Without `follow_up_id`, chat creation retains its
+normal empty-session behavior.
 
 After either message endpoint persists its user/assistant turn, the same
 transaction creates an idempotent automatic-memory extraction job. Background

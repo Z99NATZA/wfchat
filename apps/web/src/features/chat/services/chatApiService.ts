@@ -37,6 +37,16 @@ type ApiChat = {
 	updated_at: number;
 };
 
+type ApiChatFollowUp = {
+	id: string;
+	content: string;
+	created_at: number;
+};
+
+type ApiChatFollowUpResponse = {
+	follow_up: ApiChatFollowUp | null;
+};
+
 type ApiSendMessageResponse = {
 	messages: ApiMessage[];
 };
@@ -127,6 +137,13 @@ export type SendChatMessageAttachment = {
 	kind: "image";
 };
 
+export type ChatFollowUp = {
+	id: string;
+	characterId: string;
+	content: string;
+	createdAt: number;
+};
+
 export type VoiceCredit = {
 	text: string;
 };
@@ -138,14 +155,39 @@ export async function listPersonaChats(characterId: string): Promise<ChatSession
 }
 
 export async function createPersonaChat(
-	characterId: string
+	characterId: string,
+	followUpId?: string
 ): Promise<{ chatId: string; messages: ChatMessage[] }> {
 	await ensureCookieSession();
-	const response = await apiClient.post<ApiChat>(`/api/personas/${characterId}/chats`);
+	const response = await apiClient.post<ApiChat>(
+		`/api/personas/${characterId}/chats`,
+		followUpId ? { follow_up_id: followUpId } : undefined
+	);
 	return {
 		chatId: response.data.id,
 		messages: response.data.messages.map(toChatMessage)
 	};
+}
+
+export async function claimPersonaFollowUp(
+	characterId: string,
+	locale: "en" | "th",
+	claimKey: string
+): Promise<ChatFollowUp | null> {
+	await ensureCookieSession();
+	const response = await apiClient.post<ApiChatFollowUpResponse>(
+		`/api/personas/${characterId}/follow-up`,
+		{ claim_key: claimKey, locale }
+	);
+	const followUp = response.data.follow_up;
+	return followUp
+		? {
+				id: followUp.id,
+				characterId,
+				content: followUp.content,
+				createdAt: followUp.created_at
+			}
+		: null;
 }
 
 export async function getChat(

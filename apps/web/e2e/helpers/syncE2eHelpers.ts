@@ -61,7 +61,78 @@ type MockAppApisOptions = {
 	personaId?: string;
 	syncServer?: FakeRemoteSyncState;
 	failPersonaLists?: boolean;
+	followUpServer?: FakeFollowUpState;
 };
+
+export type E2eFollowUpCandidate = {
+	id: string;
+	characterId: string;
+	content: string;
+	createdAt: number;
+	ownerId?: string;
+};
+
+export class FakeFollowUpState {
+	private candidate: E2eFollowUpCandidate | null;
+	private delivered = false;
+	private failureStatus: number | null = null;
+	private readonly claimsByKey = new Map<string, E2eFollowUpCandidate>();
+
+	claimRequests: Array<{ characterId: string; claimKey: string; locale: string }> = [];
+
+	constructor(candidate: E2eFollowUpCandidate | null = null) {
+		this.candidate = candidate;
+	}
+
+	setCandidate(candidate: E2eFollowUpCandidate | null) {
+		this.candidate = candidate;
+	}
+
+	fail(status = 500) {
+		this.failureStatus = status;
+	}
+
+	claimed(id: string) {
+		return [...this.claimsByKey.values()].find((candidate) => candidate.id === id) ?? null;
+	}
+
+	async routeClaim(route: Route, characterId: string) {
+		const body = route.request().postDataJSON() as { claim_key?: string; locale?: string };
+		const claimKey = body.claim_key ?? "missing-claim-key";
+		const locale = body.locale ?? "en";
+		this.claimRequests.push({ characterId, claimKey, locale });
+
+		if (this.failureStatus !== null) {
+			await route.fulfill({
+				status: this.failureStatus,
+				contentType: "application/json",
+				body: JSON.stringify({ error: "follow_up_unavailable" })
+			});
+			return;
+		}
+
+		const existing = this.claimsByKey.get(claimKey);
+		if (existing) {
+			await fulfillJson(route, followUpResponse(existing));
+			return;
+		}
+
+		const candidate = this.candidate;
+		if (
+			this.delivered ||
+			!candidate ||
+			candidate.characterId !== characterId ||
+			(candidate.ownerId && candidate.ownerId !== "user-e2e")
+		) {
+			await fulfillJson(route, { follow_up: null });
+			return;
+		}
+
+		this.delivered = true;
+		this.claimsByKey.set(claimKey, candidate);
+		await fulfillJson(route, followUpResponse(candidate));
+	}
+}
 
 export class FakeRemoteSyncState {
 	private readonly items = new Map<string, E2eSyncItem>();
@@ -255,19 +326,12 @@ export async function mockBaseAppApis(page: Page, options: MockAppApisOptions = 
 		}
 		await fulfillJson(route, []);
 	});
-	await page.route(`**/api/personas/${personaId}/memory/facts`, async (route) => {
-		if (options.failPersonaLists) {
-			await fulfillApiUnavailable(route);
+	await page.route(`**/api/personas/${personaId}/follow-up`, async (route) => {
+		if (options.followUpServer) {
+			await options.followUpServer.routeClaim(route, personaId);
 			return;
 		}
-		await fulfillJson(route, []);
-	});
-	await page.route(`**/api/personas/${personaId}/memory/summaries`, async (route) => {
-		if (options.failPersonaLists) {
-			await fulfillApiUnavailable(route);
-			return;
-		}
-		await fulfillJson(route, []);
+		await fulfillJson(route, { follow_up: null });
 	});
 	await page.route("**/api/sync/preview", (route) => syncServer.routePreview(route));
 	await page.route("**/api/sync/commit", (route) => syncServer.routeCommit(route));
@@ -386,6 +450,16 @@ function chatUiConfigFixture(personaId: string) {
 			assistant_speech_enabled: false,
 			user_transcription_enabled: false,
 			credits: []
+		}
+	};
+}
+
+function followUpResponse(candidate: E2eFollowUpCandidate) {
+	return {
+		follow_up: {
+			id: candidate.id,
+			content: candidate.content,
+			created_at: candidate.createdAt
 		}
 	};
 }

@@ -6,6 +6,7 @@ import { useUserSpeechTranscription } from "@/features/chat/hooks/useUserSpeechT
 import { useI18n } from "@/i18n/i18nContext";
 import {
 	clearChatMessages,
+	claimPersonaFollowUp,
 	createPersonaChat,
 	deleteChat,
 	deleteChatAttachment,
@@ -18,6 +19,7 @@ import {
 	streamChatMessage,
 	uploadChatImageAttachment
 } from "@/features/chat/services/chatApiService";
+import type { ChatFollowUp } from "@/features/chat/services/chatApiService";
 import {
 	markChatMessagesDeleted,
 	markChatSessionDeleted,
@@ -77,7 +79,7 @@ type ActiveAssistantSpeechAvatarState = {
 
 export function useChatSession({ onAvatarChatEvent }: UseChatSessionOptions = {}) {
 	const { confirm } = useDialog();
-	const { t } = useI18n();
+	const { locale, t } = useI18n();
 	const location = useLocation();
 	const navigate = useNavigate();
 	const [personas, setPersonas] = useState(CHAT_PERSONAS);
@@ -101,6 +103,8 @@ export function useChatSession({ onAvatarChatEvent }: UseChatSessionOptions = {}
 	const [routeChatId, setRouteChatId] = useState<string | null>(() =>
 		parseChatIdFromPath(location.pathname)
 	);
+	const [draftFollowUp, setDraftFollowUp] = useState<ChatFollowUp | null>(null);
+	const draftFollowUpClaimRef = useRef<{ characterId: string; claimKey: string } | null>(null);
 	const pendingCreatedChatIdRef = useRef<string | null>(null);
 	const activeAssistantSpeechAvatarRef = useRef<ActiveAssistantSpeechAvatarState | null>(null);
 	const assistantSpeechAvatarEventKeyRef = useRef<string | null>(null);
@@ -147,6 +151,19 @@ export function useChatSession({ onAvatarChatEvent }: UseChatSessionOptions = {}
 			import.meta.env.DEV || import.meta.env.VITE_ENABLE_MARKDOWN_QA === "true";
 		return isQaBuildEnabled && new URLSearchParams(search).get("qa") === "markdown";
 	}, [location.search]);
+	const draftFollowUpMessage = useMemo<ChatMessage | null>(
+		() =>
+			draftFollowUp
+				? {
+						id: `follow-up-${draftFollowUp.id}`,
+						author: "companion",
+						text: draftFollowUp.content,
+						createdAt: draftFollowUp.createdAt,
+						time: formatMessageTime(new Date(draftFollowUp.createdAt * 1000))
+					}
+				: null,
+		[draftFollowUp]
+	);
 
 	useEffect(() => {
 		const timeoutId = window.setTimeout(() => {
@@ -159,6 +176,40 @@ export function useChatSession({ onAvatarChatEvent }: UseChatSessionOptions = {}
 	useEffect(() => {
 		setRouteChatId(parseChatIdFromPath(location.pathname));
 	}, [location.pathname]);
+
+	useEffect(() => {
+		let isCurrent = true;
+		if (!selectedPersonaId || !isDraftChatPath(location.pathname) || isMarkdownQaEnabled) {
+			setDraftFollowUp(null);
+			draftFollowUpClaimRef.current = null;
+			return;
+		}
+
+		const existingClaim = draftFollowUpClaimRef.current;
+		const claim =
+			existingClaim?.characterId === selectedPersonaId
+				? existingClaim
+				: { characterId: selectedPersonaId, claimKey: createUuidV4() };
+		draftFollowUpClaimRef.current = claim;
+		setDraftFollowUp((current) =>
+			current?.characterId === selectedPersonaId ? current : null
+		);
+		claimPersonaFollowUp(selectedPersonaId, locale, claim.claimKey)
+			.then((followUp) => {
+				if (isCurrent) {
+					setDraftFollowUp(followUp);
+				}
+			})
+			.catch(() => {
+				if (isCurrent) {
+					setDraftFollowUp(null);
+				}
+			});
+
+		return () => {
+			isCurrent = false;
+		};
+	}, [isMarkdownQaEnabled, locale, location.pathname, selectedPersonaId]);
 
 	const navigateToChat = useCallback(
 		(chatId: string) => {
@@ -479,6 +530,7 @@ export function useChatSession({ onAvatarChatEvent }: UseChatSessionOptions = {}
 		cancelUserSpeechInput();
 		setActiveChatId(null);
 		setMessages(MARKDOWN_QA_MESSAGES.map((message) => ({ ...message })));
+		setDraftFollowUp(null);
 		setDraft("");
 		setErrorMessage(null);
 		setIsActiveChatReadOnly(false);
@@ -656,10 +708,20 @@ export function useChatSession({ onAvatarChatEvent }: UseChatSessionOptions = {}
 		};
 
 		try {
-			const chatId = activeChatId ?? (await createPersonaChat(selectedPersonaId)).chatId;
+			const createdChat = activeChatId
+				? null
+				: await createPersonaChat(selectedPersonaId, draftFollowUp?.id);
+			const chatId = activeChatId ?? createdChat?.chatId;
+			if (!chatId) {
+				throw new Error("chat creation did not return an id");
+			}
 			if (!activeChatId) {
 				createdChatId = chatId;
 				pendingCreatedChatIdRef.current = chatId;
+				if (draftFollowUp && createdChat) {
+					setDraftFollowUp(null);
+					setMessages((currentMessages) => [...createdChat.messages, ...currentMessages]);
+				}
 				setActiveChatId(chatId);
 				setIsActiveChatReadOnly(false);
 				navigateToChat(chatId);
@@ -845,6 +907,7 @@ export function useChatSession({ onAvatarChatEvent }: UseChatSessionOptions = {}
 	return {
 		activePersona,
 		activeChatId,
+		draftFollowUpMessage,
 		clearChat,
 		closeSidebar: () => setIsSidebarOpen(false),
 		createNewSession,
@@ -929,6 +992,18 @@ function mergeDraftWithTranscript(currentDraft: string, transcript: string): str
 	return /\s$/.test(currentDraft)
 		? `${currentDraft}${trimmedTranscript}`
 		: `${currentDraft} ${trimmedTranscript}`;
+}
+
+function createUuidV4(): string {
+	if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+		return crypto.randomUUID();
+	}
+
+	return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (token) => {
+		const random = Math.floor(Math.random() * 16);
+		const value = token === "x" ? random : (random & 0x3) | 0x8;
+		return value.toString(16);
+	});
 }
 
 async function cleanupUploadedAttachments(attachments: ChatMessageAttachment[]) {

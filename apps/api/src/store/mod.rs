@@ -180,6 +180,16 @@ pub struct MemoryRetrievalRecord {
 }
 
 #[derive(Clone, Debug)]
+pub struct MemoryFollowUpRecord {
+    pub id: Uuid,
+    pub memory_id: Uuid,
+    pub character_id: String,
+    pub prompt: String,
+    pub shown_at: u64,
+    pub chat_id: Option<Uuid>,
+}
+
+#[derive(Clone, Debug)]
 pub struct MemoryExtractionJobRecord {
     pub id: Uuid,
     pub chat_id: Uuid,
@@ -303,6 +313,102 @@ mod integration_tests {
             .create_chat(owner, "aiko".to_owned(), "aiko_default".to_owned())
             .await
             .expect("chat should create")
+    }
+
+    fn follow_up_memory(memory_key: &str, content: &str) -> NewMemoryItemRecord {
+        NewMemoryItemRecord {
+            character_id: "aiko".to_owned(),
+            memory_key: memory_key.to_owned(),
+            kind: "plan".to_owned(),
+            content: content.to_owned(),
+            tags: vec!["career".to_owned()],
+            confidence: 0.9,
+            importance: 0.85,
+            last_reinforced_at: now_unix_seconds(),
+            expires_at: None,
+        }
+    }
+
+    #[tokio::test]
+    async fn follow_up_claim_is_idempotent_rate_limited_and_persisted_with_chat() {
+        let Some(store) = test_store().await else {
+            return;
+        };
+        let session = create_test_session(&store).await;
+        let owner = OwnerScope::from_session(&session);
+        let first_memory = store
+            .upsert_memory_item(
+                owner,
+                follow_up_memory("career.interview.plan", "Has a job interview tomorrow"),
+            )
+            .await
+            .expect("follow-up memory should save");
+        let now = now_unix_seconds();
+        let claim_key = Uuid::new_v4();
+        let first = store
+            .claim_memory_follow_up(
+                owner,
+                claim_key,
+                first_memory.id,
+                "aiko",
+                first_memory.updated_at,
+                "How did the interview go?",
+                now,
+            )
+            .await
+            .expect("follow-up claim should query")
+            .expect("follow-up should claim");
+        let retried = store
+            .claim_memory_follow_up(
+                owner,
+                claim_key,
+                first_memory.id,
+                "aiko",
+                first_memory.updated_at,
+                "How did the interview go?",
+                now,
+            )
+            .await
+            .expect("idempotent follow-up claim should query")
+            .expect("same claim key should return the delivery");
+        assert_eq!(retried.id, first.id);
+
+        let second_memory = store
+            .upsert_memory_item(
+                owner,
+                follow_up_memory("career.application.plan", "Plans to submit an application"),
+            )
+            .await
+            .expect("second memory should save");
+        let blocked = store
+            .claim_memory_follow_up(
+                owner,
+                Uuid::new_v4(),
+                second_memory.id,
+                "aiko",
+                second_memory.updated_at,
+                "Did you submit the application?",
+                now,
+            )
+            .await
+            .expect("rate-limited claim should query");
+        assert!(blocked.is_none());
+
+        let chat = store
+            .create_chat_with_follow_up(
+                owner,
+                "aiko".to_owned(),
+                "aiko_default".to_owned(),
+                Some(first.id),
+            )
+            .await
+            .expect("chat with follow-up should query")
+            .expect("follow-up should attach to a new chat");
+        assert_eq!(chat.messages.len(), 1);
+        assert_eq!(chat.messages[0].role, AiRole::Assistant);
+        assert_eq!(chat.messages[0].content, "How did the interview go?");
+
+        cleanup_sessions(&store, &[session.id]).await;
     }
 
     async fn append_test_turn(

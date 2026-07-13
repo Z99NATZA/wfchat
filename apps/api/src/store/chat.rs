@@ -35,6 +35,19 @@ impl ChatStore {
         character_id: String,
         ai_profile_id: String,
     ) -> StoreResult<ChatRecord> {
+        self.create_chat_with_follow_up(owner, character_id, ai_profile_id, None)
+            .await?
+            .ok_or(sqlx::Error::RowNotFound)
+    }
+
+    pub async fn create_chat_with_follow_up(
+        &self,
+        owner: OwnerScope,
+        character_id: String,
+        ai_profile_id: String,
+        follow_up_id: Option<Uuid>,
+    ) -> StoreResult<Option<ChatRecord>> {
+        let mut tx = self.db.begin().await?;
         let id = Uuid::new_v4();
         let now = now_unix_seconds() as i64;
         sqlx::query(
@@ -46,18 +59,51 @@ impl ChatStore {
         .bind(&character_id)
         .bind(&ai_profile_id)
         .bind(now)
-        .execute(self.db.as_ref())
+        .execute(&mut *tx)
         .await?;
 
-        Ok(ChatRecord {
-            id,
-            owner_session_id: owner.session_id,
-            character_id,
-            ai_profile_id,
-            messages: Vec::new(),
-            created_at: now as u64,
-            updated_at: now as u64,
-        })
+        if let Some(follow_up_id) = follow_up_id {
+            let row = sqlx::query(
+                "select prompt, extract(epoch from shown_at)::bigint as shown_at
+                 from memory_follow_up_deliveries
+                 where id = $1
+                   and (($4::uuid is not null and owner_user_id = $4)
+                        or ($4::uuid is null and owner_session_id = $2))
+                   and character_id = $3
+                   and chat_id is null
+                 for update",
+            )
+            .bind(follow_up_id)
+            .bind(owner.session_id)
+            .bind(&character_id)
+            .bind(owner.user_id)
+            .fetch_optional(&mut *tx)
+            .await?;
+            let Some(row) = row else {
+                tx.rollback().await?;
+                return Ok(None);
+            };
+            let prompt: String = row.get("prompt");
+            let shown_at: i64 = row.get("shown_at");
+            sqlx::query(
+                "insert into chat_messages (id, chat_id, role, content, created_at)
+                 values ($1, $2, 'assistant', $3, to_timestamp($4))",
+            )
+            .bind(Uuid::new_v4())
+            .bind(id)
+            .bind(prompt)
+            .bind(shown_at)
+            .execute(&mut *tx)
+            .await?;
+            sqlx::query("update memory_follow_up_deliveries set chat_id = $1 where id = $2")
+                .bind(id)
+                .bind(follow_up_id)
+                .execute(&mut *tx)
+                .await?;
+        }
+
+        tx.commit().await?;
+        self.get_chat(owner, id).await
     }
 
     pub async fn get_chat(

@@ -12,7 +12,7 @@ import type { AppFont } from "@/types/font";
 import type { Theme } from "@/types/theme";
 import type { ChatMessage, ChatSessionSummary } from "@/types/chat";
 import type { AvatarOverlayPosition, AvatarOverlaySize } from "@/stores/avatarOverlayStore";
-import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { type ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 export type ChatSyncSnapshot = {
 	activeChatId: string | null;
@@ -73,6 +73,13 @@ function ChatPage({
 		chat.isAssistantSpeechEnabled && isAssistantSpeechVisible && !chat.isActiveChatReadOnly;
 	const isUserSpeechInputEnabled = chat.isUserTranscriptionEnabled && !chat.isActiveChatReadOnly;
 	const latestFinalAssistantMessage = findLatestFinalAssistantMessage(chat.messages);
+	const displayedMessages = useMemo(
+		() =>
+			chat.draftFollowUpMessage
+				? [chat.draftFollowUpMessage, ...chat.messages]
+				: chat.messages,
+		[chat.draftFollowUpMessage, chat.messages]
+	);
 	const wasSendingRef = useRef(false);
 	const lastAutoPlayedAssistantMessageIdRef = useRef<string | null>(null);
 	const isSending = chat.isSending;
@@ -231,7 +238,7 @@ function ChatPage({
 				<div className="relative z-10 flex min-h-0 flex-1 flex-col">
 					<ChatMessageList
 						activeChatId={chat.activeChatId}
-						messages={chat.messages}
+						messages={displayedMessages}
 						companionName={chat.activePersona.name}
 						companionAvatarUrl={chat.activePersona.avatarUrl}
 						errorMessage={chat.errorMessage}

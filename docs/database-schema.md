@@ -188,6 +188,34 @@ human-readable schema reference.
   - guest-to-account promotion updates pending and historical job ownership
   - learned-context reset removes queued jobs so old turns cannot be recaptured
 
+### `memory_follow_up_deliveries`
+
+- Purpose: authoritative, idempotent record of a personalized automatic-memory
+  follow-up displayed on the empty New Chat route.
+- Columns:
+  - `id uuid primary key`
+  - `claim_key uuid not null unique`
+  - `memory_id uuid not null` -> `memory_items(id)` (`on delete cascade`)
+  - `owner_session_id uuid not null` -> `auth_sessions(id)` (`on delete cascade`)
+  - `owner_user_id uuid null` for registered account ownership
+  - `character_id text not null`
+  - `prompt text not null`
+  - `shown_at timestamptz not null default now()`
+  - `chat_id uuid null` -> `chats(id)` (`on delete set null`)
+  - `created_at timestamptz not null default now()`
+- Indexes:
+  - guest and registered-owner indexes on owner, character, and descending
+    `shown_at` enforce efficient rolling-window checks
+  - memory lookup index on `memory_id`
+- Lifecycle:
+  - display creates the row before any chat exists
+  - replying attaches the row to one newly created chat and persists `prompt`
+    as that chat's first assistant message in the same transaction
+  - account promotion moves delivery ownership and preserves references when
+    duplicate memory items merge
+  - deleting the source memory cascades to its delivery; deleting an attached
+    chat clears `chat_id` when the memory remains supported by another source
+
 ### `sync_entities`
 
 - Purpose: latest sync item state for settings and chat cache.
@@ -216,3 +244,5 @@ human-readable schema reference.
 - Image attachments belong to one owner, may be pending before send, and later become linked to one `chat_message` after successful message completion.
 - One owner + `character_id` has normalized `memory_items` keyed by `memory_key`.
 - One `memory_item` has one or more `memory_sources` across chats.
+- One displayed memory follow-up belongs to one owner and character and may
+  later reference one chat created from the reply.

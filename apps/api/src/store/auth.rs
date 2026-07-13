@@ -104,6 +104,16 @@ impl ChatStore {
             let account_id: Uuid = row.get("account_id");
 
             sqlx::query(
+                "update memory_follow_up_deliveries
+                 set memory_id = $1
+                 where memory_id = $2",
+            )
+            .bind(account_id)
+            .bind(guest_id)
+            .execute(&mut *tx)
+            .await?;
+
+            sqlx::query(
                 "delete from memory_sources guest_source
                  using memory_sources account_source
                  where guest_source.memory_id = $1
@@ -171,6 +181,16 @@ impl ChatStore {
         sqlx::query(
             "update memory_extraction_jobs
              set owner_user_id = $1, updated_at = now()
+             where owner_session_id = $2 and owner_user_id is null",
+        )
+        .bind(user_id)
+        .bind(session_id)
+        .execute(&mut *tx)
+        .await?;
+
+        sqlx::query(
+            "update memory_follow_up_deliveries
+             set owner_user_id = $1
              where owner_session_id = $2 and owner_user_id is null",
         )
         .bind(user_id)

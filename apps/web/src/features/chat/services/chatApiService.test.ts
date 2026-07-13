@@ -3,6 +3,8 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+	claimPersonaFollowUp,
+	createPersonaChat,
 	createSseEventParser,
 	normalizeSpeechAudioForUpload,
 	sendChatMessage,
@@ -12,6 +14,62 @@ import {
 import { apiClient } from "@/services/apiClient";
 
 const sessionCookieReadyKey = "wfchat.sessionCookieReady";
+
+describe("chat follow-up API boundary", () => {
+	beforeEach(() => {
+		installLocalStorageMock();
+		window.sessionStorage.clear();
+		window.sessionStorage.setItem(sessionCookieReadyKey, "true");
+	});
+
+	afterEach(() => {
+		window.sessionStorage.clear();
+		vi.restoreAllMocks();
+	});
+
+	it("claims a localized persona follow-up with an idempotency key", async () => {
+		const postSpy = vi.spyOn(apiClient, "post").mockResolvedValue({
+			data: {
+				follow_up: {
+					id: "follow-up-1",
+					content: "How did it go?",
+					created_at: 1_780_000_000
+				}
+			}
+		});
+
+		const followUp = await claimPersonaFollowUp("aiko", "en", "claim-key");
+
+		expect(postSpy).toHaveBeenCalledWith("/api/personas/aiko/follow-up", {
+			claim_key: "claim-key",
+			locale: "en"
+		});
+		expect(followUp).toEqual({
+			id: "follow-up-1",
+			characterId: "aiko",
+			content: "How did it go?",
+			createdAt: 1_780_000_000
+		});
+	});
+
+	it("attaches the claimed follow-up when creating the first chat", async () => {
+		const postSpy = vi.spyOn(apiClient, "post").mockResolvedValue({
+			data: {
+				id: "chat-1",
+				character_id: "aiko",
+				messages: [],
+				created_at: 1,
+				updated_at: 1
+			}
+		});
+
+		await createPersonaChat("aiko", "follow-up-1");
+
+		expect(postSpy).toHaveBeenCalledWith("/api/personas/aiko/chats", {
+			follow_up_id: "follow-up-1"
+		});
+	});
+});
 
 describe("chat SSE parser", () => {
 	it("parses events split across chunks", () => {

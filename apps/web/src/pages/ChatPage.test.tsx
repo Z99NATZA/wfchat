@@ -68,11 +68,21 @@ vi.mock("@/features/chat/components/ChatComposer", () => ({
 }));
 
 vi.mock("@/features/chat/components/ChatMessageList", () => ({
-	default: ({ isAssistantSpeechEnabled }: { isAssistantSpeechEnabled?: boolean }) => (
+	default: ({
+		isAssistantSpeechEnabled,
+		messages = []
+	}: {
+		isAssistantSpeechEnabled?: boolean;
+		messages?: Array<{ id: string; text: string }>;
+	}) => (
 		<div
 			data-assistant-speech-enabled={String(isAssistantSpeechEnabled)}
 			data-testid="chat-message-list"
-		/>
+		>
+			{messages.map((message) => (
+				<span key={message.id}>{message.text}</span>
+			))}
+		</div>
 	)
 }));
 
@@ -277,6 +287,25 @@ describe("ChatPage assistant speech visibility", () => {
 
 		expect(toggleAssistantSpeech).not.toHaveBeenCalled();
 	});
+
+	it("renders a provisional New Chat follow-up before persisted messages", () => {
+		mocks.useChatSession.mockReturnValue(
+			chatState({
+				isAssistantSpeechEnabled: false,
+				draftFollowUpMessage: {
+					id: "follow-up-1",
+					author: "companion",
+					text: "How did the interview go?",
+					createdAt: 1_780_000_000,
+					time: "10:00"
+				}
+			})
+		);
+
+		renderChatPage({ isAssistantSpeechVisible: false });
+
+		expect(screen.getByText("How did the interview go?")).toBeTruthy();
+	});
 });
 
 type RenderChatPageOptions = {
@@ -329,6 +358,13 @@ type ChatStateOptions = {
 	isUserTranscriptionEnabled?: boolean;
 	isSending?: boolean;
 	messages?: ReturnType<typeof assistantMessage>[];
+	draftFollowUpMessage?: {
+		id: string;
+		author: "companion";
+		text: string;
+		createdAt: number;
+		time: string;
+	} | null;
 	toggleAssistantSpeech?: ReturnType<typeof vi.fn>;
 };
 
@@ -338,6 +374,7 @@ function chatState({
 	isUserTranscriptionEnabled = false,
 	isSending = false,
 	messages = [],
+	draftFollowUpMessage = null,
 	toggleAssistantSpeech = vi.fn()
 }: ChatStateOptions) {
 	return {
@@ -352,6 +389,7 @@ function chatState({
 			avatarUrl: "/images/aiko-avatar.png"
 		},
 		activeChatId: "chat-1",
+		draftFollowUpMessage,
 		clearChat: vi.fn(),
 		closeSidebar: vi.fn(),
 		createNewSession: vi.fn(),

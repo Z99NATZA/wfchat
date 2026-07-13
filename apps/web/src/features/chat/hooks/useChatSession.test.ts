@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ChatMessage, ChatPersona } from "@/types/chat";
 import { useChatSession, type ChatSessionAvatarEvent } from "@/features/chat/hooks/useChatSession";
 import {
+	claimPersonaFollowUp,
 	createPersonaChat,
 	deleteChatAttachment,
 	deleteChat,
@@ -26,6 +27,7 @@ const mocks = vi.hoisted(() => ({
 	getAssistantMessageSpeech: vi.fn(),
 	transcribeUserSpeech: vi.fn(),
 	listPersonaChats: vi.fn(),
+	claimPersonaFollowUp: vi.fn(),
 	listMemorySummaries: vi.fn(),
 	createPersonaChat: vi.fn(),
 	streamChatMessage: vi.fn(),
@@ -46,6 +48,7 @@ vi.mock("react-router-dom", () => ({
 
 vi.mock("@/i18n/i18nContext", () => ({
 	useI18n: () => ({
+		locale: "en",
 		t: mocks.t
 	})
 }));
@@ -67,6 +70,7 @@ vi.mock("@/services/syncService", () => ({
 
 vi.mock("@/features/chat/services/chatApiService", () => ({
 	clearChatMessages: mocks.clearChatMessages,
+	claimPersonaFollowUp: mocks.claimPersonaFollowUp,
 	createPersonaChat: mocks.createPersonaChat,
 	deleteChat: mocks.deleteChat,
 	deleteChatAttachment: mocks.deleteChatAttachment,
@@ -167,6 +171,7 @@ describe("useChatSession streaming sendMessage", () => {
 			quickPrompts: []
 		});
 		mocks.listPersonaChats.mockResolvedValue([]);
+		mocks.claimPersonaFollowUp.mockResolvedValue(null);
 		mocks.listMemorySummaries.mockResolvedValue([]);
 		mocks.createPersonaChat.mockResolvedValue({ chatId: "chat-1", messages: [] });
 		mocks.deleteChat.mockResolvedValue(undefined);
@@ -322,6 +327,94 @@ describe("useChatSession streaming sendMessage", () => {
 		});
 
 		expect(result.current.messages).toEqual(serverMessages);
+	});
+
+	it("shows a claimed follow-up on New Chat without creating a chat", async () => {
+		mocks.claimPersonaFollowUp.mockResolvedValue({
+			id: "follow-up-1",
+			characterId: "aiko",
+			content: "You mentioned your interview. How did it go?",
+			createdAt: 1_780_000_000
+		});
+
+		const { result } = renderHook(() => useChatSession());
+
+		await waitFor(() =>
+			expect(result.current.draftFollowUpMessage).toMatchObject({
+				author: "companion",
+				text: "You mentioned your interview. How did it go?"
+			})
+		);
+		expect(claimPersonaFollowUp).toHaveBeenCalledWith("aiko", "en", expect.any(String));
+		expect(createPersonaChat).not.toHaveBeenCalled();
+		expect(result.current.activeChatId).toBeNull();
+		expect(result.current.messages).toEqual([]);
+	});
+
+	it("persists the claimed opening when the user replies", async () => {
+		const opening = message("server-opening", "companion", "How did the interview go?");
+		const user = message("server-user", "user", "It went well");
+		const assistant = message("server-ai", "companion", "I'm glad to hear that.");
+		mocks.claimPersonaFollowUp.mockResolvedValue({
+			id: "follow-up-1",
+			characterId: "aiko",
+			content: opening.text,
+			createdAt: opening.createdAt
+		});
+		mocks.createPersonaChat.mockResolvedValue({ chatId: "chat-1", messages: [opening] });
+		mocks.streamChatMessage.mockImplementation((_chatId, _content, _attachments, handlers) => {
+			handlers.onStart?.({ chatId: "chat-1", personaId: "aiko" });
+			handlers.onDone?.({
+				chatId: "chat-1",
+				userMessage: user,
+				assistantMessage: assistant,
+				messages: [opening, user, assistant]
+			});
+			return Promise.resolve();
+		});
+		const { result } = renderHook(() => useChatSession());
+		await waitFor(() => expect(result.current.draftFollowUpMessage).not.toBeNull());
+
+		await act(async () => {
+			result.current.setDraft("It went well");
+		});
+		await act(async () => {
+			await result.current.sendMessage();
+		});
+
+		expect(createPersonaChat).toHaveBeenCalledWith("aiko", "follow-up-1");
+		expect(result.current.draftFollowUpMessage).toBeNull();
+		expect(result.current.messages).toEqual([opening, user, assistant]);
+	});
+
+	it("fails open when follow-up loading fails", async () => {
+		mocks.claimPersonaFollowUp.mockRejectedValue(new Error("follow-up unavailable"));
+		mocks.streamChatMessage.mockImplementation((_chatId, _content, _attachments, handlers) => {
+			handlers.onStart?.({ chatId: "chat-1", personaId: "aiko" });
+			handlers.onDone?.({
+				chatId: "chat-1",
+				userMessage: message("server-user", "user", "hello"),
+				assistantMessage: message("server-ai", "companion", "hello back"),
+				messages: [
+					message("server-user", "user", "hello"),
+					message("server-ai", "companion", "hello back")
+				]
+			});
+			return Promise.resolve();
+		});
+		const { result } = renderHook(() => useChatSession());
+		await waitFor(() => expect(claimPersonaFollowUp).toHaveBeenCalled());
+
+		await act(async () => {
+			result.current.setDraft("hello");
+		});
+		await act(async () => {
+			await result.current.sendMessage();
+		});
+
+		expect(createPersonaChat).toHaveBeenCalledWith("aiko", undefined);
+		expect(result.current.activeChatId).toBe("chat-1");
+		expect(result.current.messages.at(-1)?.text).toBe("hello back");
 	});
 
 	it("uploads image attachments before streaming and keeps local previews until server messages arrive", async () => {
