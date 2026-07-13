@@ -807,7 +807,7 @@ Recommended cases:
 ### API Unit And Integration Tests
 
 Use tests inside `apps/api/src/sync.rs`, `apps/api/src/auth.rs`, and
-`apps/api/src/store.rs`. Database-backed tests require `WFCHAT_TEST_DATABASE_URL`.
+`apps/api/src/store/sync.rs`. Database-backed tests require `WFCHAT_TEST_DATABASE_URL`.
 
 Recommended cases:
 
@@ -926,7 +926,7 @@ npm --prefix apps/web run test:e2e
 Backend:
 
 - `apps/api/src/sync.rs`
-- `apps/api/src/store.rs`
+- `apps/api/src/store/sync.rs`
 - `apps/api/src/auth.rs`
 - `apps/api/src/app.rs`
 

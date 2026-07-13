@@ -55,7 +55,7 @@ Related current contract:
 Related implementation:
 - `apps/api/src/memory.rs`
 - `apps/api/src/memory_evaluation.rs`
-- `apps/api/src/store.rs`
+- `apps/api/src/store/memory.rs`
 
 ## 2026-07-12 - Validate expiration and removal safety
 
@@ -93,7 +93,7 @@ Related current contract:
 Related implementation:
 - `apps/api/src/memory_evaluation.rs`
 - `apps/api/src/memory.rs`
-- `apps/api/src/store.rs`
+- `apps/api/src/store/memory.rs`
 
 ## 2026-07-12 - Add privacy-safe basic memory observability
 
@@ -131,7 +131,7 @@ Related current contract:
 Related implementation:
 - `apps/api/src/memory.rs`
 - `apps/api/src/state.rs`
-- `apps/api/src/chat.rs`
+- `apps/api/src/chat/messages.rs`
 
 ## 2026-07-12 - Add deterministic automatic-memory evaluation
 
@@ -248,8 +248,8 @@ Related current contract:
 
 Related implementation:
 - `apps/api/src/memory.rs`
-- `apps/api/src/store.rs`
-- `apps/api/src/chat.rs`
+- `apps/api/src/store/memory.rs`
+- `apps/api/src/chat/messages.rs`
 
 ## 2026-07-11 - Add durable selective automatic capture
 
@@ -290,7 +290,7 @@ Related current contract:
 
 Related implementation:
 - `apps/api/src/memory.rs`
-- `apps/api/src/store.rs`
+- `apps/api/src/store/memory.rs`
 - `apps/api/migrations/202607110001_memory_extraction_outbox.sql`
 
 ## 2026-07-10 - Retire manual facts and summaries
@@ -335,7 +335,7 @@ Related current contract:
 - `docs/sync-system.md`
 
 Related implementation:
-- `apps/api/src/chat.rs`
+- `apps/api/src/chat/messages.rs`
 - `apps/web/src/features/chat/hooks/useChatSession.ts`
 
 ## 2026-07-10 - Add storage and provenance foundation
@@ -369,5 +369,5 @@ Related current contract:
 - `docs/database-schema.md`
 
 Related implementation:
-- `apps/api/src/store.rs`
+- `apps/api/src/store/memory.rs`
 - `apps/api/migrations/202607100003_automatic_memory_foundation.sql`

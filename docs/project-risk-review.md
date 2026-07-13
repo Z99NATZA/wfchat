@@ -59,7 +59,7 @@ Status: addressed after this review.
 Files:
 
 - `apps/api/db/init.sql`
-- `apps/api/src/store.rs`
+- `apps/api/src/store/`
 - `apps/api/migrations/202607040001_initial_schema.sql`
 - `docs/database-migrations.md`
 
@@ -173,7 +173,7 @@ is still a product/privacy decision if profiles become public or widely shared.
 Files:
 
 - `apps/api/src/auth.rs`
-- `apps/api/src/store.rs`
+- `apps/api/src/store/`
 
 Profile update now validates user-supplied `avatar_url` before storing profile
 updates. The backend accepts `https` URLs and allows `http` only for

@@ -358,7 +358,7 @@ Backend:
 - Reject URL/path attachment input. Implemented by upload-only API shape.
 - Link attachments only after successful message completion. Implemented.
 - Roll back message persistence when attachment linking is incomplete.
-  Implemented in `apps/api/src/store.rs`.
+  Implemented in `apps/api/src/store/attachments.rs`.
 - Leave pending attachments unlinked after provider failure. Implemented.
 - Return safe upload errors. Implemented.
 - Return safe stream errors. Implemented.

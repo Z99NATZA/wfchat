@@ -7,7 +7,18 @@ apps/
 			main.rs
 			app.rs
 			auth.rs
-			chat.rs
+			chat/
+				mod.rs
+				messages.rs
+				attachments.rs
+				voice.rs
+			store/
+				mod.rs
+				auth.rs
+				chat.rs
+				attachments.rs
+				memory.rs
+				sync.rs
 			characters.rs
 			admin.rs
 			ai/
@@ -56,7 +67,13 @@ docs/
 
 `apps/api/src/app.rs` wires the Axum router.
 
-`apps/api/src/chat.rs` keeps chat routes and flow close together so one chat request is understandable in one file.
+`apps/api/src/chat/mod.rs` composes chat routes and keeps chat CRUD handlers.
+`apps/api/src/chat/messages.rs` keeps message preparation, completion, and SSE
+streaming together so one message request remains understandable in one file.
+Attachment and voice handlers live in their matching chat submodules.
+
+`apps/api/src/store` splits PostgreSQL persistence by auth, chat, attachment,
+memory, and sync domain while preserving the shared `store` API.
 
 `apps/api/src/characters.rs` keeps the static character registry and character prompts until this moves to a database.
 

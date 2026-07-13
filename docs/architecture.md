@@ -24,9 +24,9 @@ Frontend code is feature-first under `apps/web/src`. App-level wiring stays in
 browser infrastructure stays in `services`, persisted app-state helpers stay in
 `stores`, and feature behavior stays inside `features/*`.
 
-Backend code keeps request flows close to their owning route modules. `chat.rs`
+Backend code keeps request flows close to their owning route modules. `chat/*`
 owns chat flow, `auth.rs` owns sessions and login, `sync.rs` owns sync APIs,
-`store.rs` owns PostgreSQL persistence, and `ai/*` owns provider adapters.
+`store/*` owns PostgreSQL persistence by domain, and `ai/*` owns provider adapters.
 
 ## Runtime Flow
 
@@ -41,7 +41,7 @@ browser
   -> /api/*
       -> apps/api/src/app.rs router
           -> auth/chat/sync/admin route modules
-          -> apps/api/src/store.rs and apps/api/src/ai/*
+          -> apps/api/src/store/* and apps/api/src/ai/*
 ```
 
 ## Dependency Direction

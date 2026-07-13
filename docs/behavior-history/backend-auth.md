@@ -40,7 +40,7 @@ Related current contract:
 Related implementation:
 
 - `apps/api/src/auth.rs`
-- `apps/api/src/store.rs`
+- `apps/api/src/store/auth.rs`
 
 ## 2026-07-04 - Cookie-first session ownership
 

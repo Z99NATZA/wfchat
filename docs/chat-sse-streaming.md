@@ -12,7 +12,7 @@ The current chat path is request/response:
 React useChatSession
   -> chatApiService.sendChatMessage()
     -> POST /api/chats/:chat_id/messages
-      -> apps/api/src/chat.rs send_message()
+      -> apps/api/src/chat/messages.rs send_message()
         -> AiService::complete_chat()
           -> provider complete_chat()
         -> store.append_chat_messages(user, assistant)
@@ -440,7 +440,7 @@ Keep the work in small commits.
 
 Files:
 
-- `apps/api/src/chat.rs`
+- `apps/api/src/chat/messages.rs`
 - `apps/api/Cargo.toml`
 - `Cargo.lock`
 
@@ -561,9 +561,9 @@ Current provider streaming behavior:
 Current automated coverage:
 
 - Provider stream parser and Aiko streaming guard unit tests are implemented in `apps/api/src/ai/providers/openai.rs`.
-- SSE stream error sanitization unit tests are implemented in `apps/api/src/chat.rs`.
-- A mock-provider endpoint integration test is implemented in `apps/api/src/chat.rs` and runs when `WFCHAT_TEST_DATABASE_URL` is set. It verifies response headers, `message_start`, `token`, `message_done`, final assistant content, and persisted user/assistant messages.
-- A provider-failure endpoint integration test is implemented in `apps/api/src/chat.rs` and runs when `WFCHAT_TEST_DATABASE_URL` is set. It uses OpenAI provider config without an API key to verify `message_start`, sanitized `error`, no raw upstream/config details in the SSE body, no `message_done`, and no persisted messages.
+- SSE stream error sanitization unit tests are implemented in `apps/api/src/chat/mod.rs`.
+- A mock-provider endpoint integration test is implemented in `apps/api/src/chat/mod.rs` and runs when `WFCHAT_TEST_DATABASE_URL` is set. It verifies response headers, `message_start`, `token`, `message_done`, final assistant content, and persisted user/assistant messages.
+- A provider-failure endpoint integration test is implemented in `apps/api/src/chat/mod.rs` and runs when `WFCHAT_TEST_DATABASE_URL` is set. It uses OpenAI provider config without an API key to verify `message_start`, sanitized `error`, no raw upstream/config details in the SSE body, no `message_done`, and no persisted messages.
 
 ### Frontend
 

@@ -31,7 +31,7 @@ Related current contract:
 - `docs/automatic-memory.md`
 
 Related implementation:
-- `apps/api/src/chat.rs`
+- `apps/api/src/chat/messages.rs`
 - `apps/api/src/memory.rs`
 
 ## 2026-07-03 - Atomic chat append with attachments
@@ -67,4 +67,4 @@ Related current contract:
 - `docs/chat-image-attachments.md`
 
 Related implementation:
-- `apps/api/src/store.rs`
+- `apps/api/src/store/chat.rs`

@@ -16,7 +16,7 @@ The backend is a Rust Axum API in `apps/api`. It is designed to keep common requ
 ```text
 React
   -> POST /api/chats/:chat_id/messages
-    -> chat.rs
+    -> chat/messages.rs
       -> ai/mod.rs
         -> ai/providers/<provider>.rs
 ```
@@ -38,7 +38,7 @@ The streaming path is additive and does not replace the non-streaming endpoint:
 ```text
 React
   -> POST /api/chats/:chat_id/messages/stream
-    -> chat.rs
+    -> chat/messages.rs
       -> ai/mod.rs
         -> ai/providers/<provider>.rs
       <- text/event-stream
@@ -71,8 +71,8 @@ Clear chat flow:
 ```text
 React
   -> DELETE /api/chats/:chat_id/messages
-    -> chat.rs
-      -> store.rs
+    -> chat/mod.rs
+      -> store/chat.rs
 ```
 
 This clears message history for the current chat while keeping the chat id and guest session.
@@ -96,9 +96,12 @@ image attachment upload use separate stricter buckets.
 
 `auth.rs` owns guest sessions, Google login, logout, `GET /api/auth/me`, and editable account profile updates.
 
-`chat.rs` owns chat routes and the main chat flow.
+`chat/mod.rs` composes chat routes and owns chat CRUD handlers.
+`chat/messages.rs` keeps the main message flow and SSE streaming together,
+`chat/attachments.rs` owns upload/preview/delete handlers, and `chat/voice.rs`
+owns speech and transcription handlers.
 
-`store.rs` owns the internal automatic-memory persistence foundation. It exposes
+`store/memory.rs` owns the internal automatic-memory persistence foundation. It exposes
 owner-scoped memory item/source operations, account-promotion merging,
 transactional chat-deletion cleanup, durable extraction jobs, atomic captured
 item/source writes, bounded owner/character retrieval candidates, and

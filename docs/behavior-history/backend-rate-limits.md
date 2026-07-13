@@ -29,7 +29,7 @@ Why:
 Regression guard:
 - `apps/api/src/rate_limit.rs` covers allowed requests, exceeded buckets,
   endpoint-family isolation, and IP fallback.
-- `apps/api/src/chat.rs` covers route-level `429` behavior for chat
+- `apps/api/src/chat/` covers route-level `429` behavior for chat
   send/stream, assistant speech, user transcription, and image upload.
 
 Related current contract:
@@ -40,6 +40,6 @@ Related current contract:
 
 Related implementation:
 - `apps/api/src/rate_limit.rs`
-- `apps/api/src/chat.rs`
+- `apps/api/src/chat/`
 - `apps/api/src/error.rs`
 - `apps/api/src/state.rs`

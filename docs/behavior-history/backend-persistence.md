@@ -72,7 +72,7 @@ Related current contract:
 - `docs/database-migrations.md`
 
 Related implementation:
-- `apps/api/src/store.rs`
+- `apps/api/src/store/`
 - `apps/api/migrations/202607110001_memory_extraction_outbox.sql`
 
 ## 2026-07-03 - Propagate store database errors explicitly
@@ -106,8 +106,8 @@ Related current contract:
 - `docs/backend-architecture.md`
 
 Related implementation:
-- `apps/api/src/store.rs`
+- `apps/api/src/store/`
 - `apps/api/src/error.rs`
 - `apps/api/src/auth.rs`
-- `apps/api/src/chat.rs`
+- `apps/api/src/chat/`
 - `apps/api/src/sync.rs`

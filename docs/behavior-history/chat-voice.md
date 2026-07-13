@@ -178,7 +178,7 @@ Why:
 - Keeping this as backend-owned metadata preserves the normal chat UI boundary.
 
 Regression guard:
-- `apps/api/src/chat.rs` covers VOICEVOX credit metadata and absence of raw
+- `apps/api/src/chat/` covers VOICEVOX credit metadata and absence of raw
   provider control fields.
 - `apps/web/src/components/settings/AppSettingsDialog.test.tsx` covers credit
   rendering without controls.
@@ -187,7 +187,7 @@ Related current contract:
 - `docs/chat-voice.md`
 
 Related implementation:
-- `apps/api/src/chat.rs`
+- `apps/api/src/chat/`
 - `apps/api/src/config.rs`
 - `apps/web/src/app/App.tsx`
 - `apps/web/src/components/settings/AppSettingsDialog.tsx`
@@ -266,7 +266,7 @@ Related current contract:
 Related implementation:
 - `apps/api/src/voice.rs`
 - `apps/api/src/config.rs`
-- `apps/api/src/chat.rs`
+- `apps/api/src/chat/`
 - `docker-compose.yml`
 
 ## 2026-06-25 - Gate MediaSource speech streaming behind an opt-in flag
@@ -365,14 +365,14 @@ Why:
 Regression guard:
 - `apps/web/src/features/chat/hooks/useAssistantSpeechPlayback.test.ts` covers
   the MediaSource streaming path and replay cache behavior.
-- `apps/api/src/chat.rs` keeps speech endpoint header and mock audio coverage.
+- `apps/api/src/chat/` keeps speech endpoint header and mock audio coverage.
 
 Related current contract:
 - `docs/chat-voice.md`
 
 Related implementation:
 - `apps/api/src/voice.rs`
-- `apps/api/src/chat.rs`
+- `apps/api/src/chat/`
 - `apps/web/src/features/chat/hooks/useAssistantSpeechPlayback.ts`
 - `apps/web/src/features/chat/services/chatApiService.ts`
 
