@@ -37,15 +37,22 @@ apps/
 			types/
 			utils/
 docs/
+	lessons-learned/
 ```
 
 ## Folder Roles
 
-`apps/web` contains the standalone React frontend. It can be moved to another repo later because it talks to the backend through HTTP only.
+`apps/web` contains the standalone React frontend. It talks to the backend
+through HTTP only.
 
 `apps/api` contains the standalone Rust Axum backend. It owns auth, admin-only AI configuration, API keys, chat persistence, and provider adapters.
 
-`docs/` contains architecture and implementation notes. The root `README.md` is intentionally limited to run commands.
+`docs/` contains documentation. Current architecture and implementation
+behavior stay in its domain documents, separate from historical lessons. The
+root `README.md` is intentionally limited to run commands.
+
+`docs/lessons-learned/` records failed approaches and their reusable warnings
+without describing the current replacement implementation.
 
 ## Frontend Shape
 

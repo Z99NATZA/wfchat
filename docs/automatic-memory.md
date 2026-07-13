@@ -1,11 +1,11 @@
 # Automatic Memory
 
-Status: Phase 4 Validation Implemented - Capture And Retrieval Active
+Status: Capture And Retrieval Active
 
-This document defines the intended replacement for the retired manual memory
-system. The internal storage, provenance, chat-deletion cleanup, account
-promotion, learned-context reset boundaries, durable automatic capture, and
-bounded multilingual structured retrieval are implemented. Aiko can use
+This document defines the current automatic-memory system. Internal storage,
+provenance, chat-deletion cleanup, account promotion, learned-context reset
+boundaries, durable automatic capture, and bounded multilingual structured
+retrieval are active. Aiko can use
 relevant learned context across chats for the same owner and character even
 when the remembered content and the new topic use Thai and English differently.
 
@@ -42,7 +42,7 @@ Result: the canonical music topic makes the nightcore preference eligible.
   tokens, or unsupported inferences.
 - The backend and Settings UI support a confirmed learned-context reset while
   retaining chat history.
-- The replacement must not reuse the retired manual memory API or sync-cache
+- Learned context has no manual facts/summaries API or browser sync-cache
   contract.
 
 ## What To Remember
@@ -62,7 +62,7 @@ Do not retain:
 - Sensitive data that is not required for the companion experience.
 - Raw conversation text as a substitute for a structured memory.
 
-## Implemented Data Model
+## Data Model
 
 ### `memory_items`
 
@@ -101,7 +101,7 @@ Provenance connecting one memory to one or more conversations:
 One memory may have multiple sources. This allows repeated statements to
 reinforce a memory without duplicating it.
 
-## Capture Flow (Implemented)
+## Capture Flow
 
 Memory extraction runs after a user and assistant turn has been persisted:
 
@@ -142,8 +142,7 @@ useful specific tags such as `nightcore`. Application validation remains the
 authority: known Thai/English category aliases are normalized to canonical
 tags, canonical topics visible in keys/content are added, specific lowercase
 ASCII tags are retained, duplicates are removed, and the six-tag limit remains
-enforced. Existing stored tags are normalized during retrieval, so this change
-does not require a data rewrite or migration.
+enforced. Stored tags are normalized during retrieval.
 
 ## Deduplication And Conflict Rules
 
@@ -154,7 +153,7 @@ does not require a data rewrite or migration.
 - Temporary plans may use `expires_at` and must not remain permanent facts.
 - Confidence must come from user evidence, not repeated assistant assertions.
 
-## Retrieval Flow (Implemented)
+## Retrieval Flow
 
 Before an AI request, retrieve a small set of relevant memory items for the chat
 owner and character:
@@ -167,7 +166,7 @@ current user message
   -> inject the top items within a fixed token budget
 ```
 
-The first version uses structured keys, tags, and normalized content signals.
+Retrieval uses structured keys, tags, and normalized content signals.
 A small backend-owned taxonomy expands bounded Thai/English category aliases,
 for example `เพลง`/`ดนตรี`/`songs` to `music` and `เกม`/`games` to `gaming`.
 Canonical topics and aliases are placed before raw lexical terms within the
@@ -178,10 +177,8 @@ application scoring.
 The store prefilters at most 50 candidates using the exact guest/account owner
 boundary, `character_id`, supported kinds, minimum `0.65` confidence,
 non-expiration, and expanded key/tag/content topic overlap. Query expansion also
-contains bounded legacy aliases, allowing older tags such as `songs` to match a
-canonical `music` query without rewriting stored rows. Embeddings and vector
-search remain deferred until evaluation shows that this deterministic metadata
-retrieval is insufficient.
+contains bounded aliases, allowing tags such as `songs` to match a canonical
+`music` query. Retrieval does not use embeddings or vector search.
 
 Application code validates candidates again and assigns deterministic scores
 from lexical relevance, canonical-topic relevance, confidence, importance,
@@ -206,7 +203,7 @@ remember correctly" for uncertain items. Retrieval is fail-open: a
 memory-specific database error is logged with metadata only and chat continues
 without learned context.
 
-## Chat Deletion (Implemented)
+## Chat Deletion
 
 Deleting a chat must remove everything learned only from that chat in the same
 database transaction:
@@ -220,7 +217,7 @@ database transaction:
 This provenance rule is required before automatic capture is enabled. A single
 `source_chat_id` column is not sufficient.
 
-## Learned-Context Reset (Implemented)
+## Learned-Context Reset
 
 The Settings action supports:
 
@@ -239,12 +236,11 @@ the translation string.
 
 A full reset that also deletes chat history is not exposed by this action.
 
-## Implementation Plan
+## Current Operations And Validation
 
-### Phase 1: Storage And Lifecycle
+### Storage And Lifecycle
 
-- Status: implemented.
-- Ordered migrations create `memory_items` and `memory_sources`.
+- PostgreSQL stores learned context in `memory_items` and `memory_sources`.
 - Owner-scoped store methods support upsert, list, source attachment, source
   listing, and learned-context reset.
 - Account promotion merges duplicate keys and preserves non-duplicate sources.
@@ -253,9 +249,8 @@ A full reset that also deletes chat history is not exposed by this action.
 - Clearing chat messages applies the same cleanup to message-level sources while
   retaining the chat itself.
 
-### Phase 2: Automatic Capture
+### Automatic Capture
 
-- Status: implemented.
 - Extraction jobs are enqueued atomically with successful persisted turns.
 - A background worker provides bounded retries and restart-safe claiming.
 - Strict structured output, evidence grounding, sensitive-data filtering,
@@ -264,9 +259,8 @@ A full reset that also deletes chat history is not exposed by this action.
 - Operational logs and in-process counters exclude raw learned content and
   source text.
 
-### Phase 3: Retrieval
+### Retrieval
 
-- Status: implemented.
 - Owner/character candidate lookup filters confidence, kinds, expiration, and
   bounded multilingual canonical/lexical topic signals before deterministic
   scoring.
@@ -279,14 +273,10 @@ A full reset that also deletes chat history is not exposed by this action.
   isolation, expiration, correction precedence, deterministic ordering,
   budgets, and endpoint parity.
 
-### Phase 4: Validation And Basic Operations
-
-Status: implemented. Reset and Control, the deterministic Evaluation Suite,
-Basic Observability, and Expiration Tests are complete.
+### Validation And Basic Operations
 
 #### Reset And Control
 
-- Status: implemented.
 - Settings exposes only a destructive reset button and confirmation dialog,
   with no memory list, section title, or description.
 - The action deletes learned context and queued extraction work for the current
@@ -296,7 +286,6 @@ Basic Observability, and Expiration Tests are complete.
 
 #### Evaluation Suite
 
-- Status: implemented.
 - `apps/api/src/memory_evaluation.rs` uses deterministic, synthetic English and
   Thai fixtures without a live provider or network dependency.
 - Coverage includes related/unrelated/empty retrieval, Thai-English retrieval
@@ -318,7 +307,6 @@ cargo test --manifest-path apps/api/Cargo.toml memory_evaluation -- --test-threa
 
 #### Basic Observability
 
-- Status: implemented.
 - One `MemoryTelemetry` instance is owned by `AppState`; cloned runtime state
   shares process-lifetime atomic counters, while independently constructed test
   states remain isolated.
@@ -338,7 +326,6 @@ cargo test --manifest-path apps/api/Cargo.toml memory_evaluation -- --test-threa
 
 #### Expiration Tests
 
-- Status: implemented.
 - Deterministic application tests prove `expires_at <= now` is inactive while a
   future timestamp remains eligible, including the exact boundary without
   sleeping.
@@ -358,10 +345,10 @@ $env:WFCHAT_TEST_DATABASE_URL='postgres://postgres:postgres@localhost:5432/wfcha
 cargo test --manifest-path apps/api/Cargo.toml memory_expiration -- --test-threads=1
 ```
 
-Expiration remains retrieval-time filtering plus provenance/reset cleanup. No
-background expiration scheduler or new deletion policy was required.
+Expiration uses retrieval-time filtering plus provenance and reset cleanup.
+There is no background expiration scheduler.
 
-## Phase 1 Acceptance Criteria
+## Persistence And Lifecycle Behavior
 
 - Guest memory is isolated by session ownership.
 - Registered memory is visible across sessions for the same account.
@@ -372,9 +359,9 @@ background expiration scheduler or new deletion policy was required.
 - Internal learned-context reset removes memory while retaining chat history.
 - Clearing messages removes message-level evidence and cleans up affected
   orphaned memory.
-- No retired manual memory UI, API, or browser cache is reintroduced.
+- There is no manual memory UI, item-management API, or browser memory cache.
 
-## Capture Acceptance Criteria
+## Current Capture Behavior
 
 - A durable preference stated in a persisted user turn can be captured with
   message-level provenance.
@@ -382,12 +369,12 @@ background expiration scheduler or new deletion policy was required.
 - Corrected preferences replace or supersede stale values.
 - Memory extraction failures never block or lose a successful chat response.
 
-## Retrieval Acceptance Criteria
+## Current Retrieval Behavior
 
 - A relevant durable preference captured in one chat can inform another chat
   for the same owner and character.
 - Thai and English category aliases can retrieve the same canonical memory in
-  either direction without embeddings or a data migration.
+  either direction without embeddings.
 - Unrelated, expired, weak, unsafe, cross-owner, and cross-character items are
   not injected.
 - Specific terms outrank category-only matches, and broad categories cannot
@@ -396,7 +383,7 @@ background expiration scheduler or new deletion policy was required.
 - Streaming and non-streaming requests use identical memory preparation.
 - The latest user message overrides conflicting learned context.
 
-## Non-Goals For The First Version
+## Excluded Behavior
 
 - Remembering every conversation detail.
 - User-facing per-memory management.

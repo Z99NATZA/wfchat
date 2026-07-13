@@ -25,7 +25,20 @@ Status: Ready for the next scoped task.
   headings, default placeholder text, and these notes for the next agent.
 - Keep this file short and task-focused.
 - `docs/architecture.md` is an architecture index, not the source of detailed behavior.
-- Read `docs/behavior-history/*` only for the subsystem being changed, when debugging a regression, or when changing a behavior that has prior decision history.
-- When code changes because of a bug, regression, confusing UX, or previously wrong behavior, update the current domain document and add a short behavior history entry for the affected subsystem.
-- Move completed milestone details into the relevant domain document.
+- Treat implementation and tests as the source of truth. Before adding or
+  changing a current claim in `docs/`, inspect the owning code and relevant
+  tests rather than copying an older document.
+- Keep current domain documents in `docs/` limited to how the system works now.
+  Do not preserve previous behavior, migration narrative, replacement history,
+  or failed approaches in a current domain document.
+- Read `docs/lessons-learned/*` only for the subsystem being changed, when debugging
+  a regression, or before reworking behavior with a known failure mode.
+- When a bug, regression, confusing UX, security weakness, or operational risk
+  reveals a reusable failed approach, add a short entry to the matching
+  `docs/lessons-learned/` file. Record the failed approach and lesson only; do not
+  describe the replacement or current implementation there.
+- Ordinary feature delivery, implementation summaries, current contracts, test
+  plans, and roadmap items do not belong in `docs/lessons-learned/`.
+- When a milestone completes, put only the resulting current behavior in the
+  relevant domain document; do not move milestone narrative into `docs/`.
 - Clear only the completed task details when the active priority is complete; keep this template for the next scoped task.

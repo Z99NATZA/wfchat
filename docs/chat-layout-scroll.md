@@ -1,8 +1,6 @@
 # Chat Layout Scroll Behavior
 
-This document defines the intended scroll behavior for the chat screen in `apps/web`.
-
-For prior scroll decisions and regressions, read `docs/behavior-history/chat-scroll.md` after this current contract.
+This document defines the current scroll behavior for the chat screen in `apps/web`.
 
 ## Goals
 
@@ -45,30 +43,27 @@ Current behavior:
 - Support variable message heights for Markdown, tables, code blocks, and streaming text.
 - Cache measured message heights by message id.
 - Reset measured heights and transient list UI state when the active chat changes so the previous chat's virtualized scroll state cannot pin the next chat away from its latest message.
-- Preserve scroll position when older messages are prepended.
 - Keep the existing bottom auto-scroll and `Jump to latest` behavior.
 - Keep PNGTuber bottom clearance as part of the timeline's bottom spacing contract.
 - Unmounted messages must not keep expensive rendering work, highlight effects, observers, or timers alive.
 
-Known performance risks to revisit:
+Performance constraints:
 
-- Streaming assistant messages can trigger frequent `ResizeObserver` callbacks, height state updates, and offset recalculation. Keep unchanged-height guards, and consider `requestAnimationFrame` batching if streaming causes scroll jitter or CPU spikes.
-- Large histories can make per-row lookup costs visible. Avoid repeated O(n) lookups in hot measurement paths; prefer id-indexed maps when profiling shows pressure.
-- Height changes currently rebuild virtual offset arrays through memoized row metrics. Measure rebuild frequency under long conversations and streaming, then consider batched or incremental offset updates if needed.
-- History prepend must preserve the user's anchored viewport. Any future older-message loading flow should verify `scrollTop` compensation against the scroll-height delta.
+- Streaming assistant messages can trigger frequent `ResizeObserver` callbacks,
+  height state updates, and offset recalculation. Unchanged-height guards prevent
+  redundant measurement updates.
+- Hot measurement paths use id-indexed lookup rather than repeated linear
+  message searches.
+- Height changes rebuild virtual offset arrays through memoized row metrics.
 
-Planned test and QA coverage:
+Current automated coverage:
 
-- long conversations render only visible messages plus overscan, while the scrollbar still represents the loaded timeline
-- bottom auto-scroll still occurs only when the user is near the latest message
-- incoming messages do not force-jump the viewport when the user is reading history
-- switching chats after the user scrolled upward resets the timeline and scrolls to the latest message in the newly selected chat
-- `Jump to latest` remains visible and returns to the latest message when the user is away from the bottom
-- prepending older messages preserves the user's anchored viewport position
-- variable-height Markdown, tables, code blocks, and streaming text are measured without page-level scroll regressions
-- PNGTuber overlay clearance still prevents the latest visible bubble from sitting under the overlay
-- unmounted messages do not keep highlight work, resize observers, timers, or other expensive effects alive
-- mobile-width chat keeps the composer reachable and does not reintroduce body/page scrolling
+- Long conversations mount only the virtualized window.
+- Incoming messages do not pull the viewport back to the latest message after
+  the user scrolls upward near the bottom.
+- Switching chats resets the timeline and scrolls to the latest message in the
+  newly selected chat.
+- Overlay clearance reserves bottom space in the timeline.
 
 ## Why This Matters
 

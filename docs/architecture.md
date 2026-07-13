@@ -70,10 +70,9 @@ adapters. Provider adapters should not depend on frontend concepts.
 - [Chat image attachments](chat-image-attachments.md)
 - [Chat voice](chat-voice.md)
 - [Sync system](sync-system.md)
-- [Behavior history](behavior-history/README.md)
 - [Database schema](database-schema.md)
 - [Automatic memory](automatic-memory.md) - storage, automatic capture, and
-  bounded multilingual structured retrieval implemented
+  bounded multilingual structured retrieval
 - [PNGTuber and avatar runtime](pngtuber.md)
 - [Theme system](theme.md)
 - [Mobile viewport](mobile-viewport.md)
@@ -81,7 +80,8 @@ adapters. Provider adapters should not depend on frontend concepts.
 
 ## Maintenance Rule
 
-When behavior changes, update the focused document that owns that behavior
-first. If the change fixes a regression or replaces a previously intentional
-behavior, add a short entry to the matching behavior history file. Update this
-file only when the top-level system shape or document map changes.
+Current documents describe the behavior implemented by the code and tests.
+Verify implementation before changing a current claim. Failed approaches and
+their reusable warnings live in `docs/lessons-learned/`, separate from current
+domain documents. Update this file only when the top-level system shape or
+current document map changes.

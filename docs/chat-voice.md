@@ -1,7 +1,6 @@
 # Chat Voice
 
-This document scopes voice features for chat. It is not an active work item by
-itself; use it to keep future implementation narrow and staged.
+This document defines the current voice behavior for chat.
 
 ## Current Scope: Assistant Playback And Push-To-Talk Input
 
@@ -22,9 +21,9 @@ Assistant playback behavior:
   audio is audibly playing.
 - Speech playback must return the PNGTuber to `idle` when playback ends, is
   stopped, errors, is interrupted, or chat context changes.
-- For uncached playback, the frontend may stream supported audio responses
-  through `MediaSource` so playback can begin before the full audio response is
-  downloaded.
+- For uncached playback, the frontend uses Blob playback by default. Setting
+  `VITE_ENABLE_STREAMING_SPEECH_PLAYBACK=true` opts into `MediaSource` for
+  supported audio responses.
 - Playback is user-initiated by default. Optional latest-message auto-play is a
   separate opt-in setting.
 - Voice playback must not change the stored `ChatMessage.text` contract.
@@ -88,9 +87,6 @@ Do not include these in the current voice scope:
 - waveform, amplitude, phoneme, or viseme analysis for assistant playback
 - mouth-shape asset switching during assistant playback
 
-These can be planned as separate follow-up scopes after playback and
-push-to-talk input are stable.
-
 ## Assistant Speech Avatar Motion
 
 This scope is only a semantic motion bridge:
@@ -133,7 +129,7 @@ Expected failure behavior:
 - If the assistant speech is replayed from the session-only audio cache, it
   should still drive `talking` while the cached audio plays.
 
-## Recommended Flow
+## Current Flow
 
 ```text
 assistant message final text
@@ -157,17 +153,13 @@ content remains text.
 
 ## Voice Source Policy
 
-The first implementation should not require choosing a real TTS vendor. Build
-the API and UI lifecycle against a backend-owned TTS adapter boundary first.
-
 Voice source rules:
 
 - The chat UI requests speech for a message; it does not choose the provider, model, voice id, or API key.
 - Browser `SpeechSynthesis` should not be the primary implementation path because voice quality and behavior vary across devices and browsers.
-- A real provider can be added later behind the same backend adapter boundary.
 - Provider choice should be server-side configuration and should remain invisible to normal chat UI.
 
-Recommended provider modes:
+Supported provider modes:
 
 - `disabled`: voice playback is unavailable and the UI hides speaker actions.
 - `mock`: backend returns deterministic development/test WAV audio so the UI lifecycle can be built without a real provider.
@@ -192,7 +184,7 @@ chat UI speech endpoint. The current behavior is:
 - For VOICEVOX, `speech_text` can be locked to natural spoken Japanese even
   when the displayed assistant message is Thai, English, or another language.
 
-Recommended VOICEVOX configuration:
+VOICEVOX configuration:
 
 ```text
 AI_VOICE_PROVIDER=voicevox
@@ -207,24 +199,13 @@ VOICEVOX_PRE_PHONEME_LENGTH= # optional
 VOICEVOX_POST_PHONEME_LENGTH=# optional
 ```
 
-Recommended future speech text policies:
+Supported speech text policies:
 
 - `original`: synthesize the assistant message text exactly as displayed.
 - `japanese_translation`: translate the assistant message into natural spoken
   Japanese before TTS.
-- `same_language`: synthesize in the assistant message language when the voice
-  provider supports it.
-- `character_default`: use the character's configured voice language, such as
-  Japanese for Aiko.
-- `user_preference`: use a user/app setting layered on top of server and
-  character defaults.
 
-The initial implementation can be server-configured only. Do not add chat UI
-provider, speaker, model, or API key controls. If a user-facing setting is added
-later, expose it as a voice language or speech style preference, not as raw
-provider configuration.
-
-Recommended derived speech flow:
+Derived speech flow:
 
 ```text
 assistant final text in the user's language
@@ -277,32 +258,20 @@ VOICEVOX adapter rules:
 VOICEVOX attribution rules:
 
 - VOICEVOX usage requires attribution/credit, not a payment credit.
-- Check the selected character or voice library terms before release because
-  each voice can have additional usage requirements.
+- The selected character or voice library terms also apply because each voice
+  can have additional usage requirements.
 - The chat timeline does not need a persistent credit label under every message.
-- Prefer an app-level Credits/About page or a Settings credits section.
+- Settings exposes the configured voice credit.
 - A minimal credit line should identify both VOICEVOX and the selected voice,
   for example `VOICEVOX: <character name>`.
 - `VOICEVOX_CREDIT` can configure the non-secret credit line that the backend
   exposes to the frontend. If it is unset, local development falls back to a
   speaker-id based credit line until the selected voice name is configured.
-- If the app later exports or shares generated audio/video, include the
-  required VOICEVOX and character credit with that output or its description.
-
-Future backend cache keys should include the derived speech inputs, for example:
-
-```text
-chat_id + message_id + provider + voice_or_speaker_id + speech_text_policy + source_text_hash
-```
-
-This avoids replaying stale audio if the displayed text, voice provider,
-speaker, or speech policy changes.
-
 ## Frontend Contract
 
 - Keep voice UI local to assistant message actions or a small feature-local hook.
 - Keep high-frequency audio state out of React state. Use React state only for coarse states such as `idle`, `loading`, `playing`, and `error`.
-- Allow only one active assistant playback at a time in the first iteration. Starting another message should stop the current audio.
+- Allow only one active assistant playback at a time. Starting another message should stop the current audio.
 - Stop playback on chat navigation or component unmount.
 - Clean up `HTMLAudioElement`, object URLs, abort controllers, and pending requests.
 - Default assistant speech playback should download a Blob and play it after
@@ -328,14 +297,13 @@ speaker, or speech policy changes.
 - Use `MediaRecorder` timeslice flushing and `requestData()` before stop so the
   uploaded blob contains audio frames, not just a WebM header.
 - Do not upload recordings that are too small to contain usable audio.
-- Upload only a completed push-to-talk recording. Do not stream microphone audio
-  in this milestone.
+- Upload only a completed push-to-talk recording. Do not stream microphone audio.
 - Insert transcript text into the composer draft instead of auto-sending it.
 - Coordinate voice interruption from the chat session boundary: assistant
   playback owns audio cleanup, push-to-talk owns microphone/upload cleanup, and
   chat actions call those local cleanup APIs before changing message context.
 
-Suggested first UI states:
+Playback UI states:
 
 - `idle`: speaker action is available
 - `loading`: TTS request is in flight
@@ -474,133 +442,9 @@ The UI should handle:
 
 Failures should not alter the message text or break normal chat actions.
 
-## Follow-Up Scopes
+## Capability Summary
 
-Plan each as a separate scoped change:
-
-1. Session-only replay cache for generated audio.
-2. Optional auto-play setting for the latest assistant message.
-3. Voice interruption semantics.
-   - Done for assistant playback, push-to-talk input, send, clear, chat context
-     changes, and unmount cleanup.
-4. Assistant speech playback can drive PNGTuber semantic motion.
-   - Done for loading, playing, stopped, and error playback lifecycle states.
-   - Done through the chat session boundary and avatar bridge without importing
-     avatar runtime code into the audio hook.
-5. Avatar lip sync from playback audio or provider visemes.
-6. VOICEVOX provider with Japanese speech text policy.
-
-## Recommended Next Work Sequence
-
-Do not implement all voice follow-ups in one large change. Build one scoped
-step at a time and verify the app before moving to the next step. This keeps
-provider configuration, playback behavior, user settings, microphone capture,
-and realtime transport risks separate.
-
-1. Add a real backend TTS provider behind the existing speech endpoint.
-   - Done for OpenAI with the frontend contract unchanged.
-   - Server-side provider/model/voice configuration is available.
-   - Required provider secrets are validated at API startup.
-   - `disabled` and `mock` remain supported.
-
-2. Add backend tests for real-provider configuration and adapter behavior.
-   - Done for provider configuration validation, OpenAI adapter request/response
-     mapping, provider error handling, and speech endpoint response headers.
-   - Test invalid provider values.
-   - Test missing required API key/model/voice settings.
-   - Test provider request/response mapping without calling the real network.
-   - Test the speech endpoint still returns explicit audio content type and
-     `Cache-Control: no-store`.
-
-3. Manually verify real TTS playback end to end.
-   - Done with `AI_VOICE_PROVIDER=openai` after backend tests passed.
-   - Start the API with the real voice provider enabled.
-   - Send a chat message, wait for the assistant's final persisted response,
-     then click the assistant speaker action.
-   - Confirm playback, stop, retry, provider failure, and chat navigation do
-     not break normal chat.
-
-4. Improve frontend speech failure feedback.
-   - Keep the UI small and local to assistant message actions.
-   - Preserve the existing loading, playing, stop, and retry states.
-   - Avoid moving provider details or API keys into the frontend.
-
-5. Add session-only replay cache for generated speech.
-   - Done with an in-memory frontend cache for the current page/session lifetime.
-   - Generated audio files are not persisted.
-   - Replaying the same assistant message in the same chat reuses cached audio.
-   - Failed and aborted speech requests are not cached.
-
-6. Add a user setting to show or hide assistant voice playback.
-   - Done as a frontend preference layered on top of backend capability.
-   - If the backend reports speech unavailable, the speaker action stays hidden
-     regardless of user preference.
-
-7. Add optional auto-play for the latest assistant message.
-   - Done as a frontend preference layered on top of backend capability and
-     assistant speech visibility.
-   - It is opt-in and disabled by default.
-   - Respect browser autoplay policy; manual user interaction may be required
-     before auto-play can work reliably.
-   - It runs after sending finishes and only targets final assistant messages,
-     not streaming placeholders.
-
-8. Add push-to-talk speech-to-text as a separate milestone.
-   - Done as the voice milestone after verified assistant TTS playback.
-   - Done with a backend-owned transcription adapter and composer-local
-     recording/transcription UI.
-   - Uses the microphone composer button as the entry point when backend config
-     reports transcription support.
-   - Handle permission denial, recording cancel, upload failure, and
-     transcription failure.
-   - Keep transcription provider credentials server-side.
-   - Manually verified end to end with `AI_TRANSCRIPTION_PROVIDER=openai` after
-     correcting local microphone device input.
-
-9. Consider realtime voice only after TTS and push-to-talk STT are stable.
-   - Design this separately from SSE chat streaming.
-   - Prefer WebSocket or WebRTC only when bidirectional low-latency behavior is
-     actually required.
-
-10. Add streaming TTS playback after SSE text behavior is stable.
-   - Done as a playback transport change after the SSE text lifecycle was
-     already documented as implemented.
-   - Keeps the existing speech endpoint, message id contract, manual playback
-     controls, session-only replay cache, and push-to-talk STT behavior.
-   - Backend streams OpenAI speech responses through the existing route when
-     possible; mock audio remains deterministic WAV bytes.
-   - Frontend uses `MediaSource` for supported uncached audio responses and
-     falls back to Blob playback when streaming is unavailable.
-   - Does not synthesize partial SSE text, add interruption semantics, add
-     WebRTC, or add realtime voice conversation.
-
-11. Add VOICEVOX speech output with Japanese speech text policy.
-   - Done with `AI_VOICE_PROVIDER=voicevox` behind the existing speech endpoint.
-   - Done with `AI_VOICE_SPEECH_TEXT_POLICY=original|japanese_translation`.
-   - Displayed assistant text remains in the user's language.
-   - For `japanese_translation`, Japanese `speech_text` is derived only when
-     speech audio is requested.
-   - The backend calls VOICEVOX Engine server-side through `/audio_query` and
-     `/synthesis`.
-   - The endpoint returns `audio/wav` and preserves existing manual playback,
-     retry, stop, and replay cache behavior.
-   - Provider controls are not exposed in the normal chat UI.
-
-12. Add assistant speech playback motion for PNGTuber.
-   - Done with coarse semantic avatar runtime state from speech playback
-     lifecycle.
-   - Done using `thinking` while speech audio is loading and `talking` while audio is
-     playing.
-   - Done returning to `idle` on end, stop, error, interruption, chat change, persona
-     change, navigation, and unmount.
-   - Done keeping the audio hook independent from avatar runtime code; route updates
-     through the chat session boundary and avatar bridge.
-   - Did not add waveform, amplitude, phoneme, viseme, mouth-shape asset, or
-     backend speech metadata work in this step.
-
-## Current Status
-
-Implemented for v1 with:
+The current implementation includes:
 
 - backend `AI_VOICE_PROVIDER=disabled|mock|openai|voicevox`
 - chat UI config capability flag for assistant speech playback
@@ -619,8 +463,8 @@ Implemented for v1 with:
 - app-level Settings voice credits for VOICEVOX attribution
 - one active playback at a time
 - loading, playing, stop, retry/error states
-- frontend streaming playback for uncached supported audio through
-  `MediaSource`, with Blob playback fallback
+- Blob playback by default, with opt-in `MediaSource` playback for uncached
+  supported audio
 - visible assistant-message-local feedback when speech playback fails
 - session-only replay cache for generated speech audio
 - user setting to show or hide assistant speech playback actions
@@ -630,7 +474,6 @@ Implemented for v1 with:
   stopped, and error states
 - backend tests for voice provider configuration, adapter behavior, and speech
   endpoint headers
-- manually verified OpenAI TTS playback end to end
 - backend `AI_TRANSCRIPTION_PROVIDER=disabled|mock|openai`
 - `POST /api/chat/transcription`
 - OpenAI speech-to-text adapter on the backend
@@ -647,13 +490,3 @@ Implemented for v1 with:
 - normalized transcription upload content types for browser-generated audio
 - safe provider-error diagnostics for transcription upload metadata
 - transcript insertion into the composer draft without auto-sending
-- manually verified OpenAI STT end to end with real microphone input
-
-## Documentation Rules
-
-When implementing voice behavior:
-
-- Update this document first if the current scope changes.
-- Add `docs/behavior-history/chat-voice.md` when a voice bug or regression changes behavior.
-- Keep `docs/chat-sse-streaming.md` separate unless the work changes SSE protocol or streaming lifecycle.
-- Keep `docs/pngtuber.md` separate unless the work adds avatar playback or lip sync.

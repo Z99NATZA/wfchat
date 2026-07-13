@@ -11,8 +11,13 @@
 - `/` redirects to `/chat`.
 - `/chat` opens the chat workspace without creating a backend chat yet.
 - The first sent message creates a backend chat for the selected persona, then navigates to `/chat/:chatId`.
+- The first optimistic user message remains visible while the newly created chat
+  route is active and the assistant response is still pending.
 - `/chat/:chatId` opens that exact chat.
 - Refresh keeps current chat because the URL still contains `chatId`.
+- Deleting the active chat returns to the empty `/chat` draft instead of opening
+  another remaining chat. Other sessions remain available in the sidebar.
+- Deleting an inactive chat leaves the current chat open.
 
 ## API
 
@@ -21,6 +26,7 @@
 - `GET /api/chats/:chat_id`
 - `POST /api/chats/:chat_id/messages`
 - `POST /api/chats/:chat_id/messages/stream`
+- `DELETE /api/chats/:chat_id`
 - `DELETE /api/chats/:chat_id/messages`
 
 After either message endpoint persists its user/assistant turn, the same
@@ -58,4 +64,4 @@ recreate pre-reset memory.
 
 The streaming path is additive. It returns SSE-framed assistant response events and keeps the non-streaming message endpoint available as a fallback.
 
-See `docs/chat-sse-streaming.md` for the completed first-iteration SSE contract.
+See `docs/chat-sse-streaming.md` for the current SSE contract.
