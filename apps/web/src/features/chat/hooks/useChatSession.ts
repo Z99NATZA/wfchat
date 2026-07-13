@@ -811,7 +811,7 @@ export function useChatSession({ onAvatarChatEvent }: UseChatSessionOptions = {}
 			return;
 		}
 
-		async function applyLocalRemoval() {
+		function applyLocalRemoval() {
 			markChatDeletedAndSync(sessionId);
 			const nextSessions = sessions.filter((session) => session.id !== sessionId);
 			setSessions(nextSessions);
@@ -820,25 +820,22 @@ export function useChatSession({ onAvatarChatEvent }: UseChatSessionOptions = {}
 				return;
 			}
 
-			const fallbackSession = nextSessions[0];
-			if (fallbackSession) {
-				await selectSession(fallbackSession.id);
-				return;
-			}
-
+			stopAssistantSpeech();
+			cancelUserSpeechInput();
 			setActiveChatId(null);
 			setMessages([]);
 			setDraft("");
 			setIsActiveChatReadOnly(false);
 			navigateToDraft();
+			setIsSidebarOpen(false);
 		}
 
 		try {
 			await deleteChat(sessionId);
-			await applyLocalRemoval();
+			applyLocalRemoval();
 		} catch (error) {
 			if (isNotFound(error)) {
-				await applyLocalRemoval();
+				applyLocalRemoval();
 				return;
 			}
 			setErrorMessage(t("chat.session.deleteError"));

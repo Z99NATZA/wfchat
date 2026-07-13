@@ -872,6 +872,49 @@ describe("useChatSession streaming sendMessage", () => {
 		expect(result.current.errorMessage).toBe("chat.session.notFound");
 		expect(syncLocalDeletesNow).toHaveBeenCalled();
 	});
+
+	it("returns to a new chat after deleting the active chat", async () => {
+		mocks.listPersonaChats.mockResolvedValue([
+			{
+				id: "current-chat",
+				characterId: "aiko",
+				createdAt: 1_780_325_300,
+				updatedAt: 1_780_325_500,
+				lastMessage: "current"
+			},
+			{
+				id: "other-chat",
+				characterId: "aiko",
+				createdAt: 1_780_325_200,
+				updatedAt: 1_780_325_400,
+				lastMessage: "other"
+			}
+		]);
+		mocks.getChat.mockResolvedValue({
+			chatId: "current-chat",
+			messages: [message("current-message", "user", "current")]
+		});
+		const { result } = renderHook(() => useChatSession());
+
+		await waitFor(() => expect(result.current.sessions).toHaveLength(2));
+		await act(async () => {
+			await result.current.selectSession("current-chat");
+		});
+		mocks.getChat.mockClear();
+		mocks.navigate.mockClear();
+
+		await act(async () => {
+			await result.current.removeSession("current-chat");
+		});
+
+		expect(deleteChat).toHaveBeenCalledWith("current-chat");
+		expect(result.current.sessions.map((session) => session.id)).toEqual(["other-chat"]);
+		expect(result.current.activeChatId).toBeNull();
+		expect(result.current.messages).toEqual([]);
+		expect(result.current.draft).toBe("");
+		expect(mocks.getChat).not.toHaveBeenCalled();
+		expect(mocks.navigate).toHaveBeenCalledWith("/chat");
+	});
 });
 
 function message(id: string, author: ChatMessage["author"], text: string): ChatMessage {
