@@ -228,13 +228,16 @@ impl ChatStore {
     pub async fn claim_memory_follow_up(
         &self,
         owner: OwnerScope,
-        claim_key: Uuid,
-        memory_id: Uuid,
-        character_id: &str,
-        expected_updated_at: u64,
-        prompt: &str,
-        now: u64,
+        claim: MemoryFollowUpClaim<'_>,
     ) -> StoreResult<Option<MemoryFollowUpRecord>> {
+        let MemoryFollowUpClaim {
+            claim_key,
+            memory_id,
+            character_id,
+            expected_updated_at,
+            prompt,
+            shown_at,
+        } = claim;
         let mut tx = self.db.begin().await?;
         let owner_key = owner
             .user_id
@@ -266,7 +269,7 @@ impl ChatStore {
             return Ok(Some(memory_follow_up_from_row(row)));
         }
 
-        let cutoff = now.saturating_sub(86_400) as i64;
+        let cutoff = shown_at.saturating_sub(86_400) as i64;
         let recently_shown = sqlx::query(
             "select 1
              from memory_follow_up_deliveries
@@ -316,7 +319,7 @@ impl ChatStore {
         .bind(owner.session_id)
         .bind(owner.user_id)
         .bind(prompt)
-        .bind(now as i64)
+        .bind(shown_at as i64)
         .bind(memory_id)
         .bind(character_id)
         .bind(vec!["plan", "goal"])

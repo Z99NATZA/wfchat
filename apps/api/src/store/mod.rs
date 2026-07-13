@@ -189,6 +189,16 @@ pub struct MemoryFollowUpRecord {
     pub chat_id: Option<Uuid>,
 }
 
+#[derive(Clone, Copy, Debug)]
+pub struct MemoryFollowUpClaim<'a> {
+    pub claim_key: Uuid,
+    pub memory_id: Uuid,
+    pub character_id: &'a str,
+    pub expected_updated_at: u64,
+    pub prompt: &'a str,
+    pub shown_at: u64,
+}
+
 #[derive(Clone, Debug)]
 pub struct MemoryExtractionJobRecord {
     pub id: Uuid,
@@ -348,12 +358,14 @@ mod integration_tests {
         let first = store
             .claim_memory_follow_up(
                 owner,
-                claim_key,
-                first_memory.id,
-                "aiko",
-                first_memory.updated_at,
-                "How did the interview go?",
-                now,
+                MemoryFollowUpClaim {
+                    claim_key,
+                    memory_id: first_memory.id,
+                    character_id: "aiko",
+                    expected_updated_at: first_memory.updated_at,
+                    prompt: "How did the interview go?",
+                    shown_at: now,
+                },
             )
             .await
             .expect("follow-up claim should query")
@@ -361,12 +373,14 @@ mod integration_tests {
         let retried = store
             .claim_memory_follow_up(
                 owner,
-                claim_key,
-                first_memory.id,
-                "aiko",
-                first_memory.updated_at,
-                "How did the interview go?",
-                now,
+                MemoryFollowUpClaim {
+                    claim_key,
+                    memory_id: first_memory.id,
+                    character_id: "aiko",
+                    expected_updated_at: first_memory.updated_at,
+                    prompt: "How did the interview go?",
+                    shown_at: now,
+                },
             )
             .await
             .expect("idempotent follow-up claim should query")
@@ -383,12 +397,14 @@ mod integration_tests {
         let blocked = store
             .claim_memory_follow_up(
                 owner,
-                Uuid::new_v4(),
-                second_memory.id,
-                "aiko",
-                second_memory.updated_at,
-                "Did you submit the application?",
-                now,
+                MemoryFollowUpClaim {
+                    claim_key: Uuid::new_v4(),
+                    memory_id: second_memory.id,
+                    character_id: "aiko",
+                    expected_updated_at: second_memory.updated_at,
+                    prompt: "Did you submit the application?",
+                    shown_at: now,
+                },
             )
             .await
             .expect("rate-limited claim should query");

@@ -23,8 +23,8 @@ use crate::{
     session::session_id_from_headers,
     state::AppState,
     store::{
-        CapturedMemoryRecord, ChatStore, MemoryExtractionJobRecord, MemoryItemRecord,
-        MemoryRetrievalRecord, OwnerScope, StoreResult,
+        CapturedMemoryRecord, ChatStore, MemoryExtractionJobRecord, MemoryFollowUpClaim,
+        MemoryItemRecord, MemoryRetrievalRecord, OwnerScope, StoreResult,
     },
 };
 
@@ -333,12 +333,14 @@ async fn claim_persona_follow_up(
         .store
         .claim_memory_follow_up(
             owner,
-            request.claim_key,
-            candidate.id,
-            &persona_id,
-            candidate.updated_at,
-            &prompt,
-            now,
+            MemoryFollowUpClaim {
+                claim_key: request.claim_key,
+                memory_id: candidate.id,
+                character_id: &persona_id,
+                expected_updated_at: candidate.updated_at,
+                prompt: &prompt,
+                shown_at: now,
+            },
         )
         .await?;
 
