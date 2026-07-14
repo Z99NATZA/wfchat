@@ -211,6 +211,8 @@ pub struct MemoryExtractionJobRecord {
     pub status: String,
     pub attempts: i32,
     pub max_attempts: i32,
+    pub user_timezone: String,
+    pub captured_at: u64,
     pub user_content: String,
 }
 
@@ -222,6 +224,7 @@ pub struct CapturedMemoryRecord {
     pub tags: Vec<String>,
     pub importance: f32,
     pub evidence_strength: f32,
+    pub expires_at: Option<u64>,
     pub replaces_existing: bool,
 }
 
@@ -463,6 +466,7 @@ mod integration_tests {
             tags: vec!["food".to_owned(), "spicy".to_owned()],
             importance: 0.8,
             evidence_strength: 0.8,
+            expires_at: None,
             replaces_existing,
         }
     }

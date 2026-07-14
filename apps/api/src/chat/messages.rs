@@ -115,6 +115,7 @@ pub(super) async fn prepare_chat_completion_context(
     payload: &SendMessageRequest,
 ) -> AppResult<ChatCompletionContext> {
     let content = payload.content.trim();
+    let user_timezone = normalize_user_timezone(payload.timezone.as_deref());
 
     if content.is_empty() && payload.attachments.is_empty() {
         return Err(AppError::BadRequest("message content is empty".to_owned()));
@@ -154,7 +155,16 @@ pub(super) async fn prepare_chat_completion_context(
         attachment_ids,
         ai_messages,
         user_ai_message: AiMessage::user(content.to_owned()),
+        user_timezone,
     })
+}
+
+fn normalize_user_timezone(value: Option<&str>) -> String {
+    value
+        .map(str::trim)
+        .filter(|value| value.parse::<chrono_tz::Tz>().is_ok())
+        .unwrap_or("UTC")
+        .to_owned()
 }
 
 #[cfg(test)]
@@ -167,6 +177,7 @@ pub(crate) async fn prepare_text_context_for_memory_evaluation(
     let payload = SendMessageRequest {
         content: content.to_owned(),
         attachments: Vec::new(),
+        timezone: None,
     };
     Ok(
         prepare_chat_completion_context(state, owner, chat_id, &payload)
@@ -264,12 +275,13 @@ async fn complete_and_append_chat_message(
     let assistant_message = StoredMessage::from_ai_message(assistant_ai_message);
     let updated_chat = state
         .store
-        .append_chat_messages_with_attachments(
+        .append_chat_messages_with_attachments_and_timezone(
             owner,
             chat_id,
             user_message.clone(),
             assistant_message.clone(),
             &context.attachment_ids,
+            &context.user_timezone,
         )
         .await?
         .ok_or(AppError::NotFound)?;
@@ -315,12 +327,13 @@ async fn stream_and_append_chat_message(
     let assistant_message = StoredMessage::from_ai_message(assistant_ai_message);
     let updated_chat = state
         .store
-        .append_chat_messages_with_attachments(
+        .append_chat_messages_with_attachments_and_timezone(
             owner,
             chat_id,
             user_message.clone(),
             assistant_message.clone(),
             &context.attachment_ids,
+            &context.user_timezone,
         )
         .await?
         .ok_or(AppError::NotFound)?;

@@ -172,6 +172,8 @@ human-readable schema reference.
   - `owner_session_id uuid not null` -> `auth_sessions(id)` (`on delete cascade`)
   - `owner_user_id uuid null` for registered account ownership
   - `character_id text not null`
+  - `user_timezone text not null default 'UTC'`; validated IANA timezone
+    snapshot for deterministic relative-date extraction
   - `status text not null` (`pending|processing|retry|completed|dead`)
   - `attempts integer not null default 0`
   - `max_attempts integer not null default 3`
@@ -184,6 +186,8 @@ human-readable schema reference.
   - guest and registered-owner operational lookup indexes
 - Lifecycle:
   - the outbox row is inserted in the same transaction as both chat messages
+  - `created_at` plus `user_timezone` remain stable across retries and provide
+    the extraction worker's trusted temporal context
   - message/chat deletion cascades remove related work
   - guest-to-account promotion updates pending and historical job ownership
   - learned-context reset removes queued jobs so old turns cannot be recaptured

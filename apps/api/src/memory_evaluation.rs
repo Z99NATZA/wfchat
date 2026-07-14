@@ -1036,6 +1036,7 @@ fn captured_memory(content: &str, replaces_existing: bool) -> CapturedMemoryReco
         tags: vec!["food".to_owned(), "ramen".to_owned()],
         importance: 0.8,
         evidence_strength: 0.8,
+        expires_at: None,
         replaces_existing,
     }
 }

@@ -8,7 +8,8 @@ import {
 
 const followUpId = "44444444-4444-4444-8444-444444444444";
 const chatId = "55555555-5555-4555-8555-555555555555";
-const followUpContent = "You mentioned your job interview earlier. How is that going?";
+const followUpContent =
+	"ก่อนหน้านี้คุณเล่าว่า “ผู้ใช้ตั้งใจไปงานเกม NIKKE วันที่ 15 กรกฎาคม” ตอนนี้เรื่องนี้เป็นอย่างไรบ้าง?";
 
 test("meaningful New Chat follow-up is shown without creating a chat", async ({ page }) => {
 	const followUpServer = new FakeFollowUpState(candidate());
@@ -25,7 +26,7 @@ test("meaningful New Chat follow-up is shown without creating a chat", async ({ 
 	await expect(page).toHaveURL(/\/chat\/?$/);
 });
 
-test("reply persists the follow-up opening and remains coherent after reload", async ({ page }) => {
+test("NIKKE temporal-plan reply persists and remains coherent after reload", async ({ page }) => {
 	const followUpServer = new FakeFollowUpState(candidate());
 	await seedRegisteredPage(page);
 	await mockBaseAppApis(page, { followUpServer });
@@ -33,16 +34,16 @@ test("reply persists the follow-up opening and remains coherent after reload", a
 
 	await page.goto("/chat");
 	await expect(page.getByText(followUpContent, { exact: true })).toBeVisible();
-	await page.getByPlaceholder("Message Aiko", { exact: true }).fill("It went well");
+	await page.getByPlaceholder("Message Aiko", { exact: true }).fill("ไปมาแล้ว สนุกมาก");
 	await page.getByRole("button", { name: "Send message", exact: true }).click();
 
 	await expect(page).toHaveURL(`/chat/${chatId}`);
-	await expect(page.getByText("It went well", { exact: true })).toBeVisible();
+	await expect(page.getByText("ไปมาแล้ว สนุกมาก", { exact: true })).toBeVisible();
 	await expect(assistantReply(page)).toBeVisible();
 
 	await page.reload();
 	await expect(page.getByText(followUpContent, { exact: true })).toBeVisible();
-	await expect(page.getByText("It went well", { exact: true })).toBeVisible();
+	await expect(page.getByText("ไปมาแล้ว สนุกมาก", { exact: true })).toBeVisible();
 	await expect(assistantReply(page)).toBeVisible();
 });
 

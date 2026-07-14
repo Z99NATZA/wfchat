@@ -4,8 +4,8 @@ Status: Capture, Retrieval, And New Chat Follow-Up Active
 
 This document defines the current automatic-memory system. Internal storage,
 provenance, chat-deletion cleanup, account promotion, learned-context reset
-boundaries, durable automatic capture, and bounded multilingual structured
-retrieval are active. Aiko can use
+boundaries, durable and time-bound automatic capture, and bounded multilingual
+structured retrieval are active. Aiko can use
 relevant learned context across chats for the same owner and character even
 when the remembered content and the new topic use Thai and English differently.
 
@@ -55,6 +55,8 @@ Good candidates:
 - Preferred name, language, and response style.
 - Recurring travel, food, hobby, or activity preferences.
 - Long-term goals and constraints that improve future recommendations.
+- Explicit future plans or goals that are meaningful enough for one later
+  follow-up.
 - Important experiences that the user explicitly describes.
 
 Do not retain:
@@ -63,6 +65,7 @@ Do not retain:
 - Guesses made by Aiko rather than statements from the user.
 - Sensitive data that is not required for the companion experience.
 - Raw conversation text as a substitute for a structured memory.
+- Relative-time details stored as durable preferences or profile facts.
 
 ## Data Model
 
@@ -119,6 +122,15 @@ follow-up:
 The displayed prompt is stored so retries and the eventual conversation use
 the same wording even if the source memory changes later.
 
+### `memory_extraction_jobs`
+
+Each persisted user/assistant turn creates one durable extraction job. In
+addition to its owner, character, source-message references, retry state, and
+timestamps, the job stores the validated IANA timezone sent with that chat
+turn. Its immutable `created_at` is the authoritative capture time. Keeping
+both values on the outbox row lets an asynchronous or retried worker resolve
+relative wording against the same local date as the original request.
+
 ## Capture Flow
 
 Memory extraction runs after a user and assistant turn has been persisted:
@@ -126,7 +138,7 @@ Memory extraction runs after a user and assistant turn has been persisted:
 ```text
 persist chat turn
   -> enqueue extraction job
-  -> extractor reads a small recent message window
+  -> provide trusted capture time and user timezone
   -> return structured candidate memories
   -> validate categories and sensitive-data rules
   -> deduplicate or update by memory_key
@@ -140,13 +152,22 @@ runs outside the response-critical path and survives API restarts. Stale locks
 are reclaimable, retries use bounded backoff, and a third failed attempt moves a
 job to `dead`.
 
+The web client includes its resolved IANA timezone with streaming and
+non-streaming message requests. Invalid or missing timezone values become
+`UTC`. The exact normalized value is committed with the extraction job rather
+than reconstructed when the background worker eventually claims it.
+
 The extractor uses a strict JSON schema with at most five candidates. Every
 response is deserialized with unknown fields denied and then validated again in
 application code. Accepted evidence must be an exact substring of the persisted
 user message. Keys, kinds, tags, lengths, confidence, importance, and evidence
-strength are bounded. Messages or candidates containing secrets, credentials,
-financial identifiers, unsupported evidence, temporary instructions, or
-low-value details are rejected before any memory write.
+strength are bounded. A `plan` or `goal` with relative-time wording must include
+`expires_at` as a Unix timestamp after the authoritative capture time and no
+more than 90 days later. Durable kinds must return no expiration and are
+rejected when their content or evidence contains relative-time wording.
+Messages or candidates containing secrets, credentials, financial identifiers,
+unsupported evidence, temporary instructions, or low-value details are
+rejected before any memory write.
 
 Accepted candidates and message-level sources are saved atomically. The worker
 logs job ids, attempts, error codes, counts, and process counters only; it never
@@ -168,7 +189,9 @@ enforced. Stored tags are normalized during retrieval.
 - Matching key with a clearly newer value: replace or supersede the old value.
 - Conflicting low-confidence values: retain neither as authoritative until
   later conversation provides stronger evidence.
-- Temporary plans may use `expires_at` and must not remain permanent facts.
+- Temporary plans must use `expires_at` and must not remain permanent facts.
+- A future commitment is captured as `plan` or `goal`; it must not be
+  generalized into a durable `preference` merely because it mentions a hobby.
 - Confidence must come from user evidence, not repeated assistant assertions.
 
 ## Retrieval Flow
@@ -241,6 +264,12 @@ concurrent requests, and browser instances. Reusing the same `claim_key`
 returns the same delivery, which keeps repeated development renders idempotent.
 A memory item is never selected again after it has a delivery record.
 
+Candidate selection records privacy-safe aggregate reason counters for no
+undelivered item, wrong kind, low confidence, low importance, stale/expired,
+unsafe/resolved, and claim-unavailable outcomes. Structured events include only
+those bounded reason codes and counters, never content, memory keys, prompts,
+or owner identifiers.
+
 Displaying the follow-up on `/chat` does not create a chat. If the user replies,
 the web app includes the delivery id when creating the chat. The backend
 validates its owner and character, persists the stored prompt as the first
@@ -304,8 +333,11 @@ A full reset that also deletes chat history is not exposed by this action.
 - Extraction jobs are enqueued atomically with successful persisted turns.
 - A background worker provides bounded retries and restart-safe claiming.
 - Strict structured output, evidence grounding, sensitive-data filtering,
-  deduplication, reinforcement, and explicit correction handling run before
-  atomic persistence.
+  temporal-plan validation, deduplication, reinforcement, and explicit
+  correction handling run before atomic persistence.
+- Extraction receives the job capture timestamp plus its persisted IANA
+  timezone, and valid time-bound plan expiration is retained on insert and
+  update.
 - Operational logs and in-process counters exclude raw learned content and
   source text.
 
@@ -345,6 +377,12 @@ A full reset that also deletes chat history is not exposed by this action.
   credentials and internal provenance metadata.
 - PostgreSQL-backed scenarios verify exact guest, registered-account, and
   character isolation and the persisted reinforcement/correction lifecycle.
+- A deterministic Thai NIKKE scenario verifies timezone context, time-bound
+  plan validation, PostgreSQL expiration persistence, owner/character
+  isolation, retry idempotency, expiry exclusion, and one-time delivery claim.
+- Browser E2E coverage verifies that the NIKKE follow-up can open a New Chat,
+  persist the reply context, survive reload, and not display twice across
+  browser contexts for the same account.
 - The shared chat preparation and OpenAI-compatible payload are checked for
   streaming/non-streaming parity and this order: character prompt, optional
   learned context, current-chat history, latest user message.
@@ -365,6 +403,8 @@ cargo test --manifest-path apps/api/Cargo.toml memory_evaluation -- --test-threa
 - Retrieval totals cover attempts, selected context, empty results, fail-open
   errors, candidate and selected-item totals, context characters, and estimated
   tokens.
+- Follow-up totals cover requests, selections, claim races/rate limits, and
+  bounded empty-reason categories.
 - Stable structured events report completion/failure and selected/empty/fail-open
   boundaries. Fields contain aggregate counts, bounded per-operation counts,
   attempts, and sanitized error codes only—never learned content, source/latest
@@ -418,6 +458,10 @@ There is no background expiration scheduler.
 
 - A durable preference stated in a persisted user turn can be captured with
   message-level provenance.
+- A meaningful Thai or English future commitment can be captured as an
+  expiring `plan` or `goal` using the local date of the original chat turn.
+- Relative-time evidence is not accepted as a durable preference or profile
+  item.
 - Repeated evidence reinforces rather than duplicates a memory.
 - Corrected preferences replace or supersede stale values.
 - Memory extraction failures never block or lose a successful chat response.

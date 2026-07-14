@@ -18,6 +18,8 @@ Current migration files:
 - `apps/api/migrations/202607100003_automatic_memory_foundation.sql`
 - `apps/api/migrations/202607100004_memory_message_source_lifecycle.sql`
 - `apps/api/migrations/202607110001_memory_extraction_outbox.sql`
+- `apps/api/migrations/202607130001_memory_follow_up_deliveries.sql`
+- `apps/api/migrations/202607140001_memory_extraction_temporal_context.sql`
 
 `apps/api/db/init.sql` is retained only as a legacy/manual bootstrap helper. Do
 not treat it as canonical, and do not add new schema changes there unless it is
@@ -92,6 +94,19 @@ The durable automatic-capture outbox and bounded job lifecycle are created by:
 
 ```text
 apps/api/migrations/202607110001_memory_extraction_outbox.sql
+```
+
+New Chat follow-up delivery claims are created by:
+
+```text
+apps/api/migrations/202607130001_memory_follow_up_deliveries.sql
+```
+
+The extraction job receives a validated per-turn IANA timezone snapshot for
+deterministic relative-date handling through:
+
+```text
+apps/api/migrations/202607140001_memory_extraction_temporal_context.sql
 ```
 
 The baseline migration includes:

@@ -61,6 +61,12 @@ route. The shared preparation path also owns canonical Thai/English topic
 expansion, specific-over-broad ranking, and broad-category limits; transport
 choice therefore cannot change multilingual memory selection.
 
+Both streaming and non-streaming message bodies include the browser's resolved
+IANA `timezone`. The backend validates it and persists the normalized value
+with the extraction outbox row, allowing a retried worker to interpret relative
+dates against the local date of the original turn. This field does not change
+the SSE response events.
+
 ## Non-Goals
 
 - Do not add WebSocket.

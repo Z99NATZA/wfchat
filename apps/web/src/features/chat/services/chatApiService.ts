@@ -435,11 +435,20 @@ function toChatAttachment(attachment: ApiChatAttachment): ChatMessageAttachment 
 function messageRequestBody(content: string, attachments: SendChatMessageAttachment[]) {
 	return {
 		content,
+		timezone: resolvedUserTimezone(),
 		attachments: attachments.map((attachment) => ({
 			id: attachment.id,
 			kind: attachment.kind
 		}))
 	};
+}
+
+function resolvedUserTimezone(): string {
+	try {
+		return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+	} catch {
+		return "UTC";
+	}
 }
 
 function toSessionSummary(chat: ApiChat): ChatSessionSummary {

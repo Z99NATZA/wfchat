@@ -1,5 +1,27 @@
 # Chat Memory Lessons Learned
 
+## 2026-07-14 - Temporal commitments were generalized into durable preferences
+
+Context:
+- A companion follow-up depended on recognizing a user's explicit future plan
+  from a persisted chat turn.
+
+Failed approach:
+- Durable-fact extraction was also used for temporal plans without trusted
+  local-time context or a writable expiration contract.
+
+Problem observed:
+- A statement about attending an event the next day was stored as a low-value
+  general hobby preference, so the intended follow-up was never eligible.
+
+Root cause:
+- Classification optimized for long-lived facts and discarded the event's
+  temporal semantics before follow-up eligibility was evaluated.
+
+Lesson:
+- Do not generalize relative-time commitments into durable preferences; retain
+  their plan/goal kind, bounded lifetime, and original temporal reference.
+
 ## 2026-07-12 - Literal-language retrieval missed cross-language memories
 
 Context:

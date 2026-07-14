@@ -211,6 +211,7 @@ describe("chat image attachment send boundary", () => {
 		});
 		expect(JSON.parse(init?.body as string)).toEqual({
 			content: "",
+			timezone: expect.any(String),
 			attachments: [{ id: "attachment-1", kind: "image" }]
 		});
 		expectSendBodyToExcludeUnsafeImagePayload(init?.body as string);
@@ -237,6 +238,7 @@ describe("chat image attachment send boundary", () => {
 
 		expect(postSpy).toHaveBeenCalledWith("/api/chats/chat-1/messages", {
 			content: "please describe this",
+			timezone: expect.any(String),
 			attachments: [{ id: "attachment-2", kind: "image" }]
 		});
 		const requestBody = JSON.stringify(postSpy.mock.calls[0][1]);

@@ -162,6 +162,26 @@ impl ChatStore {
         assistant_message: StoredMessage,
         attachment_ids: &[Uuid],
     ) -> StoreResult<Option<ChatRecord>> {
+        self.append_chat_messages_with_attachments_and_timezone(
+            owner,
+            chat_id,
+            user_message,
+            assistant_message,
+            attachment_ids,
+            "UTC",
+        )
+        .await
+    }
+
+    pub async fn append_chat_messages_with_attachments_and_timezone(
+        &self,
+        owner: OwnerScope,
+        chat_id: Uuid,
+        user_message: StoredMessage,
+        assistant_message: StoredMessage,
+        attachment_ids: &[Uuid],
+        user_timezone: &str,
+    ) -> StoreResult<Option<ChatRecord>> {
         let mut tx = self.db.begin().await?;
         let owner_exists = sqlx::query(
             "select id from chats where id = $1 and (($3::uuid is not null and owner_user_id = $3) or ($3::uuid is null and owner_session_id = $2)) for update",
@@ -194,10 +214,10 @@ impl ChatStore {
         sqlx::query(
             "insert into memory_extraction_jobs (
                 id, chat_id, user_message_id, assistant_message_id,
-                owner_session_id, owner_user_id, character_id
+                owner_session_id, owner_user_id, character_id, user_timezone
              )
              select $1, chat.id, $2, $3, chat.owner_session_id,
-                    chat.owner_user_id, chat.character_id
+                    chat.owner_user_id, chat.character_id, $5
              from chats chat
              where chat.id = $4
              on conflict (user_message_id) do nothing",
@@ -206,6 +226,7 @@ impl ChatStore {
         .bind(user_message.id)
         .bind(assistant_message.id)
         .bind(chat_id)
+        .bind(user_timezone)
         .execute(&mut *tx)
         .await?;
 

@@ -111,6 +111,8 @@ struct SendMessageRequest {
     content: String,
     #[serde(default)]
     attachments: Vec<SendMessageAttachmentRequest>,
+    #[serde(default)]
+    timezone: Option<String>,
 }
 
 #[derive(Default, Deserialize)]
@@ -162,6 +164,7 @@ struct ChatCompletionContext {
     attachment_ids: Vec<Uuid>,
     ai_messages: Vec<AiMessage>,
     user_ai_message: AiMessage,
+    user_timezone: String,
 }
 
 #[derive(Serialize)]
@@ -434,7 +437,9 @@ mod tests {
             .header(header::CONTENT_TYPE, "application/json")
             .header(header::ACCEPT, "text/event-stream")
             .header("x-wfchat-session", session.id.to_string())
-            .body(Body::from(r#"{"content":"hello stream"}"#))
+            .body(Body::from(
+                r#"{"content":"hello stream","timezone":"Asia/Bangkok"}"#,
+            ))
             .expect("request should build");
 
         let response = app.oneshot(request).await.expect("request should run");
@@ -494,6 +499,13 @@ mod tests {
         assert_eq!(persisted.messages.len(), 2);
         assert_eq!(persisted.messages[0].content, "hello stream");
         assert_eq!(persisted.messages[1].content, assistant_content);
+        let extraction_job = state
+            .store
+            .claim_memory_extraction_job_for_test(persisted.messages[0].id)
+            .await
+            .expect("extraction job should query")
+            .expect("extraction job should exist");
+        assert_eq!(extraction_job.user_timezone, "Asia/Bangkok");
 
         let _ = state.store.delete_chat(owner, chat.id).await;
     }
@@ -1397,6 +1409,7 @@ mod tests {
         let payload = SendMessageRequest {
             content: "Recommend travel food in Osaka".to_owned(),
             attachments: Vec::new(),
+            timezone: None,
         };
 
         let non_streaming = prepare_chat_completion_context(&state, owner, chat.id, &payload)

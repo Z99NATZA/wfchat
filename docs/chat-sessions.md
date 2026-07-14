@@ -53,6 +53,10 @@ After either message endpoint persists its user/assistant turn, the same
 transaction creates an idempotent automatic-memory extraction job. Background
 capture never delays the normal JSON response or SSE `done` event, and
 extraction failures do not roll back a successfully persisted response.
+Both message request bodies include the browser's resolved IANA `timezone`.
+The backend validates it, falls back to `UTC` when missing or invalid, and
+stores the normalized value on the extraction job so relative-date capture is
+stable even when the worker retries later.
 
 Before either message endpoint calls the provider, the backend retrieves a
 bounded set of relevant, unexpired memory items for the exact owner and
@@ -62,7 +66,7 @@ reuse an English-tagged `music` preference. Specific terms rank ahead of broad
 category matches, and category-only context is limited to prevent unrelated
 preferences from flooding the prompt. The same preparation function injects
 this soft context after the character prompt and before current-chat messages.
-The public request and response contracts do not change, and a
+Memory retrieval adds no further request or response fields, and a
 retrieval-specific failure falls back to chat without memory.
 
 The shared preparation path also updates privacy-safe process counters for

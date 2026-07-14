@@ -178,22 +178,18 @@ impl ChatStore {
              where (($3::uuid is not null and item.owner_user_id = $3)
                     or ($3::uuid is null and item.owner_session_id = $1))
                and item.character_id = $2
-               and item.kind = any($4::text[])
-               and item.confidence >= 0.8
-               and item.importance >= 0.65
-               and (item.expires_at is null or item.expires_at > now())
                and not exists (
                  select 1 from memory_follow_up_deliveries delivery
                  where delivery.memory_id = item.id
                )
-             order by item.importance desc, item.confidence desc,
+             order by (item.kind in ('plan', 'goal')) desc,
+                      item.importance desc, item.confidence desc,
                       item.last_reinforced_at desc, item.memory_key, item.id
-             limit $5",
+             limit $4",
         )
         .bind(owner.session_id)
         .bind(character_id)
         .bind(owner.user_id)
-        .bind(vec!["plan", "goal"])
         .bind(limit.min(50))
         .fetch_all(self.db.as_ref())
         .await?;
@@ -474,7 +470,9 @@ impl ChatStore {
              select claimed.id, claimed.chat_id, claimed.user_message_id,
                     claimed.assistant_message_id, claimed.owner_session_id,
                     claimed.owner_user_id, claimed.character_id, claimed.status,
-                    claimed.attempts, claimed.max_attempts, message.content as user_content
+                    claimed.attempts, claimed.max_attempts, claimed.user_timezone,
+                    extract(epoch from claimed.created_at)::bigint as captured_at,
+                    message.content as user_content
              from claimed
              join chat_messages message on message.id = claimed.user_message_id",
         )
@@ -604,7 +602,7 @@ impl ChatStore {
                     sqlx::query(
                         "update memory_items
                          set kind = $2, content = $3, tags = $4, importance = $5,
-                             expires_at = null, updated_at = now()
+                             expires_at = to_timestamp($6), updated_at = now()
                          where id = $1",
                     )
                     .bind(memory_id)
@@ -612,6 +610,7 @@ impl ChatStore {
                     .bind(&candidate.content)
                     .bind(&candidate.tags)
                     .bind(candidate.importance as f64)
+                    .bind(candidate.expires_at.map(|value| value as i64))
                     .execute(&mut *tx)
                     .await?;
                     memory_id
@@ -621,8 +620,10 @@ impl ChatStore {
                     sqlx::query(
                         "insert into memory_items (
                             id, owner_session_id, owner_user_id, character_id,
-                            memory_key, kind, content, tags, confidence, importance
-                         ) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
+                            memory_key, kind, content, tags, confidence, importance,
+                            expires_at
+                         ) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
+                                   to_timestamp($11))",
                     )
                     .bind(memory_id)
                     .bind(owner_session_id)
@@ -634,6 +635,7 @@ impl ChatStore {
                     .bind(&candidate.tags)
                     .bind(candidate.evidence_strength as f64)
                     .bind(candidate.importance as f64)
+                    .bind(candidate.expires_at.map(|value| value as i64))
                     .execute(&mut *tx)
                     .await?;
                     memory_id
@@ -800,6 +802,8 @@ fn memory_extraction_job_from_row(row: sqlx::postgres::PgRow) -> MemoryExtractio
         status: row.get("status"),
         attempts: row.get("attempts"),
         max_attempts: row.get("max_attempts"),
+        user_timezone: row.get("user_timezone"),
+        captured_at: row.get::<i64, _>("captured_at") as u64,
         user_content: row.get("user_content"),
     }
 }
