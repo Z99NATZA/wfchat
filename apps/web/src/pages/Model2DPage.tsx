@@ -172,10 +172,7 @@ function Model2DHeader({ controls }: Model2DHeaderProps) {
 			subtitle={t("model2d.header.subtitle")}
 			titleAccessory={<Sparkles size={15} className="text-primary" aria-hidden="true" />}
 			desktopActions={
-				<AppHeaderDesktopControls
-					{...controls}
-					trailingActions={deletePlaceholder}
-				/>
+				<AppHeaderDesktopControls {...controls} trailingActions={deletePlaceholder} />
 			}
 			mobileMenuContent={
 				<AppHeaderMobileControls {...controls} actions={deletePlaceholder} />
