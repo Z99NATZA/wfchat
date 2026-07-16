@@ -168,7 +168,7 @@ function ChatSidebar({
 							{t("chat.sidebar.newChat")}
 						</Button>
 					</div>
-					<div className="flex-1 space-y-1 overflow-y-auto px-3 py-3">
+					<div className="chat-scroll flex-1 space-y-1 overflow-y-auto px-3 py-3">
 						{sessions.map((session) => {
 							const isMenuOpen = activeSessionMenuId === session.id;
 							return (
