@@ -369,7 +369,7 @@ impl ChatStore {
         let next_display_name = non_empty_string(display_name).unwrap_or(current.display_name);
         let next_avatar_url = avatar_url
             .map(|value| value.trim().to_owned())
-            .and_then(|value| if value.is_empty() { None } else { Some(value) });
+            .filter(|value| !value.is_empty());
         let row = sqlx::query(
             "update user_profiles
              set display_name = $1, avatar_url = $2, updated_at = now()

@@ -28,6 +28,9 @@ Status: Ready for the next scoped task.
 - Treat implementation and tests as the source of truth. Before adding or
   changing a current claim in `docs/`, inspect the owning code and relevant
   tests rather than copying an older document.
+- Before completing a scoped task, run the full local equivalents of the Web
+  and API checks defined in `.github/workflows/ci.yml`. Fix failures caused by
+  the task, and report every skipped or blocked check with the reason.
 - Keep current domain documents in `docs/` limited to how the system works now.
   Do not preserve previous behavior, migration narrative, replacement history,
   or failed approaches in a current domain document.
