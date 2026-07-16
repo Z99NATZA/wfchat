@@ -1,4 +1,4 @@
-import { Bell, Trash2 } from "lucide-react";
+import { Trash2 } from "lucide-react";
 import AppHeaderBar from "@/components/header/AppHeaderBar";
 import {
 	AppHeaderDesktopControls,
@@ -84,16 +84,6 @@ function ChatHeader({
 			desktopActions={
 				<AppHeaderDesktopControls
 					{...controlProps}
-					leadingActions={
-						<IconButton
-							className="hidden md:flex"
-							aria-label={t("chat.header.notifications")}
-							disabled
-							title={t("common.notSupportedYet")}
-						>
-							<Bell size={18} aria-hidden="true" />
-						</IconButton>
-					}
 					trailingActions={clearChatAction}
 				/>
 			}

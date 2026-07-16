@@ -17,7 +17,6 @@ import type { AvatarMotionState } from "@/features/avatar/runtime/avatarRuntimeT
 import AppLayout from "@/layouts/AppLayout";
 import { useMemo, type ReactNode } from "react";
 import {
-	Bell,
 	Brain,
 	CircleDot,
 	Eye,
@@ -267,16 +266,6 @@ type PngTuberHeaderProps = {
 
 function PngTuberHeader({ controls }: PngTuberHeaderProps) {
 	const { t } = useI18n();
-	const notificationPlaceholder = (
-		<IconButton
-			className="hidden md:flex"
-			aria-label={t("chat.header.notifications")}
-			disabled
-			title={t("common.notSupportedYet")}
-		>
-			<Bell size={18} aria-hidden="true" />
-		</IconButton>
-	);
 	const deletePlaceholder = (
 		<IconButton
 			variant="danger"
@@ -301,7 +290,6 @@ function PngTuberHeader({ controls }: PngTuberHeaderProps) {
 			desktopActions={
 				<AppHeaderDesktopControls
 					{...controls}
-					leadingActions={notificationPlaceholder}
 					trailingActions={deletePlaceholder}
 				/>
 			}

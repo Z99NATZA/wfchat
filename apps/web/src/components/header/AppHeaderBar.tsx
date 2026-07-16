@@ -1,5 +1,5 @@
 import { type ReactNode, useEffect, useRef, useState } from "react";
-import { Ellipsis, Menu } from "lucide-react";
+import { Ellipsis, Github, Menu } from "lucide-react";
 import IconButton from "@/components/ui/IconButton";
 import { useI18n } from "@/i18n/i18nContext";
 
@@ -74,6 +74,16 @@ function AppHeaderBar({
 
 				{desktopActions && (
 					<div className="hidden flex-wrap items-center gap-2 pl-11 sm:flex sm:pl-0">
+						<a
+							className="icon-button icon-button--md icon-button--default hidden md:flex"
+							href="https://github.com/Z99NATZA/wfchat"
+							target="_blank"
+							rel="noreferrer"
+							aria-label="GitHub"
+							title="GitHub"
+						>
+							<Github size={18} aria-hidden="true" />
+						</a>
 						{desktopActions}
 					</div>
 				)}

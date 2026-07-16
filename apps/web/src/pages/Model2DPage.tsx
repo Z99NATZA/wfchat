@@ -9,7 +9,6 @@ import IconButton from "@/components/ui/IconButton";
 import AppLayout from "@/layouts/AppLayout";
 import { useI18n } from "@/i18n/i18nContext";
 import {
-	Bell,
 	Box,
 	FileClock,
 	Gauge,
@@ -151,16 +150,6 @@ type Model2DHeaderProps = {
 
 function Model2DHeader({ controls }: Model2DHeaderProps) {
 	const { t } = useI18n();
-	const notificationPlaceholder = (
-		<IconButton
-			className="hidden md:flex"
-			aria-label={t("chat.header.notifications")}
-			disabled
-			title={t("common.notSupportedYet")}
-		>
-			<Bell size={18} aria-hidden="true" />
-		</IconButton>
-	);
 	const deletePlaceholder = (
 		<IconButton
 			variant="danger"
@@ -185,7 +174,6 @@ function Model2DHeader({ controls }: Model2DHeaderProps) {
 			desktopActions={
 				<AppHeaderDesktopControls
 					{...controls}
-					leadingActions={notificationPlaceholder}
 					trailingActions={deletePlaceholder}
 				/>
 			}
