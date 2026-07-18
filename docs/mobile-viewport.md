@@ -108,6 +108,11 @@ Mobile viewport changes must not reintroduce overlay overlap with the composer o
 
 ## Testing
 
+The Cafe room follows the same dynamic viewport shell and adds touch controls
+inside the game surface. Its directional pad and interaction button must remain
+above the device bottom safe area, must not trigger page scrolling, and must be
+usable without a hardware keyboard.
+
 At minimum:
 
 - run frontend tests

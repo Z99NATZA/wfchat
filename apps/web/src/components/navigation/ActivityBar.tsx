@@ -1,12 +1,13 @@
-import { Layers, MessageCircle, type LucideIcon, UserRound } from "lucide-react";
+import { Coffee, Layers, MessageCircle, type LucideIcon, UserRound } from "lucide-react";
 import { NavLink } from "react-router-dom";
 import { useI18n } from "@/i18n/i18nContext";
 import { cn } from "@/utils/classNames";
 
-export type AppPageId = "chat" | "pngtuber" | "model2d";
+export type AppPageId = "chat" | "cafe" | "pngtuber" | "model2d";
 
 const navItems: Array<{ id: AppPageId; labelKey: string; icon: LucideIcon; path: string }> = [
 	{ id: "chat", labelKey: "navigation.chat", icon: MessageCircle, path: "/chat" },
+	{ id: "cafe", labelKey: "navigation.cafe", icon: Coffee, path: "/cafe" },
 	{ id: "pngtuber", labelKey: "navigation.pngtuber", icon: UserRound, path: "/avatar/pngtuber" },
 	{ id: "model2d", labelKey: "navigation.model2d", icon: Layers, path: "/model/live2d" }
 ];

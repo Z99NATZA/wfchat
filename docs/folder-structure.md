@@ -3,14 +3,16 @@
 ```text
 apps/
 	api/
-		src/
-			main.rs
-			app.rs
-			auth.rs
+			src/
+				main.rs
+				app.rs
+				auth.rs
+				cafe.rs
 			chat/
 				mod.rs
 				messages.rs
-				attachments.rs
+					attachments.rs
+					cafe.rs
 				voice.rs
 			store/
 				mod.rs
@@ -66,6 +68,9 @@ without describing the current replacement implementation.
 
 `apps/web/src/features/avatar` contains avatar-specific metadata such as the Aiko PNGTuber expression set.
 
+`apps/web/src/features/cafe` contains the Cafe WebSocket hook, HTTP service,
+Phaser scene, game canvas, and protocol types.
+
 `apps/web/src/components/navigation` contains app-level navigation UI such as the activity bar.
 
 `apps/web/src/services` contains infrastructure-facing helpers such as storage, axios clients, or transport wrappers.
@@ -80,7 +85,10 @@ streaming together so one message request remains understandable in one file.
 Attachment and voice handlers live in their matching chat submodules.
 
 `apps/api/src/store` splits PostgreSQL persistence by auth, chat, attachment,
-memory, and sync domain while preserving the shared `store` API.
+memory, cafe, and sync domain while preserving the shared `store` API.
+
+`apps/api/src/cafe.rs` owns the in-process room hub, authoritative gameplay
+validation, WebSocket protocol, and deterministic public Aiko events.
 
 `apps/api/src/characters.rs` keeps the static character registry and character prompts until this moves to a database.
 

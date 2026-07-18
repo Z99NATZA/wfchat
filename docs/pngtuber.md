@@ -49,6 +49,8 @@ Not implemented:
 - Overlay settings store: `apps/web/src/stores/avatarOverlayStore.ts`
 - Shared animation styles: `apps/web/src/styles.css`
 - Public assets: `apps/web/public/images/aiko-pngtuber/`
+- Cafe world assets: `apps/web/public/images/aiko-cafe/` (not part of the
+  PNGTuber renderer)
 
 ## Asset Set
 
@@ -62,6 +64,10 @@ apps/web/public/images/aiko-pngtuber/
 ```
 
 Keep all expression files in the same general crop and character scale. Do not overwrite generated assets; add a new filename and update `aikoPngTuber.ts`.
+
+Cafe dialogue can reuse these expression images as portraits. The Phaser room
+uses its dedicated transparent `aiko-host-v1.png` world sprite and does not
+drive `AvatarRuntimeProvider` or `PngTuberRenderer`.
 
 ## Runtime Contract
 

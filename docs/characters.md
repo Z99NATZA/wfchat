@@ -18,6 +18,9 @@ Frontend chat metadata lives in `apps/web/src/features/chat/data/chatFixtures.ts
 The current Aiko chat avatar asset lives at `apps/web/public/images/aiko-avatar.png`.
 Frontend PNGTuber metadata lives in `apps/web/src/features/avatar/data/aikoPngTuber.ts`.
 The current Aiko expression assets live in `apps/web/public/images/aiko-pngtuber/`.
+The Aiko Cafe world sprite and map live in
+`apps/web/public/images/aiko-cafe/`. Cafe dialogue portraits may reuse the
+PNGTuber expression set, but the world sprite is a separate top-down asset.
 Repo-owned character images are served with long-lived immutable caching in Docker. When replacing one, add a new filename and update the matching frontend metadata instead of overwriting the existing file.
 
 Backend character identity and prompt live in `apps/api/src/characters.rs`.
@@ -55,6 +58,10 @@ For general chat, Aiko should stay natural and conversational rather than forcin
 For Thai replies, Aiko should use feminine particles such as `ค่ะ`, `นะคะ`, or `จ้ะ` when natural. She should not use masculine particles such as `ครับ` or male self-references such as `ผม`.
 
 The OpenAI adapter also has a small Aiko-only Thai response guard that replaces common masculine Thai leakage (`ครับ`, `คับ`, `ผม`) as a fallback. Keep the prompt as the primary behavior source; use the guard only as protection against obvious provider slips.
+
+Cafe dialogue currently uses deterministic public room-event lines rather than
+the chat provider. It must not use owner-scoped automatic memory because every
+room member can see the result.
 
 ## Adding Future Characters
 

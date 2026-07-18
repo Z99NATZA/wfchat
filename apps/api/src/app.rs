@@ -9,7 +9,7 @@ use tower_http::{
     trace::TraceLayer,
 };
 
-use crate::{admin, auth, characters, chat, memory, state::AppState, sync};
+use crate::{admin, auth, cafe, characters, chat, memory, state::AppState, sync};
 
 pub fn build_router(state: AppState) -> Router {
     let frontend_origins = parse_frontend_origins(&state.config.frontend_origin);
@@ -27,6 +27,7 @@ pub fn build_router(state: AppState) -> Router {
     let api = Router::new()
         .route("/health", get(health))
         .merge(auth::router())
+        .merge(cafe::router())
         .merge(characters::router())
         .merge(chat::router())
         .merge(memory::router())

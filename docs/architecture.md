@@ -26,7 +26,8 @@ browser infrastructure stays in `services`, persisted app-state helpers stay in
 
 Backend code keeps request flows close to their owning route modules. `chat/*`
 owns chat flow, `auth.rs` owns sessions and login, `sync.rs` owns sync APIs,
-`store/*` owns PostgreSQL persistence by domain, and `ai/*` owns provider adapters.
+`store/*` owns PostgreSQL persistence by domain, `cafe.rs` owns ephemeral
+realtime cafe rooms, and `ai/*` owns provider adapters.
 
 ## Runtime Flow
 
@@ -40,7 +41,7 @@ apps/web/src/main.tsx
 browser
   -> /api/*
       -> apps/api/src/app.rs router
-          -> auth/chat/sync/admin route modules
+          -> auth/chat/cafe/sync/admin route modules
           -> apps/api/src/store/* and apps/api/src/ai/*
 ```
 
@@ -69,6 +70,7 @@ adapters. Provider adapters should not depend on frontend concepts.
 - [Chat message rendering](chat-message-rendering.md)
 - [Chat image attachments](chat-image-attachments.md)
 - [Chat voice](chat-voice.md)
+- [Aiko Cafe](aiko-cafe.md)
 - [Sync system](sync-system.md)
 - [Database schema](database-schema.md)
 - [Automatic memory](automatic-memory.md) - storage, automatic capture, and

@@ -19,6 +19,7 @@
 		"@vitejs/plugin-react": "^5.0.0",
 		"axios": "^1.7.9",
 		"lucide-react": "^0.468.0",
+		"phaser": "^3.90.0",
 		"react": "^19.0.0",
 		"react-dom": "^19.0.0",
 		"react-markdown": "^10.1.0",

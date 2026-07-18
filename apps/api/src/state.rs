@@ -5,6 +5,7 @@ use crate::{
     attachments::{
         cleanup_stale_pending_chat_attachments, PENDING_ATTACHMENT_CLEANUP_INTERVAL_SECONDS,
     },
+    cafe::CafeHub,
     config::Config,
     memory::{spawn_memory_capture_worker, MemoryTelemetry},
     rate_limit::RateLimiter,
@@ -17,6 +18,7 @@ pub struct AppState {
     pub http: Client,
     pub rate_limiter: RateLimiter,
     pub store: ChatStore,
+    pub cafe: CafeHub,
     pub memory_telemetry: MemoryTelemetry,
 }
 
@@ -30,6 +32,7 @@ impl AppState {
             http: Client::new(),
             rate_limiter: RateLimiter::default(),
             store,
+            cafe: CafeHub::default(),
             memory_telemetry: MemoryTelemetry::default(),
         };
         spawn_memory_capture_worker(state.clone());

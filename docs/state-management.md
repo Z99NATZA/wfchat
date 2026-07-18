@@ -51,6 +51,10 @@ Feature state stays inside the feature boundary:
 
 - Chat sessions, messages, personas, and draft text stay in `features/chat`.
 - Avatar workspace selections, pose/expression state, runtime bridge state, and inspector values should stay in the avatar page/feature.
+- Cafe lobby state stays in `CafePage`. Live room snapshots, connection state,
+  dialogue, emotes, and rewards stay in `useCafeRoom`; Phaser scene objects and
+  predicted movement stay inside `CafeScene`. Only durable Cafe Stars live in
+  PostgreSQL.
 
 Feature state should not be moved into app-level state unless multiple unrelated pages genuinely need to read or update it.
 

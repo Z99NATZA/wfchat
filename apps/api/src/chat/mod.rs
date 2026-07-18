@@ -1547,6 +1547,7 @@ mod tests {
             http: Client::new(),
             rate_limiter: RateLimiter::default(),
             store,
+            cafe: crate::cafe::CafeHub::default(),
             memory_telemetry: crate::memory::MemoryTelemetry::default(),
         })
     }

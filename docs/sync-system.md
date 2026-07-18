@@ -16,6 +16,11 @@ The sync system is designed to:
 
 ## Current State
 
+Cafe Stars are intentionally outside this generic sync protocol. They are
+canonical owner-scoped PostgreSQL rows read through `/api/cafe/progress`; guest
+rows follow the existing account-promotion transaction on login. Ephemeral room
+state uses WebSocket and is never stored in `sync_entities`.
+
 ### Completed
 
 - Backend guest sessions.

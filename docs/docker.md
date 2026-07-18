@@ -15,7 +15,7 @@ The api image builds `apps/api` and runs the Axum binary.
 
 The api service reads backend-only secrets from `apps/api/.env`.
 
-In Docker, nginx also proxies `/api/*` from the web container to the API service at `http://api:8080`. This keeps browser traffic on the same origin as the web app and avoids requiring LAN clients to reach port `8080` directly.
+In Docker, nginx also proxies `/api/*` from the web container to the API service at `http://api:8080`. The proxy forwards WebSocket upgrade headers for Aiko Cafe rooms. This keeps browser traffic on the same origin as the web app and avoids requiring LAN clients to reach port `8080` directly.
 
 ## Environment Setup
 

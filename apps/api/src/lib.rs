@@ -3,6 +3,7 @@ pub mod ai;
 pub mod app;
 pub mod attachments;
 pub mod auth;
+pub mod cafe;
 pub mod characters;
 pub mod chat;
 pub mod config;

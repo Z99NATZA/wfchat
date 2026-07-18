@@ -20,6 +20,7 @@ Current migration files:
 - `apps/api/migrations/202607110001_memory_extraction_outbox.sql`
 - `apps/api/migrations/202607130001_memory_follow_up_deliveries.sql`
 - `apps/api/migrations/202607140001_memory_extraction_temporal_context.sql`
+- `apps/api/migrations/202607180001_aiko_cafe_mvp.sql`
 
 `apps/api/db/init.sql` is retained only as a legacy/manual bootstrap helper. Do
 not treat it as canonical, and do not add new schema changes there unless it is
@@ -107,6 +108,13 @@ deterministic relative-date handling through:
 
 ```text
 apps/api/migrations/202607140001_memory_extraction_temporal_context.sql
+```
+
+Durable Cafe Stars, cosmetic ids, and the idempotent room completion ledger are
+created by:
+
+```text
+apps/api/migrations/202607180001_aiko_cafe_mvp.sql
 ```
 
 The baseline migration includes:

@@ -206,6 +206,24 @@ impl ChatStore {
         .execute(&mut *tx)
         .await?;
 
+        sqlx::query(
+            "update cafe_progress set owner_user_id = $1, updated_at = now()
+             where owner_session_id = $2 and owner_user_id is null",
+        )
+        .bind(user_id)
+        .bind(session_id)
+        .execute(&mut *tx)
+        .await?;
+
+        sqlx::query(
+            "update cafe_room_rewards set owner_user_id = $1
+             where owner_session_id = $2 and owner_user_id is null",
+        )
+        .bind(user_id)
+        .bind(session_id)
+        .execute(&mut *tx)
+        .await?;
+
         tx.commit().await?;
         Ok(())
     }

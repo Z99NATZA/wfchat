@@ -21,6 +21,8 @@ apps/web/src/main.tsx
   -> apps/web/src/app/App.tsx
       -> apps/web/src/layouts/AppLayout.tsx
       -> apps/web/src/pages/ChatPage.tsx
+      -> apps/web/src/pages/CafePage.tsx
+      -> apps/web/src/pages/CafeRoomPage.tsx
       -> apps/web/src/pages/PngTuberPage.tsx
       -> apps/web/src/pages/Model2DPage.tsx
 ```
@@ -75,9 +77,14 @@ Current chat message rendering:
 - While that optimistic assistant message exists, the message list should render loading text inside that placeholder only when it has no token text yet, and should not render a second standalone thinking bubble.
 - Supported assistant formats and explicit non-goals are defined in `docs/chat-message-rendering.md`.
 
+The Cafe lobby uses normal React service calls. Its room route lazy-loads Phaser,
+then `useCafeRoom` owns the WebSocket lifecycle while `CafeScene` owns predicted
+local movement, remote interpolation, camera, collision visuals, and mobile
+input. See `docs/aiko-cafe.md` for the protocol and ownership boundary.
+
 The PNGTuber workspace renders Aiko with a lightweight PNG asset set before Live2D rigging. The Live2D page is currently a route shell only. Runtime notes, chat bridge behavior, and remaining avatar work are documented in `docs/pngtuber.md`.
 
-App-level page navigation uses the left activity bar and route map described in `docs/app-navigation.md`. The app currently supports chat, PNGTuber Studio, and a reserved Live2D workspace shell.
+App-level page navigation uses the left activity bar and route map described in `docs/app-navigation.md`. The app currently supports chat, Aiko Cafe, PNGTuber Studio, and a reserved Live2D workspace shell.
 
 Auth/profile UI lives in `apps/web/src/components/auth/AuthProfileDialog.tsx`. It renders as a desktop right drawer and mobile bottom sheet, uses Google sign-in for login, and lets signed-in users edit `display_name` and `avatar_url` through `PATCH /api/auth/profile`.
 

@@ -220,6 +220,33 @@ human-readable schema reference.
   - deleting the source memory cascades to its delivery; deleting an attached
     chat clears `chat_id` when the memory remains supported by another source
 
+### `cafe_progress`
+
+- Purpose: canonical durable Cafe Stars and future cosmetic unlock ids.
+- Ownership:
+  - guest progress is scoped by `owner_session_id`
+  - account progress also sets `owner_user_id` and is read across that user's
+    sessions
+- Columns:
+  - `owner_session_id uuid primary key` -> `auth_sessions(id)` (`on delete cascade`)
+  - `owner_user_id uuid null`
+  - `cafe_stars integer not null default 0` constrained to non-negative values
+  - `unlocked_cosmetics text[] not null default '{}'`
+  - `updated_at timestamptz not null default now()`
+- Index: `idx_cafe_progress_owner_user (owner_user_id)` for registered owners.
+- Lifecycle: guest-to-account promotion assigns `owner_user_id`; multiple guest
+  sessions promoted to the same account remain separate rows and are summed at
+  read time without overwriting progress.
+
+### `cafe_room_rewards`
+
+- Purpose: idempotency ledger for Cafe activity completion rewards.
+- Primary key: `(room_id, owner_session_id)`.
+- Columns include `owner_user_id`, `cafe_stars`, and `created_at`.
+- Completion inserts the ledger row and increments `cafe_progress` in one
+  transaction. A repeated completion for the same room/session cannot award
+  twice.
+
 ### `sync_entities`
 
 - Purpose: latest sync item state for settings and chat cache.
@@ -250,3 +277,5 @@ human-readable schema reference.
 - One `memory_item` has one or more `memory_sources` across chats.
 - One displayed memory follow-up belongs to one owner and character and may
   later reference one chat created from the reply.
+- One Cafe progress row belongs to one session and may be attached to a
+  registered owner; room reward rows make completion grants idempotent.

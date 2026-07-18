@@ -77,6 +77,22 @@ React
 
 This clears message history for the current chat while keeping the chat id and guest session.
 
+Aiko Cafe uses a separate realtime path from chat streaming and sync:
+
+```text
+React lobby -> /api/cafe/rooms and /api/cafe/progress
+Phaser room <-> /api/cafe/rooms/:roomId/ws
+                 -> cafe.rs in-process CafeHub
+                 -> store/cafe.rs for completion rewards only
+```
+
+`cafe.rs` is authoritative for room capacity, movement bounds and speed,
+collision, emote allowlists, interactions, shared activity state, and
+per-connection message rate limiting. Cookie-authenticated browser upgrades
+must have an origin in `FRONTEND_ORIGINS`. Active simulation is ephemeral;
+Cafe Stars and idempotent room rewards are PostgreSQL data. Public Aiko cafe
+dialogue is deterministic and never reads automatic memory.
+
 ## Files
 
 `main.rs` starts the process, loads `.env`, configures logging, and binds the HTTP listener.
@@ -95,6 +111,10 @@ image attachment upload use separate stricter buckets.
 `error.rs` maps application errors into HTTP responses.
 
 `auth.rs` owns guest sessions, Google login, logout, `GET /api/auth/me`, and editable account profile updates.
+
+`cafe.rs` owns Cafe lobby routes, the authenticated WebSocket protocol, and the
+in-process room hub. `store/cafe.rs` owns account-scoped Cafe Stars and
+transactional completion reward persistence.
 
 `chat/mod.rs` composes chat routes and owns chat CRUD handlers.
 `chat/messages.rs` keeps the main message flow and SSE streaming together,

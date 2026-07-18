@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import AuthProfileDialog from "@/components/auth/AuthProfileDialog";
 import ActivityBar from "@/components/navigation/ActivityBar";
 import DialogProvider from "@/components/dialog/DialogProvider";
@@ -10,6 +10,7 @@ import { useI18n } from "@/i18n/i18nContext";
 import { AvatarRuntimeProvider } from "@/features/avatar/runtime/avatarRuntimeStore";
 import { scheduleAikoPngTuberAssetPreload } from "@/features/avatar/renderers/pngtuber/pngTuberAssetPreloader";
 import ChatPage, { type ChatSyncSnapshot } from "@/pages/ChatPage";
+import CafePage from "@/pages/CafePage";
 import { getChatUiConfig, type VoiceCredit } from "@/features/chat/services/chatApiService";
 import { CHAT_PERSONAS } from "@/features/chat/data/chatFixtures";
 import Model2DPage from "@/pages/Model2DPage";
@@ -25,6 +26,8 @@ import {
 } from "@/services/syncService";
 import { resetLearnedContext } from "@/services/automaticMemoryService";
 import { Navigate, Route, Routes } from "react-router-dom";
+
+const CafeRoomPage = lazy(() => import("@/pages/CafeRoomPage"));
 
 function App() {
 	const settings = useAppSettings();
@@ -287,6 +290,8 @@ function App() {
 		onOpenSettings: () => setIsSettingsOpen(true),
 		onToggleTheme: handleToggleTheme
 	};
+	const cafeSessionKey = auth.user?.id ?? "guest";
+	const cafeLoading = <div className="app-viewport bg-app-bg" />;
 
 	return (
 		<AvatarRuntimeProvider>
@@ -294,6 +299,38 @@ function App() {
 				<Route path="/" element={<Navigate to="/chat" replace />} />
 				<Route path="/chat" element={chatPage} />
 				<Route path="/chat/:chatId" element={chatPage} />
+				<Route
+					path="/cafe"
+					element={
+						auth.isLoading ? (
+							cafeLoading
+						) : (
+							<CafePage
+								key={cafeSessionKey}
+								activityBar={activityBar}
+								backgroundImageUrl={settings.backgroundImageUrl}
+								headerControls={headerControls}
+							/>
+						)
+					}
+				/>
+				<Route
+					path="/cafe/rooms/:roomId"
+					element={
+						auth.isLoading ? (
+							cafeLoading
+						) : (
+							<Suspense fallback={cafeLoading}>
+								<CafeRoomPage
+									key={cafeSessionKey}
+									activityBar={activityBar}
+									backgroundImageUrl={settings.backgroundImageUrl}
+									headerControls={headerControls}
+								/>
+							</Suspense>
+						)
+					}
+				/>
 				<Route path="/avatar" element={<Navigate to="/avatar/pngtuber" replace />} />
 				<Route path="/model" element={<Navigate to="/model/live2d" replace />} />
 				<Route

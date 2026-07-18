@@ -10,6 +10,7 @@ use crate::ai::{AiMessage, AiRole};
 
 mod attachments;
 mod auth;
+mod cafe;
 mod chat;
 mod memory;
 mod sync;
@@ -247,6 +248,12 @@ pub struct SyncEntityRecord {
     pub updated_at: u64,
     pub deleted_at: Option<u64>,
     pub payload: Value,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+pub struct CafeProgressRecord {
+    pub cafe_stars: u32,
+    pub unlocked_cosmetics: Vec<String>,
 }
 
 impl StoredMessage {
