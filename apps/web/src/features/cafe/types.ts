@@ -1,6 +1,7 @@
 export type CafeDirection = "up" | "down" | "left" | "right";
 
-export type CafeConnectionState = "connecting" | "connected" | "reconnecting" | "closed";
+export type CafeConnectionState =
+	"connecting" | "connected" | "offline" | "reconnecting" | "closed";
 
 export type CafeRoomErrorCode =
 	| "room_not_found"
@@ -39,6 +40,9 @@ export type CafeTeaLeaf = {
 
 export type CafeActivityState = {
 	id: "tea_delivery";
+	roundNumber: number;
+	phase: "active" | "intermission";
+	nextRoundAt: number | null;
 	delivered: number;
 	target: number;
 	completed: boolean;

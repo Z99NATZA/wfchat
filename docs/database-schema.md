@@ -240,12 +240,14 @@ human-readable schema reference.
 
 ### `cafe_room_rewards`
 
-- Purpose: idempotency ledger for Cafe activity completion rewards.
-- Primary key: `(room_id, owner_session_id)`.
-- Columns include `owner_user_id`, `cafe_stars`, and `created_at`.
+- Purpose: idempotency ledger for replayable Cafe round-completion rewards.
+- Primary key: `(room_id, round_number, owner_session_id)`.
+- `round_number integer not null` is positive and identifies a round within one
+  process-local room.
+- Other columns include `owner_user_id`, `cafe_stars`, and `created_at`.
 - Completion inserts the ledger row and increments `cafe_progress` in one
-  transaction. A repeated completion for the same room/session cannot award
-  twice.
+  transaction. Repeated messages or reconnects cannot award the same
+  room/round/session more than once, while a later round can award again.
 
 ### `sync_entities`
 
@@ -278,4 +280,4 @@ human-readable schema reference.
 - One displayed memory follow-up belongs to one owner and character and may
   later reference one chat created from the reply.
 - One Cafe progress row belongs to one session and may be attached to a
-  registered owner; room reward rows make completion grants idempotent.
+  registered owner; room-round reward rows make completion grants idempotent.

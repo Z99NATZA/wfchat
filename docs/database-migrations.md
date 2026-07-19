@@ -21,6 +21,7 @@ Current migration files:
 - `apps/api/migrations/202607130001_memory_follow_up_deliveries.sql`
 - `apps/api/migrations/202607140001_memory_extraction_temporal_context.sql`
 - `apps/api/migrations/202607180001_aiko_cafe_mvp.sql`
+- `apps/api/migrations/202607190001_aiko_cafe_round_rewards.sql`
 
 `apps/api/db/init.sql` is retained only as a legacy/manual bootstrap helper. Do
 not treat it as canonical, and do not add new schema changes there unless it is
@@ -116,6 +117,16 @@ created by:
 ```text
 apps/api/migrations/202607180001_aiko_cafe_mvp.sql
 ```
+
+The Cafe reward ledger becomes round-aware for replayable activities through:
+
+```text
+apps/api/migrations/202607190001_aiko_cafe_round_rewards.sql
+```
+
+Existing room reward rows are retained as round 1. The primary key expands from
+room/session to room/round/session, allowing later rounds to award once without
+making reconnects or repeated completion messages grant duplicates.
 
 The baseline migration includes:
 

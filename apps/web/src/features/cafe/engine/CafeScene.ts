@@ -54,6 +54,7 @@ export class CafeScene extends Phaser.Scene {
 	private cursors?: Phaser.Types.Input.Keyboard.CursorKeys;
 	private wasd?: Record<"W" | "A" | "S" | "D", Phaser.Input.Keyboard.Key>;
 	private virtualInput: DirectionInput = { x: 0, y: 0 };
+	private inputEnabled = true;
 	private interactionTarget: string | null = null;
 	private movementSequence = 0;
 	private lastMovementSentAt = 0;
@@ -129,7 +130,7 @@ export class CafeScene extends Phaser.Scene {
 			return;
 		}
 
-		const input = this.readDirectionInput();
+		const input = this.inputEnabled ? this.readDirectionInput() : { x: 0, y: 0 };
 		const moving = input.x !== 0 || input.y !== 0;
 		let direction = this.localVisual.direction;
 		if (moving) {
@@ -145,7 +146,10 @@ export class CafeScene extends Phaser.Scene {
 		this.localVisual.direction = direction;
 		this.localVisual.moving = moving;
 
-		if (time - this.lastMovementSentAt >= 80 || moving !== this.lastMoving) {
+		if (
+			this.inputEnabled &&
+			(time - this.lastMovementSentAt >= 80 || moving !== this.lastMoving)
+		) {
 			this.lastMovementSentAt = time;
 			this.lastMoving = moving;
 			this.movementSequence += 1;
@@ -167,10 +171,17 @@ export class CafeScene extends Phaser.Scene {
 			visual.container.setDepth(Math.round(visual.container.y) + 500);
 		}
 
-		this.updateInteractionTarget();
+		if (this.inputEnabled) {
+			this.updateInteractionTarget();
+		} else {
+			this.changeInteractionTarget(null);
+		}
 	}
 
-	applyRoomState(room: CafeRoomState, selfPlayerId: string | null) {
+	applyRoomState(room: CafeRoomState, selfPlayerId: string | null, resetLocalPosition = false) {
+		if (resetLocalPosition) {
+			this.hasLocalPosition = false;
+		}
 		this.room = room;
 		this.selfPlayerId = selfPlayerId;
 		if (
@@ -187,7 +198,16 @@ export class CafeScene extends Phaser.Scene {
 	}
 
 	setVirtualInput(input: DirectionInput) {
-		this.virtualInput = input;
+		this.virtualInput = this.inputEnabled ? input : { x: 0, y: 0 };
+	}
+
+	setInputEnabled(enabled: boolean) {
+		this.inputEnabled = enabled;
+		if (!enabled) {
+			this.virtualInput = { x: 0, y: 0 };
+			this.lastMoving = false;
+			this.changeInteractionTarget(null);
+		}
 	}
 
 	setInteractionTarget(targetId: string | null) {
@@ -254,6 +274,13 @@ export class CafeScene extends Phaser.Scene {
 			}
 		}
 
+		const activeLeafIds = new Set(room.activity.teaLeaves.map((leaf) => leaf.id));
+		for (const [leafId, visual] of this.teaVisuals) {
+			if (!activeLeafIds.has(leafId)) {
+				visual.destroy(true);
+				this.teaVisuals.delete(leafId);
+			}
+		}
 		for (const leaf of room.activity.teaLeaves) {
 			const visual =
 				this.teaVisuals.get(leaf.id) ?? this.createTeaLeaf(leaf.id, leaf.x, leaf.y);
@@ -266,7 +293,11 @@ export class CafeScene extends Phaser.Scene {
 		if (this.aiko) {
 			this.aiko.setTint(room.activity.completed ? 0xfff2b8 : 0xffffff);
 		}
-		this.updateInteractionTarget();
+		if (this.inputEnabled) {
+			this.updateInteractionTarget();
+		} else {
+			this.changeInteractionTarget(null);
+		}
 	}
 
 	private createPlayer(player: CafePlayerState): PlayerVisual {

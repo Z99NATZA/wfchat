@@ -61,6 +61,9 @@ const room = {
 	],
 	activity: {
 		id: "tea_delivery",
+		round_number: 1,
+		phase: "active",
+		next_round_at: null,
 		delivered: 0,
 		target: 3,
 		completed: false,
@@ -98,6 +101,7 @@ describe("useCafeRoom", () => {
 		});
 
 		expect(result.current.connectionState).toBe("connected");
+		expect(result.current.connectionEpoch).toBe(1);
 		expect(result.current.cafeStars).toBe(3);
 		expect(result.current.room?.activity.teaLeaves[0].id).toBe("tea-1");
 
@@ -134,12 +138,61 @@ describe("useCafeRoom", () => {
 			});
 			socket.message({ type: "dialogue", message: "Tea is ready", expression: "happy" });
 			socket.message({ type: "emote", player_id: room.players[0].id, emote: "tea" });
-			socket.message({ type: "reward", earned_stars: 1 });
+			socket.message({
+				type: "reward",
+				player_id: room.players[0].id,
+				earned_stars: 1
+			});
+			socket.message({
+				type: "reward",
+				player_id: "33333333-3333-4333-8333-333333333333",
+				earned_stars: 1
+			});
 		});
 
 		expect(result.current.dialogue).toEqual({ message: "Tea is ready", expression: "happy" });
 		expect(result.current.emote?.emote).toBe("tea");
 		expect(result.current.cafeStars).toBe(2);
+	});
+
+	it("goes offline immediately, blocks messages, and waits for welcome before resuming", () => {
+		const { result } = renderHook(() => useCafeRoom(room.id));
+		const first = FakeWebSocket.instances[0];
+		act(() => {
+			first.open();
+			first.message({
+				type: "welcome",
+				self_player_id: room.players[0].id,
+				cafe_stars: 2,
+				room
+			});
+		});
+
+		act(() => window.dispatchEvent(new Event("offline")));
+		expect(result.current.connectionState).toBe("offline");
+		act(() => result.current.interact("tea-1"));
+		expect(first.sent).toEqual([]);
+
+		act(() => window.dispatchEvent(new Event("online")));
+		expect(result.current.connectionState).toBe("reconnecting");
+		expect(FakeWebSocket.instances).toHaveLength(2);
+		const second = FakeWebSocket.instances[1];
+		act(() => {
+			second.open();
+			second.message({
+				type: "welcome",
+				self_player_id: room.players[0].id,
+				cafe_stars: 2,
+				room: {
+					...room,
+					players: [{ ...room.players[0], x: 720 }]
+				}
+			});
+		});
+
+		expect(result.current.connectionState).toBe("connected");
+		expect(result.current.connectionEpoch).toBe(2);
+		expect(result.current.room?.players[0].x).toBe(720);
 	});
 
 	it("stops reconnecting for a terminal room error and lets the player retry", () => {

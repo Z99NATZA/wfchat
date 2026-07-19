@@ -32,6 +32,9 @@ type ApiRoom = {
 	players: ApiPlayer[];
 	activity: {
 		id: "tea_delivery";
+		round_number: number;
+		phase: "active" | "intermission";
+		next_round_at: number | null;
 		delivered: number;
 		target: number;
 		completed: boolean;
@@ -45,7 +48,7 @@ type ServerMessage =
 	| { type: "snapshot"; room: ApiRoom }
 	| { type: "dialogue"; message: string; expression: CafeDialogue["expression"] }
 	| { type: "emote"; player_id: string; emote: string }
-	| { type: "reward"; earned_stars: number }
+	| { type: "reward"; player_id: string; earned_stars: number }
 	| { type: "pong" }
 	| { type: "error"; code?: string; message: string };
 
@@ -54,6 +57,7 @@ export function useCafeRoom(roomId: string) {
 	const [selfPlayerId, setSelfPlayerId] = useState<string | null>(null);
 	const [cafeStars, setCafeStars] = useState(0);
 	const [connectionState, setConnectionState] = useState<CafeConnectionState>("connecting");
+	const [connectionEpoch, setConnectionEpoch] = useState(0);
 	const [dialogue, setDialogue] = useState<CafeDialogue | null>(null);
 	const [emote, setEmote] = useState<CafeEmote | null>(null);
 	const [error, setError] = useState<CafeRoomErrorCode | null>(null);
@@ -62,6 +66,9 @@ export function useCafeRoom(roomId: string) {
 	const reconnectTimerRef = useRef<number | null>(null);
 	const reconnectAttemptRef = useRef(0);
 	const shouldReconnectRef = useRef(true);
+	const onlineRef = useRef(browserIsOnline());
+	const readyRef = useRef(false);
+	const selfPlayerIdRef = useRef<string | null>(null);
 	const lastPongAtRef = useRef(Date.now());
 	const dialogueTimerRef = useRef<number | null>(null);
 	const emoteKeyRef = useRef(0);
@@ -69,15 +76,27 @@ export function useCafeRoom(roomId: string) {
 	useEffect(() => {
 		shouldReconnectRef.current = true;
 		reconnectAttemptRef.current = 0;
-		setConnectionState("connecting");
+		onlineRef.current = browserIsOnline();
+		readyRef.current = false;
+		setConnectionState(onlineRef.current ? "connecting" : "offline");
 		setError(null);
 		let disposed = false;
 
-		function connect() {
-			if (disposed || !shouldReconnectRef.current) {
+		function clearReconnectTimer() {
+			if (reconnectTimerRef.current !== null) {
+				window.clearTimeout(reconnectTimerRef.current);
+				reconnectTimerRef.current = null;
+			}
+		}
+
+		function connect(isReconnect = false) {
+			if (disposed || !shouldReconnectRef.current || !onlineRef.current) {
 				return;
 			}
-			setConnectionState(reconnectAttemptRef.current > 0 ? "reconnecting" : "connecting");
+			clearReconnectTimer();
+			setConnectionState(
+				isReconnect || reconnectAttemptRef.current > 0 ? "reconnecting" : "connecting"
+			);
 			let socket: WebSocket;
 			try {
 				socket = new WebSocket(cafeSocketUrl(roomId));
@@ -90,9 +109,11 @@ export function useCafeRoom(roomId: string) {
 			socketRef.current = socket;
 
 			socket.onopen = () => {
+				if (socketRef.current !== socket) return;
 				lastPongAtRef.current = Date.now();
 			};
 			socket.onmessage = (event) => {
+				if (socketRef.current !== socket) return;
 				if (typeof event.data !== "string") {
 					return;
 				}
@@ -103,13 +124,19 @@ export function useCafeRoom(roomId: string) {
 				}
 			};
 			socket.onerror = () => {
+				if (socketRef.current !== socket || !onlineRef.current) return;
 				setError("connection_interrupted");
 			};
 			socket.onclose = () => {
-				if (socketRef.current === socket) {
-					socketRef.current = null;
+				if (socketRef.current !== socket) return;
+				socketRef.current = null;
+				readyRef.current = false;
+				if (disposed) return;
+				if (!onlineRef.current) {
+					setConnectionState("offline");
+					return;
 				}
-				if (!disposed && shouldReconnectRef.current) {
+				if (shouldReconnectRef.current) {
 					const nextAttempt = reconnectAttemptRef.current + 1;
 					if (nextAttempt > MAX_RECONNECT_ATTEMPTS) {
 						shouldReconnectRef.current = false;
@@ -120,20 +147,42 @@ export function useCafeRoom(roomId: string) {
 					reconnectAttemptRef.current = nextAttempt;
 					setConnectionState("reconnecting");
 					const delay = Math.min(5000, 500 * 2 ** Math.min(4, nextAttempt - 1));
-					reconnectTimerRef.current = window.setTimeout(connect, delay);
+					reconnectTimerRef.current = window.setTimeout(() => connect(true), delay);
 				} else {
 					setConnectionState("closed");
 				}
 			};
 		}
 
+		function handleOffline() {
+			onlineRef.current = false;
+			readyRef.current = false;
+			clearReconnectTimer();
+			setError(null);
+			setConnectionState("offline");
+			socketRef.current?.close(4002, "browser offline");
+		}
+
+		function handleOnline() {
+			if (disposed || onlineRef.current) return;
+			onlineRef.current = true;
+			shouldReconnectRef.current = true;
+			reconnectAttemptRef.current = 0;
+			setError(null);
+			setConnectionState("reconnecting");
+			connect(true);
+		}
+
 		function handleServerMessage(message: ServerMessage) {
 			switch (message.type) {
 				case "welcome":
 					reconnectAttemptRef.current = 0;
+					readyRef.current = true;
+					selfPlayerIdRef.current = message.self_player_id;
 					setSelfPlayerId(message.self_player_id);
 					setCafeStars(message.cafe_stars);
 					setRoom(toRoomState(message.room));
+					setConnectionEpoch((current) => current + 1);
 					setConnectionState("connected");
 					setError(null);
 					break;
@@ -156,10 +205,13 @@ export function useCafeRoom(roomId: string) {
 					});
 					break;
 				case "reward":
-					setCafeStars((current) => current + message.earned_stars);
+					if (message.player_id === selfPlayerIdRef.current) {
+						setCafeStars((current) => current + message.earned_stars);
+					}
 					break;
 				case "error":
 					shouldReconnectRef.current = false;
+					readyRef.current = false;
 					setError(toRoomErrorCode(message.code));
 					setConnectionState("closed");
 					socketRef.current?.close(4001, "cafe room error");
@@ -170,7 +222,11 @@ export function useCafeRoom(roomId: string) {
 			}
 		}
 
-		connect();
+		window.addEventListener("offline", handleOffline);
+		window.addEventListener("online", handleOnline);
+		if (onlineRef.current) {
+			connect();
+		}
 		const heartbeatTimer = window.setInterval(() => {
 			const socket = socketRef.current;
 			if (socket?.readyState !== WebSocket.OPEN) {
@@ -185,13 +241,14 @@ export function useCafeRoom(roomId: string) {
 		return () => {
 			disposed = true;
 			shouldReconnectRef.current = false;
-			if (reconnectTimerRef.current !== null) {
-				window.clearTimeout(reconnectTimerRef.current);
-			}
+			readyRef.current = false;
+			clearReconnectTimer();
 			if (dialogueTimerRef.current !== null) {
 				window.clearTimeout(dialogueTimerRef.current);
 			}
 			window.clearInterval(heartbeatTimer);
+			window.removeEventListener("offline", handleOffline);
+			window.removeEventListener("online", handleOnline);
 			socketRef.current?.close(1000, "leaving cafe");
 			socketRef.current = null;
 		};
@@ -199,7 +256,7 @@ export function useCafeRoom(roomId: string) {
 
 	const send = useCallback((message: object) => {
 		const socket = socketRef.current;
-		if (socket?.readyState === WebSocket.OPEN) {
+		if (readyRef.current && onlineRef.current && socket?.readyState === WebSocket.OPEN) {
 			socket.send(JSON.stringify(message));
 		}
 	}, []);
@@ -224,6 +281,7 @@ export function useCafeRoom(roomId: string) {
 	return {
 		room,
 		selfPlayerId,
+		connectionEpoch,
 		cafeStars,
 		connectionState,
 		dialogue,
@@ -267,6 +325,9 @@ function toRoomState(room: ApiRoom): CafeRoomState {
 		})),
 		activity: {
 			id: room.activity.id,
+			roundNumber: room.activity.round_number,
+			phase: room.activity.phase,
+			nextRoundAt: room.activity.next_round_at,
 			delivered: room.activity.delivered,
 			target: room.activity.target,
 			completed: room.activity.completed,
@@ -279,4 +340,8 @@ function toRoomState(room: ApiRoom): CafeRoomState {
 		},
 		aiko: room.aiko
 	};
+}
+
+function browserIsOnline(): boolean {
+	return typeof navigator === "undefined" || navigator.onLine !== false;
 }

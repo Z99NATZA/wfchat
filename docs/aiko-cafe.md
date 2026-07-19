@@ -18,7 +18,8 @@ separate product surface from chat and is available at `/cafe` without login.
   Give Aiko tea, and Talk to Aiko labels instead of a generic interaction
   prompt.
 - The activity HUD distinguishes delivered leaves from leaves carried by the
-  current player. Available leaves have an in-world marker, and carrying tea
+  current player, shows the authoritative round number, and counts down the
+  intermission. Available leaves have an in-world marker, and carrying tea
   reveals a marker above Aiko at the counter.
 - Players see names, four-direction idle/walk state, movement, joins, leaves,
   reconnect status, and preset emotes.
@@ -26,9 +27,10 @@ separate product surface from chat and is available at `/cafe` without login.
   React overlays above the room use the shared application theme in both light
   and dark mode. The Phaser map, characters, tea leaves, and in-world markers
   keep their own warm game palette.
-- The first activity is shared tea delivery: collect three leaves and return
-  them to Aiko. One player can complete it, and every player connected at
-  completion earns one Cafe Star.
+- The shared tea-delivery activity is replayable: collect three leaves and
+  return them to Aiko, rest for an eight-second intermission, then continue
+  with the next round and a fresh leaf layout. Every player connected when a
+  round completes is eligible for one Cafe Star for that round.
 - Active rooms, positions, and activity simulation are process-local and
   ephemeral. Empty rooms are removed.
 
@@ -41,8 +43,9 @@ the session and use the form `Guest XXXX`.
 Cafe Stars are canonical PostgreSQL data. Guest rows are scoped by session;
 after login, the existing guest-to-account promotion assigns those rows to the
 registered `owner_user_id`. Registered progress is read across that account's
-sessions. `cafe_room_rewards` makes completion rewards idempotent per room and
-session.
+sessions. `cafe_room_rewards` makes completion rewards idempotent per room,
+round, and session. Reward WebSocket events identify their recipient; other
+connected clients ignore them.
 
 Cafe progress is not written to browser local storage and does not use the
 generic sync queue. Only the versioned first-visit guide dismissal is stored as
@@ -62,12 +65,17 @@ It also rate-limits messages per connection, discards invalid JSON and unknown
 emotes, requires monotonic movement sequence numbers, bounds movement speed and
 map coordinates, and applies collision on the server. The client predicts its
 own movement and interpolates remote snapshots, but the server snapshot is
-authoritative. A client heartbeat closes a silent connection after 25 seconds;
-the room hook then reconnects with bounded exponential backoff.
+authoritative. Browser `offline` and `online` events gate input immediately:
+movement, interaction, and emote messages stop while offline, and controls only
+resume after a reconnecting socket receives a fresh authoritative `welcome`
+snapshot. A client heartbeat still closes a silent connection after 25 seconds
+when the browser cannot detect the interruption; the room hook then reconnects
+with bounded exponential backoff.
 
 WebSocket client messages are `move`, `interact`, `emote`, and `ping`. Server
-messages are `welcome`, `snapshot`, `dialogue`, `emote`, `reward`, `pong`, and
-`error`. Error messages carry a stable `room_not_found`, `room_full`, or
+messages are `welcome`, `snapshot`, `dialogue`, `emote`, targeted `reward`,
+`pong`, and `error`. Activity snapshots include `round_number`, `phase`, and
+`next_round_at`. Error messages carry a stable `room_not_found`, `room_full`, or
 `rate_limited` code so the client does not depend on server prose.
 
 Missing and full invite rooms are presented as different lobby errors. A room
@@ -99,11 +107,12 @@ in-world markers keep the cafe game palette.
   `apps/web/src/pages/CafeRoomPage.tsx`
 - Backend room/protocol module: `apps/api/src/cafe.rs`
 - Durable store operations: `apps/api/src/store/cafe.rs`
-- Schema migration: `apps/api/migrations/202607180001_aiko_cafe_mvp.sql`
+- Schema migrations: `apps/api/migrations/202607180001_aiko_cafe_mvp.sql` and
+  `apps/api/migrations/202607190001_aiko_cafe_round_rewards.sql`
 
 ## Current Limits
 
 Rooms are not shared across multiple API processes and do not survive an API
-restart. There is one map and one activity, cosmetics have persistence support
+restart. There is one map and one activity type, cosmetics have persistence support
 but no unlock or equip UI, and there is no matchmaking region, moderation
 surface, free-text chat, AI-generated room conversation, or spectator mode.

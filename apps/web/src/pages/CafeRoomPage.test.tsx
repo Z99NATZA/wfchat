@@ -18,6 +18,7 @@ const roomHook = vi.hoisted(() => ({
 	value: {
 		room: null as CafeRoomState | null,
 		selfPlayerId: null,
+		connectionEpoch: 0,
 		cafeStars: 0,
 		connectionState: "closed" as CafeConnectionState,
 		dialogue: null as CafeDialogue | null,
@@ -31,14 +32,22 @@ const roomHook = vi.hoisted(() => ({
 }));
 
 const gameCanvas = vi.hoisted(() => ({
-	props: null as null | { interactionLabels: Record<string, string> }
+	props: null as null | {
+		connectionEpoch: number;
+		inputEnabled: boolean;
+		interactionLabels: Record<string, string>;
+	}
 }));
 
 vi.mock("@/features/cafe/hooks/useCafeRoom", () => ({
 	useCafeRoom: () => ({ ...roomHook.value, retryConnection: roomHook.retryConnection })
 }));
 vi.mock("@/features/cafe/components/CafeGameCanvas", () => ({
-	default: (props: { interactionLabels: Record<string, string> }) => {
+	default: (props: {
+		connectionEpoch: number;
+		inputEnabled: boolean;
+		interactionLabels: Record<string, string>;
+	}) => {
 		gameCanvas.props = props;
 		return <div data-testid="cafe-game" />;
 	}
@@ -88,6 +97,7 @@ describe("CafeRoomPage", () => {
 		Object.assign(roomHook.value, {
 			room: null,
 			selfPlayerId: null,
+			connectionEpoch: 0,
 			cafeStars: 0,
 			connectionState: "closed",
 			dialogue: null,
@@ -150,6 +160,53 @@ describe("CafeRoomPage", () => {
 		expect(dialogue.textContent).toContain("Bring the leaves to the counter.");
 		expect(dialogue.className).toContain("bg-dialog-soft");
 	});
+
+	it("blocks room controls immediately while the browser is offline", () => {
+		const room = roomFixture();
+		Object.assign(roomHook.value, {
+			room,
+			selfPlayerId: room.players[0].id,
+			connectionEpoch: 1,
+			connectionState: "offline",
+			error: null
+		});
+
+		renderRoomPage();
+
+		expect(screen.getByTestId("cafe-offline-status").textContent).toBe(
+			"cafe.room.offlineMessage"
+		);
+		expect(gameCanvas.props?.inputEnabled).toBe(false);
+		expect(screen.getByRole("button", { name: "cafe.emote.wave" })).toHaveProperty(
+			"disabled",
+			true
+		);
+	});
+
+	it("shows the authoritative round and intermission status", () => {
+		const room = roomFixture();
+		room.activity = {
+			...room.activity,
+			roundNumber: 2,
+			phase: "intermission",
+			nextRoundAt: Date.now() + 5_000,
+			delivered: 3,
+			completed: true
+		};
+		Object.assign(roomHook.value, {
+			room,
+			selfPlayerId: room.players[0].id,
+			connectionEpoch: 1,
+			connectionState: "connected",
+			error: null
+		});
+
+		renderRoomPage();
+
+		expect(screen.getByTestId("cafe-round-number").textContent).toBe("cafe.activity.round");
+		expect(screen.getByTestId("cafe-quest-hint").textContent).toBe("cafe.activity.nextRound");
+		expect(screen.queryByTestId("cafe-carried-tea")).toBeNull();
+	});
 });
 
 function renderRoomPage() {
@@ -193,6 +250,9 @@ function roomFixture(): CafeRoomState {
 		],
 		activity: {
 			id: "tea_delivery",
+			roundNumber: 1,
+			phase: "active",
+			nextRoundAt: null,
 			delivered: 1,
 			target: 3,
 			completed: false,

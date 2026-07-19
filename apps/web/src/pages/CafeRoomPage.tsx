@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Navigate, useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, CircleHelp, Copy, Leaf, Star, Wifi, WifiOff } from "lucide-react";
 import AppHeaderBar from "@/components/header/AppHeaderBar";
@@ -42,6 +42,9 @@ function CafeRoomContent({
 	const [showGuide, setShowGuide] = useState(shouldShowCafeGuide);
 	const selfPlayer = cafe.room?.players.find((player) => player.id === cafe.selfPlayerId);
 	const carriedTea = selfPlayer?.carriedTea ?? 0;
+	const inputEnabled = cafe.connectionState === "connected";
+	const roundCountdown = useRoundCountdown(cafe.room?.activity.nextRoundAt ?? null);
+	const isIntermission = cafe.room?.activity.phase === "intermission";
 
 	function dismissGuide() {
 		setShowGuide(false);
@@ -96,6 +99,8 @@ function CafeRoomContent({
 				<CafeGameCanvas
 					room={cafe.room}
 					selfPlayerId={cafe.selfPlayerId}
+					connectionEpoch={cafe.connectionEpoch}
+					inputEnabled={inputEnabled}
 					emote={cafe.emote}
 					onMovement={cafe.sendMovement}
 					onInteract={cafe.interact}
@@ -114,9 +119,21 @@ function CafeRoomContent({
 						data-testid="cafe-activity-hud"
 					>
 						<div className="flex items-center justify-between gap-3">
-							<p className="text-[11px] font-semibold uppercase tracking-wide text-muted">
-								{t("cafe.activity.title")}
-							</p>
+							<div className="flex items-center gap-2">
+								<p className="text-[11px] font-semibold uppercase tracking-wide text-muted">
+									{t("cafe.activity.title")}
+								</p>
+								{cafe.room && (
+									<span
+										className="rounded-full border border-dialog-border bg-dialog-panel px-2 py-0.5 text-[10px] font-bold text-app-text"
+										data-testid="cafe-round-number"
+									>
+										{t("cafe.activity.round", {
+											round: cafe.room.activity.roundNumber
+										})}
+									</span>
+								)}
+							</div>
 							<button
 								type="button"
 								className="pointer-events-auto -m-1 rounded-full p-1 text-muted transition hover:bg-dialog-panel hover:text-app-text focus:outline-none focus:ring-2 focus:ring-primary/35 dark:focus:ring-action-ring/25"
@@ -127,14 +144,14 @@ function CafeRoomContent({
 							</button>
 						</div>
 						<p className="mt-1 text-sm font-semibold">
-							{cafe.room?.activity.completed
+							{isIntermission
 								? t("cafe.activity.complete")
 								: t("cafe.activity.progress", {
 										current: cafe.room?.activity.delivered ?? 0,
 										target: cafe.room?.activity.target ?? 3
 									})}
 						</p>
-						{!cafe.room?.activity.completed && carriedTea > 0 && (
+						{!isIntermission && carriedTea > 0 && (
 							<p
 								className="mt-2 inline-flex items-center gap-1.5 rounded-md border border-dialog-border bg-dialog-panel px-2 py-1 text-xs font-semibold text-app-text"
 								data-testid="cafe-carried-tea"
@@ -147,8 +164,10 @@ function CafeRoomContent({
 							className="mt-2 border-t border-dialog-border pt-2 text-xs leading-5 text-muted"
 							data-testid="cafe-quest-hint"
 						>
-							{cafe.room?.activity.completed
-								? t("cafe.activity.completeHint")
+							{isIntermission
+								? roundCountdown > 0
+									? t("cafe.activity.nextRound", { seconds: roundCountdown })
+									: t("cafe.activity.startingRound")
 								: carriedTea > 0
 									? t("cafe.activity.returnHint")
 									: t("cafe.activity.findHint")}
@@ -172,9 +191,10 @@ function CafeRoomContent({
 						<button
 							key={value}
 							type="button"
-							className="flex size-9 items-center justify-center rounded-full text-lg transition hover:bg-dialog-panel focus:outline-none focus:ring-2 focus:ring-primary/35 dark:focus:ring-action-ring/25"
+							className="flex size-9 items-center justify-center rounded-full text-lg transition hover:bg-dialog-panel focus:outline-none focus:ring-2 focus:ring-primary/35 disabled:cursor-not-allowed disabled:opacity-50 dark:focus:ring-action-ring/25"
 							aria-label={t(`cafe.emote.${value}`)}
 							onClick={() => cafe.sendEmote(value)}
+							disabled={!inputEnabled}
 						>
 							{{ wave: "👋", heart: "💗", happy: "✨", tea: "🍵" }[value]}
 						</button>
@@ -207,6 +227,15 @@ function CafeRoomContent({
 				{cafe.connectionState === "reconnecting" && (
 					<div className="absolute inset-x-0 top-0 z-50 border-b border-dialog-border bg-dialog-soft px-3 py-1.5 text-center text-xs font-semibold text-app-text shadow-soft">
 						{t("cafe.room.reconnecting")}
+					</div>
+				)}
+				{cafe.connectionState === "offline" && (
+					<div
+						className="absolute inset-x-0 top-0 z-50 border-b border-dialog-border bg-dialog-soft px-3 py-2 text-center text-xs font-semibold text-app-text shadow-soft"
+						data-testid="cafe-offline-status"
+						role="status"
+					>
+						{t("cafe.room.offlineMessage")}
 					</div>
 				)}
 				{cafe.error && cafe.connectionState !== "closed" && (
@@ -312,6 +341,11 @@ function CafeRoomDetails({ room }: { room: CafeRoomState | null }) {
 		<aside className="hidden min-h-0 border-l border-app-border bg-app-panel/62 xl:flex xl:flex-col">
 			<div className="border-b border-app-border p-4">
 				<p className="font-semibold text-app-text">{t("cafe.activity.title")}</p>
+				{room && (
+					<p className="mt-1 text-xs text-muted">
+						{t("cafe.activity.round", { round: room.activity.roundNumber })}
+					</p>
+				)}
 			</div>
 			<div className="space-y-4 p-4">
 				<div className="rounded-xl border border-app-border bg-app-soft p-4">
@@ -341,12 +375,18 @@ function CafeRoomDetails({ room }: { room: CafeRoomState | null }) {
 function ConnectionBadge({ state }: { state: CafeConnectionState }) {
 	const { t } = useI18n();
 	const connected = state === "connected";
+	const offline = state === "offline";
 	return (
-		<span className={connected ? "text-emerald-500" : "text-amber-500"}>
+		<span
+			className={connected ? "text-emerald-500" : offline ? "text-red-500" : "text-amber-500"}
+		>
 			{connected ? (
 				<Wifi size={15} aria-label={t("cafe.room.connected")} />
 			) : (
-				<WifiOff size={15} aria-label={t("cafe.room.connectingStatus")} />
+				<WifiOff
+					size={15}
+					aria-label={offline ? t("cafe.room.offline") : t("cafe.room.connectingStatus")}
+				/>
 			)}
 		</span>
 	);
@@ -401,6 +441,23 @@ function roomErrorTranslationKey(error: CafeRoomErrorCode): string {
 		default:
 			return "cafe.room.errorUnavailable";
 	}
+}
+
+function useRoundCountdown(nextRoundAt: number | null): number {
+	const [seconds, setSeconds] = useState(() => secondsUntilRound(nextRoundAt));
+
+	useEffect(() => {
+		setSeconds(secondsUntilRound(nextRoundAt));
+		if (nextRoundAt === null) return;
+		const timer = window.setInterval(() => setSeconds(secondsUntilRound(nextRoundAt)), 250);
+		return () => window.clearInterval(timer);
+	}, [nextRoundAt]);
+
+	return seconds;
+}
+
+function secondsUntilRound(nextRoundAt: number | null): number {
+	return nextRoundAt === null ? 0 : Math.max(0, Math.ceil((nextRoundAt - Date.now()) / 1000));
 }
 
 function isUuid(value: string) {

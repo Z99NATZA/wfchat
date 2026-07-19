@@ -8,6 +8,8 @@ const AIKO_INTERACTION_DISTANCE = 134;
 type CafeGameCanvasProps = {
 	room: CafeRoomState | null;
 	selfPlayerId: string | null;
+	connectionEpoch: number;
+	inputEnabled: boolean;
 	emote: CafeEmote | null;
 	onMovement: (
 		x: number,
@@ -29,6 +31,8 @@ type CafeGameCanvasProps = {
 function CafeGameCanvas({
 	room,
 	selfPlayerId,
+	connectionEpoch,
+	inputEnabled,
 	emote,
 	onMovement,
 	onInteract,
@@ -39,6 +43,7 @@ function CafeGameCanvas({
 	const sceneRef = useRef<CafeScene | null>(null);
 	const movementRef = useRef(onMovement);
 	const interactRef = useRef(onInteract);
+	const appliedConnectionEpochRef = useRef<number | null>(null);
 	const [interactionTarget, setInteractionTarget] = useState<string | null>(null);
 	const selfPlayer = room?.players.find((player) => player.id === selfPlayerId);
 	const carriedTea = selfPlayer?.carriedTea ?? 0;
@@ -94,9 +99,18 @@ function CafeGameCanvas({
 
 	useEffect(() => {
 		if (room) {
-			sceneRef.current?.applyRoomState(room, selfPlayerId);
+			const resetLocalPosition = appliedConnectionEpochRef.current !== connectionEpoch;
+			appliedConnectionEpochRef.current = connectionEpoch;
+			sceneRef.current?.applyRoomState(room, selfPlayerId, resetLocalPosition);
 		}
-	}, [room, selfPlayerId]);
+	}, [connectionEpoch, room, selfPlayerId]);
+
+	useEffect(() => {
+		sceneRef.current?.setInputEnabled(inputEnabled);
+		if (!inputEnabled) {
+			setInteractionTarget(null);
+		}
+	}, [inputEnabled]);
 
 	useEffect(() => {
 		if (!room || !interactionTarget?.startsWith("tea-")) {
@@ -119,6 +133,7 @@ function CafeGameCanvas({
 	useEffect(() => {
 		function interactWithKeyboard(event: KeyboardEvent) {
 			if (
+				!inputEnabled ||
 				event.repeat ||
 				event.key.toLowerCase() !== "e" ||
 				!effectiveInteractionTarget ||
@@ -131,7 +146,7 @@ function CafeGameCanvas({
 		}
 		window.addEventListener("keydown", interactWithKeyboard);
 		return () => window.removeEventListener("keydown", interactWithKeyboard);
-	}, [effectiveInteractionTarget]);
+	}, [effectiveInteractionTarget, inputEnabled]);
 
 	useEffect(() => {
 		if (emote) {
@@ -140,7 +155,9 @@ function CafeGameCanvas({
 	}, [emote]);
 
 	function setDirection(x: number, y: number) {
-		sceneRef.current?.setVirtualInput({ x, y });
+		if (inputEnabled) {
+			sceneRef.current?.setVirtualInput({ x, y });
+		}
 	}
 
 	return (
@@ -157,6 +174,7 @@ function CafeGameCanvas({
 			<div className="absolute bottom-[max(1rem,env(safe-area-inset-bottom))] left-4 z-30 grid grid-cols-3 grid-rows-3 gap-1 sm:hidden">
 				<DirectionButton
 					className="col-start-2"
+					disabled={!inputEnabled}
 					label="Up"
 					onPress={() => setDirection(0, -1)}
 					onRelease={() => setDirection(0, 0)}
@@ -165,6 +183,7 @@ function CafeGameCanvas({
 				</DirectionButton>
 				<DirectionButton
 					className="row-start-2"
+					disabled={!inputEnabled}
 					label="Left"
 					onPress={() => setDirection(-1, 0)}
 					onRelease={() => setDirection(0, 0)}
@@ -173,6 +192,7 @@ function CafeGameCanvas({
 				</DirectionButton>
 				<DirectionButton
 					className="col-start-3 row-start-2"
+					disabled={!inputEnabled}
 					label="Right"
 					onPress={() => setDirection(1, 0)}
 					onRelease={() => setDirection(0, 0)}
@@ -181,6 +201,7 @@ function CafeGameCanvas({
 				</DirectionButton>
 				<DirectionButton
 					className="col-start-2 row-start-3"
+					disabled={!inputEnabled}
 					label="Down"
 					onPress={() => setDirection(0, 1)}
 					onRelease={() => setDirection(0, 0)}
@@ -191,7 +212,7 @@ function CafeGameCanvas({
 			<button
 				type="button"
 				className="absolute bottom-[max(1.25rem,env(safe-area-inset-bottom))] right-4 z-40 flex h-16 min-w-20 max-w-28 items-center justify-center rounded-2xl border border-action-border bg-action px-3 text-center text-xs font-bold leading-4 text-action-text shadow-soft transition hover:bg-action-hover focus:outline-none focus:ring-4 focus:ring-action-ring/25 disabled:border-app-border disabled:bg-app-soft disabled:text-muted sm:hidden"
-				disabled={!effectiveInteractionTarget}
+				disabled={!inputEnabled || !effectiveInteractionTarget}
 				onClick={() => {
 					if (effectiveInteractionTarget) {
 						interactRef.current(effectiveInteractionTarget);
@@ -201,7 +222,7 @@ function CafeGameCanvas({
 			>
 				{interactionLabel}
 			</button>
-			{effectiveInteractionTarget && (
+			{inputEnabled && effectiveInteractionTarget && (
 				<div
 					className="absolute bottom-16 left-1/2 z-50 hidden -translate-x-1/2 items-center gap-2 rounded-xl border border-dialog-border bg-dialog-soft px-4 py-2.5 text-sm font-semibold text-app-text shadow-soft sm:flex"
 					data-testid="cafe-interaction-prompt"
@@ -228,17 +249,26 @@ function isEditableElement(target: EventTarget | null) {
 
 type DirectionButtonProps = {
 	className?: string;
+	disabled: boolean;
 	label: string;
 	children: string;
 	onPress: () => void;
 	onRelease: () => void;
 };
 
-function DirectionButton({ className, label, children, onPress, onRelease }: DirectionButtonProps) {
+function DirectionButton({
+	className,
+	disabled,
+	label,
+	children,
+	onPress,
+	onRelease
+}: DirectionButtonProps) {
 	return (
 		<button
 			type="button"
-			className={`flex size-12 touch-none select-none items-center justify-center rounded-xl border border-dialog-border bg-dialog-soft text-lg text-app-text shadow-soft transition hover:bg-dialog-panel focus:outline-none focus:ring-2 focus:ring-primary/35 dark:focus:ring-action-ring/25 ${className ?? ""}`}
+			className={`flex size-12 touch-none select-none items-center justify-center rounded-xl border border-dialog-border bg-dialog-soft text-lg text-app-text shadow-soft transition hover:bg-dialog-panel focus:outline-none focus:ring-2 focus:ring-primary/35 disabled:cursor-not-allowed disabled:opacity-50 dark:focus:ring-action-ring/25 ${className ?? ""}`}
+			disabled={disabled}
 			aria-label={label}
 			onKeyDown={(event) => {
 				if ((event.key === " " || event.key === "Enter") && !event.repeat) {

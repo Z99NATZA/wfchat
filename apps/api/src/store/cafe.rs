@@ -51,28 +51,32 @@ impl ChatStore {
         self.get_cafe_progress(owner).await
     }
 
-    pub async fn award_cafe_room_completion(
+    pub async fn award_cafe_round_completion(
         &self,
         room_id: Uuid,
+        round_number: u32,
         owners: &[OwnerScope],
-    ) -> StoreResult<()> {
+    ) -> StoreResult<Vec<Uuid>> {
         let mut tx = self.db.begin().await?;
+        let mut awarded_session_ids = Vec::new();
 
         for owner in owners {
             let inserted = sqlx::query_scalar::<_, Uuid>(
                 "insert into cafe_room_rewards (
-                    room_id, owner_session_id, owner_user_id, cafe_stars
-                 ) values ($1, $2, $3, 1)
-                 on conflict (room_id, owner_session_id) do nothing
+                    room_id, round_number, owner_session_id, owner_user_id, cafe_stars
+                 ) values ($1, $2, $3, $4, 1)
+                 on conflict (room_id, round_number, owner_session_id) do nothing
                  returning owner_session_id",
             )
             .bind(room_id)
+            .bind(i32::try_from(round_number).unwrap_or(i32::MAX))
             .bind(owner.session_id)
             .bind(owner.user_id)
             .fetch_optional(&mut *tx)
             .await?;
 
             if inserted.is_some() {
+                awarded_session_ids.push(owner.session_id);
                 sqlx::query(
                     "insert into cafe_progress (
                         owner_session_id, owner_user_id, cafe_stars, unlocked_cosmetics, updated_at
@@ -91,7 +95,7 @@ impl ChatStore {
         }
 
         tx.commit().await?;
-        Ok(())
+        Ok(awarded_session_ids)
     }
 }
 
@@ -140,6 +144,47 @@ mod tests {
 
         sqlx::query("delete from auth_sessions where id = $1")
             .bind(registered.id)
+            .execute(store.db.as_ref())
+            .await
+            .expect("test session should clean up");
+    }
+
+    #[tokio::test]
+    async fn cafe_round_rewards_are_idempotent_per_round() {
+        let Some(store) = test_store().await else {
+            return;
+        };
+        let session = store
+            .create_guest_session()
+            .await
+            .expect("guest session should create");
+        let owner = OwnerScope::from_session(&session);
+        let room_id = Uuid::new_v4();
+
+        let first = store
+            .award_cafe_round_completion(room_id, 1, &[owner])
+            .await
+            .expect("first round should award");
+        let duplicate = store
+            .award_cafe_round_completion(room_id, 1, &[owner])
+            .await
+            .expect("duplicate round should be ignored");
+        let second = store
+            .award_cafe_round_completion(room_id, 2, &[owner])
+            .await
+            .expect("second round should award");
+        let progress = store
+            .get_cafe_progress(owner)
+            .await
+            .expect("progress should load");
+
+        assert_eq!(first, vec![session.id]);
+        assert!(duplicate.is_empty());
+        assert_eq!(second, vec![session.id]);
+        assert_eq!(progress.cafe_stars, 2);
+
+        sqlx::query("delete from auth_sessions where id = $1")
+            .bind(session.id)
             .execute(store.db.as_ref())
             .await
             .expect("test session should clean up");
