@@ -26,6 +26,7 @@ use tokio::sync::{broadcast, Mutex};
 use uuid::Uuid;
 
 use crate::{
+    cafe_cosmetics::{cafe_cosmetic, CafeCosmeticDefinition, CAFE_COSMETICS},
     error::{AppError, AppResult},
     session::{session_cookie, session_id_from_headers},
     state::AppState,
@@ -65,6 +66,7 @@ pub fn router() -> Router<AppState> {
         .route("/cafe/rooms/join", post(join_by_code))
         .route("/cafe/rooms/{room_id}/ws", get(cafe_socket))
         .route("/cafe/progress", get(cafe_progress))
+        .route("/cafe/cosmetics/equipped", post(equip_cafe_cosmetic))
 }
 
 #[derive(Clone, Default)]
@@ -93,6 +95,7 @@ struct CafePlayer {
     direction: Direction,
     moving: bool,
     carried_tea: u8,
+    equipped_cosmetic: Option<String>,
     last_sequence: u64,
     last_move_at: Instant,
 }
@@ -128,6 +131,7 @@ struct CafePlayerState {
     direction: Direction,
     moving: bool,
     carried_tea: u8,
+    equipped_cosmetic: Option<String>,
 }
 
 #[derive(Clone, Serialize)]
@@ -197,6 +201,20 @@ struct CafeRoomResponse {
 struct CafeProgressResponse {
     cafe_stars: u32,
     unlocked_cosmetics: Vec<String>,
+    equipped_cosmetic: Option<String>,
+    cosmetics: Vec<CafeCosmeticResponse>,
+}
+
+#[derive(Serialize)]
+struct CafeCosmeticResponse {
+    id: &'static str,
+    required_stars: u32,
+    unlocked: bool,
+}
+
+#[derive(Deserialize)]
+struct EquipCafeCosmeticRequest {
+    cosmetic_id: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -665,6 +683,24 @@ impl CafeHub {
             }
         }
     }
+
+    async fn equip_cosmetic(&self, owner: OwnerScope, cosmetic_id: Option<String>) {
+        let mut rooms = self.rooms.lock().await;
+        for room in rooms.values_mut() {
+            let mut changed = false;
+            for player in room.players.values_mut() {
+                if same_owner(player.owner, owner) && player.equipped_cosmetic != cosmetic_id {
+                    player.equipped_cosmetic.clone_from(&cosmetic_id);
+                    changed = true;
+                }
+            }
+            if changed {
+                let _ = room.sender.send(CafeServerMessage::Snapshot {
+                    room: room_state(room),
+                });
+            }
+        }
+    }
 }
 
 async fn list_rooms(
@@ -733,13 +769,29 @@ async fn cafe_progress(
         .store
         .get_cafe_progress(OwnerScope::from_session(&session))
         .await?;
-    Ok((
-        response_headers,
-        Json(CafeProgressResponse {
-            cafe_stars: progress.cafe_stars,
-            unlocked_cosmetics: progress.unlocked_cosmetics,
-        }),
-    ))
+    Ok((response_headers, Json(progress_response(progress))))
+}
+
+async fn equip_cafe_cosmetic(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(payload): Json<EquipCafeCosmeticRequest>,
+) -> AppResult<(HeaderMap, Json<CafeProgressResponse>)> {
+    let (session, response_headers) = ensure_cafe_session(&state, &headers).await?;
+    let cosmetic_id = payload.cosmetic_id.as_deref();
+    if cosmetic_id.is_some_and(|id| cafe_cosmetic(id).is_none()) {
+        return Err(AppError::BadRequest("unknown cafe cosmetic".to_owned()));
+    }
+    let owner = OwnerScope::from_session(&session);
+    if !state.store.equip_cafe_cosmetic(owner, cosmetic_id).await? {
+        return Err(AppError::Forbidden);
+    }
+    let progress = state.store.get_cafe_progress(owner).await?;
+    state
+        .cafe
+        .equip_cosmetic(owner, progress.equipped_cosmetic.clone())
+        .await;
+    Ok((response_headers, Json(progress_response(progress))))
 }
 
 async fn cafe_socket(
@@ -757,9 +809,10 @@ async fn cafe_socket(
         .store
         .get_cafe_progress(OwnerScope::from_session(&session))
         .await?;
-    let player = new_player(&session, player_name);
+    let player = new_player(&session, player_name, progress.equipped_cosmetic);
+    let initial_stars = progress.cafe_stars;
     let mut response = ws.on_upgrade(move |socket| {
-        handle_cafe_socket(socket, state, room_id, player, progress.cafe_stars)
+        handle_cafe_socket(socket, state, room_id, player, initial_stars)
     });
     if let Some(cookie) = response_headers.get(SET_COOKIE).cloned() {
         response.headers_mut().insert(SET_COOKIE, cookie);
@@ -983,7 +1036,11 @@ async fn cafe_display_name(state: &AppState, session: &SessionRecord) -> AppResu
         .unwrap_or_else(|| "Cafe Guest".to_owned()))
 }
 
-fn new_player(session: &SessionRecord, name: String) -> CafePlayer {
+fn new_player(
+    session: &SessionRecord,
+    name: String,
+    equipped_cosmetic: Option<String>,
+) -> CafePlayer {
     let color_index = session.user_id.as_bytes()[0] as usize % PLAYER_COLORS.len();
     CafePlayer {
         id: session.id,
@@ -995,6 +1052,7 @@ fn new_player(session: &SessionRecord, name: String) -> CafePlayer {
         direction: Direction::Up,
         moving: false,
         carried_tea: 0,
+        equipped_cosmetic,
         last_sequence: 0,
         last_move_at: Instant::now(),
     }
@@ -1060,6 +1118,7 @@ fn room_state(room: &CafeRoom) -> CafeRoomState {
             direction: player.direction,
             moving: player.moving,
             carried_tea: player.carried_tea,
+            equipped_cosmetic: player.equipped_cosmetic.clone(),
         })
         .collect::<Vec<_>>();
     players.sort_by_key(|player| player.id);
@@ -1081,6 +1140,37 @@ fn room_state(room: &CafeRoom) -> CafeRoomState {
                 "idle"
             },
         },
+    }
+}
+
+fn progress_response(progress: crate::store::CafeProgressRecord) -> CafeProgressResponse {
+    let cosmetics = CAFE_COSMETICS
+        .iter()
+        .map(|definition| cosmetic_response(*definition, &progress.unlocked_cosmetics))
+        .collect();
+    CafeProgressResponse {
+        cafe_stars: progress.cafe_stars,
+        unlocked_cosmetics: progress.unlocked_cosmetics,
+        equipped_cosmetic: progress.equipped_cosmetic,
+        cosmetics,
+    }
+}
+
+fn cosmetic_response(
+    definition: CafeCosmeticDefinition,
+    unlocked_cosmetics: &[String],
+) -> CafeCosmeticResponse {
+    CafeCosmeticResponse {
+        id: definition.id,
+        required_stars: definition.required_stars,
+        unlocked: unlocked_cosmetics.iter().any(|id| id == definition.id),
+    }
+}
+
+fn same_owner(left: OwnerScope, right: OwnerScope) -> bool {
+    match (left.user_id, right.user_id) {
+        (Some(left_user), Some(right_user)) => left_user == right_user,
+        _ => left.session_id == right.session_id,
     }
 }
 
@@ -1116,9 +1206,12 @@ mod tests {
         let hub = CafeHub::default();
         let first = hub.quick_join().await;
         let session = guest();
-        hub.join(first.id, new_player(&session, "Guest TEST".to_owned()))
-            .await
-            .expect("player should join");
+        hub.join(
+            first.id,
+            new_player(&session, "Guest TEST".to_owned(), None),
+        )
+        .await
+        .expect("player should join");
 
         let reused = hub.quick_join().await;
         assert_eq!(reused.id, first.id);
@@ -1130,7 +1223,7 @@ mod tests {
         let hub = CafeHub::default();
         let room = hub.create_room(false).await;
         let session = guest();
-        hub.join(room.id, new_player(&session, "Guest MOVE".to_owned()))
+        hub.join(room.id, new_player(&session, "Guest MOVE".to_owned(), None))
             .await
             .expect("player should join");
 
@@ -1155,11 +1248,46 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn equipped_cosmetics_are_broadcast_to_connected_room_members() {
+        let hub = CafeHub::default();
+        let room = hub.create_room(false).await;
+        let session = guest();
+        let owner = OwnerScope::from_session(&session);
+        let mut join = hub
+            .join(
+                room.id,
+                new_player(&session, "Guest STYLE".to_owned(), None),
+            )
+            .await
+            .expect("player should join");
+
+        hub.equip_cosmetic(owner, Some("sakura_pin".to_owned()))
+            .await;
+        let _initial_snapshot = join
+            .receiver
+            .recv()
+            .await
+            .expect("join snapshot should send");
+        let updated = join
+            .receiver
+            .recv()
+            .await
+            .expect("cosmetic snapshot should send");
+        let CafeServerMessage::Snapshot { room } = updated else {
+            panic!("expected a room snapshot");
+        };
+        assert_eq!(
+            room.players[0].equipped_cosmetic.as_deref(),
+            Some("sakura_pin")
+        );
+    }
+
+    #[tokio::test]
     async fn tea_activity_enters_intermission_and_starts_a_fresh_round() {
         let hub = CafeHub::default();
         let room = hub.create_room(false).await;
         let session = guest();
-        hub.join(room.id, new_player(&session, "Guest TEA".to_owned()))
+        hub.join(room.id, new_player(&session, "Guest TEA".to_owned(), None))
             .await
             .expect("player should join");
 
@@ -1180,7 +1308,10 @@ mod tests {
 
         let late_session = guest();
         let late_join = hub
-            .join(room.id, new_player(&late_session, "Guest LATE".to_owned()))
+            .join(
+                room.id,
+                new_player(&late_session, "Guest LATE".to_owned(), None),
+            )
             .await
             .expect("late player should join during intermission");
         assert_eq!(late_join.snapshot.activity.round_number, 1);
@@ -1215,9 +1346,12 @@ mod tests {
         let mut sessions = Vec::new();
         for index in 0..ROOM_CAPACITY {
             let session = guest();
-            hub.join(room.id, new_player(&session, format!("Guest {index:04}")))
-                .await
-                .expect("room should accept players up to capacity");
+            hub.join(
+                room.id,
+                new_player(&session, format!("Guest {index:04}"), None),
+            )
+            .await
+            .expect("room should accept players up to capacity");
             sessions.push(session);
         }
 
@@ -1227,7 +1361,7 @@ mod tests {
         ));
         let extra = guest();
         assert!(matches!(
-            hub.join(room.id, new_player(&extra, "Guest FULL".to_owned()))
+            hub.join(room.id, new_player(&extra, "Guest FULL".to_owned(), None),)
                 .await,
             Err(CafeJoinError::RoomFull)
         ));

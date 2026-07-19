@@ -21,8 +21,8 @@ Tailwind utilities map to CSS variables:
 
 ```css
 @theme {
-	--color-app-panel: var(--app-panel);
-	--color-dialog-panel: var(--dialog-panel);
+    --color-app-panel: var(--app-panel);
+    --color-dialog-panel: var(--dialog-panel);
 }
 ```
 
@@ -30,11 +30,11 @@ Light theme values live in `:root`. Dark theme overrides live in `.dark`.
 
 ```css
 :root {
-	--app-panel: rgb(255 255 255 / 0.82);
+    --app-panel: rgb(255 255 255 / 0.82);
 }
 
 .dark {
-	--app-panel: rgb(59 65 77 / 0.88);
+    --app-panel: rgb(59 65 77 / 0.88);
 }
 ```
 
@@ -50,22 +50,22 @@ The active theme is applied to `document.documentElement`, so components should 
 
 Use these tokens by intent, not by visual similarity.
 
-| Token | Tailwind class | Purpose |
-| --- | --- | --- |
-| `--app-bg` | `bg-app-bg` | Base app background behind all UI. |
-| `--app-panel` | `bg-app-panel` | Main app chrome surface. Translucent by design. |
-| `--app-soft` | `bg-app-soft` | Nested app controls, fields, chips, secondary panels. Translucent by design. |
-| `--app-text` | `text-app-text` | Primary readable text. |
-| `--app-border` | `border-app-border` | App chrome and surface borders. |
-| `--dialog-panel` | `bg-dialog-panel` | Modal/drawer/dialog shell. Solid by design. |
-| `--dialog-soft` | `bg-dialog-soft` | Nested controls inside modals/drawers/dialogs. Solid by design. |
-| `--dialog-border` | `border-dialog-border` | Modal/drawer/dialog borders. |
-| `--brand-primary` | `bg-primary`, `text-primary`, `border-primary` | Brand and primary action color. |
-| `--brand-primary-hover` | `bg-primary-600` | Primary action hover background. |
-| `--action-*` | `bg-action`, `text-action-text`, `border-action-border` | High-contrast action button token set. |
-| `--muted` | `text-muted` | Secondary text, metadata, less prominent icons. |
-| `--app-bg-image-opacity` | inline style var | Full-screen background image opacity. |
-| `--wfchat-bg-image` | inline style var | Shared background image used by local app surfaces. |
+| Token                    | Tailwind class                                          | Purpose                                                                      |
+| ------------------------ | ------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| `--app-bg`               | `bg-app-bg`                                             | Base app background behind all UI.                                           |
+| `--app-panel`            | `bg-app-panel`                                          | Main app chrome surface. Translucent by design.                              |
+| `--app-soft`             | `bg-app-soft`                                           | Nested app controls, fields, chips, secondary panels. Translucent by design. |
+| `--app-text`             | `text-app-text`                                         | Primary readable text.                                                       |
+| `--app-border`           | `border-app-border`                                     | App chrome and surface borders.                                              |
+| `--dialog-panel`         | `bg-dialog-panel`                                       | Modal/drawer/dialog shell. Solid by design.                                  |
+| `--dialog-soft`          | `bg-dialog-soft`                                        | Nested controls inside modals/drawers/dialogs. Solid by design.              |
+| `--dialog-border`        | `border-dialog-border`                                  | Modal/drawer/dialog borders.                                                 |
+| `--brand-primary`        | `bg-primary`, `text-primary`, `border-primary`          | Brand and primary action color.                                              |
+| `--brand-primary-hover`  | `bg-primary-600`                                        | Primary action hover background.                                             |
+| `--action-*`             | `bg-action`, `text-action-text`, `border-action-border` | High-contrast action button token set.                                       |
+| `--muted`                | `text-muted`                                            | Secondary text, metadata, less prominent icons.                              |
+| `--app-bg-image-opacity` | inline style var                                        | Full-screen background image opacity.                                        |
+| `--wfchat-bg-image`      | inline style var                                        | Shared background image used by local app surfaces.                          |
 
 ## Current Values
 
@@ -117,6 +117,25 @@ It should remain subtle. The intended behavior is close to VS Code wallpaper ext
 
 Do not add `backdrop-blur` for normal app surfaces unless the design is intentionally changed again. Blur was removed because it made the visual model harder to tune.
 
+## Scrollbar Rules
+
+User-facing scroll regions inside the app shell should use the shared
+`chat-scroll` utility from `apps/web/src/styles.css` together with their normal
+`overflow-y-auto` or `overflow-auto` class. Despite its historical name,
+`chat-scroll` is the application scrollbar style and is not limited to chat
+components.
+
+```tsx
+<section className="chat-scroll min-h-0 overflow-y-auto">{children}</section>
+```
+
+The utility provides a thin scrollbar, transparent track, rounded thumb, and
+theme-aware normal and hover colors for Firefox and WebKit/Chromium browsers.
+Do not add feature-specific `::-webkit-scrollbar` rules or hard-coded scrollbar
+colors when this shared style covers the use case. Native document scrolling
+and small controls that do not present an app-owned scroll region do not need
+the utility.
+
 ## Surface Hierarchy
 
 Use this hierarchy when adding components.
@@ -134,9 +153,7 @@ Examples:
 Recommended classes:
 
 ```tsx
-<div className="min-h-0 flex-1">
-	{children}
-</div>
+<div className="min-h-0 flex-1">{children}</div>
 ```
 
 ### Level 1: Main App Shell
@@ -153,9 +170,7 @@ Examples:
 Recommended classes:
 
 ```tsx
-<aside className="border-r border-app-border bg-app-panel/62">
-	...
-</aside>
+<aside className="border-r border-app-border bg-app-panel/62">...</aside>
 ```
 
 `bg-app-panel/62` is the preferred large-shell opacity for normal layout chrome. Use `app-surface-panel` only when the surface must prevent underlying components from showing through, such as an activity rail above a sliding sidebar. Use `mobile-app-surface-panel` for mobile sidebars and dropdown menus that overlay chat content.
@@ -175,17 +190,13 @@ Examples:
 Recommended classes:
 
 ```tsx
-<div className="rounded-lg border border-app-border bg-app-soft">
-	...
-</div>
+<div className="rounded-lg border border-app-border bg-app-soft">...</div>
 ```
 
 For nested elements inside very translucent shells, prefer a stronger local opacity:
 
 ```tsx
-<form className="rounded-lg border border-app-border bg-app-soft/82">
-	...
-</form>
+<form className="rounded-lg border border-app-border bg-app-soft/82">...</form>
 ```
 
 ### Level 3: Chat Content Cards
@@ -203,16 +214,14 @@ Recommended classes:
 
 ```tsx
 <div className="rounded-lg border border-app-border bg-app-panel/92 text-app-text shadow-soft">
-	...
+    ...
 </div>
 ```
 
 User bubbles use primary color and should stay distinct:
 
 ```tsx
-<div className="rounded-lg bg-primary text-white">
-	...
-</div>
+<div className="rounded-lg bg-primary text-white">...</div>
 ```
 
 ### Level 4: Modal And Drawer Dialogs
@@ -231,9 +240,9 @@ Use `dialog-*` tokens:
 
 ```tsx
 <aside className="border border-dialog-border bg-dialog-panel">
-	<section className="border border-dialog-border bg-dialog-soft">
-		...
-	</section>
+    <section className="border border-dialog-border bg-dialog-soft">
+        ...
+    </section>
 </aside>
 ```
 
@@ -245,8 +254,8 @@ Do not use `bg-app-panel/62`, `bg-app-panel/82`, or `bg-app-soft/82` inside moda
 
 ```tsx
 <aside className="border-r border-app-border bg-app-panel/62">
-	<div className="border-b border-app-border">...</div>
-	<input className="border border-app-border bg-app-soft text-app-text" />
+    <div className="border-b border-app-border">...</div>
+    <input className="border border-app-border bg-app-soft text-app-text" />
 </aside>
 ```
 
@@ -254,7 +263,7 @@ Do not use `bg-app-panel/62`, `bg-app-panel/82`, or `bg-app-soft/82` inside moda
 
 ```tsx
 <label className="inline-flex items-center rounded-lg border border-app-border bg-app-soft text-app-text">
-	<select className="bg-transparent text-app-text outline-none" />
+    <select className="bg-transparent text-app-text outline-none" />
 </label>
 ```
 
@@ -280,7 +289,7 @@ For select-like toolbar fields, keep the text stable and only make the border/ri
 
 ```tsx
 <label className="border border-app-border bg-app-soft text-app-text hover:border-primary focus-within:border-primary dark:hover:border-action-border dark:focus-within:border-action-border dark:focus-within:ring-action-ring/25">
-	<select className="bg-transparent text-app-text outline-none" />
+    <select className="bg-transparent text-app-text outline-none" />
 </label>
 ```
 
@@ -288,7 +297,7 @@ For select-like toolbar fields, keep the text stable and only make the border/ri
 
 ```tsx
 <div className="rounded-lg border border-app-border bg-app-panel/82 shadow-soft">
-	<button className="hover:bg-app-soft">...</button>
+    <button className="hover:bg-app-soft">...</button>
 </div>
 ```
 
@@ -296,7 +305,7 @@ For select-like toolbar fields, keep the text stable and only make the border/ri
 
 ```tsx
 <aside className="border border-dialog-border bg-dialog-panel">
-	<input className="border border-dialog-border bg-dialog-soft text-app-text" />
+    <input className="border border-dialog-border bg-dialog-soft text-app-text" />
 </aside>
 ```
 
@@ -310,25 +319,21 @@ disabled state, hover state, and dark-mode behavior stay consistent.
 For ordinary secondary actions in app chrome:
 
 ```tsx
-<Button variant="secondary">
-	Cancel
-</Button>
+<Button variant="secondary">Cancel</Button>
 ```
 
 For ordinary secondary actions in dialogs:
 
 ```tsx
 <Button variant="secondary" surface="dialog">
-	Cancel
+    Cancel
 </Button>
 ```
 
 For high-contrast action buttons:
 
 ```tsx
-<Button variant="action">
-	Sync now
-</Button>
+<Button variant="action">Sync now</Button>
 ```
 
 For menu and row actions, keep the same `Button` component and change only the
@@ -336,7 +341,7 @@ variant, size, alignment, or width:
 
 ```tsx
 <Button variant="ghostDestructive" size="menu" align="start" fullWidth>
-	Delete chat
+    Delete chat
 </Button>
 ```
 
@@ -345,9 +350,7 @@ variant, size, alignment, or width:
 Use the destructive button variant:
 
 ```tsx
-<Button variant="destructive">
-	Delete
-</Button>
+<Button variant="destructive">Delete</Button>
 ```
 
 ## Do And Do Not

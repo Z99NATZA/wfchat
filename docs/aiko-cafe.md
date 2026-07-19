@@ -27,6 +27,10 @@ separate product surface from chat and is available at `/cafe` without login.
   React overlays above the room use the shared application theme in both light
   and dark mode. The Phaser map, characters, tea leaves, and in-world markers
   keep their own warm game palette.
+- The lobby wardrobe lists the server-owned Sakura Pin, Mint Scarf, and Tea Hat
+  catalog. Cafe Stars are non-spendable lifetime progress: the items unlock at
+  0, 3, and 5 stars. Players can equip an unlocked item or return to the classic
+  look; equipped items appear on every room member in real time.
 - The shared tea-delivery activity is replayable: collect three leaves and
   return them to Aiko, rest for an eight-second intermission, then continue
   with the next round and a fresh leaf layout. Every player connected when a
@@ -40,9 +44,11 @@ Cafe APIs use the existing HTTP-only `wfchat_session` cookie. A missing session
 creates a guest automatically, so login is optional. Guest names are stable for
 the session and use the form `Guest XXXX`.
 
-Cafe Stars are canonical PostgreSQL data. Guest rows are scoped by session;
-after login, the existing guest-to-account promotion assigns those rows to the
-registered `owner_user_id`. Registered progress is read across that account's
+Cafe Stars, unlocked cosmetic ids, and the selected cosmetic are canonical
+PostgreSQL data. Guest rows are scoped by session; after login, the existing
+guest-to-account promotion assigns those rows to the registered
+`owner_user_id`. Registered star totals are summed, unlock ids are merged, and
+the most recently updated loadout is read deterministically across account
 sessions. `cafe_room_rewards` makes completion rewards idempotent per room,
 round, and session. Reward WebSocket events identify their recipient; other
 connected clients ignore them.
@@ -53,8 +59,11 @@ a browser-local UI preference; the guide remains available from the room HUD.
 
 ## Transport And Trust Boundary
 
-Lobby and progress operations use HTTP under `/api/cafe/*`. Live room state
-uses the authenticated WebSocket endpoint:
+Lobby, progress, and cosmetic equip operations use HTTP under `/api/cafe/*`.
+`GET /api/cafe/progress` returns the authoritative catalog, thresholds,
+unlocked ids, and selected item. `POST /api/cafe/cosmetics/equipped` accepts
+only a catalog id or `null`; the API rejects unknown and locked items. Live room
+state uses the authenticated WebSocket endpoint:
 
 ```text
 GET /api/cafe/rooms/:roomId/ws
@@ -75,8 +84,11 @@ with bounded exponential backoff.
 WebSocket client messages are `move`, `interact`, `emote`, and `ping`. Server
 messages are `welcome`, `snapshot`, `dialogue`, `emote`, targeted `reward`,
 `pong`, and `error`. Activity snapshots include `round_number`, `phase`, and
-`next_round_at`. Error messages carry a stable `room_not_found`, `room_full`, or
-`rate_limited` code so the client does not depend on server prose.
+`next_round_at`; every player snapshot includes `equipped_cosmetic`. A loadout
+change updates every matching connected session in the in-process room hub and
+broadcasts a fresh snapshot without requiring a rejoin. Error messages carry a
+stable `room_not_found`, `room_full`, or `rate_limited` code so the client does
+not depend on server prose.
 
 Missing and full invite rooms are presented as different lobby errors. A room
 WebSocket that cannot be joined shows a terminal recovery panel with Try again
@@ -108,11 +120,12 @@ in-world markers keep the cafe game palette.
 - Backend room/protocol module: `apps/api/src/cafe.rs`
 - Durable store operations: `apps/api/src/store/cafe.rs`
 - Schema migrations: `apps/api/migrations/202607180001_aiko_cafe_mvp.sql` and
-  `apps/api/migrations/202607190001_aiko_cafe_round_rewards.sql`
+  `apps/api/migrations/202607190001_aiko_cafe_round_rewards.sql` and
+  `apps/api/migrations/202607190002_aiko_cafe_cosmetic_loadouts.sql`
 
 ## Current Limits
 
 Rooms are not shared across multiple API processes and do not survive an API
-restart. There is one map and one activity type, cosmetics have persistence support
-but no unlock or equip UI, and there is no matchmaking region, moderation
-surface, free-text chat, AI-generated room conversation, or spectator mode.
+restart. There is one map, one activity type, and three code-rendered cosmetic
+items. There is no matchmaking region, moderation surface, free-text chat,
+AI-generated room conversation, or spectator mode.

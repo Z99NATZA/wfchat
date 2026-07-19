@@ -254,6 +254,7 @@ pub struct SyncEntityRecord {
 pub struct CafeProgressRecord {
     pub cafe_stars: u32,
     pub unlocked_cosmetics: Vec<String>,
+    pub equipped_cosmetic: Option<String>,
 }
 
 impl StoredMessage {

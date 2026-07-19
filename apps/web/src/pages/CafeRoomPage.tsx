@@ -328,6 +328,17 @@ function CafeRoomSidebar({ room }: { room: CafeRoomState | null }) {
 						{player.carriedTea > 0 && (
 							<span className="text-xs text-muted">🍃 {player.carriedTea}</span>
 						)}
+						{player.equippedCosmetic && (
+							<span
+								className="flex size-7 items-center justify-center rounded-full border border-app-border bg-app-panel text-sm text-app-text"
+								aria-label={t("cafe.cosmetics.wearing", {
+									name: t(`cafe.cosmetics.${player.equippedCosmetic}.name`)
+								})}
+								data-testid={`cafe-member-cosmetic-${player.id}`}
+							>
+								{cosmeticGlyph(player.equippedCosmetic)}
+							</span>
+						)}
 					</div>
 				))}
 			</div>
@@ -462,6 +473,10 @@ function secondsUntilRound(nextRoundAt: number | null): number {
 
 function isUuid(value: string) {
 	return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
+function cosmeticGlyph(cosmeticId: string) {
+	return { sakura_pin: "✿", mint_scarf: "〰", tea_hat: "🍵" }[cosmeticId] ?? "✦";
 }
 
 const CAFE_GUIDE_STORAGE_KEY = "wfchat_cafe_guide_seen_v1";

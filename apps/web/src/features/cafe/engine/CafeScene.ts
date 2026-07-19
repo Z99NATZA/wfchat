@@ -40,6 +40,7 @@ type PlayerVisual = {
 	direction: CafeDirection;
 	moving: boolean;
 	color: string;
+	equippedCosmetic: string | null;
 };
 
 type DirectionInput = { x: number; y: number };
@@ -262,6 +263,7 @@ export class CafeScene extends Phaser.Scene {
 			visual.targetY = player.y;
 			visual.direction = player.direction;
 			visual.moving = player.moving;
+			visual.equippedCosmetic = player.equippedCosmetic;
 			visual.label.setText(player.name);
 			if (player.id === this.selfPlayerId) {
 				this.localVisual = visual;
@@ -321,7 +323,8 @@ export class CafeScene extends Phaser.Scene {
 			targetY: player.y,
 			direction: player.direction,
 			moving: player.moving,
-			color: player.color
+			color: player.color,
+			equippedCosmetic: player.equippedCosmetic
 		};
 		this.playerVisuals.set(player.id, visual);
 		redrawPlayer(visual, 0);
@@ -481,6 +484,32 @@ function redrawPlayer(visual: PlayerVisual, time: number) {
 		graphics.fillStyle(0x353052, 1).fillCircle(-7, -27, 2.4).fillCircle(7, -27, 2.4);
 	}
 	graphics.fillStyle(0xffffff, 0.88).fillCircle(-14, 0, 4);
+	drawEquippedCosmetic(graphics, visual.equippedCosmetic);
+}
+
+function drawEquippedCosmetic(graphics: Phaser.GameObjects.Graphics, cosmeticId: string | null) {
+	switch (cosmeticId) {
+		case "sakura_pin":
+			graphics.fillStyle(0xff9eb5, 1);
+			graphics
+				.fillCircle(17, -43, 5)
+				.fillCircle(12, -47, 5)
+				.fillCircle(8, -42, 5)
+				.fillCircle(12, -37, 5);
+			graphics.fillStyle(0xffe4a8, 1).fillCircle(12, -42, 3.5);
+			break;
+		case "mint_scarf":
+			graphics.fillStyle(0x79c9a4, 1).fillRoundedRect(-19, -15, 38, 9, 4);
+			graphics.fillStyle(0x5ba985, 1).fillRoundedRect(8, -9, 9, 22, 4);
+			graphics.lineStyle(2, 0xe8fff2, 0.86).strokeRoundedRect(-19, -15, 38, 9, 4);
+			break;
+		case "tea_hat":
+			graphics.fillStyle(0x6f9f62, 1).fillEllipse(0, -57, 48, 11);
+			graphics.fillStyle(0x88b978, 1).fillRoundedRect(-15, -70, 30, 16, 6);
+			graphics.lineStyle(2, 0xfff1c9, 0.92).strokeRoundedRect(-15, -70, 30, 16, 6);
+			graphics.fillStyle(0xffd98d, 1).fillCircle(10, -61, 3);
+			break;
+	}
 }
 
 function emoteGlyph(emote: string) {

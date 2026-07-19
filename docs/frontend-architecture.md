@@ -77,10 +77,12 @@ Current chat message rendering:
 - While that optimistic assistant message exists, the message list should render loading text inside that placeholder only when it has no token text yet, and should not render a second standalone thinking bubble.
 - Supported assistant formats and explicit non-goals are defined in `docs/chat-message-rendering.md`.
 
-The Cafe lobby uses normal React service calls. Its room route lazy-loads Phaser,
-then `useCafeRoom` owns the WebSocket lifecycle while `CafeScene` owns predicted
-local movement, remote interpolation, camera, collision visuals, and mobile
-input. See `docs/aiko-cafe.md` for the protocol and ownership boundary.
+The Cafe lobby uses normal React service calls, including its shared-theme
+cosmetic catalog and equip controls. Its room route lazy-loads Phaser, then
+`useCafeRoom` owns the WebSocket lifecycle while `CafeScene` owns predicted
+local movement, remote interpolation, camera, collision visuals, mobile input,
+and game-palette cosmetic rendering. See `docs/aiko-cafe.md` for the protocol
+and ownership boundary.
 
 The PNGTuber workspace renders Aiko with a lightweight PNG asset set before Live2D rigging. The Live2D page is currently a route shell only. Runtime notes, chat bridge behavior, and remaining avatar work are documented in `docs/pngtuber.md`.
 

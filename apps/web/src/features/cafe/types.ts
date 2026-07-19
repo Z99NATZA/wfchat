@@ -29,6 +29,7 @@ export type CafePlayerState = {
 	direction: CafeDirection;
 	moving: boolean;
 	carriedTea: number;
+	equippedCosmetic: string | null;
 };
 
 export type CafeTeaLeaf = {
@@ -68,6 +69,14 @@ export type CafeRoomState = {
 export type CafeProgress = {
 	cafeStars: number;
 	unlockedCosmetics: string[];
+	equippedCosmetic: string | null;
+	cosmetics: CafeCosmetic[];
+};
+
+export type CafeCosmetic = {
+	id: string;
+	requiredStars: number;
+	unlocked: boolean;
 };
 
 export type CafeDialogue = {

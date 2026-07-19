@@ -245,7 +245,8 @@ function roomFixture(): CafeRoomState {
 				y: 350,
 				direction: "up",
 				moving: false,
-				carriedTea: 2
+				carriedTea: 2,
+				equippedCosmetic: "mint_scarf"
 			}
 		],
 		activity: {

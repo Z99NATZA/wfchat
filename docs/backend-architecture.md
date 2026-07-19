@@ -81,9 +81,10 @@ Aiko Cafe uses a separate realtime path from chat streaming and sync:
 
 ```text
 React lobby -> /api/cafe/rooms and /api/cafe/progress
+React wardrobe -> /api/cafe/cosmetics/equipped
 Phaser room <-> /api/cafe/rooms/:roomId/ws
                  -> cafe.rs in-process CafeHub
-                 -> store/cafe.rs for completion rewards only
+                 -> store/cafe.rs for durable progress, rewards, and loadouts
 ```
 
 `cafe.rs` is authoritative for room capacity, movement bounds and speed,
@@ -91,7 +92,10 @@ collision, emote allowlists, interactions, shared activity state, and
 per-connection message rate limiting. Cookie-authenticated browser upgrades
 must have an origin in `FRONTEND_ORIGINS`. Active simulation is ephemeral;
 Cafe Stars and idempotent room rewards are PostgreSQL data. Public Aiko cafe
-dialogue is deterministic and never reads automatic memory.
+dialogue is deterministic and never reads automatic memory. The backend-owned
+cosmetic catalog defines stable ids and star thresholds; store reads merge
+account progress and select the latest loadout, while the room hub broadcasts
+equipped changes to matching connected players.
 
 ## Files
 

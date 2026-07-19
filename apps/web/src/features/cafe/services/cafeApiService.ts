@@ -24,6 +24,8 @@ type ApiRoomsResponse = {
 type ApiProgressResponse = {
 	cafe_stars: number;
 	unlocked_cosmetics: string[];
+	equipped_cosmetic: string | null;
+	cosmetics: Array<{ id: string; required_stars: number; unlocked: boolean }>;
 };
 
 export async function listCafeRooms(): Promise<CafeRoomSummary[]> {
@@ -52,10 +54,14 @@ export async function joinCafeByCode(inviteCode: string): Promise<CafeRoomSummar
 
 export async function getCafeProgress(): Promise<CafeProgress> {
 	const response = await apiClient.get<ApiProgressResponse>("/api/cafe/progress");
-	return {
-		cafeStars: response.data.cafe_stars,
-		unlockedCosmetics: response.data.unlocked_cosmetics
-	};
+	return toCafeProgress(response.data);
+}
+
+export async function equipCafeCosmetic(cosmeticId: string | null): Promise<CafeProgress> {
+	const response = await apiClient.post<ApiProgressResponse>("/api/cafe/cosmetics/equipped", {
+		cosmetic_id: cosmeticId
+	});
+	return toCafeProgress(response.data);
 }
 
 export function cafeSocketUrl(roomId: string): string {
@@ -88,5 +94,18 @@ function toRoomSummary(room: ApiRoomSummary): CafeRoomSummary {
 		playerCount: room.player_count,
 		capacity: room.capacity,
 		activityCompleted: room.activity_completed
+	};
+}
+
+function toCafeProgress(progress: ApiProgressResponse): CafeProgress {
+	return {
+		cafeStars: progress.cafe_stars,
+		unlockedCosmetics: progress.unlocked_cosmetics,
+		equippedCosmetic: progress.equipped_cosmetic,
+		cosmetics: progress.cosmetics.map((cosmetic) => ({
+			id: cosmetic.id,
+			requiredStars: cosmetic.required_stars,
+			unlocked: cosmetic.unlocked
+		}))
 	};
 }

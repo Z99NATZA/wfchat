@@ -222,7 +222,7 @@ human-readable schema reference.
 
 ### `cafe_progress`
 
-- Purpose: canonical durable Cafe Stars and future cosmetic unlock ids.
+- Purpose: canonical durable Cafe Stars and cosmetic unlock ids.
 - Ownership:
   - guest progress is scoped by `owner_session_id`
   - account progress also sets `owner_user_id` and is read across that user's
@@ -235,8 +235,25 @@ human-readable schema reference.
   - `updated_at timestamptz not null default now()`
 - Index: `idx_cafe_progress_owner_user (owner_user_id)` for registered owners.
 - Lifecycle: guest-to-account promotion assigns `owner_user_id`; multiple guest
-  sessions promoted to the same account remain separate rows and are summed at
-  read time without overwriting progress.
+  sessions promoted to the same account remain separate rows. Stars are summed
+  and cosmetic ids are merged at read time. Server-owned star thresholds add
+  eligible ids idempotently; Cafe Stars are lifetime progress and are not
+  deducted when an item unlocks.
+
+### `cafe_cosmetic_loadouts`
+
+- Purpose: the currently equipped Cafe cosmetic, separate from star updates.
+- Columns:
+  - `owner_session_id uuid primary key` -> `auth_sessions(id)` (`on delete cascade`)
+  - `owner_user_id uuid null`
+  - `equipped_cosmetic text null`; `null` selects the classic look
+  - `updated_at timestamptz not null default now()`
+- Index: account owner, descending update time, and session id for a stable
+  latest-loadout lookup.
+- Lifecycle: guests update one session row. Account promotion assigns
+  `owner_user_id`; registered sessions use the latest account row with session
+  id as a deterministic tie-breaker. The API accepts only unlocked ids from its
+  static catalog.
 
 ### `cafe_room_rewards`
 
@@ -281,3 +298,5 @@ human-readable schema reference.
   later reference one chat created from the reply.
 - One Cafe progress row belongs to one session and may be attached to a
   registered owner; room-round reward rows make completion grants idempotent.
+- One Cafe loadout belongs to one session and may contribute the latest selected
+  cosmetic for a registered account.

@@ -54,6 +54,20 @@ test("two guests quick join the same cafe and mobile controls stay usable", asyn
 		await expect(secondPage).toHaveURL(firstPage.url());
 		await expect(firstPage.getByText(/^Guest [0-9A-F]{4}$/)).toHaveCount(2);
 
+		const wardrobePage = await firstContext.newPage();
+		await wardrobePage.goto(cafeUrl);
+		await expect(wardrobePage.getByTestId("cafe-cosmetic-wardrobe")).toBeVisible();
+		await wardrobePage.getByRole("button", { name: /^Equip$|^สวมใส่$/ }).click();
+		await expect(
+			wardrobePage.getByRole("button", { name: /Equipped|กำลังใช้อยู่/ })
+		).toBeVisible();
+		await expect(secondPage.getByLabel(/Wearing Sakura pin|กำลังสวม ปิ่นซากุระ/)).toBeVisible();
+		await secondPage.getByRole("button", { name: /Start helping Aiko|เริ่มช่วย Aiko/ }).click();
+		await secondPage.screenshot({
+			path: "test-results/aiko-cafe-cosmetic-realtime.png",
+			fullPage: true
+		});
+
 		await firstPage.setViewportSize({ width: 390, height: 844 });
 		await expect(firstPage.getByRole("button", { name: "Up" })).toBeVisible();
 		await expect(
@@ -353,7 +367,8 @@ function cafeRoomFixture(id = "00000000-0000-4000-8000-000000000003") {
 				y: 350,
 				direction: "up",
 				moving: false,
-				carried_tea: 3
+				carried_tea: 3,
+				equipped_cosmetic: null
 			}
 		],
 		activity: {

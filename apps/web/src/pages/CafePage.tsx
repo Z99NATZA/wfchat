@@ -1,6 +1,18 @@
 import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
-import { Coffee, DoorOpen, KeyRound, Plus, RefreshCw, Sparkles, Star, Users } from "lucide-react";
+import {
+	Check,
+	Coffee,
+	DoorOpen,
+	KeyRound,
+	LockKeyhole,
+	Plus,
+	RefreshCw,
+	Shirt,
+	Sparkles,
+	Star,
+	Users
+} from "lucide-react";
 import AppHeaderBar from "@/components/header/AppHeaderBar";
 import {
 	AppHeaderDesktopControls,
@@ -13,13 +25,14 @@ import { useI18n } from "@/i18n/i18nContext";
 import {
 	cafeLobbyErrorCode,
 	createCafeRoom,
+	equipCafeCosmetic,
 	getCafeProgress,
 	joinCafeByCode,
 	listCafeRooms,
 	quickJoinCafe
 } from "@/features/cafe/services/cafeApiService";
 import type { CafeLobbyErrorCode } from "@/features/cafe/services/cafeApiService";
-import type { CafeProgress, CafeRoomSummary } from "@/features/cafe/types";
+import type { CafeCosmetic, CafeProgress, CafeRoomSummary } from "@/features/cafe/types";
 
 type CafePageProps = {
 	activityBar: ReactNode;
@@ -31,11 +44,18 @@ function CafePage({ activityBar, backgroundImageUrl, headerControls }: CafePageP
 	const { t } = useI18n();
 	const navigate = useNavigate();
 	const [rooms, setRooms] = useState<CafeRoomSummary[]>([]);
-	const [progress, setProgress] = useState<CafeProgress>({ cafeStars: 0, unlockedCosmetics: [] });
+	const [progress, setProgress] = useState<CafeProgress>({
+		cafeStars: 0,
+		unlockedCosmetics: [],
+		equippedCosmetic: null,
+		cosmetics: []
+	});
 	const [inviteCode, setInviteCode] = useState("");
 	const [isLoading, setIsLoading] = useState(true);
 	const [pendingAction, setPendingAction] = useState<string | null>(null);
 	const [error, setError] = useState<CafeLobbyErrorCode | "load_failed" | null>(null);
+	const [pendingCosmetic, setPendingCosmetic] = useState<string | null | undefined>();
+	const [cosmeticError, setCosmeticError] = useState(false);
 
 	const refresh = useCallback(async () => {
 		setIsLoading(true);
@@ -79,6 +99,18 @@ function CafePage({ activityBar, backgroundImageUrl, headerControls }: CafePageP
 		}
 	}
 
+	async function handleEquipCosmetic(cosmeticId: string | null) {
+		setPendingCosmetic(cosmeticId);
+		setCosmeticError(false);
+		try {
+			setProgress(await equipCafeCosmetic(cosmeticId));
+		} catch {
+			setCosmeticError(true);
+		} finally {
+			setPendingCosmetic(undefined);
+		}
+	}
+
 	return (
 		<AppLayout
 			activityBar={activityBar}
@@ -87,7 +119,10 @@ function CafePage({ activityBar, backgroundImageUrl, headerControls }: CafePageP
 			header={<CafeHeader controls={headerControls} />}
 			details={<CafeLobbyDetails />}
 		>
-			<section className="min-h-0 flex-1 overflow-y-auto bg-app-bg/44 p-4 sm:p-6 lg:p-8">
+			<section
+				className="chat-scroll min-h-0 flex-1 overflow-y-auto bg-app-bg/44 p-4 sm:p-6 lg:p-8"
+				data-testid="cafe-lobby-scroll"
+			>
 				<div className="mx-auto max-w-5xl space-y-6">
 					<div className="overflow-hidden rounded-2xl border border-app-border bg-app-panel/76 shadow-soft">
 						<div className="grid gap-6 p-5 sm:p-7 lg:grid-cols-[1.25fr_0.75fr] lg:items-center">
@@ -133,6 +168,14 @@ function CafePage({ activityBar, backgroundImageUrl, headerControls }: CafePageP
 							/>
 						</div>
 					</div>
+
+					<CafeCosmeticWardrobe
+						progress={progress}
+						isLoading={isLoading}
+						pendingCosmetic={pendingCosmetic}
+						hasError={cosmeticError}
+						onEquip={handleEquipCosmetic}
+					/>
 
 					<form
 						onSubmit={handleJoinCode}
@@ -243,6 +286,164 @@ function CafePage({ activityBar, backgroundImageUrl, headerControls }: CafePageP
 				</div>
 			</section>
 		</AppLayout>
+	);
+}
+
+function CafeCosmeticWardrobe({
+	progress,
+	isLoading,
+	pendingCosmetic,
+	hasError,
+	onEquip
+}: {
+	progress: CafeProgress;
+	isLoading: boolean;
+	pendingCosmetic: string | null | undefined;
+	hasError: boolean;
+	onEquip: (cosmeticId: string | null) => void;
+}) {
+	const { t } = useI18n();
+	const isSaving = pendingCosmetic !== undefined;
+	return (
+		<section
+			className="rounded-2xl border border-app-border bg-app-panel/76 p-4 shadow-soft sm:p-5"
+			aria-labelledby="cafe-cosmetics-title"
+			data-testid="cafe-cosmetic-wardrobe"
+		>
+			<div className="flex flex-wrap items-start justify-between gap-3">
+				<div>
+					<p className="flex items-center gap-2 text-lg font-semibold text-app-text">
+						<Shirt size={19} className="text-muted" aria-hidden="true" />
+						<span id="cafe-cosmetics-title">{t("cafe.cosmetics.title")}</span>
+					</p>
+					<p className="mt-1 text-sm leading-6 text-muted">
+						{t("cafe.cosmetics.description")}
+					</p>
+				</div>
+				<Button
+					size="sm"
+					variant="ghost"
+					disabled={isSaving || progress.equippedCosmetic === null}
+					onClick={() => onEquip(null)}
+				>
+					{pendingCosmetic === null
+						? t("cafe.cosmetics.saving")
+						: t("cafe.cosmetics.classic")}
+				</Button>
+			</div>
+			{hasError && (
+				<p
+					className="mt-3 rounded-lg border border-red-400/25 bg-red-500/10 p-3 text-sm text-red-500"
+					role="alert"
+				>
+					{t("cafe.cosmetics.equipError")}
+				</p>
+			)}
+			<div className="mt-4 grid gap-3 sm:grid-cols-3">
+				{progress.cosmetics.map((cosmetic) => (
+					<CafeCosmeticCard
+						key={cosmetic.id}
+						cosmetic={cosmetic}
+						cafeStars={progress.cafeStars}
+						equipped={progress.equippedCosmetic === cosmetic.id}
+						isSaving={isSaving}
+						pending={pendingCosmetic === cosmetic.id}
+						onEquip={() => onEquip(cosmetic.id)}
+					/>
+				))}
+			</div>
+			{isLoading && progress.cosmetics.length === 0 && (
+				<p
+					className="mt-4 rounded-xl border border-app-border bg-app-soft/70 p-5 text-center text-sm text-muted"
+					role="status"
+				>
+					{t("cafe.cosmetics.loading")}
+				</p>
+			)}
+			{!isLoading && progress.cosmetics.length === 0 && (
+				<p className="mt-4 rounded-xl border border-dashed border-app-border bg-app-soft/70 p-5 text-center text-sm text-muted">
+					{t("cafe.cosmetics.empty")}
+				</p>
+			)}
+		</section>
+	);
+}
+
+function CafeCosmeticCard({
+	cosmetic,
+	cafeStars,
+	equipped,
+	isSaving,
+	pending,
+	onEquip
+}: {
+	cosmetic: CafeCosmetic;
+	cafeStars: number;
+	equipped: boolean;
+	isSaving: boolean;
+	pending: boolean;
+	onEquip: () => void;
+}) {
+	const { t } = useI18n();
+	const remaining = Math.max(0, cosmetic.requiredStars - cafeStars);
+	return (
+		<article className="rounded-xl border border-app-border bg-app-soft p-3">
+			<CosmeticPreview cosmeticId={cosmetic.id} />
+			<p className="mt-3 font-semibold text-app-text">
+				{t(`cafe.cosmetics.${cosmetic.id}.name`)}
+			</p>
+			<p className="mt-1 min-h-10 text-xs leading-5 text-muted">
+				{t(`cafe.cosmetics.${cosmetic.id}.description`)}
+			</p>
+			<p className="mt-2 flex items-center gap-1.5 text-xs font-semibold text-muted">
+				{cosmetic.unlocked ? (
+					<>
+						<Check size={14} aria-hidden="true" />
+						{t("cafe.cosmetics.unlocked")}
+					</>
+				) : (
+					<>
+						<LockKeyhole size={14} aria-hidden="true" />
+						{t("cafe.cosmetics.needStars", { count: remaining })}
+					</>
+				)}
+			</p>
+			<Button
+				className="mt-3"
+				fullWidth
+				size="sm"
+				variant={equipped ? "selected" : "secondary"}
+				disabled={!cosmetic.unlocked || equipped || isSaving}
+				onClick={onEquip}
+			>
+				{pending
+					? t("cafe.cosmetics.saving")
+					: equipped
+						? t("cafe.cosmetics.equipped")
+						: cosmetic.unlocked
+							? t("cafe.cosmetics.equip")
+							: t("cafe.cosmetics.locked")}
+			</Button>
+		</article>
+	);
+}
+
+function CosmeticPreview({ cosmeticId }: { cosmeticId: string }) {
+	const glyph = { sakura_pin: "✿", mint_scarf: "〰", tea_hat: "🍵" }[cosmeticId] ?? "✦";
+	const background = {
+		sakura_pin: "#f7a6b8",
+		mint_scarf: "#79c9a4",
+		tea_hat: "#88b978"
+	}[cosmeticId];
+	return (
+		<div
+			className="flex h-20 items-center justify-center rounded-lg border border-app-border text-3xl text-[#533b35] shadow-inner"
+			style={{ backgroundColor: background ?? "#ead6bc" }}
+			data-testid={`cafe-cosmetic-preview-${cosmeticId}`}
+			aria-hidden="true"
+		>
+			{glyph}
+		</div>
 	);
 }
 

@@ -56,7 +56,8 @@ const room = {
 			y: 704,
 			direction: "up",
 			moving: false,
-			carried_tea: 0
+			carried_tea: 0,
+			equipped_cosmetic: "sakura_pin"
 		}
 	],
 	activity: {
@@ -104,6 +105,7 @@ describe("useCafeRoom", () => {
 		expect(result.current.connectionEpoch).toBe(1);
 		expect(result.current.cafeStars).toBe(3);
 		expect(result.current.room?.activity.teaLeaves[0].id).toBe("tea-1");
+		expect(result.current.room?.players[0].equippedCosmetic).toBe("sakura_pin");
 
 		act(() => {
 			result.current.sendMovement(650, 700, "right", true, 1);

@@ -20,6 +20,7 @@ type ApiPlayer = {
 	direction: CafeDirection;
 	moving: boolean;
 	carried_tea: number;
+	equipped_cosmetic: string | null;
 };
 
 type ApiRoom = {
@@ -321,7 +322,8 @@ function toRoomState(room: ApiRoom): CafeRoomState {
 			y: player.y,
 			direction: player.direction,
 			moving: player.moving,
-			carriedTea: player.carried_tea
+			carriedTea: player.carried_tea,
+			equippedCosmetic: player.equipped_cosmetic
 		})),
 		activity: {
 			id: room.activity.id,

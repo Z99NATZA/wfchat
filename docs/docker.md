@@ -138,10 +138,11 @@ Migration ownership is tracked in `docs/database-migrations.md`. Ordered files
 under `apps/api/migrations/` are canonical.
 
 Replayable Cafe rounds use an in-process API timer for the eight-second
-intermission and the existing PostgreSQL connection for round-aware reward
-idempotency. The pending migration is applied during normal API startup. This
-adds no Compose service, port, volume, health check, or environment value; the
-normal `docker compose up -d --build` path is sufficient.
+intermission. Round-aware rewards, cosmetic unlock ids, and equipped loadouts
+use the existing PostgreSQL connection. Their ordered migrations are applied
+during normal API startup. This adds no Compose service, port, volume, health
+check, or environment value; the normal `docker compose up -d --build` path is
+sufficient.
 
 Automatic-memory storage and capture use the same embedded migration path. The
 capture worker runs inside the API container and the durable outbox stays in

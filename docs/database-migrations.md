@@ -22,6 +22,7 @@ Current migration files:
 - `apps/api/migrations/202607140001_memory_extraction_temporal_context.sql`
 - `apps/api/migrations/202607180001_aiko_cafe_mvp.sql`
 - `apps/api/migrations/202607190001_aiko_cafe_round_rewards.sql`
+- `apps/api/migrations/202607190002_aiko_cafe_cosmetic_loadouts.sql`
 
 `apps/api/db/init.sql` is retained only as a legacy/manual bootstrap helper. Do
 not treat it as canonical, and do not add new schema changes there unless it is
@@ -127,6 +128,16 @@ apps/api/migrations/202607190001_aiko_cafe_round_rewards.sql
 Existing room reward rows are retained as round 1. The primary key expands from
 room/session to room/round/session, allowing later rounds to award once without
 making reconnects or repeated completion messages grant duplicates.
+
+The selected Cafe cosmetic is stored independently from star progress through:
+
+```text
+apps/api/migrations/202607190002_aiko_cafe_cosmetic_loadouts.sql
+```
+
+The loadout table has one row per owning session and an account/latest-update
+index. This keeps reward writes from changing which account loadout wins while
+still preserving guest-to-account promotion and cross-session selection.
 
 The baseline migration includes:
 

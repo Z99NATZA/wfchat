@@ -1,6 +1,8 @@
 use super::*;
 use std::collections::BTreeSet;
 
+use crate::cafe_cosmetics::{cafe_cosmetic, unlocked_cafe_cosmetic_ids};
+
 impl ChatStore {
     pub async fn get_cafe_progress(&self, owner: OwnerScope) -> StoreResult<CafeProgressRecord> {
         let rows = sqlx::query(
@@ -21,10 +23,79 @@ impl ChatStore {
             unlocked_cosmetics.extend(row.get::<Vec<String>, _>("unlocked_cosmetics"));
         }
 
+        unlocked_cosmetics.extend(unlocked_cafe_cosmetic_ids(cafe_stars));
+        let unlocked_cosmetics = unlocked_cosmetics.into_iter().collect::<Vec<_>>();
+
+        sqlx::query(
+            "insert into cafe_progress (
+                owner_session_id, owner_user_id, cafe_stars, unlocked_cosmetics, updated_at
+             ) values ($1, $2, 0, $3, now())
+             on conflict (owner_session_id)
+             do update set
+                owner_user_id = coalesce(excluded.owner_user_id, cafe_progress.owner_user_id),
+                unlocked_cosmetics = excluded.unlocked_cosmetics,
+                updated_at = now()",
+        )
+        .bind(owner.session_id)
+        .bind(owner.user_id)
+        .bind(&unlocked_cosmetics)
+        .execute(self.db.as_ref())
+        .await?;
+
+        let equipped_cosmetic = sqlx::query_scalar::<_, Option<String>>(
+            "select equipped_cosmetic
+             from cafe_cosmetic_loadouts
+             where (($2::uuid is not null and owner_user_id = $2)
+                    or ($2::uuid is null and owner_session_id = $1))
+             order by updated_at desc, owner_session_id desc
+             limit 1",
+        )
+        .bind(owner.session_id)
+        .bind(owner.user_id)
+        .fetch_optional(self.db.as_ref())
+        .await?
+        .flatten()
+        .filter(|cosmetic_id| {
+            cafe_cosmetic(cosmetic_id).is_some() && unlocked_cosmetics.contains(cosmetic_id)
+        });
+
         Ok(CafeProgressRecord {
             cafe_stars,
-            unlocked_cosmetics: unlocked_cosmetics.into_iter().collect(),
+            unlocked_cosmetics,
+            equipped_cosmetic,
         })
+    }
+
+    pub async fn equip_cafe_cosmetic(
+        &self,
+        owner: OwnerScope,
+        cosmetic_id: Option<&str>,
+    ) -> StoreResult<bool> {
+        let progress = self.get_cafe_progress(owner).await?;
+        if cosmetic_id.is_some_and(|id| {
+            cafe_cosmetic(id).is_none()
+                || !progress.unlocked_cosmetics.iter().any(|item| item == id)
+        }) {
+            return Ok(false);
+        }
+
+        sqlx::query(
+            "insert into cafe_cosmetic_loadouts (
+                owner_session_id, owner_user_id, equipped_cosmetic, updated_at
+             ) values ($1, $2, $3, now())
+             on conflict (owner_session_id)
+             do update set
+                owner_user_id = coalesce(excluded.owner_user_id, cafe_cosmetic_loadouts.owner_user_id),
+                equipped_cosmetic = excluded.equipped_cosmetic,
+                updated_at = now()",
+        )
+        .bind(owner.session_id)
+        .bind(owner.user_id)
+        .bind(cosmetic_id)
+        .execute(self.db.as_ref())
+        .await?;
+
+        Ok(true)
     }
 
     pub async fn add_cafe_stars(
@@ -124,6 +195,25 @@ mod tests {
             .await
             .expect("guest stars should persist");
         assert_eq!(progress.cafe_stars, 2);
+        assert_eq!(progress.unlocked_cosmetics, vec!["sakura_pin"]);
+        assert!(!store
+            .equip_cafe_cosmetic(guest_owner, Some("mint_scarf"))
+            .await
+            .expect("locked cosmetic validation should succeed"));
+
+        let progress = store
+            .add_cafe_stars(guest_owner, 1)
+            .await
+            .expect("third guest star should persist");
+        assert_eq!(progress.cafe_stars, 3);
+        assert_eq!(
+            progress.unlocked_cosmetics,
+            vec!["mint_scarf", "sakura_pin"]
+        );
+        assert!(store
+            .equip_cafe_cosmetic(guest_owner, Some("mint_scarf"))
+            .await
+            .expect("unlocked cosmetic should equip"));
 
         let user_id = Uuid::new_v4();
         let registered = store
@@ -140,13 +230,69 @@ mod tests {
             .get_cafe_progress(OwnerScope::from_session(&registered))
             .await
             .expect("account progress should load");
-        assert_eq!(account_progress.cafe_stars, 2);
+        assert_eq!(account_progress.cafe_stars, 3);
+        assert_eq!(
+            account_progress.equipped_cosmetic.as_deref(),
+            Some("mint_scarf")
+        );
+
+        let second_guest = store
+            .create_guest_session()
+            .await
+            .expect("second guest session should create");
+        let second_registered = store
+            .promote_session_to_registered(second_guest.id, user_id)
+            .await
+            .expect("second session should promote")
+            .expect("second promoted session should exist");
+        store
+            .migrate_session_data_to_user(second_registered.id, user_id)
+            .await
+            .expect("second session data should migrate");
+        let second_owner = OwnerScope::from_session(&second_registered);
+        let shared_progress = store
+            .get_cafe_progress(second_owner)
+            .await
+            .expect("account progress should be shared");
+        assert_eq!(shared_progress.cafe_stars, 3);
+        assert_eq!(
+            shared_progress.equipped_cosmetic.as_deref(),
+            Some("mint_scarf")
+        );
+
+        let shared_progress = store
+            .add_cafe_stars(second_owner, 2)
+            .await
+            .expect("second session stars should aggregate");
+        assert_eq!(shared_progress.cafe_stars, 5);
+        assert!(shared_progress
+            .unlocked_cosmetics
+            .iter()
+            .any(|id| id == "tea_hat"));
+        assert!(store
+            .equip_cafe_cosmetic(second_owner, Some("tea_hat"))
+            .await
+            .expect("new account cosmetic should equip"));
+        assert_eq!(
+            store
+                .get_cafe_progress(OwnerScope::from_session(&registered))
+                .await
+                .expect("first session should see latest account loadout")
+                .equipped_cosmetic
+                .as_deref(),
+            Some("tea_hat")
+        );
 
         sqlx::query("delete from auth_sessions where id = $1")
             .bind(registered.id)
             .execute(store.db.as_ref())
             .await
             .expect("test session should clean up");
+        sqlx::query("delete from auth_sessions where id = $1")
+            .bind(second_registered.id)
+            .execute(store.db.as_ref())
+            .await
+            .expect("second test session should clean up");
     }
 
     #[tokio::test]

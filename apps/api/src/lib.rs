@@ -4,6 +4,7 @@ pub mod app;
 pub mod attachments;
 pub mod auth;
 pub mod cafe;
+pub mod cafe_cosmetics;
 pub mod characters;
 pub mod chat;
 pub mod config;

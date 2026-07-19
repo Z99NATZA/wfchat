@@ -4,6 +4,7 @@ import {
 	cafeSocketUrl,
 	cafeLobbyErrorCode,
 	createCafeRoom,
+	equipCafeCosmetic,
 	getCafeProgress,
 	joinCafeByCode,
 	listCafeRooms,
@@ -33,7 +34,17 @@ describe("cafeApiService", () => {
 	it("maps lobby rooms and durable progress", async () => {
 		vi.mocked(apiClient.get)
 			.mockResolvedValueOnce({ data: { rooms: [room] } })
-			.mockResolvedValueOnce({ data: { cafe_stars: 4, unlocked_cosmetics: ["blue_apron"] } });
+			.mockResolvedValueOnce({
+				data: {
+					cafe_stars: 4,
+					unlocked_cosmetics: ["sakura_pin", "mint_scarf"],
+					equipped_cosmetic: "mint_scarf",
+					cosmetics: [
+						{ id: "sakura_pin", required_stars: 0, unlocked: true },
+						{ id: "tea_hat", required_stars: 5, unlocked: false }
+					]
+				}
+			});
 
 		await expect(listCafeRooms()).resolves.toEqual([
 			{
@@ -47,7 +58,30 @@ describe("cafeApiService", () => {
 		]);
 		await expect(getCafeProgress()).resolves.toEqual({
 			cafeStars: 4,
-			unlockedCosmetics: ["blue_apron"]
+			unlockedCosmetics: ["sakura_pin", "mint_scarf"],
+			equippedCosmetic: "mint_scarf",
+			cosmetics: [
+				{ id: "sakura_pin", requiredStars: 0, unlocked: true },
+				{ id: "tea_hat", requiredStars: 5, unlocked: false }
+			]
+		});
+	});
+
+	it("sends only the selected cosmetic id when equipping", async () => {
+		vi.mocked(apiClient.post).mockResolvedValue({
+			data: {
+				cafe_stars: 0,
+				unlocked_cosmetics: ["sakura_pin"],
+				equipped_cosmetic: "sakura_pin",
+				cosmetics: [{ id: "sakura_pin", required_stars: 0, unlocked: true }]
+			}
+		});
+
+		await expect(equipCafeCosmetic("sakura_pin")).resolves.toMatchObject({
+			equippedCosmetic: "sakura_pin"
+		});
+		expect(apiClient.post).toHaveBeenCalledWith("/api/cafe/cosmetics/equipped", {
+			cosmetic_id: "sakura_pin"
 		});
 	});
 
