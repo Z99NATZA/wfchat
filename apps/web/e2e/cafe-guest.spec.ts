@@ -13,6 +13,13 @@ test("guest-friendly badge stays readable in dark mode", async ({ page }) => {
 	});
 
 	expect(contrastRatio(colors.foreground, colors.background)).toBeGreaterThanOrEqual(4.5);
+	const headerIconColor = await page
+		.getByTestId("cafe-header-sparkles")
+		.evaluate((element) => getComputedStyle(element).color);
+	const headerTitleColor = await page
+		.getByRole("heading", { name: "Aiko Cafe" })
+		.evaluate((element) => getComputedStyle(element).color);
+	expect(headerIconColor).toBe(headerTitleColor);
 	await page.screenshot({
 		path: "test-results/aiko-cafe-dark-badge.png",
 		fullPage: true

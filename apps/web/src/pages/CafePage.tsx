@@ -248,7 +248,14 @@ function CafeHeader({ controls }: { controls: AppHeaderControlProps }) {
 			}
 			title={t("cafe.header.title")}
 			subtitle={t("cafe.header.subtitle")}
-			titleAccessory={<Sparkles size={15} className="text-primary" aria-hidden="true" />}
+			titleAccessory={
+				<Sparkles
+					size={15}
+					className="text-primary dark:text-app-text"
+					data-testid="cafe-header-sparkles"
+					aria-hidden="true"
+				/>
+			}
 			desktopActions={<AppHeaderDesktopControls {...controls} />}
 			mobileMenuContent={<AppHeaderMobileControls {...controls} />}
 		/>
