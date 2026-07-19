@@ -7,15 +7,20 @@ web -> http://localhost:5173
 api -> http://localhost:8080
 ```
 
-The web image builds `apps/web` and serves the Vite build through nginx.
+The web image installs its locked dependencies with `npm ci`, builds
+`apps/web`, and serves the Vite build through nginx.
 
-The nginx config gives built frontend assets long-lived immutable caching. Repo-owned character images such as `/images/aiko-avatar.png` and PNGTuber images under `/images/aiko-pngtuber/` also use long-lived immutable caching because the asset contract requires a new filename when replacing an image. Other `/images/` files keep a conservative `no-cache` policy.
+The nginx config gives built frontend assets long-lived immutable caching. Repo-owned character images such as `/images/aiko-avatar.png`, PNGTuber images under `/images/aiko-pngtuber/`, and versioned Cafe assets under `/images/aiko-cafe/` also use long-lived immutable caching because the asset contract requires a new filename when replacing an image. Other `/images/` files keep a conservative `no-cache` policy.
 
 The api image builds `apps/api` and runs the Axum binary.
 
 The api service reads backend-only secrets from `apps/api/.env`.
 
-In Docker, nginx also proxies `/api/*` from the web container to the API service at `http://api:8080`. The proxy forwards WebSocket upgrade headers for Aiko Cafe rooms. This keeps browser traffic on the same origin as the web app and avoids requiring LAN clients to reach port `8080` directly.
+In Docker, nginx also proxies `/api/*` from the web container to the API service at `http://api:8080`. The proxy forwards WebSocket upgrade headers only for upgrade requests and uses 75-second read and send timeouts for live Cafe rooms. This keeps browser traffic on the same origin as the web app and avoids requiring LAN clients to reach port `8080` directly.
+
+The API container health check calls `/api/health`. The web health check calls
+the same path through nginx, which verifies both static serving and the API
+proxy. Compose waits for the API to become healthy before starting web.
 
 ## Environment Setup
 

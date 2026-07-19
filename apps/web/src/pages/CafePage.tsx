@@ -11,12 +11,14 @@ import Button from "@/components/ui/Button";
 import AppLayout from "@/layouts/AppLayout";
 import { useI18n } from "@/i18n/i18nContext";
 import {
+	cafeLobbyErrorCode,
 	createCafeRoom,
 	getCafeProgress,
 	joinCafeByCode,
 	listCafeRooms,
 	quickJoinCafe
 } from "@/features/cafe/services/cafeApiService";
+import type { CafeLobbyErrorCode } from "@/features/cafe/services/cafeApiService";
 import type { CafeProgress, CafeRoomSummary } from "@/features/cafe/types";
 
 type CafePageProps = {
@@ -33,10 +35,11 @@ function CafePage({ activityBar, backgroundImageUrl, headerControls }: CafePageP
 	const [inviteCode, setInviteCode] = useState("");
 	const [isLoading, setIsLoading] = useState(true);
 	const [pendingAction, setPendingAction] = useState<string | null>(null);
-	const [error, setError] = useState<string | null>(null);
+	const [error, setError] = useState<CafeLobbyErrorCode | "load_failed" | null>(null);
 
 	const refresh = useCallback(async () => {
 		setIsLoading(true);
+		setError(null);
 		try {
 			const [nextRooms, nextProgress] = await Promise.all([
 				listCafeRooms(),
@@ -44,13 +47,12 @@ function CafePage({ activityBar, backgroundImageUrl, headerControls }: CafePageP
 			]);
 			setRooms(nextRooms);
 			setProgress(nextProgress);
-			setError(null);
 		} catch {
-			setError(t("cafe.lobby.loadError"));
+			setError("load_failed");
 		} finally {
 			setIsLoading(false);
 		}
-	}, [t]);
+	}, []);
 
 	useEffect(() => {
 		void refresh();
@@ -62,8 +64,8 @@ function CafePage({ activityBar, backgroundImageUrl, headerControls }: CafePageP
 		try {
 			const room = await request();
 			navigate(`/cafe/rooms/${room.id}`);
-		} catch {
-			setError(t("cafe.lobby.actionError"));
+		} catch (requestError) {
+			setError(cafeLobbyErrorCode(requestError));
 		} finally {
 			setPendingAction(null);
 		}
@@ -90,7 +92,7 @@ function CafePage({ activityBar, backgroundImageUrl, headerControls }: CafePageP
 					<div className="overflow-hidden rounded-2xl border border-app-border bg-app-panel/76 shadow-soft">
 						<div className="grid gap-6 p-5 sm:p-7 lg:grid-cols-[1.25fr_0.75fr] lg:items-center">
 							<div>
-								<span className="inline-flex items-center gap-2 rounded-full border border-primary/25 bg-primary/10 px-3 py-1 text-xs font-semibold text-primary dark:border-action-border dark:bg-action-hover dark:text-app-text">
+								<span className="inline-flex items-center gap-2 rounded-full border border-app-border bg-app-soft px-3 py-1 text-xs font-semibold text-app-text">
 									<Sparkles size={14} aria-hidden="true" />
 									{t("cafe.lobby.guestFriendly")}
 								</span>
@@ -151,7 +153,7 @@ function CafePage({ activityBar, backgroundImageUrl, headerControls }: CafePageP
 								/>
 								<input
 									id="cafe-invite-code"
-									className="h-11 w-full rounded-lg border border-app-border bg-app-soft pl-10 pr-3 text-sm font-semibold uppercase tracking-[0.2em] text-app-text outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/25"
+									className="h-11 w-full rounded-lg border border-app-border bg-app-soft pl-10 pr-3 text-sm font-semibold uppercase tracking-[0.2em] text-app-text outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/25 dark:focus:border-action-border dark:focus:ring-action-ring/25"
 									value={inviteCode}
 									maxLength={6}
 									placeholder={t("cafe.lobby.joinCodePlaceholder")}
@@ -192,37 +194,44 @@ function CafePage({ activityBar, backgroundImageUrl, headerControls }: CafePageP
 							</Button>
 						</div>
 						{error && (
-							<p className="mt-4 rounded-lg border border-danger/30 bg-danger/10 p-3 text-sm text-danger">
-								{error}
+							<p
+								className="mt-4 rounded-lg border border-red-400/25 bg-red-500/10 p-3 text-sm text-red-500"
+								role="alert"
+							>
+								{t(lobbyErrorTranslationKey(error))}
 							</p>
 						)}
 						<div className="mt-4 grid gap-3 sm:grid-cols-2">
 							{rooms.map((room) => (
-								<button
-									type="button"
+								<Button
 									key={room.id}
-									className="rounded-xl border border-app-border bg-app-panel/76 p-4 text-left transition hover:border-primary hover:bg-app-soft focus:outline-none focus:ring-2 focus:ring-primary/30"
+									align="start"
+									fullWidth
+									size="row"
+									className="rounded-xl"
 									disabled={pendingAction !== null}
 									onClick={() => navigate(`/cafe/rooms/${room.id}`)}
 								>
-									<div className="flex items-center justify-between gap-3">
-										<span className="flex items-center gap-2 font-semibold text-app-text">
-											<Coffee
-												size={17}
-												className="text-primary"
-												aria-hidden="true"
-											/>
-											{t("cafe.lobby.publicCafe")}
-										</span>
-										<span className="flex items-center gap-1 text-xs text-muted">
-											<Users size={14} aria-hidden="true" />
-											{room.playerCount}/{room.capacity}
-										</span>
+									<div className="w-full">
+										<div className="flex items-center justify-between gap-3">
+											<span className="flex items-center gap-2 font-semibold text-app-text">
+												<Coffee
+													size={17}
+													className="text-muted"
+													aria-hidden="true"
+												/>
+												{t("cafe.lobby.publicCafe")}
+											</span>
+											<span className="flex items-center gap-1 text-xs text-muted">
+												<Users size={14} aria-hidden="true" />
+												{room.playerCount}/{room.capacity}
+											</span>
+										</div>
+										<p className="mt-3 font-mono text-xs tracking-widest text-muted">
+											{room.inviteCode}
+										</p>
 									</div>
-									<p className="mt-3 font-mono text-xs tracking-widest text-muted">
-										{room.inviteCode}
-									</p>
-								</button>
+								</Button>
 							))}
 						</div>
 						{!isLoading && rooms.length === 0 && (
@@ -242,7 +251,7 @@ function CafeHeader({ controls }: { controls: AppHeaderControlProps }) {
 	return (
 		<AppHeaderBar
 			leading={
-				<span className="flex size-9 items-center justify-center rounded-lg bg-primary text-white sm:size-11">
+				<span className="flex size-9 items-center justify-center rounded-lg border border-app-border bg-app-soft text-app-text sm:size-11">
 					<Coffee size={21} aria-hidden="true" />
 				</span>
 			}
@@ -273,9 +282,9 @@ function CafeLobbySidebar({ progress }: { progress: CafeProgress }) {
 				</div>
 			</div>
 			<div className="space-y-3 p-4">
-				<div className="rounded-xl border border-primary/25 bg-primary/10 p-4">
+				<div className="rounded-xl border border-app-border bg-app-soft p-4">
 					<div className="flex items-center gap-2 text-sm font-semibold text-app-text">
-						<Star size={17} className="text-primary" aria-hidden="true" />
+						<Star size={17} className="text-muted" aria-hidden="true" />
 						{t("cafe.stars")}
 					</div>
 					<p className="mt-2 text-3xl font-semibold text-app-text">
@@ -314,6 +323,19 @@ function CafeLobbyDetails() {
 			</div>
 		</aside>
 	);
+}
+
+function lobbyErrorTranslationKey(error: CafeLobbyErrorCode | "load_failed"): string {
+	switch (error) {
+		case "room_not_found":
+			return "cafe.lobby.roomNotFound";
+		case "room_full":
+			return "cafe.lobby.roomFull";
+		case "load_failed":
+			return "cafe.lobby.loadError";
+		default:
+			return "cafe.lobby.actionError";
+	}
 }
 
 export default CafePage;

@@ -12,7 +12,8 @@ const serviceMocks = vi.hoisted(() => ({
 	getCafeProgress: vi.fn(),
 	quickJoinCafe: vi.fn(),
 	createCafeRoom: vi.fn(),
-	joinCafeByCode: vi.fn()
+	joinCafeByCode: vi.fn(),
+	cafeLobbyErrorCode: vi.fn(() => "unavailable")
 }));
 
 vi.mock("@/features/cafe/services/cafeApiService", () => serviceMocks);
@@ -80,5 +81,30 @@ describe("CafePage", () => {
 
 		await waitFor(() => expect(serviceMocks.quickJoinCafe).toHaveBeenCalledTimes(1));
 		expect(screen.queryByText(/login required/i)).toBeNull();
+	});
+
+	it("shows a specific message when an invite room is full", async () => {
+		serviceMocks.listCafeRooms.mockResolvedValue([]);
+		serviceMocks.getCafeProgress.mockResolvedValue({ cafeStars: 0, unlockedCosmetics: [] });
+		serviceMocks.joinCafeByCode.mockRejectedValue(new Error("full"));
+		serviceMocks.cafeLobbyErrorCode.mockReturnValue("room_full");
+
+		render(
+			<MemoryRouter initialEntries={["/cafe"]}>
+				<CafePage
+					activityBar={null}
+					backgroundImageUrl=""
+					headerControls={headerControls}
+				/>
+			</MemoryRouter>
+		);
+
+		fireEvent.change(await screen.findByLabelText("cafe.lobby.joinCodeTitle"), {
+			target: { value: "ABC123" }
+		});
+		fireEvent.submit(screen.getByLabelText("cafe.lobby.joinCodeTitle").closest("form")!);
+
+		await waitFor(() => expect(serviceMocks.joinCafeByCode).toHaveBeenCalledWith("ABC123"));
+		expect(screen.getByRole("alert").textContent).toBe("cafe.lobby.roomFull");
 	});
 });

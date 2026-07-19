@@ -2,6 +2,14 @@ export type CafeDirection = "up" | "down" | "left" | "right";
 
 export type CafeConnectionState = "connecting" | "connected" | "reconnecting" | "closed";
 
+export type CafeRoomErrorCode =
+	| "room_not_found"
+	| "room_full"
+	| "rate_limited"
+	| "unreadable_update"
+	| "connection_interrupted"
+	| "connection_failed";
+
 export type CafeRoomSummary = {
 	id: string;
 	inviteCode: string;

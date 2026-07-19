@@ -1,5 +1,8 @@
+import { isAxiosError } from "axios";
 import { apiBaseUrl, apiClient } from "@/services/apiClient";
 import type { CafeProgress, CafeRoomSummary } from "@/features/cafe/types";
+
+export type CafeLobbyErrorCode = "room_not_found" | "room_full" | "unavailable";
 
 type ApiRoomSummary = {
 	id: string;
@@ -62,6 +65,19 @@ export function cafeSocketUrl(roomId: string): string {
 	const url = new URL(`/api/cafe/rooms/${roomId}/ws`, baseUrl);
 	url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
 	return url.toString();
+}
+
+export function cafeLobbyErrorCode(error: unknown): CafeLobbyErrorCode {
+	if (!isAxiosError(error)) {
+		return "unavailable";
+	}
+	if (error.response?.status === 404) {
+		return "room_not_found";
+	}
+	if (error.response?.status === 409) {
+		return "room_full";
+	}
+	return "unavailable";
 }
 
 function toRoomSummary(room: ApiRoomSummary): CafeRoomSummary {

@@ -53,7 +53,6 @@ export class CafeScene extends Phaser.Scene {
 	private localVisual: PlayerVisual | null = null;
 	private cursors?: Phaser.Types.Input.Keyboard.CursorKeys;
 	private wasd?: Record<"W" | "A" | "S" | "D", Phaser.Input.Keyboard.Key>;
-	private interactKey?: Phaser.Input.Keyboard.Key;
 	private virtualInput: DirectionInput = { x: 0, y: 0 };
 	private interactionTarget: string | null = null;
 	private movementSequence = 0;
@@ -61,6 +60,7 @@ export class CafeScene extends Phaser.Scene {
 	private lastMoving = false;
 	private hasLocalPosition = false;
 	private aiko?: Phaser.GameObjects.Image;
+	private aikoQuestMarker?: Phaser.GameObjects.Container;
 
 	constructor(callbacks: CafeSceneCallbacks) {
 		super("aiko-cafe");
@@ -88,6 +88,29 @@ export class CafeScene extends Phaser.Scene {
 			repeat: -1,
 			ease: "Sine.easeInOut"
 		});
+		const markerBackground = this.add.graphics();
+		markerBackground.fillStyle(0x6f431c, 0.96).fillCircle(0, 0, 19);
+		markerBackground.lineStyle(3, 0xfff4d2, 1).strokeCircle(0, 0, 19);
+		const markerLabel = this.add
+			.text(0, -1, "!", {
+				fontFamily: "sans-serif",
+				fontSize: "24px",
+				fontStyle: "bold",
+				color: "#ffffff"
+			})
+			.setOrigin(0.5);
+		this.aikoQuestMarker = this.add
+			.container(640, 112, [markerBackground, markerLabel])
+			.setDepth(2200)
+			.setVisible(false);
+		this.tweens.add({
+			targets: this.aikoQuestMarker,
+			y: 104,
+			duration: 700,
+			yoyo: true,
+			repeat: -1,
+			ease: "Sine.easeInOut"
+		});
 
 		if (this.input.keyboard) {
 			this.cursors = this.input.keyboard.createCursorKeys();
@@ -95,7 +118,6 @@ export class CafeScene extends Phaser.Scene {
 				"W" | "A" | "S" | "D",
 				Phaser.Input.Keyboard.Key
 			>;
-			this.interactKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.E);
 		}
 		if (this.room) {
 			this.renderRoom(this.room);
@@ -146,14 +168,19 @@ export class CafeScene extends Phaser.Scene {
 		}
 
 		this.updateInteractionTarget();
-		if (this.interactKey && Phaser.Input.Keyboard.JustDown(this.interactKey)) {
-			this.interactNearest();
-		}
 	}
 
 	applyRoomState(room: CafeRoomState, selfPlayerId: string | null) {
 		this.room = room;
 		this.selfPlayerId = selfPlayerId;
+		if (
+			this.interactionTarget?.startsWith("tea-") &&
+			!room.activity.teaLeaves.some(
+				(leaf) => leaf.id === this.interactionTarget && leaf.available
+			)
+		) {
+			this.changeInteractionTarget(null);
+		}
 		if (this.sys.isActive()) {
 			this.renderRoom(room);
 		}
@@ -161,6 +188,10 @@ export class CafeScene extends Phaser.Scene {
 
 	setVirtualInput(input: DirectionInput) {
 		this.virtualInput = input;
+	}
+
+	setInteractionTarget(targetId: string | null) {
+		this.changeInteractionTarget(targetId);
 	}
 
 	interactNearest() {
@@ -228,9 +259,14 @@ export class CafeScene extends Phaser.Scene {
 				this.teaVisuals.get(leaf.id) ?? this.createTeaLeaf(leaf.id, leaf.x, leaf.y);
 			visual.setVisible(leaf.available);
 		}
+		const selfPlayer = room.players.find((player) => player.id === this.selfPlayerId);
+		this.aikoQuestMarker?.setVisible(
+			!room.activity.completed && (selfPlayer?.carriedTea ?? 0) > 0
+		);
 		if (this.aiko) {
 			this.aiko.setTint(room.activity.completed ? 0xfff2b8 : 0xffffff);
 		}
+		this.updateInteractionTarget();
 	}
 
 	private createPlayer(player: CafePlayerState): PlayerVisual {
@@ -269,7 +305,17 @@ export class CafeScene extends Phaser.Scene {
 		leaf.fillStyle(0x5f8f55, 1).fillEllipse(-5, 0, 14, 24);
 		leaf.fillStyle(0x7cad64, 1).fillEllipse(6, -2, 14, 24);
 		leaf.lineStyle(2, 0x315c39, 1).lineBetween(0, 12, 0, -12);
-		const container = this.add.container(x, y, [glow, leaf]).setDepth(Math.round(y) + 420);
+		const marker = this.add
+			.text(0, -39, "🍃", {
+				fontFamily: "sans-serif",
+				fontSize: "22px",
+				backgroundColor: "rgba(34, 73, 42, 0.92)",
+				padding: { x: 5, y: 3 }
+			})
+			.setOrigin(0.5);
+		const container = this.add
+			.container(x, y, [glow, leaf, marker])
+			.setDepth(Math.round(y) + 420);
 		this.tweens.add({
 			targets: container,
 			y: y - 6,
@@ -341,10 +387,21 @@ export class CafeScene extends Phaser.Scene {
 		if (aikoDistance <= AIKO_INTERACTION_DISTANCE && aikoDistance < nearestDistance) {
 			nextTarget = "aiko";
 		}
-		if (nextTarget !== this.interactionTarget) {
-			this.interactionTarget = nextTarget;
-			this.callbacks.onInteractionTargetChange(nextTarget);
+		this.changeInteractionTarget(nextTarget);
+	}
+
+	private changeInteractionTarget(nextTarget: string | null) {
+		if (nextTarget === this.interactionTarget) {
+			return;
 		}
+		if (this.interactionTarget?.startsWith("tea-")) {
+			this.teaVisuals.get(this.interactionTarget)?.setScale(1);
+		}
+		this.interactionTarget = nextTarget;
+		if (nextTarget?.startsWith("tea-")) {
+			this.teaVisuals.get(nextTarget)?.setScale(1.16);
+		}
+		this.callbacks.onInteractionTargetChange(nextTarget);
 	}
 
 	private updateCameraZoom() {

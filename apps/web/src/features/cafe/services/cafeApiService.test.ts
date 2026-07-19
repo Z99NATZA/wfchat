@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { apiClient } from "@/services/apiClient";
 import {
 	cafeSocketUrl,
+	cafeLobbyErrorCode,
 	createCafeRoom,
 	getCafeProgress,
 	joinCafeByCode,
@@ -65,5 +66,15 @@ describe("cafeApiService", () => {
 			invite_code: "abc123"
 		});
 		expect(cafeSocketUrl(room.id)).toBe(`ws://localhost:8080/api/cafe/rooms/${room.id}/ws`);
+	});
+
+	it("maps lobby HTTP failures to player-facing room reasons", () => {
+		expect(cafeLobbyErrorCode({ isAxiosError: true, response: { status: 404 } })).toBe(
+			"room_not_found"
+		);
+		expect(cafeLobbyErrorCode({ isAxiosError: true, response: { status: 409 } })).toBe(
+			"room_full"
+		);
+		expect(cafeLobbyErrorCode(new Error("offline"))).toBe("unavailable");
 	});
 });

@@ -5,8 +5,11 @@ import type {
 	CafeDialogue,
 	CafeDirection,
 	CafeEmote,
+	CafeRoomErrorCode,
 	CafeRoomState
 } from "@/features/cafe/types";
+
+const MAX_RECONNECT_ATTEMPTS = 5;
 
 type ApiPlayer = {
 	id: string;
@@ -44,7 +47,7 @@ type ServerMessage =
 	| { type: "emote"; player_id: string; emote: string }
 	| { type: "reward"; earned_stars: number }
 	| { type: "pong" }
-	| { type: "error"; message: string };
+	| { type: "error"; code?: string; message: string };
 
 export function useCafeRoom(roomId: string) {
 	const [room, setRoom] = useState<CafeRoomState | null>(null);
@@ -53,7 +56,8 @@ export function useCafeRoom(roomId: string) {
 	const [connectionState, setConnectionState] = useState<CafeConnectionState>("connecting");
 	const [dialogue, setDialogue] = useState<CafeDialogue | null>(null);
 	const [emote, setEmote] = useState<CafeEmote | null>(null);
-	const [error, setError] = useState<string | null>(null);
+	const [error, setError] = useState<CafeRoomErrorCode | null>(null);
+	const [retryKey, setRetryKey] = useState(0);
 	const socketRef = useRef<WebSocket | null>(null);
 	const reconnectTimerRef = useRef<number | null>(null);
 	const reconnectAttemptRef = useRef(0);
@@ -64,6 +68,9 @@ export function useCafeRoom(roomId: string) {
 
 	useEffect(() => {
 		shouldReconnectRef.current = true;
+		reconnectAttemptRef.current = 0;
+		setConnectionState("connecting");
+		setError(null);
 		let disposed = false;
 
 		function connect() {
@@ -71,14 +78,19 @@ export function useCafeRoom(roomId: string) {
 				return;
 			}
 			setConnectionState(reconnectAttemptRef.current > 0 ? "reconnecting" : "connecting");
-			const socket = new WebSocket(cafeSocketUrl(roomId));
+			let socket: WebSocket;
+			try {
+				socket = new WebSocket(cafeSocketUrl(roomId));
+			} catch {
+				shouldReconnectRef.current = false;
+				setConnectionState("closed");
+				setError("connection_failed");
+				return;
+			}
 			socketRef.current = socket;
 
 			socket.onopen = () => {
-				reconnectAttemptRef.current = 0;
 				lastPongAtRef.current = Date.now();
-				setConnectionState("connected");
-				setError(null);
 			};
 			socket.onmessage = (event) => {
 				if (typeof event.data !== "string") {
@@ -87,23 +99,27 @@ export function useCafeRoom(roomId: string) {
 				try {
 					handleServerMessage(JSON.parse(event.data) as ServerMessage);
 				} catch {
-					setError("Cafe sent an unreadable update");
+					setError("unreadable_update");
 				}
 			};
 			socket.onerror = () => {
-				setError("Cafe connection was interrupted");
+				setError("connection_interrupted");
 			};
 			socket.onclose = () => {
 				if (socketRef.current === socket) {
 					socketRef.current = null;
 				}
 				if (!disposed && shouldReconnectRef.current) {
-					reconnectAttemptRef.current += 1;
+					const nextAttempt = reconnectAttemptRef.current + 1;
+					if (nextAttempt > MAX_RECONNECT_ATTEMPTS) {
+						shouldReconnectRef.current = false;
+						setConnectionState("closed");
+						setError("connection_failed");
+						return;
+					}
+					reconnectAttemptRef.current = nextAttempt;
 					setConnectionState("reconnecting");
-					const delay = Math.min(
-						5000,
-						500 * 2 ** Math.min(4, reconnectAttemptRef.current - 1)
-					);
+					const delay = Math.min(5000, 500 * 2 ** Math.min(4, nextAttempt - 1));
 					reconnectTimerRef.current = window.setTimeout(connect, delay);
 				} else {
 					setConnectionState("closed");
@@ -114,9 +130,12 @@ export function useCafeRoom(roomId: string) {
 		function handleServerMessage(message: ServerMessage) {
 			switch (message.type) {
 				case "welcome":
+					reconnectAttemptRef.current = 0;
 					setSelfPlayerId(message.self_player_id);
 					setCafeStars(message.cafe_stars);
 					setRoom(toRoomState(message.room));
+					setConnectionState("connected");
+					setError(null);
 					break;
 				case "snapshot":
 					setRoom(toRoomState(message.room));
@@ -140,7 +159,10 @@ export function useCafeRoom(roomId: string) {
 					setCafeStars((current) => current + message.earned_stars);
 					break;
 				case "error":
-					setError(message.message);
+					shouldReconnectRef.current = false;
+					setError(toRoomErrorCode(message.code));
+					setConnectionState("closed");
+					socketRef.current?.close(4001, "cafe room error");
 					break;
 				case "pong":
 					lastPongAtRef.current = Date.now();
@@ -173,7 +195,7 @@ export function useCafeRoom(roomId: string) {
 			socketRef.current?.close(1000, "leaving cafe");
 			socketRef.current = null;
 		};
-	}, [roomId]);
+	}, [retryKey, roomId]);
 
 	const send = useCallback((message: object) => {
 		const socket = socketRef.current;
@@ -193,6 +215,11 @@ export function useCafeRoom(roomId: string) {
 		[send]
 	);
 	const sendEmote = useCallback((value: string) => send({ type: "emote", emote: value }), [send]);
+	const retryConnection = useCallback(() => {
+		setRoom(null);
+		setSelfPlayerId(null);
+		setRetryKey((current) => current + 1);
+	}, []);
 
 	return {
 		room,
@@ -202,10 +229,22 @@ export function useCafeRoom(roomId: string) {
 		dialogue,
 		emote,
 		error,
+		retryConnection,
 		sendMovement,
 		interact,
 		sendEmote
 	};
+}
+
+function toRoomErrorCode(code: string | undefined): CafeRoomErrorCode {
+	switch (code) {
+		case "room_not_found":
+		case "room_full":
+		case "rate_limited":
+			return code;
+		default:
+			return "connection_failed";
+	}
 }
 
 function toRoomState(room: ApiRoom): CafeRoomState {

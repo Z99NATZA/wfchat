@@ -141,4 +141,42 @@ describe("useCafeRoom", () => {
 		expect(result.current.emote?.emote).toBe("tea");
 		expect(result.current.cafeStars).toBe(2);
 	});
+
+	it("stops reconnecting for a terminal room error and lets the player retry", () => {
+		const { result } = renderHook(() => useCafeRoom(room.id));
+		const socket = FakeWebSocket.instances[0];
+
+		act(() => {
+			socket.open();
+			socket.message({
+				type: "error",
+				code: "room_not_found",
+				message: "Cafe room no longer exists"
+			});
+		});
+
+		expect(result.current.connectionState).toBe("closed");
+		expect(result.current.error).toBe("room_not_found");
+		act(() => vi.advanceTimersByTime(10_000));
+		expect(FakeWebSocket.instances).toHaveLength(1);
+
+		act(() => result.current.retryConnection());
+		expect(result.current.connectionState).toBe("connecting");
+		expect(result.current.error).toBeNull();
+		expect(FakeWebSocket.instances).toHaveLength(2);
+	});
+
+	it("offers manual recovery after bounded reconnect attempts", () => {
+		const { result } = renderHook(() => useCafeRoom(room.id));
+
+		for (const delay of [500, 1000, 2000, 4000, 5000]) {
+			act(() => FakeWebSocket.instances.at(-1)?.close());
+			act(() => vi.advanceTimersByTime(delay));
+		}
+		act(() => FakeWebSocket.instances.at(-1)?.close());
+
+		expect(FakeWebSocket.instances).toHaveLength(6);
+		expect(result.current.connectionState).toBe("closed");
+		expect(result.current.error).toBe("connection_failed");
+	});
 });

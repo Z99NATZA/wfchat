@@ -239,8 +239,23 @@ enum CafeServerMessage {
     },
     Pong,
     Error {
+        code: CafeErrorCode,
         message: String,
     },
+}
+
+#[derive(Clone, Copy, Serialize)]
+#[serde(rename_all = "snake_case")]
+enum CafeErrorCode {
+    RoomNotFound,
+    RoomFull,
+    RateLimited,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+enum CafeJoinError {
+    RoomNotFound,
+    RoomFull,
 }
 
 struct CafeJoin {
@@ -350,24 +365,29 @@ impl CafeHub {
         summary
     }
 
-    pub async fn find_by_invite_code(&self, code: &str) -> Option<CafeRoomSummary> {
-        let normalized = normalize_invite_code(code)?;
+    async fn find_by_invite_code(&self, code: &str) -> Result<CafeRoomSummary, CafeJoinError> {
+        let normalized = normalize_invite_code(code).ok_or(CafeJoinError::RoomNotFound)?;
         let rooms = self.rooms.lock().await;
-        rooms
+        let room = rooms
             .values()
-            .find(|room| room.invite_code == normalized && room.players.len() < ROOM_CAPACITY)
-            .map(room_summary)
+            .find(|room| room.invite_code == normalized)
+            .ok_or(CafeJoinError::RoomNotFound)?;
+        if room.players.len() >= ROOM_CAPACITY {
+            return Err(CafeJoinError::RoomFull);
+        }
+        Ok(room_summary(room))
     }
 
+    #[cfg(test)]
     async fn contains_room(&self, room_id: Uuid) -> bool {
         self.rooms.lock().await.contains_key(&room_id)
     }
 
-    async fn join(&self, room_id: Uuid, player: CafePlayer) -> Option<CafeJoin> {
+    async fn join(&self, room_id: Uuid, player: CafePlayer) -> Result<CafeJoin, CafeJoinError> {
         let mut rooms = self.rooms.lock().await;
-        let room = rooms.get_mut(&room_id)?;
+        let room = rooms.get_mut(&room_id).ok_or(CafeJoinError::RoomNotFound)?;
         if !room.players.contains_key(&player.id) && room.players.len() >= ROOM_CAPACITY {
-            return None;
+            return Err(CafeJoinError::RoomFull);
         }
 
         let receiver = room.sender.subscribe();
@@ -377,7 +397,7 @@ impl CafeHub {
             room: snapshot.clone(),
         });
 
-        Some(CafeJoin { receiver, snapshot })
+        Ok(CafeJoin { receiver, snapshot })
     }
 
     async fn leave(&self, room_id: Uuid, player_id: Uuid) {
@@ -633,11 +653,13 @@ async fn join_by_code(
     Json(payload): Json<JoinRoomRequest>,
 ) -> AppResult<(HeaderMap, Json<CafeRoomResponse>)> {
     let (_, response_headers) = ensure_cafe_session(&state, &headers).await?;
-    let room = state
-        .cafe
-        .find_by_invite_code(&payload.invite_code)
-        .await
-        .ok_or(AppError::NotFound)?;
+    let room = match state.cafe.find_by_invite_code(&payload.invite_code).await {
+        Ok(room) => room,
+        Err(CafeJoinError::RoomNotFound) => return Err(AppError::NotFound),
+        Err(CafeJoinError::RoomFull) => {
+            return Err(AppError::Conflict("cafe room is full".to_owned()));
+        }
+    };
     Ok((response_headers, Json(CafeRoomResponse { room })))
 }
 
@@ -667,9 +689,6 @@ async fn cafe_socket(
 ) -> AppResult<Response> {
     if !is_allowed_websocket_origin(&headers, &state.config.frontend_origin) {
         return Err(AppError::Forbidden);
-    }
-    if !state.cafe.contains_room(room_id).await {
-        return Err(AppError::NotFound);
     }
     let (session, response_headers) = ensure_cafe_session(&state, &headers).await?;
     let player_name = cafe_display_name(&state, &session).await?;
@@ -708,15 +727,25 @@ async fn handle_cafe_socket(
     initial_stars: u32,
 ) {
     let player_id = player.id;
-    let Some(mut joined) = state.cafe.join(room_id, player).await else {
-        send_socket_message(
-            &mut socket,
-            &CafeServerMessage::Error {
-                message: "Cafe room is full or unavailable".to_owned(),
-            },
-        )
-        .await;
-        return;
+    let mut joined = match state.cafe.join(room_id, player).await {
+        Ok(joined) => joined,
+        Err(error) => {
+            let (code, message) = match error {
+                CafeJoinError::RoomNotFound => {
+                    (CafeErrorCode::RoomNotFound, "Cafe room no longer exists")
+                }
+                CafeJoinError::RoomFull => (CafeErrorCode::RoomFull, "Cafe room is full"),
+            };
+            send_socket_message(
+                &mut socket,
+                &CafeServerMessage::Error {
+                    code,
+                    message: message.to_owned(),
+                },
+            )
+            .await;
+            return;
+        }
     };
 
     if !send_socket_message(
@@ -745,7 +774,10 @@ async fn handle_cafe_socket(
                         if !accept_message(&mut recent_messages) {
                             let _ = send_socket_message(
                                 &mut socket,
-                                &CafeServerMessage::Error { message: "Too many cafe messages".to_owned() },
+                                &CafeServerMessage::Error {
+                                    code: CafeErrorCode::RateLimited,
+                                    message: "Too many cafe messages".to_owned(),
+                                },
                             ).await;
                             break;
                         }
@@ -1071,6 +1103,40 @@ mod tests {
         assert_eq!(completion.awarded_owners.len(), 1);
         let duplicate = hub.interact(room.id, session.id, "aiko").await;
         assert!(duplicate.awarded_owners.is_empty());
+    }
+
+    #[tokio::test]
+    async fn full_rooms_are_distinct_and_empty_rooms_are_removed() {
+        let hub = CafeHub::default();
+        let room = hub.create_room(true).await;
+        let mut sessions = Vec::new();
+        for index in 0..ROOM_CAPACITY {
+            let session = guest();
+            hub.join(room.id, new_player(&session, format!("Guest {index:04}")))
+                .await
+                .expect("room should accept players up to capacity");
+            sessions.push(session);
+        }
+
+        assert!(matches!(
+            hub.find_by_invite_code(&room.invite_code).await,
+            Err(CafeJoinError::RoomFull)
+        ));
+        let extra = guest();
+        assert!(matches!(
+            hub.join(room.id, new_player(&extra, "Guest FULL".to_owned()))
+                .await,
+            Err(CafeJoinError::RoomFull)
+        ));
+
+        for session in sessions {
+            hub.leave(room.id, session.id).await;
+        }
+        assert!(!hub.contains_room(room.id).await);
+        assert!(matches!(
+            hub.find_by_invite_code(&room.invite_code).await,
+            Err(CafeJoinError::RoomNotFound)
+        ));
     }
 
     #[test]

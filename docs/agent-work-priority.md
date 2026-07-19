@@ -4,17 +4,15 @@ Use this file as the first document to read before starting a new scoped agent t
 
 ## Active Scope
 
-No active priority.
-
-Status: Ready for the next scoped task.
+No active scoped task.
 
 ## Required Read Order
 
-- Add the focused documents required by the next task.
+Add task-specific documents here before implementation.
 
 ## Required Outcome
 
-- Define the concrete outcome for the next task.
+Define the task-specific completion criteria here before implementation.
 
 ## Notes
 
