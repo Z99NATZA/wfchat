@@ -6,7 +6,6 @@ import { useI18n } from "@/i18n/i18nContext";
 type AppHeaderBarProps = {
 	leading?: ReactNode;
 	title: ReactNode;
-	subtitle?: ReactNode;
 	titleAccessory?: ReactNode;
 	desktopActions?: ReactNode;
 	mobileMenuContent?: ReactNode;
@@ -16,7 +15,6 @@ type AppHeaderBarProps = {
 function AppHeaderBar({
 	leading,
 	title,
-	subtitle,
 	titleAccessory,
 	desktopActions,
 	mobileMenuContent,
@@ -64,11 +62,6 @@ function AppHeaderBar({
 							<h1 className="truncate text-base font-semibold">{title}</h1>
 							{titleAccessory}
 						</div>
-						{subtitle && (
-							<p className="hidden truncate text-xs text-muted sm:block">
-								{subtitle}
-							</p>
-						)}
 					</div>
 				</div>
 

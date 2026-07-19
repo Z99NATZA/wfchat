@@ -80,7 +80,6 @@ function ChatHeader({
 			}
 			title={persona.name}
 			titleAccessory={<StatusDot />}
-			subtitle={`${persona.title} - ${persona.status}`}
 			desktopActions={
 				<AppHeaderDesktopControls {...controlProps} trailingActions={clearChatAction} />
 			}

@@ -285,8 +285,6 @@ function PngTuberHeader({ controls }: PngTuberHeaderProps) {
 				</span>
 			}
 			title={t("pngtuber.header.title")}
-			subtitle={t("pngtuber.header.subtitle")}
-			titleAccessory={<Sparkles size={15} className="text-primary" aria-hidden="true" />}
 			desktopActions={
 				<AppHeaderDesktopControls {...controls} trailingActions={deletePlaceholder} />
 			}

@@ -83,11 +83,6 @@ function CafeRoomContent({
 						</IconButton>
 					}
 					title={t("cafe.room.title")}
-					subtitle={
-						cafe.room
-							? `${t("cafe.room.code")}: ${cafe.room.inviteCode}`
-							: t("cafe.room.connecting")
-					}
 					titleAccessory={<ConnectionBadge state={cafe.connectionState} />}
 					desktopActions={<AppHeaderDesktopControls {...headerControls} />}
 					mobileMenuContent={<AppHeaderMobileControls {...headerControls} />}

@@ -89,6 +89,11 @@ describe("CafePage", () => {
 
 		const quickJoin = await screen.findByRole("button", { name: "cafe.lobby.quickJoin" });
 		expect(screen.getByTestId("cafe-lobby-scroll").className).toContain("chat-scroll");
+		expect(
+			screen
+				.getByTestId("cafe-entry-panel")
+				.contains(screen.getByLabelText("cafe.lobby.joinCodeTitle"))
+		).toBe(true);
 		fireEvent.click(quickJoin);
 
 		await waitFor(() => expect(serviceMocks.quickJoinCafe).toHaveBeenCalledTimes(1));
@@ -148,5 +153,8 @@ describe("CafePage", () => {
 			"disabled",
 			true
 		);
+		expect(screen.queryByText("cafe.cosmetics.unlocked")).toBeNull();
+		expect(screen.queryByText("cafe.cosmetics.sakura_pin.description")).toBeNull();
+		expect(screen.getByLabelText("cafe.cosmetics.needStars").textContent).toContain("5");
 	});
 });

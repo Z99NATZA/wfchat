@@ -169,8 +169,6 @@ function Model2DHeader({ controls }: Model2DHeaderProps) {
 				</span>
 			}
 			title={t("model2d.header.title")}
-			subtitle={t("model2d.header.subtitle")}
-			titleAccessory={<Sparkles size={15} className="text-primary" aria-hidden="true" />}
 			desktopActions={
 				<AppHeaderDesktopControls {...controls} trailingActions={deletePlaceholder} />
 			}

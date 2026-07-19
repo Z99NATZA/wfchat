@@ -1,18 +1,6 @@
 import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
-import {
-	Check,
-	Coffee,
-	DoorOpen,
-	KeyRound,
-	LockKeyhole,
-	Plus,
-	RefreshCw,
-	Shirt,
-	Sparkles,
-	Star,
-	Users
-} from "lucide-react";
+import { Coffee, DoorOpen, Plus, RefreshCw, Star, Users } from "lucide-react";
 import AppHeaderBar from "@/components/header/AppHeaderBar";
 import {
 	AppHeaderDesktopControls,
@@ -123,12 +111,14 @@ function CafePage({ activityBar, backgroundImageUrl, headerControls }: CafePageP
 				className="chat-scroll min-h-0 flex-1 overflow-y-auto bg-app-bg/44 p-4 sm:p-6 lg:p-8"
 				data-testid="cafe-lobby-scroll"
 			>
-				<div className="mx-auto max-w-5xl space-y-6">
-					<div className="overflow-hidden rounded-2xl border border-app-border bg-app-panel/76 shadow-soft">
+				<div className="mx-auto max-w-5xl space-y-5">
+					<div
+						className="overflow-hidden rounded-2xl border border-app-border bg-app-panel/76 shadow-soft"
+						data-testid="cafe-entry-panel"
+					>
 						<div className="grid gap-6 p-5 sm:p-7 lg:grid-cols-[1.25fr_0.75fr] lg:items-center">
 							<div>
-								<span className="inline-flex items-center gap-2 rounded-full border border-app-border bg-app-soft px-3 py-1 text-xs font-semibold text-app-text">
-									<Sparkles size={14} aria-hidden="true" />
+								<span className="inline-flex rounded-full border border-app-border bg-app-soft px-3 py-1 text-xs font-semibold text-app-text">
 									{t("cafe.lobby.guestFriendly")}
 								</span>
 								<h2 className="mt-4 text-2xl font-semibold text-app-text sm:text-3xl">
@@ -160,11 +150,47 @@ function CafePage({ activityBar, backgroundImageUrl, headerControls }: CafePageP
 										{t("cafe.lobby.createRoom")}
 									</Button>
 								</div>
+								<form onSubmit={handleJoinCode} className="mt-5 max-w-xl">
+									<label
+										className="text-xs font-semibold text-muted"
+										htmlFor="cafe-invite-code"
+									>
+										{t("cafe.lobby.joinCodeTitle")}
+									</label>
+									<div className="mt-2 flex flex-col gap-2 sm:flex-row">
+										<input
+											id="cafe-invite-code"
+											className="h-11 min-w-0 flex-1 rounded-lg border border-app-border bg-app-soft px-3 text-sm font-semibold uppercase tracking-[0.2em] text-app-text outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/25 dark:focus:border-action-border dark:focus:ring-action-ring/25"
+											value={inviteCode}
+											maxLength={6}
+											placeholder={t("cafe.lobby.joinCodePlaceholder")}
+											onChange={(event) =>
+												setInviteCode(event.target.value.toUpperCase())
+											}
+										/>
+										<Button
+											type="submit"
+											disabled={!inviteCode.trim() || pendingAction !== null}
+										>
+											{pendingAction === "code"
+												? t("cafe.lobby.joining")
+												: t("cafe.lobby.joinCode")}
+										</Button>
+									</div>
+								</form>
+								{error && (
+									<p
+										className="mt-4 rounded-lg border border-red-400/25 bg-red-500/10 p-3 text-sm text-red-500"
+										role="alert"
+									>
+										{t(lobbyErrorTranslationKey(error))}
+									</p>
+								)}
 							</div>
 							<img
 								src="/images/aiko-cafe/aiko-host-v1.png"
 								alt={t("cafe.lobby.aikoAlt")}
-								className="mx-auto h-56 w-auto object-contain drop-shadow-xl sm:h-64"
+								className="mx-auto h-52 w-auto object-contain drop-shadow-xl sm:h-56"
 							/>
 						</div>
 					</div>
@@ -177,55 +203,11 @@ function CafePage({ activityBar, backgroundImageUrl, headerControls }: CafePageP
 						onEquip={handleEquipCosmetic}
 					/>
 
-					<form
-						onSubmit={handleJoinCode}
-						className="rounded-2xl border border-app-border bg-app-panel/76 p-4 shadow-soft sm:p-5"
-					>
-						<label
-							className="text-sm font-semibold text-app-text"
-							htmlFor="cafe-invite-code"
-						>
-							{t("cafe.lobby.joinCodeTitle")}
-						</label>
-						<div className="mt-3 flex flex-col gap-2 sm:flex-row">
-							<div className="relative min-w-0 flex-1">
-								<KeyRound
-									className="absolute left-3 top-1/2 -translate-y-1/2 text-muted"
-									size={17}
-									aria-hidden="true"
-								/>
-								<input
-									id="cafe-invite-code"
-									className="h-11 w-full rounded-lg border border-app-border bg-app-soft pl-10 pr-3 text-sm font-semibold uppercase tracking-[0.2em] text-app-text outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/25 dark:focus:border-action-border dark:focus:ring-action-ring/25"
-									value={inviteCode}
-									maxLength={6}
-									placeholder={t("cafe.lobby.joinCodePlaceholder")}
-									onChange={(event) =>
-										setInviteCode(event.target.value.toUpperCase())
-									}
-								/>
-							</div>
-							<Button
-								type="submit"
-								disabled={!inviteCode.trim() || pendingAction !== null}
-							>
-								{pendingAction === "code"
-									? t("cafe.lobby.joining")
-									: t("cafe.lobby.joinCode")}
-							</Button>
-						</div>
-					</form>
-
 					<div>
 						<div className="flex items-center justify-between gap-3">
-							<div>
-								<h3 className="text-lg font-semibold text-app-text">
-									{t("cafe.lobby.publicRooms")}
-								</h3>
-								<p className="mt-1 text-xs text-muted">
-									{t("cafe.lobby.publicRoomsDescription")}
-								</p>
-							</div>
+							<h3 className="text-lg font-semibold text-app-text">
+								{t("cafe.lobby.publicRooms")}
+							</h3>
 							<Button
 								size="sm"
 								variant="ghost"
@@ -236,14 +218,6 @@ function CafePage({ activityBar, backgroundImageUrl, headerControls }: CafePageP
 								{t("cafe.lobby.refresh")}
 							</Button>
 						</div>
-						{error && (
-							<p
-								className="mt-4 rounded-lg border border-red-400/25 bg-red-500/10 p-3 text-sm text-red-500"
-								role="alert"
-							>
-								{t(lobbyErrorTranslationKey(error))}
-							</p>
-						)}
 						<div className="mt-4 grid gap-3 sm:grid-cols-2">
 							{rooms.map((room) => (
 								<Button
@@ -310,15 +284,18 @@ function CafeCosmeticWardrobe({
 			aria-labelledby="cafe-cosmetics-title"
 			data-testid="cafe-cosmetic-wardrobe"
 		>
-			<div className="flex flex-wrap items-start justify-between gap-3">
-				<div>
-					<p className="flex items-center gap-2 text-lg font-semibold text-app-text">
-						<Shirt size={19} className="text-muted" aria-hidden="true" />
-						<span id="cafe-cosmetics-title">{t("cafe.cosmetics.title")}</span>
+			<div className="flex flex-wrap items-center justify-between gap-3">
+				<div className="flex items-center gap-3">
+					<p id="cafe-cosmetics-title" className="text-lg font-semibold text-app-text">
+						{t("cafe.cosmetics.title")}
 					</p>
-					<p className="mt-1 text-sm leading-6 text-muted">
-						{t("cafe.cosmetics.description")}
-					</p>
+					<span
+						className="inline-flex items-center gap-1 rounded-full bg-app-soft px-2.5 py-1 text-xs font-semibold text-muted"
+						aria-label={`${t("cafe.stars")}: ${progress.cafeStars}`}
+					>
+						<Star size={13} aria-hidden="true" />
+						{progress.cafeStars}
+					</span>
 				</div>
 				<Button
 					size="sm"
@@ -344,7 +321,6 @@ function CafeCosmeticWardrobe({
 					<CafeCosmeticCard
 						key={cosmetic.id}
 						cosmetic={cosmetic}
-						cafeStars={progress.cafeStars}
 						equipped={progress.equippedCosmetic === cosmetic.id}
 						isSaving={isSaving}
 						pending={pendingCosmetic === cosmetic.id}
@@ -371,45 +347,45 @@ function CafeCosmeticWardrobe({
 
 function CafeCosmeticCard({
 	cosmetic,
-	cafeStars,
 	equipped,
 	isSaving,
 	pending,
 	onEquip
 }: {
 	cosmetic: CafeCosmetic;
-	cafeStars: number;
 	equipped: boolean;
 	isSaving: boolean;
 	pending: boolean;
 	onEquip: () => void;
 }) {
 	const { t } = useI18n();
-	const remaining = Math.max(0, cosmetic.requiredStars - cafeStars);
 	return (
-		<article className="rounded-xl border border-app-border bg-app-soft p-3">
-			<CosmeticPreview cosmeticId={cosmetic.id} />
+		<article
+			className={`rounded-xl border p-3 ${
+				equipped
+					? "border-primary/30 bg-primary/10 dark:border-action-border dark:bg-action-hover"
+					: "border-transparent bg-app-soft/70"
+			}`}
+		>
+			<div className="relative">
+				<CosmeticPreview cosmeticId={cosmetic.id} />
+				{!cosmetic.unlocked && (
+					<span
+						className="absolute right-2 top-2 inline-flex items-center gap-1 rounded-full border border-app-border bg-app-panel/92 px-2 py-1 text-xs font-semibold text-app-text shadow-soft"
+						aria-label={t("cafe.cosmetics.needStars", {
+							count: cosmetic.requiredStars
+						})}
+					>
+						<Star size={12} aria-hidden="true" />
+						{cosmetic.requiredStars}
+					</span>
+				)}
+			</div>
 			<p className="mt-3 font-semibold text-app-text">
 				{t(`cafe.cosmetics.${cosmetic.id}.name`)}
 			</p>
-			<p className="mt-1 min-h-10 text-xs leading-5 text-muted">
-				{t(`cafe.cosmetics.${cosmetic.id}.description`)}
-			</p>
-			<p className="mt-2 flex items-center gap-1.5 text-xs font-semibold text-muted">
-				{cosmetic.unlocked ? (
-					<>
-						<Check size={14} aria-hidden="true" />
-						{t("cafe.cosmetics.unlocked")}
-					</>
-				) : (
-					<>
-						<LockKeyhole size={14} aria-hidden="true" />
-						{t("cafe.cosmetics.needStars", { count: remaining })}
-					</>
-				)}
-			</p>
 			<Button
-				className="mt-3"
+				className="mt-2"
 				fullWidth
 				size="sm"
 				variant={equipped ? "selected" : "secondary"}
@@ -437,7 +413,7 @@ function CosmeticPreview({ cosmeticId }: { cosmeticId: string }) {
 	}[cosmeticId];
 	return (
 		<div
-			className="flex h-20 items-center justify-center rounded-lg border border-app-border text-3xl text-[#533b35] shadow-inner"
+			className="flex h-20 items-center justify-center rounded-lg text-3xl text-[#533b35] shadow-inner"
 			style={{ backgroundColor: background ?? "#ead6bc" }}
 			data-testid={`cafe-cosmetic-preview-${cosmeticId}`}
 			aria-hidden="true"
@@ -457,15 +433,6 @@ function CafeHeader({ controls }: { controls: AppHeaderControlProps }) {
 				</span>
 			}
 			title={t("cafe.header.title")}
-			subtitle={t("cafe.header.subtitle")}
-			titleAccessory={
-				<Sparkles
-					size={15}
-					className="text-primary dark:text-app-text"
-					data-testid="cafe-header-sparkles"
-					aria-hidden="true"
-				/>
-			}
 			desktopActions={<AppHeaderDesktopControls {...controls} />}
 			mobileMenuContent={<AppHeaderMobileControls {...controls} />}
 		/>
