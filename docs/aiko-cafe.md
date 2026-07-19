@@ -23,6 +23,10 @@ separate product surface from chat and is available at `/cafe` without login.
   reveals a marker above Aiko at the counter.
 - Players see names, four-direction idle/walk state, movement, joins, leaves,
   reconnect status, and preset emotes.
+- The room camera uses cover framing when a player enters, so the game surface
+  never shrinks to show the whole map or exposes space beyond the room. It keeps
+  a readable minimum zoom on narrow screens, follows the local player within
+  the map bounds, and uses a small dead zone to avoid moving on every step.
 - Lobby, header, side panels, forms, status messages, recovery actions, and
   React overlays above the room use the shared application theme in both light
   and dark mode. The Phaser map, characters, tea leaves, and in-world markers

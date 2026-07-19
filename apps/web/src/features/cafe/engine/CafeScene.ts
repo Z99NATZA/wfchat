@@ -5,6 +5,7 @@ import type {
 	CafePlayerState,
 	CafeRoomState
 } from "@/features/cafe/types";
+import { calculateCafeCameraFraming } from "@/features/cafe/engine/cafeCamera";
 
 const MAP_WIDTH = 1280;
 const MAP_HEIGHT = 800;
@@ -14,6 +15,7 @@ const PLAYER_LABEL_Y = -58;
 const PLAYER_LABEL_WITH_COSMETIC_Y = -88;
 const INTERACTION_DISTANCE = 94;
 const AIKO_INTERACTION_DISTANCE = 134;
+const CAMERA_FOLLOW_LERP = 0.1;
 const COLLIDERS = [
 	new Phaser.Geom.Rectangle(414, 92, 452, 142),
 	new Phaser.Geom.Rectangle(198, 360, 176, 102),
@@ -272,8 +274,13 @@ export class CafeScene extends Phaser.Scene {
 				if (!this.hasLocalPosition) {
 					visual.container.setPosition(player.x, player.y);
 					this.hasLocalPosition = true;
-					this.cameras.main.startFollow(visual.container, true, 0.12, 0.12);
-					this.updateCameraZoom();
+					this.cameras.main.startFollow(
+						visual.container,
+						true,
+						CAMERA_FOLLOW_LERP,
+						CAMERA_FOLLOW_LERP
+					);
+					this.updateCameraFraming();
 				}
 			}
 		}
@@ -440,10 +447,15 @@ export class CafeScene extends Phaser.Scene {
 		this.callbacks.onInteractionTargetChange(nextTarget);
 	}
 
-	private updateCameraZoom() {
-		const width = this.scale.width;
-		const zoom = width < 640 ? 1.12 : width < 960 ? 0.9 : 0.78;
-		this.cameras.main.setZoom(zoom);
+	private updateCameraFraming() {
+		const framing = calculateCafeCameraFraming(
+			this.scale.width,
+			this.scale.height,
+			MAP_WIDTH,
+			MAP_HEIGHT
+		);
+		this.cameras.main.setZoom(framing.zoom);
+		this.cameras.main.setDeadzone(framing.deadZoneWidth, framing.deadZoneHeight);
 	}
 }
 

@@ -159,13 +159,32 @@ function CafeRoomContent({
 							className="mt-2 border-t border-dialog-border pt-2 text-xs leading-5 text-muted"
 							data-testid="cafe-quest-hint"
 						>
-							{isIntermission
-								? roundCountdown > 0
-									? t("cafe.activity.nextRound", { seconds: roundCountdown })
-									: t("cafe.activity.startingRound")
-								: carriedTea > 0
-									? t("cafe.activity.returnHint")
-									: t("cafe.activity.findHint")}
+							{isIntermission ? (
+								roundCountdown > 0 ? (
+									t("cafe.activity.nextRound", { seconds: roundCountdown })
+								) : (
+									t("cafe.activity.startingRound")
+								)
+							) : (
+								<>
+									<span
+										className="hidden sm:inline"
+										data-testid="cafe-quest-hint-desktop"
+									>
+										{carriedTea > 0
+											? t("cafe.activity.returnHintDesktop")
+											: t("cafe.activity.findHintDesktop")}
+									</span>
+									<span
+										className="sm:hidden"
+										data-testid="cafe-quest-hint-mobile"
+									>
+										{carriedTea > 0
+											? t("cafe.activity.returnHintMobile")
+											: t("cafe.activity.findHintMobile")}
+									</span>
+								</>
+							)}
 						</p>
 					</div>
 					<div

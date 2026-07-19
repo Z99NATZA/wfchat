@@ -154,11 +154,36 @@ describe("CafeRoomPage", () => {
 		expect(screen.getByTestId("cafe-carried-tea").textContent).toContain(
 			"cafe.activity.carried"
 		);
-		expect(screen.getByTestId("cafe-quest-hint").textContent).toBe("cafe.activity.returnHint");
+		expect(screen.getByTestId("cafe-quest-hint-desktop").textContent).toBe(
+			"cafe.activity.returnHintDesktop"
+		);
+		expect(screen.getByTestId("cafe-quest-hint-mobile").textContent).toBe(
+			"cafe.activity.returnHintMobile"
+		);
 		expect(gameCanvas.props?.interactionLabels.deliverTea).toBe("cafe.room.deliverTea");
 		const dialogue = screen.getByTestId("aiko-dialogue");
 		expect(dialogue.textContent).toContain("Bring the leaves to the counter.");
 		expect(dialogue.className).toContain("bg-dialog-soft");
+	});
+
+	it("explains how to collect tea on desktop and mobile", () => {
+		const room = roomFixture();
+		room.players[0].carriedTea = 0;
+		Object.assign(roomHook.value, {
+			room,
+			selfPlayerId: room.players[0].id,
+			connectionState: "connected",
+			error: null
+		});
+
+		renderRoomPage();
+
+		const desktopHint = screen.getByTestId("cafe-quest-hint-desktop");
+		const mobileHint = screen.getByTestId("cafe-quest-hint-mobile");
+		expect(desktopHint.textContent).toBe("cafe.activity.findHintDesktop");
+		expect(desktopHint.className).toContain("hidden sm:inline");
+		expect(mobileHint.textContent).toBe("cafe.activity.findHintMobile");
+		expect(mobileHint.className).toContain("sm:hidden");
 	});
 
 	it("blocks room controls immediately while the browser is offline", () => {
