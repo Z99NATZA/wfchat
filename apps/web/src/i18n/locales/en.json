@@ -38,6 +38,8 @@
 	"cafe.cosmetics.tea_hat.description": "A playful tea-colored hat unlocked after earning 5 Cafe Stars.",
 	"cafe.lobby.heroTitle": "The kettle is warm. Come on in.",
 	"cafe.lobby.heroDescription": "Help Aiko prepare tea and play with up to 8 players.",
+	"cafe.lobby.playerName": "Cafe name (optional)",
+	"cafe.lobby.playerNamePlaceholder": "Use default name",
 	"cafe.lobby.quickJoin": "Quick Join",
 	"cafe.lobby.createRoom": "Create Room",
 	"cafe.lobby.joining": "Joining...",

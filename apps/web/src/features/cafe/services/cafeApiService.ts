@@ -64,12 +64,16 @@ export async function equipCafeCosmetic(cosmeticId: string | null): Promise<Cafe
 	return toCafeProgress(response.data);
 }
 
-export function cafeSocketUrl(roomId: string): string {
+export function cafeSocketUrl(roomId: string, playerName = ""): string {
 	const fallbackOrigin =
 		typeof window === "undefined" ? "http://localhost:8080" : window.location.origin;
 	const baseUrl = apiBaseUrl || fallbackOrigin;
 	const url = new URL(`/api/cafe/rooms/${roomId}/ws`, baseUrl);
 	url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
+	const nickname = playerName.trim();
+	if (nickname) {
+		url.searchParams.set("nickname", nickname);
+	}
 	return url.toString();
 }
 

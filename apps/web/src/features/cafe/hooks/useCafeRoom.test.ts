@@ -4,6 +4,7 @@
 import { act, cleanup, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useCafeRoom } from "@/features/cafe/hooks/useCafeRoom";
+import { CAFE_PLAYER_NAME_STORAGE_KEY } from "@/features/cafe/services/cafePlayerName";
 
 class FakeWebSocket {
 	static readonly OPEN = 1;
@@ -76,6 +77,7 @@ const room = {
 describe("useCafeRoom", () => {
 	beforeEach(() => {
 		FakeWebSocket.instances = [];
+		window.sessionStorage.clear();
 		vi.stubGlobal("WebSocket", FakeWebSocket);
 		vi.useFakeTimers();
 	});
@@ -87,9 +89,11 @@ describe("useCafeRoom", () => {
 	});
 
 	it("accepts welcome state, sends protocol messages, and reconnects", () => {
+		window.sessionStorage.setItem(CAFE_PLAYER_NAME_STORAGE_KEY, "Mint Friend");
 		const { result, unmount } = renderHook(() => useCafeRoom(room.id));
 		const first = FakeWebSocket.instances[0];
 		expect(first).toBeDefined();
+		expect(new URL(first.url).searchParams.get("nickname")).toBe("Mint Friend");
 
 		act(() => {
 			first.open();
@@ -124,6 +128,9 @@ describe("useCafeRoom", () => {
 		expect(result.current.connectionState).toBe("reconnecting");
 		act(() => vi.advanceTimersByTime(500));
 		expect(FakeWebSocket.instances).toHaveLength(2);
+		expect(new URL(FakeWebSocket.instances[1].url).searchParams.get("nickname")).toBe(
+			"Mint Friend"
+		);
 		unmount();
 	});
 

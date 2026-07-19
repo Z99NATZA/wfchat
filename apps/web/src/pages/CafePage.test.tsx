@@ -6,6 +6,7 @@ import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import CafePage from "@/pages/CafePage";
+import { CAFE_PLAYER_NAME_STORAGE_KEY } from "@/features/cafe/services/cafePlayerName";
 
 const serviceMocks = vi.hoisted(() => ({
 	listCafeRooms: vi.fn(),
@@ -77,6 +78,7 @@ describe("CafePage", () => {
 	afterEach(() => {
 		cleanup();
 		vi.clearAllMocks();
+		window.sessionStorage.clear();
 	});
 
 	it("lets a guest quick join without showing a login gate", async () => {
@@ -116,6 +118,31 @@ describe("CafePage", () => {
 
 		await waitFor(() => expect(serviceMocks.quickJoinCafe).toHaveBeenCalledTimes(1));
 		expect(screen.queryByText(/login required/i)).toBeNull();
+	});
+
+	it("keeps an optional cafe name only for the current tab", async () => {
+		window.sessionStorage.setItem(CAFE_PLAYER_NAME_STORAGE_KEY, "Mint Friend");
+		serviceMocks.listCafeRooms.mockResolvedValue([]);
+		serviceMocks.getCafeProgress.mockResolvedValue(progress);
+
+		render(
+			<MemoryRouter initialEntries={["/cafe"]}>
+				<CafePage
+					activityBar={null}
+					backgroundImageUrl=""
+					headerControls={headerControls}
+				/>
+			</MemoryRouter>
+		);
+
+		const playerName = await screen.findByLabelText("cafe.lobby.playerName");
+		expect(playerName).toHaveProperty("value", "Mint Friend");
+		expect(playerName).toHaveProperty("maxLength", 24);
+		expect(screen.queryByText("cafe.lobby.playerNameHint")).toBeNull();
+		fireEvent.change(playerName, { target: { value: "Tea Friend" } });
+		expect(window.sessionStorage.getItem(CAFE_PLAYER_NAME_STORAGE_KEY)).toBe("Tea Friend");
+		fireEvent.change(playerName, { target: { value: "   " } });
+		expect(window.sessionStorage.getItem(CAFE_PLAYER_NAME_STORAGE_KEY)).toBeNull();
 	});
 
 	it("shows a specific message when an invite room is full", async () => {

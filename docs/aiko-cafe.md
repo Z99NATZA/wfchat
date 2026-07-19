@@ -7,6 +7,9 @@ separate product surface from chat and is available at `/cafe` without login.
 
 - `/cafe` lists public rooms and provides Quick Join, Create Invite Room, and
   Join by Code.
+- The lobby has an optional cafe name field shared by guests and signed-in
+  users. It is tab-scoped session state rather than profile data; an empty name
+  keeps the existing account display name or generated guest name.
 - `/cafe/rooms/:roomId` loads the Phaser game only when the room route opens,
   keeping Phaser out of the initial chat bundle.
 - One room supports 1-8 players. Public Quick Join prefers the busiest room
@@ -45,8 +48,13 @@ separate product surface from chat and is available at `/cafe` without login.
 ## Guest And Progress Ownership
 
 Cafe APIs use the existing HTTP-only `wfchat_session` cookie. A missing session
-creates a guest automatically, so login is optional. Guest names are stable for
-the session and use the form `Guest XXXX`.
+creates a guest automatically, so login is optional. Default guest names are
+stable for the session and use the form `Guest XXXX`. A player may override the
+room name from the lobby; the Web client keeps that value only in
+`sessionStorage`, sends it on every WebSocket connection and reconnect, and
+does not write it to the profile or database. The API trims and validates the
+override, limits it to 24 Unicode characters, and falls back to the default
+name when it is empty or invalid.
 
 Cafe Stars, unlocked cosmetic ids, and the selected cosmetic are canonical
 PostgreSQL data. Guest rows are scoped by session; after login, the existing

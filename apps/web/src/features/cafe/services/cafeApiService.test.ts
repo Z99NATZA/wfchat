@@ -100,6 +100,8 @@ describe("cafeApiService", () => {
 			invite_code: "abc123"
 		});
 		expect(cafeSocketUrl(room.id)).toBe(`ws://localhost:8080/api/cafe/rooms/${room.id}/ws`);
+		const namedSocketUrl = new URL(cafeSocketUrl(room.id, "  Mint Friend  "));
+		expect(namedSocketUrl.searchParams.get("nickname")).toBe("Mint Friend");
 	});
 
 	it("maps lobby HTTP failures to player-facing room reasons", () => {

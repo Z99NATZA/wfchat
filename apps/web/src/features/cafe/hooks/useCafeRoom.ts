@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { cafeSocketUrl } from "@/features/cafe/services/cafeApiService";
+import { readCafePlayerName } from "@/features/cafe/services/cafePlayerName";
 import type {
 	CafeConnectionState,
 	CafeDialogue,
@@ -100,7 +101,7 @@ export function useCafeRoom(roomId: string) {
 			);
 			let socket: WebSocket;
 			try {
-				socket = new WebSocket(cafeSocketUrl(roomId));
+				socket = new WebSocket(cafeSocketUrl(roomId, readCafePlayerName()));
 			} catch {
 				shouldReconnectRef.current = false;
 				setConnectionState("closed");

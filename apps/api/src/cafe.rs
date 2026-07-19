@@ -10,7 +10,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use axum::{
     extract::{
         ws::{Message, WebSocket, WebSocketUpgrade},
-        Path, State,
+        Path, Query, State,
     },
     http::{
         header::{ORIGIN, SET_COOKIE},
@@ -45,6 +45,7 @@ const AIKO_INTERACTION_DISTANCE: f32 = 132.0;
 const MAX_MESSAGES_PER_WINDOW: usize = 45;
 const MESSAGE_WINDOW: Duration = Duration::from_secs(2);
 const ROUND_INTERMISSION: Duration = Duration::from_secs(8);
+const MAX_CAFE_PLAYER_NAME_CHARS: usize = 24;
 
 const TEA_LAYOUTS: [[(f32, f32); 3]; 3] = [
     [(142.0, 224.0), (1138.0, 248.0), (1064.0, 682.0)],
@@ -230,6 +231,11 @@ fn default_private_room() -> bool {
 #[derive(Deserialize)]
 struct JoinRoomRequest {
     invite_code: String,
+}
+
+#[derive(Deserialize)]
+struct CafeSocketQuery {
+    nickname: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -797,6 +803,7 @@ async fn equip_cafe_cosmetic(
 async fn cafe_socket(
     ws: WebSocketUpgrade,
     Path(room_id): Path<Uuid>,
+    Query(query): Query<CafeSocketQuery>,
     State(state): State<AppState>,
     headers: HeaderMap,
 ) -> AppResult<Response> {
@@ -804,7 +811,7 @@ async fn cafe_socket(
         return Err(AppError::Forbidden);
     }
     let (session, response_headers) = ensure_cafe_session(&state, &headers).await?;
-    let player_name = cafe_display_name(&state, &session).await?;
+    let player_name = cafe_display_name(&state, &session, query.nickname.as_deref()).await?;
     let progress = state
         .store
         .get_cafe_progress(OwnerScope::from_session(&session))
@@ -1015,7 +1022,14 @@ async fn ensure_cafe_session(
     Ok((session, response_headers))
 }
 
-async fn cafe_display_name(state: &AppState, session: &SessionRecord) -> AppResult<String> {
+async fn cafe_display_name(
+    state: &AppState,
+    session: &SessionRecord,
+    nickname: Option<&str>,
+) -> AppResult<String> {
+    if let Some(nickname) = nickname.and_then(normalize_cafe_player_name) {
+        return Ok(nickname);
+    }
     if matches!(session.kind, UserKind::Guest) {
         let suffix = session
             .user_id
@@ -1034,6 +1048,15 @@ async fn cafe_display_name(state: &AppState, session: &SessionRecord) -> AppResu
         .map(|profile| profile.display_name)
         .filter(|name| !name.trim().is_empty())
         .unwrap_or_else(|| "Cafe Guest".to_owned()))
+}
+
+fn normalize_cafe_player_name(value: &str) -> Option<String> {
+    if value.chars().any(char::is_control) {
+        return None;
+    }
+    let normalized = value.split_whitespace().collect::<Vec<_>>().join(" ");
+    let length = normalized.chars().count();
+    (length > 0 && length <= MAX_CAFE_PLAYER_NAME_CHARS).then_some(normalized)
 }
 
 fn new_player(
@@ -1191,6 +1214,21 @@ fn now_unix_seconds() -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn normalizes_optional_cafe_player_names() {
+        assert_eq!(
+            normalize_cafe_player_name("  Mint   Friend  ").as_deref(),
+            Some("Mint Friend")
+        );
+        assert_eq!(
+            normalize_cafe_player_name("น้องชา").as_deref(),
+            Some("น้องชา")
+        );
+        assert_eq!(normalize_cafe_player_name("   "), None);
+        assert_eq!(normalize_cafe_player_name("Tea\nFriend"), None);
+        assert_eq!(normalize_cafe_player_name(&"a".repeat(25)), None);
+    }
 
     fn guest() -> SessionRecord {
         SessionRecord {

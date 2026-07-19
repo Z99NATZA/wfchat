@@ -20,6 +20,11 @@ import {
 	quickJoinCafe
 } from "@/features/cafe/services/cafeApiService";
 import type { CafeLobbyErrorCode } from "@/features/cafe/services/cafeApiService";
+import {
+	CAFE_PLAYER_NAME_MAX_LENGTH,
+	readCafePlayerName,
+	saveCafePlayerName
+} from "@/features/cafe/services/cafePlayerName";
 import type { CafeCosmetic, CafeProgress, CafeRoomSummary } from "@/features/cafe/types";
 
 type CafePageProps = {
@@ -39,6 +44,7 @@ function CafePage({ activityBar, backgroundImageUrl, headerControls }: CafePageP
 		cosmetics: []
 	});
 	const [inviteCode, setInviteCode] = useState("");
+	const [playerName, setPlayerName] = useState(readCafePlayerName);
 	const [isLoading, setIsLoading] = useState(true);
 	const [pendingAction, setPendingAction] = useState<string | null>(null);
 	const [error, setError] = useState<CafeLobbyErrorCode | "load_failed" | null>(null);
@@ -87,6 +93,11 @@ function CafePage({ activityBar, backgroundImageUrl, headerControls }: CafePageP
 		}
 	}
 
+	function handlePlayerNameChange(value: string) {
+		setPlayerName(value);
+		saveCafePlayerName(value);
+	}
+
 	async function handleEquipCosmetic(cosmeticId: string | null) {
 		setPendingCosmetic(cosmeticId);
 		setCosmeticError(false);
@@ -124,7 +135,27 @@ function CafePage({ activityBar, backgroundImageUrl, headerControls }: CafePageP
 								<p className="mt-3 max-w-2xl text-sm leading-6 text-muted">
 									{t("cafe.lobby.heroDescription")}
 								</p>
-								<div className="mt-6 flex flex-wrap gap-3">
+								<div className="mt-6 flex max-w-xl flex-wrap items-end gap-3">
+									<div className="min-w-[14rem] flex-1">
+										<label
+											className="text-xs font-semibold text-muted"
+											htmlFor="cafe-player-name"
+										>
+											{t("cafe.lobby.playerName")}
+										</label>
+										<input
+											id="cafe-player-name"
+											type="text"
+											autoComplete="nickname"
+											className="mt-2 h-11 w-full rounded-lg border border-app-border bg-app-soft px-3 text-sm font-semibold text-app-text outline-none transition placeholder:font-normal placeholder:text-muted/70 focus:border-primary focus:ring-2 focus:ring-primary/25 dark:focus:border-action-border dark:focus:ring-action-ring/25"
+											value={playerName}
+											maxLength={CAFE_PLAYER_NAME_MAX_LENGTH}
+											placeholder={t("cafe.lobby.playerNamePlaceholder")}
+											onChange={(event) =>
+												handlePlayerNameChange(event.target.value)
+											}
+										/>
+									</div>
 									<Button
 										variant="primary"
 										size="lg"
