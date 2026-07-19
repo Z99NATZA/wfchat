@@ -3,6 +3,7 @@
 WaifuChat is a full-stack chat app with a React frontend, Rust API, and PostgreSQL database.
 
 ![WaifuChat interface](docs/images/wfchat-chat-interface.png)
+![WaifuChat interface](docs/images/aiko-cafe.png)
 
 ## Stack
 

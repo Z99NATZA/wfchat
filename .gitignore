@@ -8,9 +8,12 @@ apps/api/data
 !.env.example
 npm-debug.log*
 .codex-*.log
+coverage/
+.DS_Store
+Thumbs.db
+Desktop.ini
 apps/web/playwright-report/
 apps/web/test-results/
-Dockerfile.*
 .VSCodeCounter/
 me/
 release.md
