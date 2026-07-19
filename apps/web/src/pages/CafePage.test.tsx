@@ -19,7 +19,21 @@ const serviceMocks = vi.hoisted(() => ({
 
 vi.mock("@/features/cafe/services/cafeApiService", () => serviceMocks);
 vi.mock("@/layouts/AppLayout", () => ({
-	default: ({ children }: { children: ReactNode }) => <div>{children}</div>
+	default: ({
+		children,
+		details,
+		sidebar
+	}: {
+		children: ReactNode;
+		details: ReactNode;
+		sidebar: ReactNode;
+	}) => (
+		<div>
+			{sidebar}
+			{children}
+			{details}
+		</div>
+	)
 }));
 vi.mock("@/components/header/AppHeaderBar", () => ({ default: () => null }));
 vi.mock("@/components/header/AppHeaderControls", () => ({
@@ -89,6 +103,10 @@ describe("CafePage", () => {
 
 		const quickJoin = await screen.findByRole("button", { name: "cafe.lobby.quickJoin" });
 		expect(screen.getByTestId("cafe-lobby-scroll").className).toContain("chat-scroll");
+		expect(screen.queryByText("cafe.lobby.guestFriendly")).toBeNull();
+		expect(screen.getByText("cafe.lobby.heroDescription")).toBeTruthy();
+		expect(screen.getByText("cafe.sidebar.guestNote")).toBeTruthy();
+		expect(screen.queryByText("cafe.details.capacity")).toBeNull();
 		expect(
 			screen
 				.getByTestId("cafe-entry-panel")
@@ -119,6 +137,7 @@ describe("CafePage", () => {
 		fireEvent.change(await screen.findByLabelText("cafe.lobby.joinCodeTitle"), {
 			target: { value: "ABC123" }
 		});
+		expect(screen.getByText("cafe.lobby.noRooms")).toBeTruthy();
 		fireEvent.submit(screen.getByLabelText("cafe.lobby.joinCodeTitle").closest("form")!);
 
 		await waitFor(() => expect(serviceMocks.joinCafeByCode).toHaveBeenCalledWith("ABC123"));

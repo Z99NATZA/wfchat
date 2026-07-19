@@ -118,10 +118,7 @@ function CafePage({ activityBar, backgroundImageUrl, headerControls }: CafePageP
 					>
 						<div className="grid gap-6 p-5 sm:p-7 lg:grid-cols-[1.25fr_0.75fr] lg:items-center">
 							<div>
-								<span className="inline-flex rounded-full border border-app-border bg-app-soft px-3 py-1 text-xs font-semibold text-app-text">
-									{t("cafe.lobby.guestFriendly")}
-								</span>
-								<h2 className="mt-4 text-2xl font-semibold text-app-text sm:text-3xl">
+								<h2 className="text-2xl font-semibold text-app-text sm:text-3xl">
 									{t("cafe.lobby.heroTitle")}
 								</h2>
 								<p className="mt-3 max-w-2xl text-sm leading-6 text-muted">
@@ -480,13 +477,6 @@ function CafeLobbyDetails() {
 					<p className="mt-2 text-sm leading-6 text-muted">
 						{t("cafe.activity.description")}
 					</p>
-				</div>
-				<div className="rounded-xl border border-app-border bg-app-soft p-4">
-					<p className="flex items-center gap-2 font-semibold text-app-text">
-						<Users size={16} aria-hidden="true" />
-						{t("cafe.details.capacity")}
-					</p>
-					<p className="mt-2 text-sm text-muted">{t("cafe.details.capacityValue")}</p>
 				</div>
 			</div>
 		</aside>
