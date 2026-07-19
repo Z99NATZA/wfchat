@@ -10,6 +10,8 @@ const MAP_WIDTH = 1280;
 const MAP_HEIGHT = 800;
 const PLAYER_SPEED = 210;
 const PLAYER_RADIUS = 22;
+const PLAYER_LABEL_Y = -58;
+const PLAYER_LABEL_WITH_COSMETIC_Y = -88;
 const INTERACTION_DISTANCE = 94;
 const AIKO_INTERACTION_DISTANCE = 134;
 const COLLIDERS = [
@@ -264,7 +266,7 @@ export class CafeScene extends Phaser.Scene {
 			visual.direction = player.direction;
 			visual.moving = player.moving;
 			visual.equippedCosmetic = player.equippedCosmetic;
-			visual.label.setText(player.name);
+			visual.label.setText(player.name).setY(playerLabelY(player.equippedCosmetic));
 			if (player.id === this.selfPlayerId) {
 				this.localVisual = visual;
 				if (!this.hasLocalPosition) {
@@ -305,7 +307,7 @@ export class CafeScene extends Phaser.Scene {
 	private createPlayer(player: CafePlayerState): PlayerVisual {
 		const graphics = this.add.graphics();
 		const label = this.add
-			.text(0, -58, player.name, {
+			.text(0, playerLabelY(player.equippedCosmetic), player.name, {
 				fontFamily: "sans-serif",
 				fontSize: "14px",
 				fontStyle: "bold",
@@ -510,6 +512,10 @@ function drawEquippedCosmetic(graphics: Phaser.GameObjects.Graphics, cosmeticId:
 			graphics.fillStyle(0xffd98d, 1).fillCircle(10, -61, 3);
 			break;
 	}
+}
+
+function playerLabelY(cosmeticId: string | null) {
+	return cosmeticId ? PLAYER_LABEL_WITH_COSMETIC_Y : PLAYER_LABEL_Y;
 }
 
 function emoteGlyph(emote: string) {
