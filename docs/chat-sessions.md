@@ -1,91 +1,41 @@
 # Chat Sessions
 
-- Data model: `persona -> chats -> messages`
-- One persona can have many chats.
-- Raw conversation history remains isolated per chat. Requests may additionally
-  include a small relevant learned-context block captured from other chats for
-  the same owner and character.
+One character can own many chats. Raw messages stay inside their chat; only
+selected [automatic memory](automatic-memory.md) can cross chats for the same
+owner and character.
 
-## URL behavior
+## Route Behavior
 
 - `/` redirects to `/chat`.
-- `/chat` opens the chat workspace without creating a backend chat yet.
-- `/chat` may display one provisional personalized assistant follow-up from
-  automatic memory. Displaying it still does not create a backend chat.
-- The first sent message creates a backend chat for the selected persona, then
-  navigates to `/chat/:chatId`. When replying to a displayed follow-up, chat
-  creation first persists that exact opening as an assistant message so the
-  reply has coherent context.
-- The first optimistic user message remains visible while the newly created chat
-  route is active and the assistant response is still pending.
-- `/chat/:chatId` opens that exact chat.
-- Refresh keeps current chat because the URL still contains `chatId`.
-- Deleting the active chat returns to the empty `/chat` draft instead of opening
-  another remaining chat. Other sessions remain available in the sidebar.
-- Deleting an inactive chat leaves the current chat open.
+- `/chat` is a draft and does not create a backend chat.
+- The draft may show one claimed memory follow-up without creating a chat.
+- First send creates the chat, preserves the optimistic message, and navigates
+  to `/chat/:chatId`.
+- Replying to a follow-up stores that exact prompt as the chat's first assistant
+  message in the same create transaction.
+- A valid `/chat/:chatId` loads that chat. Invalid id syntax remains a draft and
+  does not call the detail endpoint.
+- Deleting the active chat returns to `/chat`; deleting another chat keeps the
+  current route.
+- Clearing messages retains the chat id.
 
 ## API
 
-- `GET /api/personas/:persona_id/chats`
-- `POST /api/personas/:persona_id/chats`
-- `POST /api/personas/:persona_id/follow-up`
-- `GET /api/chats/:chat_id`
-- `POST /api/chats/:chat_id/messages`
-- `POST /api/chats/:chat_id/messages/stream`
-- `DELETE /api/chats/:chat_id`
-- `DELETE /api/chats/:chat_id/messages`
+| Method | Route |
+| --- | --- |
+| `GET/POST` | `/api/personas/:persona_id/chats` |
+| `POST` | `/api/personas/:persona_id/follow-up` |
+| `GET/DELETE` | `/api/chats/:chat_id` |
+| `POST/DELETE` | `/api/chats/:chat_id/messages` |
+| `POST` | `/api/chats/:chat_id/messages/stream` |
 
-The follow-up endpoint accepts `{ claim_key, locale }` and returns either one
-claimed follow-up or `null`. Display is limited server-side to one per owner and
-character in a rolling 24-hour window and is idempotent for the same claim key.
-No eligible unresolved plan or goal means no prompt; there is no generic
-fallback. A failed request is ignored by the draft UI so normal New Chat sending
-remains available.
+Message sends include `content`, IANA `timezone`, and attachment ids. Streaming
+and JSON sends share validation, context preparation, rate limiting, and atomic
+persistence. See [SSE streaming](chat-sse-streaming.md).
 
-`POST /api/personas/:persona_id/chats` accepts an optional `follow_up_id`. When
-present, the backend creates the chat and its initial assistant opening in one
-transaction only if the claimed delivery belongs to the same owner and
-character and has not already been attached to a chat. An unavailable delivery
-rolls back chat creation. Without `follow_up_id`, chat creation retains its
-normal empty-session behavior.
+Delete and clear operations also clean automatic-memory sources. They remove a
+memory with no evidence and recalculate one that still has other sources.
 
-After either message endpoint persists its user/assistant turn, the same
-transaction creates an idempotent automatic-memory extraction job. Background
-capture never delays the normal JSON response or SSE `done` event, and
-extraction failures do not roll back a successfully persisted response.
-Both message request bodies include the browser's resolved IANA `timezone`.
-The backend validates it, falls back to `UTC` when missing or invalid, and
-stores the normalized value on the extraction job so relative-date capture is
-stable even when the worker retries later.
-
-Before either message endpoint calls the provider, the backend retrieves a
-bounded set of relevant, unexpired memory items for the exact owner and
-character. Bounded Thai/English aliases expand to canonical topics for both the
-database query and deterministic scoring, so a new Thai chat about `เพลง` can
-reuse an English-tagged `music` preference. Specific terms rank ahead of broad
-category matches, and category-only context is limited to prevent unrelated
-preferences from flooding the prompt. The same preparation function injects
-this soft context after the character prompt and before current-chat messages.
-Memory retrieval adds no further request or response fields, and a
-retrieval-specific failure falls back to chat without memory.
-
-The shared preparation path also updates privacy-safe process counters for
-selected, empty, and fail-open retrieval outcomes and prompt-budget usage.
-These counters do not change either chat transport or expose user content.
-
-Deleting a chat through `DELETE /api/chats/:chat_id` also removes automatic
-memory source rows tied to that chat. Affected learned context is deleted when
-no source remains and retained when another chat still supports it. Automatic
-capture and bounded retrieval are implemented.
-
-Clearing a chat's messages removes message-level memory sources and applies the
-same orphan cleanup while retaining the chat id.
-
-Expired learned context is filtered at retrieval time. Chat/source deletion and
-learned-context reset remain transactional lifecycle boundaries, and reset also
-removes pending, retry, and processing extraction jobs so stale work cannot
-recreate pre-reset memory.
-
-The streaming path is additive. It returns SSE-framed assistant response events and keeps the non-streaming message endpoint available as a fallback.
-
-See `docs/chat-sse-streaming.md` for the current SSE contract.
+Generic sync can provide cache-only readback when a pulled chat id is absent
+from canonical backend chats. That recovery view is read-only; see
+[Sync system](sync-system.md).

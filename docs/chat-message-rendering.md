@@ -1,294 +1,76 @@
 # Chat Message Rendering
 
-This document scopes the chat UI work for rendering assistant responses in richer formats without expanding into unrelated chat features.
-
-## Goal
-
-Improve readability of assistant responses by rendering a safe, useful Markdown subset inside the existing chat message timeline.
-
-The first implementation should make long assistant replies easier to scan by supporting:
-
-- paragraphs and line breaks
-- headings
-- unordered and ordered lists
-- bold, italic, and inline code
-- links
-- blockquotes
-- fenced code blocks
-- GitHub-flavored Markdown tables
-
-## Current State
-
-- `ChatMessage.text` is the only message content field.
-- User and assistant messages are rendered by `ChatMessageList`.
-- User messages render as plain text.
-- Assistant messages render Markdown through `ChatMessageContent`.
-- Assistant message bubbles use a wider layout than user bubbles so tables, lists, and code blocks have more readable space.
-- Assistant messages with non-empty text expose a copy action that copies the raw `ChatMessage.text` value.
-- Fenced assistant code blocks render plain code immediately, then receive lazy Shiki syntax highlighting when eligible.
-- Local development and local Docker builds can expose frontend-only Markdown QA fixtures with `/chat?qa=markdown` when `import.meta.env.DEV` is true or `VITE_ENABLE_MARKDOWN_QA=true`.
-- SSE streaming appends token text into one optimistic assistant message.
-- The message list uses `local-assistant-*` companion messages as active streaming assistant placeholders.
-- The backend stores plain text content only. No structured message parts exist yet.
-- Image attachment rendering is planned separately in `docs/chat-image-attachments.md`.
-
-## First Scope
-
-### In Scope
-
-- Add a message-content rendering component under `apps/web/src/features/chat/components`.
-- Render Markdown only for assistant messages.
-- Keep user messages as plain text.
-- Use a Markdown parser/renderer library instead of hand-parsing Markdown.
-- Support GitHub-flavored Markdown tables and task-list syntax if the selected library supports it cleanly.
-- Style rendered content with semantic app tokens from `docs/theme.md`.
-- Keep rendering compatible with streaming text updates. Partial Markdown may look incomplete while streaming, but it must not crash.
-- Open links in a new tab with safe `rel` attributes.
-- Add a copy button for fenced code blocks only if it can be implemented locally inside the message renderer without adding message-level actions. Current implementation includes a code-block copy button.
-- Add focused component tests for supported Markdown shapes and streaming placeholder behavior. Required cases live in `docs/chat-message-rendering-test-cases.md`.
-- Update this document when the supported format set changes.
-
-### Out Of Scope
-
-- Message attachments, file uploads, image generation, audio, voice input, and multimodal message parts. Planned image attachment work is scoped separately in `docs/chat-image-attachments.md`.
-- Tool-call cards, citations, web references, source inspectors, or artifact previews.
-- Mermaid diagrams, LaTeX/math rendering, charts, iframes, embeds, or custom HTML blocks.
-- Additional assistant message actions such as regenerate, thumbs up/down, edit, branch, or share.
-- Prompt-engineering changes that force every model response into a specific format.
-- Backend schema changes or database migrations.
-- SSE protocol changes.
-- Chat mode controls, response-shape controls, quick prompts, search, notification behavior, or details-panel changes.
-- Reworking the full chat layout, sidebar, header, composer, avatar bridge, or sync system.
-
-If a future task needs any out-of-scope item, create a separate scoped document or extend this one before implementing.
+`ChatMessage.text` is the canonical text field. User and assistant content use
+different rendering rules inside `ChatMessageContent`.
 
 ## Rendering Contract
 
-### User Messages
+User messages render as plain text. Image attachments render as authenticated
+thumbnails beside that text; see [Chat image attachments](chat-image-attachments.md).
 
-User messages must render as plain text. Do not interpret user content as Markdown in the first implementation.
+Assistant messages render with `react-markdown` and `remark-gfm`:
 
-Reasons:
+- paragraphs, headings, emphasis, and blockquotes
+- ordered, unordered, and task lists
+- links
+- inline code and fenced code blocks
+- GitHub-flavored Markdown tables
 
-- avoids surprising formatting when users type Markdown-like text
-- reduces XSS and link-spam risk
-- keeps user bubble layout compact
+Raw HTML stays inert because no raw-HTML plugin is enabled. External links open
+in a new tab with `noopener noreferrer`. Tables and code blocks scroll inside
+the assistant bubble and must not create page-level horizontal overflow.
 
-### Assistant Messages
+Assistant messages with non-empty text expose a full-message copy action. Fenced
+code blocks also expose a code-only copy action and show the language label when
+present.
 
-Assistant messages may render Markdown from `ChatMessage.text`.
+## Syntax Highlighting
 
-The renderer must:
+Fenced code renders immediately as plain monospace text. Eligible, finalized
+blocks are highlighted asynchronously with Shiki; inline code stays plain.
 
-- preserve readable paragraph spacing
-- constrain content to the assistant bubble width
-- allow long code lines and wide tables to scroll horizontally inside the bubble
-- avoid page-level horizontal overflow
-- avoid nested card-like surfaces inside the message bubble unless needed for code blocks
-- use small, compact typography appropriate for chat bubbles
-- keep timestamp placement stable
+The highlighter:
 
-### Raw HTML
+- loads core, themes, and grammars through fine-grained dynamic imports
+- skips active streaming content
+- debounces changing code, caches by code/language/theme, and limits input size
+- renders token spans through React rather than `dangerouslySetInnerHTML`
+- preserves code-block dimensions before and after highlighting
 
-Raw HTML in assistant text must not be trusted. The first implementation should either escape raw HTML or rely on a renderer configuration that does not render raw HTML.
+Supported grammar aliases currently cover shell, CSS, diff, Go, HTML,
+JavaScript/JSX, JSON, Markdown, Python, Rust, SQL, TypeScript/TSX, and YAML.
+Unknown languages keep the plain code fallback.
 
-Do not add HTML rendering plugins unless there is a separate security review.
+Markdown dependencies build into the `markdown-renderer` Vite chunk. Do not
+collapse Shiki's dynamic imports into one large manual chunk.
 
-### Links
+## Streaming And Layout
 
-Links should render as ordinary inline links.
+SSE tokens append to one `local-assistant-*` optimistic message. An empty
+placeholder shows the thinking state inside that bubble; the list must not add a
+second standalone thinking bubble.
 
-Rules:
+Assistant bubbles are wider than user bubbles. The virtualized message list
+supports variable heights and remounts, so render effects, observers, and timers
+must clean up on unmount.
 
-- external links open with `target="_blank"`
-- external links use `rel="noreferrer noopener"`
-- link text must wrap inside the bubble
-- do not add previews, favicons, unfurl cards, or source panels in this scope
+## Boundaries
 
-### Code Blocks
+- Rendering components receive content and UI intent only; they do not own chat
+  state, API calls, streaming, or avatar events.
+- User text is never interpreted as Markdown.
+- Unsupported content includes live HTML, Mermaid, math, iframes, embeds,
+  runnable code, citations/source cards, and tool-call cards.
+- Use semantic theme tokens and preserve keyboard access, text selection, and
+  accessible labels for copy actions.
 
-Fenced code blocks should render as a distinct code surface inside the assistant bubble.
+## Verification
 
-Minimum behavior:
+Focused tests live beside `ChatMessageContent`, `ChatMessageList`, and
+`codeHighlighter`. They cover supported Markdown, inert HTML, safe links,
+overflow containers, streaming placeholders, copy behavior, lazy highlighting,
+cache reuse, size limits, themes, and virtualized remounts.
 
-- preserve whitespace
-- use monospace font
-- support horizontal scrolling
-- show the language label when present
-
-Optional first-scope behavior:
-
-- add a small code-copy icon button
-- use lightweight syntax highlighting if dependency cost and styling are reasonable
-
-Do not add:
-
-- runnable code sandboxes
-- terminal execution
-- file creation controls
-- diff viewers
-
-### Tables
-
-Tables should be readable inside assistant bubbles.
-
-Rules:
-
-- wrap the table in an overflow container
-- keep cell padding compact
-- use app border tokens
-- do not make the whole page overflow horizontally
-
-## Component Boundaries
-
-Preferred shape:
-
-```text
-ChatMessageList
-  -> ChatMessageContent
-       -> AssistantMarkdownContent
-       -> PlainMessageContent
-       -> CodeBlockContent
-```
-
-Keep chat state in `useChatSession`. The renderer should receive text and author-like intent only.
-
-Do not move streaming state, API calls, or avatar events into message rendering components.
-
-## Dependencies
-
-Allowed dependency direction:
-
-- Add frontend-only Markdown rendering dependencies in `apps/web/package.json`.
-- Keep dependencies out of the Rust API.
-- Prefer small, common React-compatible packages.
-
-Recommended candidates:
-
-- `react-markdown` - implemented
-- `remark-gfm` - implemented
-- `shiki` - implemented for lazy fenced-code syntax highlighting
-
-Code blocks render plain monospace content first, with a language label and copy button. Eligible assistant fenced code blocks are then enhanced asynchronously with Shiki token colors. Inline code remains plain.
-
-Syntax highlighting is treated as a performance-sensitive enhancement:
-
-- Render the existing plain code block immediately as the fallback.
-- Load the highlighter lazily only when eligible assistant fenced code blocks are present.
-- Highlight fenced code blocks only; keep inline code plain.
-- Skip or delay highlighting while an assistant message is actively streaming.
-- Debounce highlight work for changing code content.
-- Cache highlighted output by code, language, and theme.
-- Read cached highlighted output synchronously on code-block mount so virtualized messages that remount after scrolling do not flash back to plain code.
-- Keep a max-size guard for very large code blocks and fall back to plain rendering.
-- Do not render raw assistant HTML. The implementation uses Shiki token data rendered through React spans rather than `dangerouslySetInnerHTML`.
-- Keep the code block padding, font size, and line height stable before and after highlighting so scroll measurement remains predictable.
-
-The first supported highlighted language set is intentionally small. Other languages keep the plain code-block rendering and language label.
-
-Supported syntax-highlight language ids:
-
-- `bash`, `sh`, `shell`, `shellscript`
-- `css`
-- `diff`
-- `go`, `golang`
-- `html`
-- `javascript`, `js`
-- `jsx`
-- `json`
-- `markdown`, `md`
-- `python`, `py`
-- `rust`, `rs`
-- `sql`
-- `tsx`
-- `typescript`, `ts`
-- `yaml`, `yml`
-
-Build note: `react-markdown`, `remark-gfm`, and their Markdown parsing dependencies are split into a dedicated Vite `markdown-renderer` chunk through `apps/web/vite.config.ts`. Syntax highlighting uses fine-grained dynamic imports for Shiki core, the JavaScript regex engine, the selected light/dark themes, and the supported language grammars. Do not force these Shiki imports into one manual chunk; keeping them split avoids a large first-highlight download. Keep Markdown renderer dependencies frontend-only and update the manual chunk package list if the Markdown renderer dependency graph changes.
-
-## Styling Rules
-
-Follow `docs/theme.md`.
-
-Use:
-
-- `text-app-text`
-- `text-muted`
-- `border-app-border`
-- `bg-app-panel/92`
-- `bg-app-soft`
-- `shadow-soft` only where consistent with existing bubbles
-
-Do not add raw hex colors in chat components.
-
-Assistant Markdown should be compact. Avoid large article-style typography inside chat bubbles.
-
-## Accessibility
-
-- Code-copy buttons must have an `aria-label`.
-- Links should be keyboard reachable.
-- Do not rely on color alone to identify links or code actions.
-- Preserve text selection for assistant content.
-
-## Testing
-
-Detailed automated and manual QA cases live in `docs/chat-message-rendering-test-cases.md`.
-
-Testing rules for this scope:
-
-- keep tests frontend-only unless the implementation changes backend contracts
-- keep tests close to the renderer or `ChatMessageList`
-- cover every format added in the first implementation
-- keep the streaming placeholder behavior covered
-- do not add backend tests for a frontend-only rendering change
-- planned syntax highlighting test cases are tracked in `docs/chat-message-rendering-test-cases.md` and should be updated when that scope is implemented
-
-## Manual QA
-
-Use the checklist and sample messages in `docs/chat-message-rendering-test-cases.md`.
-
-At minimum, manual QA must check:
-
-- desktop and mobile widths
-- light and dark themes
-- streaming partial Markdown
-- table and code block overflow behavior
-- raw HTML remains inert
-
-## Completion Criteria
-
-The first chat message rendering iteration is complete when:
-
-- assistant Markdown renders for the supported subset
-- user messages remain plain text
-- raw HTML does not execute or become live DOM
-- code blocks and tables do not break chat layout
-- streaming still shows only one assistant loading/message surface
-- automated frontend tests cover the required cases in `docs/chat-message-rendering-test-cases.md`
-- docs list the final supported formats and explicit non-goals
-
-Current status: implemented for the first chat message rendering iteration.
-
-## Implemented Follow-up Scopes
-
-These follow-up scopes are complete and should be treated as current behavior:
-
-- `feat(web): add assistant message actions` - assistant messages with non-empty text expose a full-message copy action. The action copies the raw `ChatMessage.text` value, not rendered HTML.
-- `feat(web): improve assistant bubble layout` - assistant message bubbles are wider than user bubbles and keep table/code overflow inside the bubble instead of creating page-level horizontal overflow.
-- `feat(web): add markdown manual QA fixtures` - local dev and local Docker builds can load frontend-only Markdown QA messages from `http://localhost:5173/chat?qa=markdown` with the `Load QA` action.
-- `chore(web): split markdown renderer chunk` - Markdown rendering dependencies build into a dedicated Vite `markdown-renderer` chunk so they do not inflate the main application chunk.
-- `feat(web): add lazy code syntax highlighting` - assistant fenced code blocks render plain fallback first, then eligible non-streaming blocks are highlighted through lazy Shiki token rendering.
-
-## Future Work
-
-Potential later scopes:
-
-- full assistant message actions
-- full-message copy
-- citation/source cards
-- attachment rendering
-- image message parts
-- Mermaid or math rendering
-- prompt-level response formatting rules
-
-Do not include these in the first implementation unless this document is updated first.
+For visual QA, enable `VITE_ENABLE_MARKDOWN_QA=true` and open
+`/chat?qa=markdown`. Check desktop/mobile widths, light/dark themes, partial
+streaming Markdown, and table/code overflow.

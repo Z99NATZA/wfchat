@@ -2,98 +2,43 @@
 
 ```text
 apps/
-	api/
-			src/
-				main.rs
-				app.rs
-				auth.rs
-				cafe.rs
-			chat/
-				mod.rs
-				messages.rs
-					attachments.rs
-					cafe.rs
-				voice.rs
-			store/
-				mod.rs
-				auth.rs
-				chat.rs
-				attachments.rs
-				memory.rs
-				sync.rs
-			characters.rs
-			admin.rs
-			ai/
-				mod.rs
-				providers/
-	web/
-		src/
-			app/
-			components/
-			features/
-			hooks/
-			layouts/
-			pages/
-			services/
-			stores/
-			types/
-			utils/
+  api/
+    migrations/       ordered PostgreSQL schema
+    src/
+      ai/providers/   chat provider adapters
+      chat/           chat, attachment, streaming, and voice routes
+      store/          PostgreSQL operations by domain
+      app.rs           router and middleware
+      auth.rs          sessions and profiles
+      cafe.rs          lobby and realtime room hub
+      memory.rs        automatic memory
+      sync.rs          generic sync API
+      voice.rs         speech providers
+  web/
+    e2e/               Playwright flows
+    public/images/     versioned application assets
+    src/
+      app/             top-level providers and orchestration
+      components/      reusable UI
+      features/        avatar, cafe, and chat domains
+      hooks/           app-level React hooks
+      layouts/         shared shells
+      pages/           route screens
+      services/        browser/API infrastructure
+      stores/          browser persistence and small stores
+      i18n/            locale runtime and dictionaries
+      types/           shared frontend contracts
+      utils/           shared pure helpers
 docs/
-	lessons-learned/
+  lessons-learned/    reusable warnings from concrete failures
+  release/            version history
 ```
 
-## Folder Roles
+Current behavior belongs in focused files directly under `docs/`. Do not put
+roadmaps, implementation journals, or release history there. Reusable failure
+lessons belong in `docs/lessons-learned/`; release summaries belong in
+`docs/release/`.
 
-`apps/web` contains the standalone React frontend. It talks to the backend
-through HTTP only.
-
-`apps/api` contains the standalone Rust Axum backend. It owns auth, admin-only AI configuration, API keys, chat persistence, and provider adapters.
-
-`docs/` contains documentation. Current architecture and implementation
-behavior stay in its domain documents, separate from historical lessons. The
-root `README.md` is intentionally limited to run commands.
-
-`docs/lessons-learned/` records failed approaches and their reusable warnings
-without describing the current replacement implementation.
-
-## Frontend Shape
-
-`apps/web/src/app` contains top-level app wiring. Keep this small.
-
-`apps/web/src/pages` contains route-level screens. A page composes layouts, features, and app-level dependencies.
-
-`apps/web/src/layouts` contains reusable page shells such as `AppLayout`, including the activity bar/sidebar/content slot contract.
-
-`apps/web/src/features` contains domain-specific frontend code. Each feature can have its own `components`, `data`, `hooks`, and `services`.
-
-`apps/web/src/features/avatar` contains avatar-specific metadata such as the Aiko PNGTuber expression set.
-
-`apps/web/src/features/cafe` contains the Cafe WebSocket hook, HTTP service,
-Phaser scene, game canvas, and protocol types.
-
-`apps/web/src/components/navigation` contains app-level navigation UI such as the activity bar.
-
-`apps/web/src/services` contains infrastructure-facing helpers such as storage, axios clients, or transport wrappers.
-
-## Backend Shape
-
-`apps/api/src/app.rs` wires the Axum router.
-
-`apps/api/src/chat/mod.rs` composes chat routes and keeps chat CRUD handlers.
-`apps/api/src/chat/messages.rs` keeps message preparation, completion, and SSE
-streaming together so one message request remains understandable in one file.
-Attachment and voice handlers live in their matching chat submodules.
-
-`apps/api/src/store` splits PostgreSQL persistence by auth, chat, attachment,
-memory, cafe, and sync domain while preserving the shared `store` API.
-
-`apps/api/src/cafe.rs` owns the in-process room hub, authoritative gameplay
-validation, WebSocket protocol, and deterministic public Aiko events.
-
-`apps/api/src/characters.rs` keeps the static character registry and character prompts until this moves to a database.
-
-`apps/api/src/ai/mod.rs` owns provider selection and AI profile usage.
-
-`apps/api/src/ai/providers` keeps external provider details isolated from chat code.
-
-`apps/api/src/admin.rs` is the boundary for admin-only AI configuration endpoints.
+Keep request flow close to its domain handler and persistence in the matching
+`store/` module. Keep feature-specific frontend state and UI under the feature;
+move code to shared layers only after it has a real cross-feature use.

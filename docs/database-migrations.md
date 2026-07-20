@@ -1,196 +1,42 @@
 # Database Migrations
 
-Status: implemented
+Ordered SQL files in `apps/api/migrations/` are the only canonical PostgreSQL
+schema source.
 
-This document tracks WFChat's PostgreSQL migration policy. Ordered migration
-files under `apps/api/migrations/` are the canonical schema source.
+## Runtime
 
-## Current State
+`ChatStore::connect()` runs embedded SQLx migrations before the API serves
+traffic. Startup fails if migration validation or execution fails. Docker
+Compose waits for PostgreSQL health and relies on this API startup path; there
+is no separate migration service.
 
-WFChat applies embedded SQLx migrations during API startup through
-`ChatStore::connect()`.
+CI provides `WFCHAT_TEST_DATABASE_URL` so `cargo test` applies the same
+migrations to a fresh PostgreSQL database.
 
-Current migration files:
+`apps/api/db/init.sql` is a manual bootstrap helper only. It may be regenerated
+from migrations, but schema changes must never be added only there.
 
-- `apps/api/migrations/202607040001_initial_schema.sql`
-- `apps/api/migrations/202607100001_remove_manual_memory.sql`
-- `apps/api/migrations/202607100002_remove_manual_memory_sync_entities.sql`
-- `apps/api/migrations/202607100003_automatic_memory_foundation.sql`
-- `apps/api/migrations/202607100004_memory_message_source_lifecycle.sql`
-- `apps/api/migrations/202607110001_memory_extraction_outbox.sql`
-- `apps/api/migrations/202607130001_memory_follow_up_deliveries.sql`
-- `apps/api/migrations/202607140001_memory_extraction_temporal_context.sql`
-- `apps/api/migrations/202607180001_aiko_cafe_mvp.sql`
-- `apps/api/migrations/202607190001_aiko_cafe_round_rewards.sql`
-- `apps/api/migrations/202607190002_aiko_cafe_cosmetic_loadouts.sql`
+## Rules
 
-`apps/api/db/init.sql` is retained only as a legacy/manual bootstrap helper. Do
-not treat it as canonical, and do not add new schema changes there unless it is
-being regenerated from migrations.
+- Add one new timestamped SQL file for every schema change.
+- Never edit a migration after it has run on a shared or deployed database.
+- Keep migration files LF-only. SQLx checksums include line-ending bytes;
+  `.gitattributes` enforces this path.
+- Resolve checksum failures by comparing committed bytes and line endings.
+  Never edit `_sqlx_migrations` to hide a mismatch.
+- Use expand/backfill/contract migrations when one destructive step would make
+  mixed application versions unsafe.
+- Review application and migration changes together.
+- Keep [Database schema](database-schema.md) aligned at the table/relationship
+  level; exact columns, constraints, and indexes remain in SQL.
 
-## Risk
+Migrations are forward-only. PostgreSQL is the only supported database.
 
-The migration system exists to avoid schema drift:
+## Verification
 
-- A fresh database created from `init.sql` may not match an upgraded database
-  that has seen ordered migrations.
-- Schema changes can be hard to audit because they are embedded in application
-  code.
-- Deployment order is unclear when a change needs both a schema migration and
-  application code changes.
-- Destructive or backfill migrations are difficult to reason about without an
-  ordered migration history.
+From the repository root, against a disposable database:
 
-## Target State
-
-Use ordered SQLx migrations as the source of truth.
-
-- Store migration files under `apps/api/migrations/`.
-- Keep migration files append-only after they have been applied to any shared or
-  deployed database.
-- Keep every migration file byte-stable with LF line endings. SQLx checksums
-  include line-ending bytes, so CRLF conversion makes an unchanged applied
-  migration fail startup validation.
-- Run migrations before serving API traffic.
-- Fail API startup if a migration fails.
-- Keep `apps/api/db/init.sql` only as a non-canonical convenience if it remains
-  useful.
-
-## Implementation
-
-The baseline migration is:
-
-```text
-apps/api/migrations/202607040001_initial_schema.sql
+```powershell
+$env:WFCHAT_TEST_DATABASE_URL='postgres://postgres:postgres@localhost:5432/wfchat_test'
+cargo test --manifest-path apps/api/Cargo.toml
 ```
-
-The manual memory tables were retired by:
-
-```text
-apps/api/migrations/202607100001_remove_manual_memory.sql
-```
-
-This migration drops the former `memory_facts` and `memory_summaries` tables and
-their data. The baseline remains unchanged because migration files are
-append-only after use.
-
-The follow-up migration removes retired fact and summary cache items from
-`sync_entities`:
-
-```text
-apps/api/migrations/202607100002_remove_manual_memory_sync_entities.sql
-```
-
-The automatic-memory storage foundation is created by:
-
-```text
-apps/api/migrations/202607100003_automatic_memory_foundation.sql
-```
-
-Message-level provenance cleanup is completed by:
-
-```text
-apps/api/migrations/202607100004_memory_message_source_lifecycle.sql
-```
-
-The durable automatic-capture outbox and bounded job lifecycle are created by:
-
-```text
-apps/api/migrations/202607110001_memory_extraction_outbox.sql
-```
-
-New Chat follow-up delivery claims are created by:
-
-```text
-apps/api/migrations/202607130001_memory_follow_up_deliveries.sql
-```
-
-The extraction job receives a validated per-turn IANA timezone snapshot for
-deterministic relative-date handling through:
-
-```text
-apps/api/migrations/202607140001_memory_extraction_temporal_context.sql
-```
-
-Durable Cafe Stars, cosmetic ids, and the idempotent room completion ledger are
-created by:
-
-```text
-apps/api/migrations/202607180001_aiko_cafe_mvp.sql
-```
-
-The Cafe reward ledger becomes round-aware for replayable activities through:
-
-```text
-apps/api/migrations/202607190001_aiko_cafe_round_rewards.sql
-```
-
-Existing room reward rows are retained as round 1. The primary key expands from
-room/session to room/round/session, allowing later rounds to award once without
-making reconnects or repeated completion messages grant duplicates.
-
-The selected Cafe cosmetic is stored independently from star progress through:
-
-```text
-apps/api/migrations/202607190002_aiko_cafe_cosmetic_loadouts.sql
-```
-
-The loadout table has one row per owning session and an account/latest-update
-index. This keeps reward writes from changing which account loadout wins while
-still preserving guest-to-account promotion and cross-session selection.
-
-The baseline migration includes:
-
-- current table definitions
-- current indexes
-- compatibility `alter table ... add column if not exists` statements for
-  existing local databases
-- existing owner backfills for registered-user account data
-
-`Store::migrate()` has been removed. `ChatStore::connect()` now calls the SQLx
-migration runner before returning a usable store.
-
-Docker Compose no longer runs a separate `db-init` service. The API container
-waits for PostgreSQL to be healthy, then applies embedded migrations during API
-startup.
-
-CI starts a PostgreSQL service for the API job and sets
-`WFCHAT_TEST_DATABASE_URL`, so `cargo test` exercises the migration path against
-a fresh database.
-
-## Operating Rules
-
-- Every future schema change gets a new migration file.
-- `.gitattributes` enforces `apps/api/migrations/*.sql text eol=lf`; do not
-  remove or override this rule on another platform.
-- Never fix a checksum mismatch by editing `_sqlx_migrations`. First compare the
-  migration bytes and line endings with the committed file. Applied migrations
-  remain immutable; real schema changes require a new migration.
-- Migrations are reviewed with the application code that depends on them.
-- Risky migrations are split into expand/backfill/contract steps when needed.
-- CI should run migrations against an empty database before backend tests.
-- Release notes should mention whether a release includes database migrations.
-
-## Acceptance Criteria
-
-Migration work is complete when:
-
-- A fresh database can be created only from ordered migration files.
-- An existing development database can be upgraded by running the same migration
-  command.
-- API startup applies pending migrations before normal request handling.
-- `database-schema.md` matches the schema produced by migrations.
-- Docker documentation points to the migration flow as the canonical path.
-- No schema SQL is embedded in store startup code.
-
-## Non-Goals
-
-This work does not need to introduce:
-
-- Cross-database support beyond PostgreSQL.
-- A complex rollback framework.
-- Online zero-downtime migration guarantees before the app has production
-  traffic that requires them.
-
-Down migrations can be added later if the deployment workflow requires them, but
-forward-only migrations are enough for the current project stage.

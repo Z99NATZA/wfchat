@@ -1,63 +1,33 @@
 # State Management
 
-The project currently uses local React state because the app surface is small. This keeps debugging simple and avoids premature global state.
+WFChat uses React state, contexts, refs, and small browser-persistence modules;
+it does not use a general-purpose state library.
 
-## Chat State
+## Ownership
 
-Chat screen state is isolated in `apps/web/src/features/chat/hooks/useChatSession.ts`.
+| State | Owner |
+| --- | --- |
+| Theme, font, background, speech visibility/auto-play, overlay settings | `AppSettingsProvider` plus `stores/*` |
+| Auth/profile lifecycle | `useAuthSession` |
+| Sync queue/pull/cache orchestration | `App.tsx` and `syncService.ts` |
+| Chats, route hydration, messages, draft, attachments, voice interaction | `useChatSession` and feature hooks |
+| Semantic avatar expression/motion | `AvatarRuntimeProvider` |
+| Cafe lobby | `CafePage` |
+| Cafe socket snapshots/dialogue/rewards | `useCafeRoom` |
+| Phaser objects, predicted movement, rendering | `CafeScene` |
 
-It owns:
+Browser stores handle serialization, validation, and document effects; React
+providers expose render-facing values and callbacks. Components do not read
+feature hooks or localStorage directly when their owner can pass explicit props.
 
-- selected persona
-- message list
-- composer draft
-- mobile sidebar state
-- send/select handlers
+Avatar runtime state remains renderer-neutral: avatar id, renderer kind,
+expression, motion, and driver. PNG URLs, CSS classes, and Live2D paths belong
+to renderers or metadata.
 
-The hook imports chat fixtures and the companion reply service. UI components receive explicit props and do not reach into the hook directly.
+Avatar overlay settings are local-only. Theme, font, locale, and background are
+eligible for generic sync. Cafe progress and automatic memory are backend-owned
+and bypass browser sync.
 
-## App Settings State
-
-Theme, font, locale, background image, assistant speech visibility, assistant
-speech auto-play, avatar overlay preferences, auth/profile state, and sync
-orchestration are app-level state.
-
-- `apps/web/src/app/AppSettingsProvider.tsx` exposes persisted app settings to the app tree.
-- `apps/web/src/hooks/useTheme.ts` exposes React state and actions.
-- `apps/web/src/stores/themeStore.ts` resolves, persists, and applies the theme.
-- `apps/web/src/stores/fontStore.ts` resolves, persists, and applies the font.
-- `apps/web/src/stores/backgroundStore.ts` resolves and persists the background image URL.
-- `apps/web/src/stores/assistantSpeechStore.ts` resolves and persists local assistant speech visibility and auto-play preferences.
-- `apps/web/src/stores/avatarOverlayStore.ts` resolves and persists local chat overlay preferences.
-- `apps/web/src/services/storageService.ts` wraps browser local storage access.
-
-This split keeps browser persistence separate from React rendering, and keeps app settings from being owned by one page such as chat.
-
-Avatar overlay preferences are local UI preferences, not synced settings. They can be revisited later if multi-device overlay layout becomes a real requirement.
-
-## Avatar Runtime State
-
-Avatar runtime state is feature-level state shared across routes by `AvatarRuntimeProvider`.
-
-- `apps/web/src/features/avatar/runtime/avatarRuntimeStore.tsx` owns the current semantic avatar state.
-- `apps/web/src/features/avatar/runtime/avatarChatBridge.ts` maps chat lifecycle events into runtime updates.
-- `apps/web/src/features/avatar/renderers/pngtuber/PngTuberRenderer.tsx` renders PNG-specific visuals from semantic state.
-
-Keep runtime state renderer-neutral. It should describe `avatarId`, `rendererKind`, expression, motion, and driver, not PNG URLs, CSS classes, or Live2D file paths.
-
-## Feature State
-
-Feature state stays inside the feature boundary:
-
-- Chat sessions, messages, personas, and draft text stay in `features/chat`.
-- Avatar workspace selections, pose/expression state, runtime bridge state, and inspector values should stay in the avatar page/feature.
-- Cafe lobby state stays in `CafePage`. Live room snapshots, connection state,
-  dialogue, emotes, and rewards stay in `useCafeRoom`; Phaser scene objects and
-  predicted movement stay inside `CafeScene`. Only durable Cafe Stars live in
-  PostgreSQL.
-
-Feature state should not be moved into app-level state unless multiple unrelated pages genuinely need to read or update it.
-
-## When To Add A Store Library
-
-Add a dedicated state library only when state becomes shared across unrelated pages or needs derived selectors, optimistic updates, or cache invalidation. Until then, keep state close to the feature that owns it.
+Keep new state at the narrowest owner. Add a dedicated state library only when
+unrelated routes need shared derived selectors, cache invalidation, or complex
+optimistic updates that the existing boundaries cannot express clearly.

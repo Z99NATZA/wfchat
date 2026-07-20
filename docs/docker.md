@@ -1,179 +1,81 @@
 # Docker
 
-`docker-compose.yml` lives at the repo root and runs both services:
+`docker-compose.yml` runs PostgreSQL, the Rust API, VOICEVOX Engine, and the
+nginx-served web app.
 
-```text
-web -> http://localhost:5173
-api -> http://localhost:8080
-```
+| Service | Host port | Persistent data |
+| --- | ---: | --- |
+| `postgres` | 5432 | `pgdata` |
+| `api` | 8080 | `api_uploads` |
+| `voicevox` | 50021 | none |
+| `web` | 5173 | none |
 
-The web image installs its locked dependencies with `npm ci`, builds
-`apps/web`, and serves the Vite build through nginx.
+## Setup And Run
 
-The nginx config gives built frontend assets long-lived immutable caching. Repo-owned character images such as `/images/aiko-avatar.png`, PNGTuber images under `/images/aiko-pngtuber/`, and versioned Cafe assets under `/images/aiko-cafe/` also use long-lived immutable caching because the asset contract requires a new filename when replacing an image. Other `/images/` files keep a conservative `no-cache` policy.
-
-The api image builds `apps/api` and runs the Axum binary.
-
-The api service reads backend-only secrets from `apps/api/.env`.
-
-In Docker, nginx also proxies `/api/*` from the web container to the API service at `http://api:8080`. The proxy forwards WebSocket upgrade headers only for upgrade requests and uses 75-second read and send timeouts for live Cafe rooms. This keeps browser traffic on the same origin as the web app and avoids requiring LAN clients to reach port `8080` directly.
-
-The API container health check calls `/api/health`. The web health check calls
-the same path through nginx, which verifies both static serving and the API
-proxy. Compose waits for the API to become healthy before starting web.
-
-## Environment Setup
-
-Create local env files once after clone:
-
-```bash
+```powershell
 npm run init
+docker compose up -d --build
 ```
 
-This creates missing env files and adds newly introduced keys to existing env files without overwriting current values:
+`npm run init` creates missing `apps/api/.env` and `apps/web/.env` from
+their examples and adds missing keys without overwriting existing values.
+Backend secrets belong only in `apps/api/.env`.
 
-- `apps/api/.env` from `apps/api/.env.example`
-- `apps/web/.env` from `apps/web/.env.example`
+The API waits for PostgreSQL health, applies embedded SQLx migrations, then
+starts background memory and attachment-cleanup work. Web waits for API health.
+`/api/health` checks the API directly on port 8080 and through nginx on 5173.
 
-## API Startup Validation
+## Networking
 
-The API validates required env values at startup and exits immediately with a clear config error when missing.
+The Docker web build leaves `VITE_API_BASE_URL` empty. Browser requests remain
+same-origin on port 5173 and nginx proxies `/api/*` to `api:8080`, including
+WebSocket upgrade headers and unbuffered SSE.
 
-Provider requirements:
-
-- `AI_PROVIDER=openai` requires `OPENAI_API_KEY` and `OPENAI_MODEL`
-- `AI_PROVIDER=xai` requires `XAI_API_KEY` and `XAI_MODEL`
-- `AI_PROVIDER=lmstudio` requires `LMSTUDIO_MODEL`
-- `AI_PROVIDER=mock` requires no external API key
-- `AI_PROVIDER=anthropic` and `AI_PROVIDER=claude` are not implemented and fail at startup
-
-Unknown provider values also fail at startup.
-
-Voice playback provider requirements:
-
-- `AI_VOICE_PROVIDER=disabled` hides assistant voice playback actions
-- `AI_VOICE_PROVIDER=mock` enables backend-generated mock WAV playback for local UI lifecycle testing
-- `AI_VOICE_PROVIDER=openai` enables OpenAI text-to-speech playback and requires `OPENAI_API_KEY`
-- `AI_VOICE_PROVIDER=voicevox` enables server-side VOICEVOX Engine text-to-speech playback and requires `VOICEVOX_BASE_URL` plus `VOICEVOX_SPEAKER_ID`
-- `OPENAI_MODEL` is the text/chat model and is also used for VOICEVOX
-  `japanese_translation` speech-text generation when `AI_PROVIDER=openai`
-- `AI_VOICE_MODEL` defaults to `gpt-4o-mini-tts`
-- `AI_VOICE_ID` defaults to `marin`
-- `AI_VOICE_FORMAT` supports `mp3` and `wav`
-- `AI_VOICE_INSTRUCTIONS` is optional provider-side voice guidance
-- `AI_VOICE_SPEECH_TEXT_POLICY` supports `original` and `japanese_translation`
-- `VOICEVOX_CREDIT` is optional non-secret attribution text shown in Settings
-  when `AI_VOICE_PROVIDER=voicevox`; set it to the credit required by the
-  selected VOICEVOX voice library, for example `VOICEVOX: <speaker name>`
-- Optional VOICEVOX tuning env values are backend-owned and applied to the
-  `/audio_query` JSON before synthesis when set: `VOICEVOX_SPEED_SCALE`,
-  `VOICEVOX_PITCH_SCALE`, `VOICEVOX_INTONATION_SCALE`,
-  `VOICEVOX_VOLUME_SCALE`, `VOICEVOX_PRE_PHONEME_LENGTH`, and
-  `VOICEVOX_POST_PHONEME_LENGTH`. Values must be numeric; all except pitch
-  must be non-negative.
-- In Docker Compose, the API defaults `VOICEVOX_BASE_URL` to `http://voicevox:50021` and starts a `voicevox` service from `voicevox/voicevox_engine:cpu-ubuntu20.04-latest`
-
-Unknown voice provider values fail at startup.
-
-Voice input transcription provider requirements:
-
-- `AI_TRANSCRIPTION_PROVIDER=disabled` hides the chat composer microphone action
-- `AI_TRANSCRIPTION_PROVIDER=mock` enables backend-generated mock transcripts
-  for local UI lifecycle testing
-- `AI_TRANSCRIPTION_PROVIDER=openai` enables OpenAI speech-to-text and requires
-  `OPENAI_API_KEY`
-- `AI_TRANSCRIPTION_MODEL` defaults to `gpt-4o-mini-transcribe`
-- `AI_TRANSCRIPTION_PROMPT` is optional provider-side transcription guidance
-
-`OPENAI_MODEL`, `AI_VOICE_MODEL`, and `AI_TRANSCRIPTION_MODEL` target different
-provider endpoint capabilities. A latest text model such as `gpt-5.5` can be
-used for `OPENAI_MODEL`, but voice playback and transcription should keep
-audio-specific model ids supported by their respective endpoints.
-
-Unknown transcription provider values fail at startup.
-
-For local non-Docker browser-side axios calls, use:
+For separate non-Docker frontend development:
 
 ```text
 VITE_API_BASE_URL=http://localhost:8080
 ```
 
-For Docker web builds, `VITE_API_BASE_URL` is intentionally empty so browser requests stay relative to the web origin and go through the nginx `/api` proxy. Use `http://api:8080` only for server-to-server calls from inside Docker.
-
-## LAN Sharing
-
-To open the Docker web app from another device on the same Wi-Fi, use the host machine's LAN IP:
+For another device on the LAN, set `WFCHAT_PUBLIC_HOST` to the host's LAN IP,
+rebuild, and open:
 
 ```text
-http://10.42.17.228:5173
+http://<host-lan-ip>:5173
 ```
 
-Rebuild and start the containers:
+Only port 5173 is required by the browser. `FRONTEND_ORIGINS` controls direct
+cross-origin API access.
 
-```bash
-docker compose up -d --build
-```
+## Provider Configuration
 
-The other device only needs to reach port `5173`. Chat API calls go to `http://10.42.17.228:5173/api/...` and nginx forwards them to the API container inside Docker.
+Chat provider modes:
 
-The root `docker-compose.yml` still keeps both `http://localhost:5173` and `http://<WFCHAT_PUBLIC_HOST>:5173` in the API CORS allow-list for direct API access and development diagnostics.
+- `mock`
+- `openai` with `OPENAI_API_KEY` and `OPENAI_MODEL`
+- `xai` with `XAI_API_KEY` and `XAI_MODEL`
+- `lmstudio` with `LMSTUDIO_MODEL`
 
-If `WFCHAT_PUBLIC_HOST` is unset, Docker Compose defaults to `localhost` for normal local use.
+`anthropic`/`claude` and unknown values fail startup validation.
 
-For local chat Markdown QA, the root `docker-compose.yml` builds the web image with:
+Voice modes are `disabled|mock|openai|voicevox`. Transcription modes are
+`disabled|mock|openai`. See [Chat voice](chat-voice.md) for capability-specific
+models, speech policy, VOICEVOX attribution, and tuning.
 
-```text
-VITE_ENABLE_MARKDOWN_QA=true
-```
+Attachment size/dimension defaults are configured by `CHAT_ATTACHMENT_*`; see
+[Chat image attachments](chat-image-attachments.md). Exact environment keys and
+defaults live in `apps/api/.env.example` and `apps/api/src/config.rs`.
 
-This exposes the frontend-only `Load QA` action at `http://localhost:5173/chat?qa=markdown`. Use the query string exactly; `/chat/qa` is a chat path segment, not the QA fixture route. The web `Dockerfile` defaults this build arg to `false` for non-local builds.
+The compose build enables Markdown QA at `/chat?qa=markdown`. Other web builds
+default `VITE_ENABLE_MARKDOWN_QA` to false.
 
-## Database Init Options
+## Persistence And Caching
 
-The API applies embedded SQLx migrations during startup. Docker Compose waits
-for PostgreSQL to become healthy, then starts the API; no separate database init
-container is required.
+Schema changes come only from `apps/api/migrations/`; `db/init.sql` is not
+part of normal Compose startup.
 
-Migration ownership is tracked in `docs/database-migrations.md`. Ordered files
-under `apps/api/migrations/` are canonical.
+Uploaded images live in `api_uploads`; database data lives in `pgdata`.
+In-process Cafe rooms and memory telemetry do not survive an API restart.
 
-Replayable Cafe rounds use an in-process API timer for the eight-second
-intermission. Round-aware rewards, cosmetic unlock ids, and equipped loadouts
-use the existing PostgreSQL connection. Their ordered migrations are applied
-during normal API startup. This adds no Compose service, port, volume, health
-check, or environment value; the normal `docker compose up -d --build` path is
-sufficient.
-
-Automatic-memory storage and capture use the same embedded migration path. The
-capture worker runs inside the API container and the durable outbox stays in
-PostgreSQL, so no additional Compose service, volume, port, or environment value
-is required. `docker compose up -d --build` rebuilds the API, applies the outbox
-migration to the existing PostgreSQL volume during startup, and then starts the
-worker. With `AI_PROVIDER=mock`, extraction jobs complete without learned
-items; configured OpenAI-compatible providers perform structured extraction
-using their existing backend model and credentials.
-
-Bounded automatic-memory retrieval also runs inside the API container and uses
-the existing PostgreSQL connection. It adds no Compose service, migration,
-volume, port, public API, or environment value. The normal
-`docker compose up -d --build` path is sufficient for both capture and
-retrieval.
-
-Automatic-memory observability uses in-process atomic counters and structured
-API logs. It adds no Compose service, dependency, port, volume, migration, or
-environment value. Counters reset when the API container restarts; no public
-metrics endpoint is exposed.
-
-Memory expiration is enforced by the existing PostgreSQL retrieval query and
-application validation. It requires no cleanup container, scheduler, migration,
-environment value, or additional Compose configuration.
-
-For local manual bootstrap only, legacy schema SQL remains at
-`apps/api/db/init.sql`:
-
-```bash
-psql "postgres://postgres:postgres@localhost:5432/wfchat" -v ON_ERROR_STOP=1 -f apps/api/db/init.sql
-```
-
-Do not add future schema changes only to `init.sql`; add a new migration file
-instead.
+Built assets and versioned Aiko/PNGTuber/Cafe images use immutable nginx caching.
+Replacing one requires a new filename and a metadata update.

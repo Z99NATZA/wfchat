@@ -1,77 +1,11 @@
 # Aiko PNGTuber
 
-The PNGTuber stack is the current real avatar implementation for Aiko. Live2D has a separate route shell, but no Live2D runtime is loaded yet.
+The PNGTuber renderer is Aiko's active avatar implementation. The Live2D route
+is a UI shell and loads no model or runtime.
 
-## Current Status
+## Assets And Runtime
 
-Implemented:
-
-- PNGTuber Studio page at `/avatar/pngtuber`.
-- Live2D workspace shell at `/model/live2d`.
-- Shared avatar runtime provider mounted above routes.
-- PNG renderer split into `PngTuberRenderer`.
-- Chat-to-avatar bridge wired from `ChatPage` to `useChatSession`.
-- Chat overlay using the same runtime and renderer.
-- Overlay visibility, position, and size settings persisted locally.
-- Chat reply emotion inference with a small conservative heuristic.
-- Chat reply emotion inference split into a pure helper with focused unit tests.
-- Persona-to-avatar binding config split into a pure helper with Aiko as the only enabled binding.
-- Compact mobile chat overlay behavior using the same visibility, position, and size settings.
-- Renderer-level expression transition polish with reduced-motion support.
-- Non-blocking PNGTuber asset preloading after app mount, so expression changes do not wait for first-use image fetches.
-- Chat SSE lifecycle wired into the PNGTuber bridge so Aiko can enter talking while stream tokens arrive.
-- Assistant speech playback lifecycle wired into the PNGTuber bridge so Aiko
-  can enter thinking while speech loads, talking while audio plays, and idle
-  when playback stops or fails.
-- Provider-native SSE token streaming for OpenAI-compatible providers with an Aiko streaming-safe response guard.
-
-Not implemented:
-
-- Live2D model loading, physics, motion priority, lip-sync, or runtime package.
-- Audio waveform, amplitude, phoneme, or viseme-driven PNGTuber lip sync.
-- Additional non-Aiko persona assets and bindings.
-- User-uploaded/custom PNG asset management.
-
-## Runtime Files
-
-- Agent work priority: `docs/agent-work-priority.md`
-- UI page: `apps/web/src/pages/PngTuberPage.tsx`
-- Live2D shell page: `apps/web/src/pages/Model2DPage.tsx`
-- PNGTuber metadata: `apps/web/src/features/avatar/data/aikoPngTuber.ts`
-- Runtime store: `apps/web/src/features/avatar/runtime/avatarRuntimeStore.tsx`
-- Runtime types: `apps/web/src/features/avatar/runtime/avatarRuntimeTypes.ts`
-- Avatar binding config: `apps/web/src/features/avatar/runtime/avatarBindings.ts`
-- Chat bridge: `apps/web/src/features/avatar/runtime/avatarChatBridge.ts`
-- Emotion inference helper: `apps/web/src/features/avatar/runtime/avatarEmotionInference.ts`
-- Chat overlay: `apps/web/src/features/avatar/components/AvatarOverlay.tsx`
-- PNGTuber renderer: `apps/web/src/features/avatar/renderers/pngtuber/PngTuberRenderer.tsx`
-- PNGTuber asset preloader: `apps/web/src/features/avatar/renderers/pngtuber/pngTuberAssetPreloader.ts`
-- Overlay settings store: `apps/web/src/stores/avatarOverlayStore.ts`
-- Shared animation styles: `apps/web/src/styles.css`
-- Public assets: `apps/web/public/images/aiko-pngtuber/`
-- Cafe world assets: `apps/web/public/images/aiko-cafe/` (not part of the
-  PNGTuber renderer)
-
-## Asset Set
-
-```text
-apps/web/public/images/aiko-pngtuber/
-  aiko-neutral.png
-  aiko-happy.png
-  aiko-shy.png
-  aiko-sad.png
-  aiko-surprised.png
-```
-
-Keep all expression files in the same general crop and character scale. Do not overwrite generated assets; add a new filename and update `aikoPngTuber.ts`.
-
-Cafe dialogue can reuse these expression images as portraits. The Phaser room
-uses its dedicated transparent `aiko-host-v1.png` world sprite and does not
-drive `AvatarRuntimeProvider` or `PngTuberRenderer`.
-
-## Runtime Contract
-
-The app keeps semantic avatar state in `AvatarRuntimeProvider`, mounted in `apps/web/src/app/App.tsx` above both chat and avatar routes:
+`AvatarRuntimeProvider` is mounted above routes and stores semantic state:
 
 ```ts
 type AvatarRuntimeState = {
@@ -83,93 +17,70 @@ type AvatarRuntimeState = {
 };
 ```
 
-Keep runtime state semantic. It should not contain PNG URLs, CSS class names, Live2D file paths, physics parameters, or renderer-specific motion names.
+Renderer-neutral state must not contain PNG URLs, CSS classes, model paths, or
+physics parameters.
 
-## Page Boundaries
+Aiko expressions are `neutral`, `happy`, `shy`, `sad`, and `surprised`
+under `apps/web/public/images/aiko-pngtuber/`. Keep the crop and character scale
+consistent. Add a new filename when replacing an asset because nginx caches
+these paths as immutable.
 
-`PngTuberPage` owns the PNGTuber Studio layout, sidebar, controls, and inspector UI.
+`scheduleAikoPngTuberAssetPreload()` requests neutral first and the remaining
+expressions during browser idle time. It is non-blocking and deduplicates URLs
+for the current session.
 
-`PngTuberRenderer` owns only the visual performer. It receives a resolved emotion and motion state, then renders the PNG asset and CSS animations.
+## Ownership
 
-`ChatPage` owns chat layout and emits chat lifecycle events through `useChatSession({ onAvatarChatEvent })`.
+| File | Role |
+| --- | --- |
+| `pages/PngTuberPage.tsx` | Studio layout and manual controls |
+| `features/avatar/data/aikoPngTuber.ts` | Expression assets and metadata |
+| `features/avatar/runtime/avatarRuntimeStore.tsx` | Shared semantic state |
+| `features/avatar/runtime/avatarBindings.ts` | Persona-to-avatar binding |
+| `features/avatar/runtime/avatarChatBridge.ts` | Chat/speech event mapping |
+| `features/avatar/runtime/avatarEmotionInference.ts` | Conservative text heuristic |
+| `features/avatar/renderers/pngtuber/PngTuberRenderer.tsx` | PNG rendering and CSS motion |
+| `features/avatar/components/AvatarOverlay.tsx` | Chat overlay |
 
-`avatarChatBridge.ts` translates chat lifecycle events into semantic avatar state. Chat code should not import PNG metadata or renderer-specific components.
-
-`avatarBindings.ts` maps chat personas to semantic avatar runtime targets. Keep it small and data-first so forks can add another persona binding without changing the chat bridge lifecycle logic.
-
-`Model2DPage` is a separate Live2D workspace shell. It exists to keep future 2D model work out of the PNGTuber page.
-
-## Current Behavior
-
-Avatar binding:
+The current binding is:
 
 ```text
-aiko -> aiko-pngtuber, pngtuber, enabled
+aiko -> aiko-pngtuber -> pngtuber
 ```
 
-Motion mapping:
+## Chat And Speech Behavior
 
 ```text
-assistant_waiting -> neutral + thinking
+assistant_waiting   -> neutral + thinking
 assistant_streaming -> neutral + talking
-assistant_replied -> inferred expression + talking, then idle
-assistant_error   -> sad + idle
+assistant_replied   -> inferred expression + talking, then idle
+assistant_error     -> sad + idle
+
+speech loading      -> current/inferred expression + thinking
+speech playing      -> inferred expression + talking
+speech stop/end     -> current expression + idle
+speech error        -> sad/current expression + idle
 ```
 
-Assistant speech playback motion mapping:
+Emotion inference maps a small keyword set only to known expressions and
+defaults to neutral. Chat emits semantic events and never imports PNG metadata
+or renderer components.
 
-```text
-assistant_speech_loading -> current/inferred expression + thinking
-assistant_speech_playing -> inferred expression + talking
-assistant_speech_stopped -> current expression + idle
-assistant_speech_error   -> sad or current expression + idle
-```
+Speech motion follows playback lifecycle only. There is no waveform, amplitude,
+phoneme, viseme, mouth-shape, or lip-sync analysis.
 
-Expression inference currently lives in `avatarEmotionInference.ts` as a small keyword heuristic. It maps only to known expressions: `neutral`, `happy`, `shy`, `sad`, and `surprised`. If no rule matches, it defaults to `neutral`.
+## Rendering And Overlay
 
-Manual motion controls in PNGTuber Studio can preview idle, thinking, and talking. They update the shared runtime, so the chat overlay reflects the same selected motion while the app remains mounted.
+`PngTuberRenderer` receives resolved expression and motion. Expression
+fade/scale runs on a wrapper while idle/thinking/talking loops run on the image,
+so transforms do not overwrite each other. Reduced-motion preferences disable
+unnecessary animation.
 
-The PNGTuber Studio viewport keeps the decorative stage and performer visual non-interactive. The top expression control strip is the interactive layer and must stay above the renderer so emotion buttons remain tappable on small screens.
+The Studio's top control strip remains above the non-interactive stage on small
+screens. Manual expression/motion controls update the same shared runtime used
+by chat.
 
-Expression changes use a short fade/scale transition in `PngTuberRenderer`. Motion loops run on the image element while expression transitions run on the wrapper, so the animations do not override each other's transforms. PNGTuber animations respect reduced-motion preferences.
-
-## Assistant Speech Playback Motion
-
-Assistant text-to-speech playback should use the existing semantic avatar
-runtime instead of audio analysis. When the chat UI plays a finalized assistant
-message, the chat session boundary can notify the avatar bridge that speech is
-loading, playing, stopped, or failed. The renderer then uses the existing
-`thinking`, `talking`, and `idle` motion classes.
-
-Keep this scope narrow:
-
-- Drive motion from playback lifecycle state, not from waveform or amplitude.
-- Use `talking` only while audio playback is actually active.
-- Use `thinking` only while the speech request is loading or waiting to begin.
-- Return to `idle` on natural audio end, stop, error, interruption, chat change,
-  persona change, clear chat, navigation, or unmount.
-- Infer expression from the played assistant message text when available.
-- Do not add mouth-shape PNG assets, viseme mappings, Web Audio analysis, or
-  backend speech metadata in this scope.
-- Do not make `PngTuberRenderer` depend on chat, speech, provider, or audio
-  APIs. It should continue to receive only resolved emotion and semantic motion
-  state.
-
-This work is separate from real lip sync. Real lip sync should wait until there
-are mouth-shape assets, provider visemes, or a Live2D runtime that can represent
-mouth movement cleanly.
-
-## Asset Loading And Cache
-
-`App.tsx` schedules `scheduleAikoPngTuberAssetPreload()` after mount. The preloader runs during `requestIdleCallback` when available, or a zero-delay timeout fallback otherwise. It creates `Image` objects with async decoding and does not await the result, so first paint and normal UI interaction are not blocked.
-
-The preloader keeps a session-local set of already requested URLs to avoid duplicate fetches. It requests the neutral expression first, then the remaining Aiko expression PNGs.
-
-The Docker web image serves `/images/aiko-pngtuber/` through nginx with long-lived immutable caching. Keep the asset contract from the asset set section: when replacing a PNGTuber expression image, add a new filename and update `aikoPngTuber.ts` instead of overwriting the existing file. Other `/images/` assets keep the more conservative cache policy.
-
-## Chat Overlay Settings
-
-Overlay settings are controlled from the app settings dialog and persisted locally:
+Chat overlay visibility, position, and size are local settings:
 
 ```text
 wfchat.avatarOverlayVisible
@@ -177,26 +88,14 @@ wfchat.avatarOverlayPosition
 wfchat.avatarOverlaySize
 ```
 
-The overlay can be hidden or moved without changing chat behavior. The bridge should continue updating runtime state even when the overlay is hidden.
+The bridge keeps updating when the overlay is hidden. On mobile, `ChatPage`
+positions the overlay above the measured composer and reserves only the measured
+overlay height plus a gap in the timeline.
 
-On mobile chat viewports, the overlay uses a compact performer size and sits above the composer. The chat page measures the composer height to offset the overlay above the live composer, then measures the overlay height and adds only overlay-height bottom clearance to the message timeline so chat bubbles do not sit under the PNGTuber. On medium and larger viewports, it uses the larger desktop dimensions.
+## Current Limits
 
-## Deferred Transport Work
-
-Do not start with WebSocket for the current PNGTuber work. The chat flow is still request/response, so the bridge can run from existing `sendMessage()` lifecycle events.
-
-Preferred transport order:
-
-```text
-runtime store -> renderer split -> chat bridge -> chat overlay -> SSE/token streaming -> WebSocket if needed
-```
-
-Use SSE first if the next need is one-way AI response streaming. Reserve WebSocket for bidirectional realtime features such as voice input, live mic volume, remote overlay control, OBS control, or multi-device avatar synchronization.
-
-## Remaining Work
-
-Useful next stations:
-
-- Add PNG asset management only when there are real custom assets to manage.
-
-Pause Live2D runtime work until real model assets and runtime decisions exist. Future Live2D implementation should live under a separate `renderers/live2d/` module while sharing the same semantic avatar runtime state.
+- Aiko is the only bound persona.
+- Users cannot upload or manage PNG sets.
+- The Live2D shell has no model loading, physics, motions, or lip sync.
+- Avatar runtime is local to the mounted app; it is not remotely controlled or
+  synchronized across devices.
