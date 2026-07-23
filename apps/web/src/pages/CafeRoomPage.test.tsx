@@ -307,8 +307,17 @@ function roomFixture(): CafeRoomState {
 		inviteCode: "ABC123",
 		isPrivate: true,
 		capacity: 8,
-		mapWidth: 1280,
-		mapHeight: 800,
+		mapLayout: {
+			version: "cafe-room-v1",
+			width: 1280,
+			height: 800,
+			playerCollisionRadius: 10,
+			interactionRadius: 92,
+			hostInteractionRadius: 132,
+			playerSpawn: { x: 640, y: 704 },
+			colliders: [],
+			interactionTargets: [{ id: "aiko", x: 640, y: 272 }]
+		},
 		players: [
 			{
 				id: "22222222-2222-4222-8222-222222222222",

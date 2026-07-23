@@ -6,6 +6,7 @@ import type {
 	CafeDialogue,
 	CafeDirection,
 	CafeEmote,
+	CafeMapLayout,
 	CafeRoomErrorCode,
 	CafeRoomState
 } from "@/features/cafe/types";
@@ -30,8 +31,23 @@ type ApiRoom = {
 	invite_code: string;
 	is_private: boolean;
 	capacity: number;
-	map_width: number;
-	map_height: number;
+	map_layout: {
+		version: string;
+		width: number;
+		height: number;
+		player_collision_radius: number;
+		interaction_radius: number;
+		host_interaction_radius: number;
+		player_spawn: { x: number; y: number };
+		colliders: Array<{
+			id: string;
+			x: number;
+			y: number;
+			width: number;
+			height: number;
+		}>;
+		interaction_targets: Array<{ id: string; x: number; y: number }>;
+	};
 	players: ApiPlayer[];
 	activity: {
 		id: "tea_delivery" | "table_service";
@@ -326,8 +342,7 @@ function toRoomState(room: ApiRoom): CafeRoomState {
 		inviteCode: room.invite_code,
 		isPrivate: room.is_private,
 		capacity: room.capacity,
-		mapWidth: room.map_width,
-		mapHeight: room.map_height,
+		mapLayout: toMapLayout(room.map_layout),
 		players: room.players.map((player) => ({
 			id: player.id,
 			name: player.name,
@@ -365,6 +380,20 @@ function toRoomState(room: ApiRoom): CafeRoomState {
 			}))
 		},
 		aiko: room.aiko
+	};
+}
+
+function toMapLayout(layout: ApiRoom["map_layout"]): CafeMapLayout {
+	return {
+		version: layout.version,
+		width: layout.width,
+		height: layout.height,
+		playerCollisionRadius: layout.player_collision_radius,
+		interactionRadius: layout.interaction_radius,
+		hostInteractionRadius: layout.host_interaction_radius,
+		playerSpawn: layout.player_spawn,
+		colliders: layout.colliders,
+		interactionTargets: layout.interaction_targets
 	};
 }
 

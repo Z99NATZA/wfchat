@@ -64,13 +64,41 @@ export type CafeTableOrder = {
 	claimedBy: string | null;
 };
 
+export type CafeMapCollider = {
+	id: string;
+	x: number;
+	y: number;
+	width: number;
+	height: number;
+};
+
+export type CafeMapInteractionTarget = {
+	id: string;
+	x: number;
+	y: number;
+};
+
+export type CafeMapLayout = {
+	version: string;
+	width: number;
+	height: number;
+	playerCollisionRadius: number;
+	interactionRadius: number;
+	hostInteractionRadius: number;
+	playerSpawn: {
+		x: number;
+		y: number;
+	};
+	colliders: CafeMapCollider[];
+	interactionTargets: CafeMapInteractionTarget[];
+};
+
 export type CafeRoomState = {
 	id: string;
 	inviteCode: string;
 	isPrivate: boolean;
 	capacity: number;
-	mapWidth: number;
-	mapHeight: number;
+	mapLayout: CafeMapLayout;
 	players: CafePlayerState[];
 	activity: CafeActivityState;
 	aiko: {

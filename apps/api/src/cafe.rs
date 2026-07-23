@@ -34,19 +34,38 @@ use crate::{
 };
 
 const ROOM_CAPACITY: usize = 8;
-const MAP_WIDTH: f32 = 1280.0;
-const MAP_HEIGHT: f32 = 800.0;
-const PLAYER_RADIUS: f32 = 22.0;
 const MOVE_SPEED: f32 = 210.0;
-const AIKO_X: f32 = 640.0;
-const AIKO_Y: f32 = 272.0;
-const INTERACTION_DISTANCE: f32 = 92.0;
-const AIKO_INTERACTION_DISTANCE: f32 = 132.0;
 const MAX_MESSAGES_PER_WINDOW: usize = 45;
 const MESSAGE_WINDOW: Duration = Duration::from_secs(2);
 const ROUND_INTERMISSION: Duration = Duration::from_secs(8);
 const MAX_CAFE_PLAYER_NAME_CHARS: usize = 24;
 const SERVICE_COUNTER_TARGET_ID: &str = "service-counter";
+const CAFE_MAP_LAYOUT: CafeMapLayout = CafeMapLayout {
+    version: "cafe-room-v1",
+    width: 1280.0,
+    height: 800.0,
+    player_collision_radius: 10.0,
+    interaction_radius: 92.0,
+    host_interaction_radius: 132.0,
+    player_spawn: CafeMapPoint { x: 640.0, y: 704.0 },
+    colliders: &CAFE_MAP_COLLIDERS,
+    interaction_targets: &CAFE_MAP_INTERACTION_TARGETS,
+};
+const CAFE_MAP_COLLIDERS: [CafeMapCollider; 6] = [
+    CafeMapCollider::new("service-counter", 366.0, 182.0, 488.0, 120.0),
+    CafeMapCollider::new("table-window", 190.0, 322.0, 120.0, 122.0),
+    CafeMapCollider::new("table-window-lower", 188.0, 540.0, 108.0, 100.0),
+    CafeMapCollider::new("table-garden", 990.0, 338.0, 114.0, 106.0),
+    CafeMapCollider::new("table-garden-lower", 990.0, 544.0, 112.0, 104.0),
+    CafeMapCollider::new("table-long", 460.0, 523.0, 352.0, 98.0),
+];
+const CAFE_MAP_INTERACTION_TARGETS: [CafeMapInteractionTarget; 5] = [
+    CafeMapInteractionTarget::new("aiko", 640.0, 272.0),
+    CafeMapInteractionTarget::new(SERVICE_COUNTER_TARGET_ID, 640.0, 272.0),
+    CafeMapInteractionTarget::new("table-window", 250.0, 383.0),
+    CafeMapInteractionTarget::new("table-garden", 1047.0, 391.0),
+    CafeMapInteractionTarget::new("table-long", 636.0, 573.0),
+];
 
 const TEA_LAYOUTS: [[(f32, f32); 3]; 3] = [
     [(142.0, 224.0), (1138.0, 248.0), (1064.0, 682.0)],
@@ -54,17 +73,10 @@ const TEA_LAYOUTS: [[(f32, f32); 3]; 3] = [
     [(322.0, 278.0), (950.0, 248.0), (912.0, 688.0)],
 ];
 
-const TABLE_SERVICE_LAYOUT: [(&str, &str, f32, f32); 3] = [
-    ("window", "sakura", 198.0, 411.0),
-    ("garden", "mint", 906.0, 411.0),
-    ("long", "classic", 640.0, 526.0),
-];
-
-const COLLIDERS: &[Collider] = &[
-    Collider::new(414.0, 92.0, 452.0, 142.0),
-    Collider::new(198.0, 360.0, 176.0, 102.0),
-    Collider::new(906.0, 360.0, 176.0, 102.0),
-    Collider::new(504.0, 526.0, 272.0, 104.0),
+const TABLE_SERVICE_ORDERS: [(&str, &str, &str); 3] = [
+    ("window", "sakura", "table-window"),
+    ("garden", "mint", "table-garden"),
+    ("long", "classic", "table-long"),
 ];
 
 pub fn router() -> Router<AppState> {
@@ -123,11 +135,71 @@ struct CafeRoomState {
     invite_code: String,
     is_private: bool,
     capacity: usize,
-    map_width: f32,
-    map_height: f32,
+    map_layout: CafeMapLayout,
     players: Vec<CafePlayerState>,
     activity: CafeActivity,
     aiko: CafeAikoState,
+}
+
+#[derive(Clone, Copy, Serialize)]
+struct CafeMapLayout {
+    version: &'static str,
+    width: f32,
+    height: f32,
+    player_collision_radius: f32,
+    interaction_radius: f32,
+    host_interaction_radius: f32,
+    player_spawn: CafeMapPoint,
+    colliders: &'static [CafeMapCollider],
+    interaction_targets: &'static [CafeMapInteractionTarget],
+}
+
+#[derive(Clone, Copy, Serialize)]
+struct CafeMapPoint {
+    x: f32,
+    y: f32,
+}
+
+#[derive(Clone, Copy, Serialize)]
+struct CafeMapCollider {
+    id: &'static str,
+    x: f32,
+    y: f32,
+    width: f32,
+    height: f32,
+}
+
+impl CafeMapCollider {
+    const fn new(id: &'static str, x: f32, y: f32, width: f32, height: f32) -> Self {
+        Self {
+            id,
+            x,
+            y,
+            width,
+            height,
+        }
+    }
+
+    fn contains_player(self, x: f32, y: f32) -> bool {
+        let radius = CAFE_MAP_LAYOUT.player_collision_radius;
+        x + radius > self.x
+            && x - radius < self.x + self.width
+            && y + radius > self.y
+            && y - radius < self.y + self.height
+    }
+}
+
+#[derive(Clone, Copy, Serialize)]
+struct CafeMapInteractionTarget {
+    id: &'static str,
+    x: f32,
+    y: f32,
+}
+
+impl CafeMapInteractionTarget {
+    const fn new(id: &'static str, x: f32, y: f32) -> Self {
+        Self { id, x, y }
+    }
 }
 
 #[derive(Clone, Serialize)]
@@ -357,32 +429,6 @@ impl CafeInteractionResult {
     }
 }
 
-#[derive(Clone, Copy)]
-struct Collider {
-    x: f32,
-    y: f32,
-    width: f32,
-    height: f32,
-}
-
-impl Collider {
-    const fn new(x: f32, y: f32, width: f32, height: f32) -> Self {
-        Self {
-            x,
-            y,
-            width,
-            height,
-        }
-    }
-
-    fn contains_player(self, x: f32, y: f32) -> bool {
-        x + PLAYER_RADIUS > self.x
-            && x - PLAYER_RADIUS < self.x + self.width
-            && y + PLAYER_RADIUS > self.y
-            && y - PLAYER_RADIUS < self.y + self.height
-    }
-}
-
 impl CafeActivity {
     fn for_round(round_number: u32) -> Self {
         if round_number.is_multiple_of(2) {
@@ -423,20 +469,23 @@ impl CafeActivity {
             phase: CafeActivityPhase::Active,
             next_round_at: None,
             delivered: 0,
-            target: TABLE_SERVICE_LAYOUT.len() as u8,
+            target: TABLE_SERVICE_ORDERS.len() as u8,
             completed: false,
             tea_leaves: Vec::new(),
-            table_orders: TABLE_SERVICE_LAYOUT
+            table_orders: TABLE_SERVICE_ORDERS
                 .into_iter()
                 .enumerate()
-                .map(|(index, (table_id, drink, x, y))| CafeTableOrder {
-                    id: format!("order-{round_number}-{}", index + 1),
-                    table_id,
-                    drink,
-                    x,
-                    y,
-                    status: CafeTableOrderStatus::Available,
-                    claimed_by: None,
+                .map(|(index, (table_id, drink, target_id))| {
+                    let target = cafe_map_interaction_target(target_id);
+                    CafeTableOrder {
+                        id: format!("order-{round_number}-{}", index + 1),
+                        table_id,
+                        drink,
+                        x: target.x,
+                        y: target.y,
+                        status: CafeTableOrderStatus::Available,
+                        claimed_by: None,
+                    }
                 })
                 .collect(),
         }
@@ -583,13 +632,11 @@ impl CafeHub {
         } else {
             (movement.x, movement.y)
         };
-        let next_x = next_x.clamp(PLAYER_RADIUS, MAP_WIDTH - PLAYER_RADIUS);
-        let next_y = next_y.clamp(PLAYER_RADIUS, MAP_HEIGHT - PLAYER_RADIUS);
+        let radius = CAFE_MAP_LAYOUT.player_collision_radius;
+        let next_x = next_x.clamp(radius, CAFE_MAP_LAYOUT.width - radius);
+        let next_y = next_y.clamp(radius, CAFE_MAP_LAYOUT.height - radius);
 
-        if !COLLIDERS
-            .iter()
-            .any(|collider| collider.contains_player(next_x, next_y))
-        {
+        if !cafe_map_collides(next_x, next_y) {
             player.x = next_x;
             player.y = next_y;
         }
@@ -634,10 +681,12 @@ impl CafeHub {
             return CafeInteractionResult::none();
         };
         let player_position = (player.x, player.y);
+        let aiko = cafe_map_interaction_target("aiko");
 
         if room.activity.phase == CafeActivityPhase::Intermission {
             if target_id == "aiko"
-                && distance_between(player_position, (AIKO_X, AIKO_Y)) <= AIKO_INTERACTION_DISTANCE
+                && distance_between(player_position, (aiko.x, aiko.y))
+                    <= CAFE_MAP_LAYOUT.host_interaction_radius
             {
                 let _ = room.sender.send(CafeServerMessage::Dialogue {
                     message_key: "cafe.dialogue.intermission",
@@ -658,7 +707,9 @@ impl CafeHub {
             .position(|leaf| leaf.id == target_id && leaf.available)
         {
             let leaf = &room.activity.tea_leaves[leaf_index];
-            if distance_between(player_position, (leaf.x, leaf.y)) <= INTERACTION_DISTANCE {
+            if distance_between(player_position, (leaf.x, leaf.y))
+                <= CAFE_MAP_LAYOUT.interaction_radius
+            {
                 room.activity.tea_leaves[leaf_index].available = false;
                 if let Some(player) = room.players.get_mut(&player_id) {
                     player.carried_tea = player.carried_tea.saturating_add(1);
@@ -675,7 +726,8 @@ impl CafeHub {
         }
 
         if target_id != "aiko"
-            || distance_between(player_position, (AIKO_X, AIKO_Y)) > AIKO_INTERACTION_DISTANCE
+            || distance_between(player_position, (aiko.x, aiko.y))
+                > CAFE_MAP_LAYOUT.host_interaction_radius
         {
             return CafeInteractionResult::none();
         }
@@ -800,7 +852,10 @@ fn interact_table_service(
     target_id: &str,
 ) -> CafeInteractionResult {
     if target_id == SERVICE_COUNTER_TARGET_ID {
-        if distance_between(player_position, (AIKO_X, AIKO_Y)) > AIKO_INTERACTION_DISTANCE {
+        let counter = cafe_map_interaction_target(SERVICE_COUNTER_TARGET_ID);
+        if distance_between(player_position, (counter.x, counter.y))
+            > CAFE_MAP_LAYOUT.host_interaction_radius
+        {
             return CafeInteractionResult::none();
         }
         if room
@@ -852,7 +907,8 @@ fn interact_table_service(
     let order = &room.activity.table_orders[order_index];
     if order.status != CafeTableOrderStatus::Claimed
         || order.claimed_by != Some(player_id)
-        || distance_between(player_position, (order.x, order.y)) > INTERACTION_DISTANCE
+        || distance_between(player_position, (order.x, order.y))
+            > CAFE_MAP_LAYOUT.interaction_radius
     {
         return CafeInteractionResult::none();
     }
@@ -1264,13 +1320,14 @@ fn new_player(
     equipped_cosmetic: Option<String>,
 ) -> CafePlayer {
     let color_index = session.user_id.as_bytes()[0] as usize % PLAYER_COLORS.len();
+    let spawn = CAFE_MAP_LAYOUT.player_spawn;
     CafePlayer {
         id: session.id,
         owner: OwnerScope::from_session(session),
         name,
         color: PLAYER_COLORS[color_index].to_owned(),
-        x: 640.0,
-        y: 704.0,
+        x: spawn.x,
+        y: spawn.y,
         direction: Direction::Up,
         moving: false,
         carried_tea: 0,
@@ -1330,6 +1387,7 @@ fn room_summary(room: &CafeRoom) -> CafeRoomSummary {
 }
 
 fn room_state(room: &CafeRoom) -> CafeRoomState {
+    let aiko = cafe_map_interaction_target("aiko");
     let mut players = room
         .players
         .values()
@@ -1352,13 +1410,12 @@ fn room_state(room: &CafeRoom) -> CafeRoomState {
         invite_code: room.invite_code.clone(),
         is_private: room.is_private,
         capacity: ROOM_CAPACITY,
-        map_width: MAP_WIDTH,
-        map_height: MAP_HEIGHT,
+        map_layout: CAFE_MAP_LAYOUT,
         players,
         activity: room.activity.clone(),
         aiko: CafeAikoState {
-            x: AIKO_X,
-            y: AIKO_Y,
+            x: aiko.x,
+            y: aiko.y,
             motion: if room.activity.completed {
                 "celebrate"
             } else {
@@ -1405,6 +1462,22 @@ fn distance_between(left: (f32, f32), right: (f32, f32)) -> f32 {
     (dx * dx + dy * dy).sqrt()
 }
 
+fn cafe_map_collides(x: f32, y: f32) -> bool {
+    CAFE_MAP_LAYOUT
+        .colliders
+        .iter()
+        .any(|collider| collider.contains_player(x, y))
+}
+
+fn cafe_map_interaction_target(id: &str) -> CafeMapInteractionTarget {
+    CAFE_MAP_LAYOUT
+        .interaction_targets
+        .iter()
+        .find(|target| target.id == id)
+        .copied()
+        .expect("Cafe map interaction target must exist")
+}
+
 #[cfg(test)]
 fn now_unix_seconds() -> u64 {
     SystemTime::now()
@@ -1430,6 +1503,39 @@ mod tests {
         assert_eq!(normalize_cafe_player_name("   "), None);
         assert_eq!(normalize_cafe_player_name("Tea\nFriend"), None);
         assert_eq!(normalize_cafe_player_name(&"a".repeat(25)), None);
+    }
+
+    #[test]
+    fn cafe_map_layout_is_versioned_and_matches_furniture_footprints() {
+        assert_eq!(CAFE_MAP_LAYOUT.version, "cafe-room-v1");
+        assert_eq!(CAFE_MAP_LAYOUT.width, 1280.0);
+        assert_eq!(CAFE_MAP_LAYOUT.height, 800.0);
+        assert_eq!(CAFE_MAP_LAYOUT.player_collision_radius, 10.0);
+        assert_eq!(
+            CAFE_MAP_LAYOUT
+                .colliders
+                .iter()
+                .map(|collider| collider.id)
+                .collect::<Vec<_>>(),
+            [
+                "service-counter",
+                "table-window",
+                "table-window-lower",
+                "table-garden",
+                "table-garden-lower",
+                "table-long"
+            ]
+        );
+        assert!(!cafe_map_collides(180.0, 380.0));
+        assert!(cafe_map_collides(181.0, 380.0));
+        assert!(cafe_map_collides(250.0, 380.0));
+        assert!(!cafe_map_collides(320.0, 380.0));
+
+        let room = new_room(false, &HashMap::new());
+        let value = serde_json::to_value(room_state(&room)).expect("room state should serialize");
+        assert_eq!(value["map_layout"]["version"], "cafe-room-v1");
+        assert_eq!(value["map_layout"]["player_collision_radius"], 10.0);
+        assert_eq!(value["map_layout"]["colliders"][1]["width"], 120.0);
     }
 
     fn guest() -> SessionRecord {
@@ -1479,12 +1585,58 @@ mod tests {
             },
         )
         .await;
+        {
+            let mut rooms = hub.rooms.lock().await;
+            let player = rooms
+                .get_mut(&room.id)
+                .and_then(|room| room.players.get_mut(&session.id))
+                .expect("player should remain");
+            assert!(player.y > 650.0, "large movement should be clamped");
+            player.x = 170.0;
+            player.y = 380.0;
+            player.last_move_at = Instant::now() - Duration::from_secs(1);
+        }
+
+        hub.update_player(
+            room.id,
+            session.id,
+            PlayerMovement {
+                x: 195.0,
+                y: 380.0,
+                direction: Direction::Right,
+                moving: true,
+                sequence: 2,
+            },
+        )
+        .await;
+        {
+            let mut rooms = hub.rooms.lock().await;
+            let player = rooms
+                .get_mut(&room.id)
+                .and_then(|room| room.players.get_mut(&session.id))
+                .expect("player should remain");
+            assert_eq!((player.x, player.y), (170.0, 380.0));
+            player.last_move_at = Instant::now() - Duration::from_secs(1);
+        }
+
+        hub.update_player(
+            room.id,
+            session.id,
+            PlayerMovement {
+                x: 175.0,
+                y: 380.0,
+                direction: Direction::Right,
+                moving: true,
+                sequence: 3,
+            },
+        )
+        .await;
         let rooms = hub.rooms.lock().await;
         let player = rooms
             .get(&room.id)
             .and_then(|room| room.players.get(&session.id))
             .expect("player should remain");
-        assert!(player.y > 650.0, "large movement should be clamped");
+        assert_eq!((player.x, player.y), (175.0, 380.0));
     }
 
     #[tokio::test]
@@ -1527,6 +1679,7 @@ mod tests {
         let hub = CafeHub::default();
         let room = hub.create_room(false).await;
         let session = guest();
+        let aiko = cafe_map_interaction_target("aiko");
         hub.join(room.id, new_player(&session, "Guest TEA".to_owned(), None))
             .await
             .expect("player should join");
@@ -1538,8 +1691,8 @@ mod tests {
                 .players
                 .get_mut(&session.id)
                 .expect("player should exist");
-            player.x = AIKO_X;
-            player.y = AIKO_Y + 80.0;
+            player.x = aiko.x;
+            player.y = aiko.y + 80.0;
             player.carried_tea = 3;
         }
         let completion = hub.interact(room.id, session.id, "aiko").await;
@@ -1587,6 +1740,7 @@ mod tests {
         let room = hub.create_room(false).await;
         let first = guest();
         let second = guest();
+        let aiko = cafe_map_interaction_target("aiko");
         hub.join(room.id, new_player(&first, "Guest SERVER".to_owned(), None))
             .await
             .expect("first player should join");
@@ -1601,8 +1755,8 @@ mod tests {
             let room = rooms.get_mut(&room.id).expect("room should exist");
             room.activity = CafeActivity::table_service(2);
             for player in room.players.values_mut() {
-                player.x = AIKO_X;
-                player.y = AIKO_Y + 80.0;
+                player.x = aiko.x;
+                player.y = aiko.y + 80.0;
             }
         }
 
@@ -1651,8 +1805,8 @@ mod tests {
                     .get_mut(&first.id)
                     .expect("first player should exist");
                 if player.carried_order_id.is_none() {
-                    player.x = AIKO_X;
-                    player.y = AIKO_Y + 80.0;
+                    player.x = aiko.x;
+                    player.y = aiko.y + 80.0;
                     true
                 } else {
                     false

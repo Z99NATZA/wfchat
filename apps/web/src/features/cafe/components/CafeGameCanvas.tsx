@@ -3,8 +3,6 @@ import Phaser from "phaser";
 import { CafeScene } from "@/features/cafe/engine/CafeScene";
 import type { CafeDirection, CafeEmote, CafeRoomState } from "@/features/cafe/types";
 
-const AIKO_INTERACTION_DISTANCE = 134;
-
 type CafeGameCanvasProps = {
 	room: CafeRoomState | null;
 	selfPlayerId: string | null;
@@ -64,7 +62,7 @@ function CafeGameCanvas({
 		room !== null &&
 		selfPlayer !== undefined &&
 		Math.hypot(selfPlayer.x - room.aiko.x, selfPlayer.y - room.aiko.y) <=
-			AIKO_INTERACTION_DISTANCE;
+			room.mapLayout.hostInteractionRadius;
 	const effectiveInteractionTarget = staleTeaTarget
 		? carriedTea > 0 && isNearAiko
 			? "aiko"
@@ -102,11 +100,14 @@ function CafeGameCanvas({
 		if (!parentRef.current) {
 			return;
 		}
-		const scene = new CafeScene({
-			onMovement: (...args) => movementRef.current(...args),
-			onInteract: (targetId) => interactRef.current(targetId),
-			onInteractionTargetChange: setInteractionTarget
-		});
+		const scene = new CafeScene(
+			{
+				onMovement: (...args) => movementRef.current(...args),
+				onInteract: (targetId) => interactRef.current(targetId),
+				onInteractionTargetChange: setInteractionTarget
+			},
+			shouldShowCollisionDebug()
+		);
 		sceneRef.current = scene;
 		const game = new Phaser.Game({
 			type: Phaser.AUTO,
@@ -154,7 +155,7 @@ function CafeGameCanvas({
 		const isNearAiko =
 			selfPlayer !== undefined &&
 			Math.hypot(selfPlayer.x - room.aiko.x, selfPlayer.y - room.aiko.y) <=
-				AIKO_INTERACTION_DISTANCE;
+				room.mapLayout.hostInteractionRadius;
 		sceneRef.current?.setInteractionTarget(isNearAiko ? "aiko" : null);
 	}, [interactionTarget, room, selfPlayerId]);
 
@@ -272,6 +273,13 @@ function isEditableElement(target: EventTarget | null) {
 		target instanceof HTMLInputElement ||
 		target instanceof HTMLTextAreaElement ||
 		(target instanceof HTMLElement && target.isContentEditable)
+	);
+}
+
+function shouldShowCollisionDebug() {
+	return (
+		import.meta.env.DEV &&
+		new URLSearchParams(window.location.search).get("debugCollision") === "1"
 	);
 }
 

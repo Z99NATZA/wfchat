@@ -2,26 +2,17 @@ import Phaser from "phaser";
 import type {
 	CafeDirection,
 	CafeEmote,
+	CafeMapLayout,
 	CafePlayerState,
 	CafeRoomState
 } from "@/features/cafe/types";
 import { calculateCafeCameraFraming } from "@/features/cafe/engine/cafeCamera";
+import { resolveCafeMovement } from "@/features/cafe/engine/cafeCollision";
 
-const MAP_WIDTH = 1280;
-const MAP_HEIGHT = 800;
 const PLAYER_SPEED = 210;
-const PLAYER_RADIUS = 22;
 const PLAYER_LABEL_Y = -58;
 const PLAYER_LABEL_WITH_COSMETIC_Y = -88;
-const INTERACTION_DISTANCE = 94;
-const AIKO_INTERACTION_DISTANCE = 134;
 const CAMERA_FOLLOW_LERP = 0.1;
-const COLLIDERS = [
-	new Phaser.Geom.Rectangle(414, 92, 452, 142),
-	new Phaser.Geom.Rectangle(198, 360, 176, 102),
-	new Phaser.Geom.Rectangle(906, 360, 176, 102),
-	new Phaser.Geom.Rectangle(504, 526, 272, 104)
-];
 
 type CafeSceneCallbacks = {
 	onMovement: (
@@ -52,6 +43,7 @@ type DirectionInput = { x: number; y: number };
 
 export class CafeScene extends Phaser.Scene {
 	private readonly callbacks: CafeSceneCallbacks;
+	private readonly showCollisionDebug: boolean;
 	private readonly playerVisuals = new Map<string, PlayerVisual>();
 	private readonly teaVisuals = new Map<string, Phaser.GameObjects.Container>();
 	private readonly tableOrderVisuals = new Map<string, Phaser.GameObjects.Container>();
@@ -67,12 +59,16 @@ export class CafeScene extends Phaser.Scene {
 	private lastMovementSentAt = 0;
 	private lastMoving = false;
 	private hasLocalPosition = false;
+	private background?: Phaser.GameObjects.Image;
 	private aiko?: Phaser.GameObjects.Image;
 	private aikoQuestMarker?: Phaser.GameObjects.Container;
+	private collisionDebug?: Phaser.GameObjects.Graphics;
+	private appliedMapVersion: string | null = null;
 
-	constructor(callbacks: CafeSceneCallbacks) {
+	constructor(callbacks: CafeSceneCallbacks, showCollisionDebug = false) {
 		super("aiko-cafe");
 		this.callbacks = callbacks;
+		this.showCollisionDebug = showCollisionDebug;
 	}
 
 	preload() {
@@ -81,21 +77,13 @@ export class CafeScene extends Phaser.Scene {
 	}
 
 	create() {
-		this.cameras.main.setBounds(0, 0, MAP_WIDTH, MAP_HEIGHT);
-		this.add.image(0, 0, "cafe-room").setOrigin(0).setDisplaySize(MAP_WIDTH, MAP_HEIGHT);
+		this.background = this.add.image(0, 0, "cafe-room").setOrigin(0).setVisible(false);
 		this.aiko = this.add
-			.image(640, 272, "aiko-host")
+			.image(0, 0, "aiko-host")
 			.setOrigin(0.5, 0.9)
 			.setDisplaySize(112, 168)
-			.setDepth(420);
-		this.tweens.add({
-			targets: this.aiko,
-			y: 268,
-			duration: 1800,
-			yoyo: true,
-			repeat: -1,
-			ease: "Sine.easeInOut"
-		});
+			.setDepth(420)
+			.setVisible(false);
 		const markerBackground = this.add.graphics();
 		markerBackground.fillStyle(0x6f431c, 0.96).fillCircle(0, 0, 19);
 		markerBackground.lineStyle(3, 0xfff4d2, 1).strokeCircle(0, 0, 19);
@@ -108,17 +96,12 @@ export class CafeScene extends Phaser.Scene {
 			})
 			.setOrigin(0.5);
 		this.aikoQuestMarker = this.add
-			.container(640, 112, [markerBackground, markerLabel])
+			.container(0, 0, [markerBackground, markerLabel])
 			.setDepth(2200)
 			.setVisible(false);
-		this.tweens.add({
-			targets: this.aikoQuestMarker,
-			y: 104,
-			duration: 700,
-			yoyo: true,
-			repeat: -1,
-			ease: "Sine.easeInOut"
-		});
+		if (this.showCollisionDebug) {
+			this.collisionDebug = this.add.graphics().setDepth(5000);
+		}
 
 		if (this.input.keyboard) {
 			this.cursors = this.input.keyboard.createCursorKeys();
@@ -136,6 +119,7 @@ export class CafeScene extends Phaser.Scene {
 		if (!this.room || !this.localVisual) {
 			return;
 		}
+		this.updateHostVisuals(time);
 
 		const input = this.inputEnabled ? this.readDirectionInput() : { x: 0, y: 0 };
 		const moving = input.x !== 0 || input.y !== 0;
@@ -183,6 +167,7 @@ export class CafeScene extends Phaser.Scene {
 		} else {
 			this.changeInteractionTarget(null);
 		}
+		this.drawCollisionDebug();
 	}
 
 	applyRoomState(room: CafeRoomState, selfPlayerId: string | null, resetLocalPosition = false) {
@@ -247,6 +232,7 @@ export class CafeScene extends Phaser.Scene {
 	}
 
 	private renderRoom(room: CafeRoomState) {
+		this.applyMapLayout(room.mapLayout);
 		const activePlayerIds = new Set(room.players.map((player) => player.id));
 		for (const [playerId, visual] of this.playerVisuals) {
 			if (!activePlayerIds.has(playerId)) {
@@ -426,17 +412,15 @@ export class CafeScene extends Phaser.Scene {
 	}
 
 	private moveLocalPlayer(nextX: number, nextY: number) {
-		if (!this.localVisual) {
+		if (!this.localVisual || !this.room) {
 			return;
 		}
-		const clampedX = Phaser.Math.Clamp(nextX, PLAYER_RADIUS, MAP_WIDTH - PLAYER_RADIUS);
-		const clampedY = Phaser.Math.Clamp(nextY, PLAYER_RADIUS, MAP_HEIGHT - PLAYER_RADIUS);
-		if (!collides(clampedX, this.localVisual.container.y)) {
-			this.localVisual.container.x = clampedX;
-		}
-		if (!collides(this.localVisual.container.x, clampedY)) {
-			this.localVisual.container.y = clampedY;
-		}
+		const resolved = resolveCafeMovement(
+			this.room.mapLayout,
+			{ x: this.localVisual.container.x, y: this.localVisual.container.y },
+			{ x: nextX, y: nextY }
+		);
+		this.localVisual.container.setPosition(resolved.x, resolved.y);
 	}
 
 	private updateInteractionTarget() {
@@ -461,7 +445,10 @@ export class CafeScene extends Phaser.Scene {
 					leaf.x,
 					leaf.y
 				);
-				if (distance <= INTERACTION_DISTANCE && distance < nearestDistance) {
+				if (
+					distance <= this.room.mapLayout.interactionRadius &&
+					distance < nearestDistance
+				) {
 					nextTarget = leaf.id;
 					nearestDistance = distance;
 				}
@@ -472,7 +459,10 @@ export class CafeScene extends Phaser.Scene {
 				this.room.aiko.x,
 				this.room.aiko.y
 			);
-			if (aikoDistance <= AIKO_INTERACTION_DISTANCE && aikoDistance < nearestDistance) {
+			if (
+				aikoDistance <= this.room.mapLayout.hostInteractionRadius &&
+				aikoDistance < nearestDistance
+			) {
 				nextTarget = "aiko";
 			}
 		} else if (selfPlayer?.carriedOrderId) {
@@ -485,7 +475,7 @@ export class CafeScene extends Phaser.Scene {
 			if (
 				order &&
 				Phaser.Math.Distance.Between(localPosition.x, localPosition.y, order.x, order.y) <=
-					INTERACTION_DISTANCE
+					this.room.mapLayout.interactionRadius
 			) {
 				nextTarget = order.id;
 			}
@@ -496,7 +486,7 @@ export class CafeScene extends Phaser.Scene {
 				this.room.aiko.x,
 				this.room.aiko.y
 			);
-			if (counterDistance <= AIKO_INTERACTION_DISTANCE) {
+			if (counterDistance <= this.room.mapLayout.hostInteractionRadius) {
 				nextTarget = "service-counter";
 			}
 		}
@@ -524,25 +514,66 @@ export class CafeScene extends Phaser.Scene {
 	}
 
 	private updateCameraFraming() {
+		if (!this.room) {
+			return;
+		}
 		const framing = calculateCafeCameraFraming(
 			this.scale.width,
 			this.scale.height,
-			MAP_WIDTH,
-			MAP_HEIGHT
+			this.room.mapLayout.width,
+			this.room.mapLayout.height
 		);
 		this.cameras.main.setZoom(framing.zoom);
 		this.cameras.main.setDeadzone(framing.deadZoneWidth, framing.deadZoneHeight);
 	}
-}
 
-function collides(x: number, y: number) {
-	return COLLIDERS.some(
-		(rectangle) =>
-			x + PLAYER_RADIUS > rectangle.left &&
-			x - PLAYER_RADIUS < rectangle.right &&
-			y + PLAYER_RADIUS > rectangle.top &&
-			y - PLAYER_RADIUS < rectangle.bottom
-	);
+	private applyMapLayout(layout: CafeMapLayout) {
+		if (this.appliedMapVersion === layout.version) {
+			return;
+		}
+		this.appliedMapVersion = layout.version;
+		this.cameras.main.setBounds(0, 0, layout.width, layout.height);
+		this.background?.setDisplaySize(layout.width, layout.height).setVisible(true);
+		this.updateCameraFraming();
+	}
+
+	private updateHostVisuals(time: number) {
+		if (!this.room) {
+			return;
+		}
+		const hostBob = Math.sin(time / 900) * 2;
+		this.aiko?.setPosition(this.room.aiko.x, this.room.aiko.y + hostBob).setVisible(true);
+		if (this.aikoQuestMarker?.visible) {
+			const markerBob = Math.sin(time / 350) * 4;
+			this.aikoQuestMarker.setPosition(this.room.aiko.x, this.room.aiko.y - 160 + markerBob);
+		}
+	}
+
+	private drawCollisionDebug() {
+		if (!this.collisionDebug || !this.room) {
+			return;
+		}
+		const layout = this.room.mapLayout;
+		this.collisionDebug.clear();
+		this.collisionDebug.fillStyle(0xff315c, 0.2);
+		this.collisionDebug.lineStyle(2, 0xff315c, 0.95);
+		for (const collider of layout.colliders) {
+			this.collisionDebug.fillRect(collider.x, collider.y, collider.width, collider.height);
+			this.collisionDebug.strokeRect(collider.x, collider.y, collider.width, collider.height);
+		}
+		this.collisionDebug.fillStyle(0xffc857, 0.9);
+		for (const target of layout.interactionTargets) {
+			this.collisionDebug.fillCircle(target.x, target.y, 6);
+		}
+		if (this.localVisual) {
+			this.collisionDebug.lineStyle(2, 0x42e695, 1);
+			this.collisionDebug.strokeCircle(
+				this.localVisual.container.x,
+				this.localVisual.container.y,
+				layout.playerCollisionRadius
+			);
+		}
+	}
 }
 
 function directionFromVector(x: number, y: number, fallback: CafeDirection): CafeDirection {

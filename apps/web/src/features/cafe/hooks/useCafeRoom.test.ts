@@ -46,8 +46,25 @@ const room = {
 	invite_code: "ABC123",
 	is_private: false,
 	capacity: 8,
-	map_width: 1280,
-	map_height: 800,
+	map_layout: {
+		version: "cafe-room-v1",
+		width: 1280,
+		height: 800,
+		player_collision_radius: 10,
+		interaction_radius: 92,
+		host_interaction_radius: 132,
+		player_spawn: { x: 640, y: 704 },
+		colliders: [
+			{
+				id: "table-window",
+				x: 190,
+				y: 322,
+				width: 120,
+				height: 122
+			}
+		],
+		interaction_targets: [{ id: "aiko", x: 640, y: 272 }]
+	},
 	players: [
 		{
 			id: "22222222-2222-4222-8222-222222222222",
@@ -112,6 +129,18 @@ describe("useCafeRoom", () => {
 		expect(result.current.cafeStars).toBe(3);
 		expect(result.current.room?.activity.teaLeaves[0].id).toBe("tea-1");
 		expect(result.current.room?.players[0].equippedCosmetic).toBe("sakura_pin");
+		expect(result.current.room?.mapLayout).toMatchObject({
+			version: "cafe-room-v1",
+			playerCollisionRadius: 10,
+			hostInteractionRadius: 132
+		});
+		expect(result.current.room?.mapLayout.colliders[0]).toEqual({
+			id: "table-window",
+			x: 190,
+			y: 322,
+			width: 120,
+			height: 122
+		});
 
 		act(() => {
 			result.current.sendMovement(650, 700, "right", true, 1);

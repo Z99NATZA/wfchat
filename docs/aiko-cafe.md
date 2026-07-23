@@ -34,6 +34,13 @@ The Phaser game loads only on `/cafe/rooms/:roomId`, so it is excluded from the
 initial chat bundle. Active rooms and gameplay simulation live in the API
 process; empty rooms are removed.
 
+The Cafe uses `cafe-room-v1.png` as one background image in a fixed 1280x800
+world. The API-owned `cafe-room-v1` map layout defines the world bounds,
+10-pixel player foot radius, interaction distances and positions, and
+rectangular footprints for the service counter and all five tables. Camera
+scaling, viewport size, device pixel ratio, and browser zoom affect rendering
+only and do not change this world geometry.
+
 ## Identity And Persistence
 
 Cafe APIs use the existing HTTP-only `wfchat_session` cookie. Missing sessions
@@ -63,14 +70,16 @@ WebSocket client messages are `move`, `interact`, `emote`, and `ping`. Server
 messages are `welcome`, `snapshot`, localized-key `dialogue`, `emote`, targeted
 `reward`, `pong`, and `error`. Room snapshots identify `tea_delivery` or
 `table_service`; Table Service snapshots include order table, drink, claim,
-and delivery state. Stable terminal error codes are `room_not_found`,
+and delivery state. Each room state also carries the versioned authoritative map
+layout used by the client. Stable terminal error codes are `room_not_found`,
 `room_full`, and `rate_limited`.
 
 The API is authoritative for room capacity, collision, coordinates, movement
 speed, activity rotation, inventory, Table Service claims, completion, rewards,
 cosmetics, and allowed emotes. It validates browser origins, message rate, JSON
 shape, interaction distance, target ownership, and monotonic movement sequence
-numbers. The client predicts local movement and interpolates remote snapshots.
+numbers. The client predicts local movement from the server-provided layout and
+interpolates remote snapshots; it contains no independent collider constants.
 
 When the browser goes offline, gameplay input stops immediately. Controls
 resume only after a reconnected socket receives a fresh `welcome` snapshot.
@@ -83,6 +92,10 @@ to lobby actions.
 React UI—including the lobby, panels, forms, HUD, prompts, dialogue, and mobile
 controls—uses the shared application theme. The Phaser map, characters, items,
 and in-world markers use the Cafe game palette.
+
+Development builds show the authoritative obstacle rectangles, interaction
+points, and local player collision radius when a room URL includes
+`?debugCollision=1`. Normal rendering never shows this overlay.
 
 Cafe dialogue is deterministic and uses public room events only. It does not
 call an AI provider or load automatic memory. Never expose owner-scoped learned
