@@ -25,6 +25,7 @@ const room = {
 	is_private: false,
 	player_count: 2,
 	capacity: 8,
+	activity_id: "tea_delivery",
 	activity_completed: false
 };
 
@@ -53,6 +54,7 @@ describe("cafeApiService", () => {
 				isPrivate: false,
 				playerCount: 2,
 				capacity: 8,
+				activityId: "tea_delivery",
 				activityCompleted: false
 			}
 		]);

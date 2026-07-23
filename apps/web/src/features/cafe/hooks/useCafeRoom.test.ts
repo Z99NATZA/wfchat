@@ -58,6 +58,7 @@ const room = {
 			direction: "up",
 			moving: false,
 			carried_tea: 0,
+			carried_order_id: null,
 			equipped_cosmetic: "sakura_pin"
 		}
 	],
@@ -69,7 +70,8 @@ const room = {
 		delivered: 0,
 		target: 3,
 		completed: false,
-		tea_leaves: [{ id: "tea-1", x: 142, y: 224, available: true }]
+		tea_leaves: [{ id: "tea-1", x: 142, y: 224, available: true }],
+		table_orders: []
 	},
 	aiko: { x: 640, y: 272, motion: "idle" }
 };
@@ -145,7 +147,11 @@ describe("useCafeRoom", () => {
 				cafe_stars: 1,
 				room
 			});
-			socket.message({ type: "dialogue", message: "Tea is ready", expression: "happy" });
+			socket.message({
+				type: "dialogue",
+				message_key: "cafe.dialogue.roundComplete",
+				expression: "happy"
+			});
 			socket.message({ type: "emote", player_id: room.players[0].id, emote: "tea" });
 			socket.message({
 				type: "reward",
@@ -159,9 +165,66 @@ describe("useCafeRoom", () => {
 			});
 		});
 
-		expect(result.current.dialogue).toEqual({ message: "Tea is ready", expression: "happy" });
+		expect(result.current.dialogue).toEqual({
+			messageKey: "cafe.dialogue.roundComplete",
+			expression: "happy"
+		});
 		expect(result.current.emote?.emote).toBe("tea");
 		expect(result.current.cafeStars).toBe(2);
+	});
+
+	it("maps claimed table service orders from authoritative snapshots", () => {
+		const tableRoom = {
+			...room,
+			players: [
+				{
+					...room.players[0],
+					carried_order_id: "order-2-1"
+				}
+			],
+			activity: {
+				id: "table_service" as const,
+				round_number: 2,
+				phase: "active" as const,
+				next_round_at: null,
+				delivered: 0,
+				target: 3,
+				completed: false,
+				tea_leaves: [],
+				table_orders: [
+					{
+						id: "order-2-1",
+						table_id: "garden" as const,
+						drink: "mint" as const,
+						x: 906,
+						y: 411,
+						status: "claimed" as const,
+						claimed_by: room.players[0].id
+					}
+				]
+			}
+		};
+		const { result } = renderHook(() => useCafeRoom(room.id));
+		const socket = FakeWebSocket.instances[0];
+
+		act(() => {
+			socket.open();
+			socket.message({
+				type: "welcome",
+				self_player_id: room.players[0].id,
+				cafe_stars: 7,
+				room: tableRoom
+			});
+		});
+
+		expect(result.current.room?.activity.id).toBe("table_service");
+		expect(result.current.room?.activity.tableOrders[0]).toMatchObject({
+			id: "order-2-1",
+			tableId: "garden",
+			drink: "mint",
+			status: "claimed"
+		});
+		expect(result.current.room?.players[0].carriedOrderId).toBe("order-2-1");
 	});
 
 	it("goes offline immediately, blocks messages, and waits for welcome before resuming", () => {

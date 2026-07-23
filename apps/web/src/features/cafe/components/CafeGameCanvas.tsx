@@ -23,6 +23,10 @@ type CafeGameCanvasProps = {
 		collectTea: string;
 		deliverTea: string;
 		talkToAiko: string;
+		pickUpDrink: string;
+		serveDrink: string;
+		findCounter: string;
+		findTable: string;
 		idle: string;
 	};
 	loadingLabel: string;
@@ -47,6 +51,12 @@ function CafeGameCanvas({
 	const [interactionTarget, setInteractionTarget] = useState<string | null>(null);
 	const selfPlayer = room?.players.find((player) => player.id === selfPlayerId);
 	const carriedTea = selfPlayer?.carriedTea ?? 0;
+	const carriedOrder = room?.activity.tableOrders.find(
+		(order) =>
+			order.id === selfPlayer?.carriedOrderId &&
+			order.status === "claimed" &&
+			order.claimedBy === selfPlayerId
+	);
 	const staleTeaTarget =
 		interactionTarget?.startsWith("tea-") === true &&
 		!room?.activity.teaLeaves.some((leaf) => leaf.id === interactionTarget && leaf.available);
@@ -60,13 +70,31 @@ function CafeGameCanvas({
 			? "aiko"
 			: null
 		: interactionTarget;
-	const interactionLabel = effectiveInteractionTarget
-		? effectiveInteractionTarget === "aiko"
-			? carriedTea > 0
-				? interactionLabels.deliverTea
-				: interactionLabels.talkToAiko
-			: interactionLabels.collectTea
-		: interactionLabels.idle;
+	const tableTargetIsStale =
+		room?.activity.id === "table_service" &&
+		effectiveInteractionTarget !== null &&
+		(effectiveInteractionTarget === "service-counter"
+			? Boolean(selfPlayer?.carriedOrderId) ||
+				!room.activity.tableOrders.some((order) => order.status === "available")
+			: effectiveInteractionTarget.startsWith("order-") &&
+				effectiveInteractionTarget !== carriedOrder?.id);
+	const currentInteractionTarget = tableTargetIsStale ? null : effectiveInteractionTarget;
+	const interactionLabel =
+		room?.activity.id === "table_service"
+			? currentInteractionTarget === "service-counter"
+				? interactionLabels.pickUpDrink
+				: currentInteractionTarget?.startsWith("order-")
+					? interactionLabels.serveDrink
+					: carriedOrder
+						? interactionLabels.findTable
+						: interactionLabels.findCounter
+			: currentInteractionTarget
+				? currentInteractionTarget === "aiko"
+					? carriedTea > 0
+						? interactionLabels.deliverTea
+						: interactionLabels.talkToAiko
+					: interactionLabels.collectTea
+				: interactionLabels.idle;
 	movementRef.current = onMovement;
 	interactRef.current = onInteract;
 
@@ -136,17 +164,17 @@ function CafeGameCanvas({
 				!inputEnabled ||
 				event.repeat ||
 				event.key.toLowerCase() !== "e" ||
-				!effectiveInteractionTarget ||
+				!currentInteractionTarget ||
 				isEditableElement(event.target)
 			) {
 				return;
 			}
 			event.preventDefault();
-			interactRef.current(effectiveInteractionTarget);
+			interactRef.current(currentInteractionTarget);
 		}
 		window.addEventListener("keydown", interactWithKeyboard);
 		return () => window.removeEventListener("keydown", interactWithKeyboard);
-	}, [effectiveInteractionTarget, inputEnabled]);
+	}, [currentInteractionTarget, inputEnabled]);
 
 	useEffect(() => {
 		if (emote) {
@@ -212,17 +240,17 @@ function CafeGameCanvas({
 			<button
 				type="button"
 				className="absolute bottom-[max(1.25rem,env(safe-area-inset-bottom))] right-4 z-40 flex h-16 min-w-20 max-w-28 items-center justify-center rounded-2xl border border-action-border bg-action px-3 text-center text-xs font-bold leading-4 text-action-text shadow-soft transition hover:bg-action-hover focus:outline-none focus:ring-4 focus:ring-action-ring/25 disabled:border-app-border disabled:bg-app-soft disabled:text-muted sm:hidden"
-				disabled={!inputEnabled || !effectiveInteractionTarget}
+				disabled={!inputEnabled || !currentInteractionTarget}
 				onClick={() => {
-					if (effectiveInteractionTarget) {
-						interactRef.current(effectiveInteractionTarget);
+					if (currentInteractionTarget) {
+						interactRef.current(currentInteractionTarget);
 					}
 				}}
 				aria-live="polite"
 			>
 				{interactionLabel}
 			</button>
-			{inputEnabled && effectiveInteractionTarget && (
+			{inputEnabled && currentInteractionTarget && (
 				<div
 					className="absolute bottom-16 left-1/2 z-50 hidden -translate-x-1/2 items-center gap-2 rounded-xl border border-dialog-border bg-dialog-soft px-4 py-2.5 text-sm font-semibold text-app-text shadow-soft sm:flex"
 					data-testid="cafe-interaction-prompt"

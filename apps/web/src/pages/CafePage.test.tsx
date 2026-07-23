@@ -61,6 +61,7 @@ const room = {
 	isPrivate: false,
 	playerCount: 1,
 	capacity: 8,
+	activityId: "tea_delivery" as const,
 	activityCompleted: false
 };
 const progress = {
@@ -202,5 +203,43 @@ describe("CafePage", () => {
 		expect(screen.queryByText("cafe.cosmetics.unlocked")).toBeNull();
 		expect(screen.queryByText("cafe.cosmetics.sakura_pin.description")).toBeNull();
 		expect(screen.getByLabelText("cafe.cosmetics.needStars").textContent).toContain("5");
+	});
+
+	it("equips the Cafe Apron after eight server-owned stars", async () => {
+		const apronProgress = {
+			...progress,
+			cafeStars: 8,
+			unlockedCosmetics: ["sakura_pin", "mint_scarf", "tea_hat", "cafe_apron"],
+			cosmetics: [
+				...progress.cosmetics,
+				{ id: "cafe_apron", requiredStars: 8, unlocked: true }
+			]
+		};
+		serviceMocks.listCafeRooms.mockResolvedValue([]);
+		serviceMocks.getCafeProgress.mockResolvedValue(apronProgress);
+		serviceMocks.equipCafeCosmetic.mockResolvedValue({
+			...apronProgress,
+			equippedCosmetic: "cafe_apron"
+		});
+
+		render(
+			<MemoryRouter initialEntries={["/cafe"]}>
+				<CafePage
+					activityBar={null}
+					backgroundImageUrl=""
+					headerControls={headerControls}
+				/>
+			</MemoryRouter>
+		);
+
+		const preview = await screen.findByTestId("cafe-cosmetic-preview-cafe_apron");
+		const equipButton = preview.closest("article")?.querySelector("button");
+		expect(equipButton).toBeTruthy();
+		fireEvent.click(equipButton!);
+
+		await waitFor(() =>
+			expect(serviceMocks.equipCafeCosmetic).toHaveBeenCalledWith("cafe_apron")
+		);
+		expect(screen.getByRole("button", { name: "cafe.cosmetics.equipped" })).toBeTruthy();
 	});
 });

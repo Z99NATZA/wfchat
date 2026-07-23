@@ -44,6 +44,7 @@ type PlayerVisual = {
 	direction: CafeDirection;
 	moving: boolean;
 	color: string;
+	carriedOrderId: string | null;
 	equippedCosmetic: string | null;
 };
 
@@ -53,6 +54,7 @@ export class CafeScene extends Phaser.Scene {
 	private readonly callbacks: CafeSceneCallbacks;
 	private readonly playerVisuals = new Map<string, PlayerVisual>();
 	private readonly teaVisuals = new Map<string, Phaser.GameObjects.Container>();
+	private readonly tableOrderVisuals = new Map<string, Phaser.GameObjects.Container>();
 	private room: CafeRoomState | null = null;
 	private selfPlayerId: string | null = null;
 	private localVisual: PlayerVisual | null = null;
@@ -189,14 +191,6 @@ export class CafeScene extends Phaser.Scene {
 		}
 		this.room = room;
 		this.selfPlayerId = selfPlayerId;
-		if (
-			this.interactionTarget?.startsWith("tea-") &&
-			!room.activity.teaLeaves.some(
-				(leaf) => leaf.id === this.interactionTarget && leaf.available
-			)
-		) {
-			this.changeInteractionTarget(null);
-		}
 		if (this.sys.isActive()) {
 			this.renderRoom(room);
 		}
@@ -267,6 +261,7 @@ export class CafeScene extends Phaser.Scene {
 			visual.targetY = player.y;
 			visual.direction = player.direction;
 			visual.moving = player.moving;
+			visual.carriedOrderId = player.carriedOrderId;
 			visual.equippedCosmetic = player.equippedCosmetic;
 			visual.label.setText(player.name).setY(playerLabelY(player.equippedCosmetic));
 			if (player.id === this.selfPlayerId) {
@@ -297,9 +292,30 @@ export class CafeScene extends Phaser.Scene {
 				this.teaVisuals.get(leaf.id) ?? this.createTeaLeaf(leaf.id, leaf.x, leaf.y);
 			visual.setVisible(leaf.available);
 		}
+		const activeOrderIds = new Set(room.activity.tableOrders.map((order) => order.id));
+		for (const [orderId, visual] of this.tableOrderVisuals) {
+			if (!activeOrderIds.has(orderId)) {
+				visual.destroy(true);
+				this.tableOrderVisuals.delete(orderId);
+			}
+		}
+		for (const order of room.activity.tableOrders) {
+			const visual =
+				this.tableOrderVisuals.get(order.id) ??
+				this.createTableOrder(order.id, order.x, order.y, order.drink);
+			visual.setVisible(order.status !== "served");
+			visual.setAlpha(
+				order.status === "available" || order.claimedBy === this.selfPlayerId ? 1 : 0.46
+			);
+			visual.setScale(order.claimedBy === this.selfPlayerId ? 1.12 : 1);
+		}
 		const selfPlayer = room.players.find((player) => player.id === this.selfPlayerId);
 		this.aikoQuestMarker?.setVisible(
-			!room.activity.completed && (selfPlayer?.carriedTea ?? 0) > 0
+			!room.activity.completed &&
+				(room.activity.id === "tea_delivery"
+					? (selfPlayer?.carriedTea ?? 0) > 0
+					: !selfPlayer?.carriedOrderId &&
+						room.activity.tableOrders.some((order) => order.status === "available"))
 		);
 		if (this.aiko) {
 			this.aiko.setTint(room.activity.completed ? 0xfff2b8 : 0xffffff);
@@ -333,6 +349,7 @@ export class CafeScene extends Phaser.Scene {
 			direction: player.direction,
 			moving: player.moving,
 			color: player.color,
+			carriedOrderId: player.carriedOrderId,
 			equippedCosmetic: player.equippedCosmetic
 		};
 		this.playerVisuals.set(player.id, visual);
@@ -372,6 +389,32 @@ export class CafeScene extends Phaser.Scene {
 		return container;
 	}
 
+	private createTableOrder(id: string, x: number, y: number, drink: string) {
+		const background = this.add.graphics();
+		background.fillStyle(0x503b35, 0.94).fillRoundedRect(-28, -24, 56, 48, 14);
+		background.lineStyle(3, 0xfff4d2, 1).strokeRoundedRect(-28, -24, 56, 48, 14);
+		const label = this.add
+			.text(0, -1, drinkGlyph(drink), {
+				fontFamily: "sans-serif",
+				fontSize: "24px"
+			})
+			.setOrigin(0.5);
+		const container = this.add
+			.container(x, y - 54, [background, label])
+			.setDepth(Math.round(y) + 1300);
+		this.tweens.add({
+			targets: container,
+			y: y - 61,
+			duration: 820,
+			yoyo: true,
+			repeat: -1,
+			ease: "Sine.easeInOut",
+			delay: this.tableOrderVisuals.size * 140
+		});
+		this.tableOrderVisuals.set(id, container);
+		return container;
+	}
+
 	private readDirectionInput(): DirectionInput {
 		const keyboardX =
 			(this.cursors?.right.isDown || this.wasd?.D.isDown ? 1 : 0) -
@@ -405,30 +448,57 @@ export class CafeScene extends Phaser.Scene {
 			this.localVisual.container.y
 		);
 		let nextTarget: string | null = null;
-		let nearestDistance = Number.POSITIVE_INFINITY;
-		for (const leaf of this.room.activity.teaLeaves) {
-			if (!leaf.available) {
-				continue;
+		const selfPlayer = this.room.players.find((player) => player.id === this.selfPlayerId);
+		if (this.room.activity.id === "tea_delivery") {
+			let nearestDistance = Number.POSITIVE_INFINITY;
+			for (const leaf of this.room.activity.teaLeaves) {
+				if (!leaf.available) {
+					continue;
+				}
+				const distance = Phaser.Math.Distance.Between(
+					localPosition.x,
+					localPosition.y,
+					leaf.x,
+					leaf.y
+				);
+				if (distance <= INTERACTION_DISTANCE && distance < nearestDistance) {
+					nextTarget = leaf.id;
+					nearestDistance = distance;
+				}
 			}
-			const distance = Phaser.Math.Distance.Between(
+			const aikoDistance = Phaser.Math.Distance.Between(
 				localPosition.x,
 				localPosition.y,
-				leaf.x,
-				leaf.y
+				this.room.aiko.x,
+				this.room.aiko.y
 			);
-			if (distance <= INTERACTION_DISTANCE && distance < nearestDistance) {
-				nextTarget = leaf.id;
-				nearestDistance = distance;
+			if (aikoDistance <= AIKO_INTERACTION_DISTANCE && aikoDistance < nearestDistance) {
+				nextTarget = "aiko";
 			}
-		}
-		const aikoDistance = Phaser.Math.Distance.Between(
-			localPosition.x,
-			localPosition.y,
-			this.room.aiko.x,
-			this.room.aiko.y
-		);
-		if (aikoDistance <= AIKO_INTERACTION_DISTANCE && aikoDistance < nearestDistance) {
-			nextTarget = "aiko";
+		} else if (selfPlayer?.carriedOrderId) {
+			const order = this.room.activity.tableOrders.find(
+				(candidate) =>
+					candidate.id === selfPlayer.carriedOrderId &&
+					candidate.status === "claimed" &&
+					candidate.claimedBy === this.selfPlayerId
+			);
+			if (
+				order &&
+				Phaser.Math.Distance.Between(localPosition.x, localPosition.y, order.x, order.y) <=
+					INTERACTION_DISTANCE
+			) {
+				nextTarget = order.id;
+			}
+		} else if (this.room.activity.tableOrders.some((order) => order.status === "available")) {
+			const counterDistance = Phaser.Math.Distance.Between(
+				localPosition.x,
+				localPosition.y,
+				this.room.aiko.x,
+				this.room.aiko.y
+			);
+			if (counterDistance <= AIKO_INTERACTION_DISTANCE) {
+				nextTarget = "service-counter";
+			}
 		}
 		this.changeInteractionTarget(nextTarget);
 	}
@@ -440,9 +510,15 @@ export class CafeScene extends Phaser.Scene {
 		if (this.interactionTarget?.startsWith("tea-")) {
 			this.teaVisuals.get(this.interactionTarget)?.setScale(1);
 		}
+		if (this.interactionTarget?.startsWith("order-")) {
+			this.tableOrderVisuals.get(this.interactionTarget)?.setScale(1.12);
+		}
 		this.interactionTarget = nextTarget;
 		if (nextTarget?.startsWith("tea-")) {
 			this.teaVisuals.get(nextTarget)?.setScale(1.16);
+		}
+		if (nextTarget?.startsWith("order-")) {
+			this.tableOrderVisuals.get(nextTarget)?.setScale(1.24);
 		}
 		this.callbacks.onInteractionTargetChange(nextTarget);
 	}
@@ -499,6 +575,12 @@ function redrawPlayer(visual: PlayerVisual, time: number) {
 	}
 	graphics.fillStyle(0xffffff, 0.88).fillCircle(-14, 0, 4);
 	drawEquippedCosmetic(graphics, visual.equippedCosmetic);
+	if (visual.carriedOrderId) {
+		graphics.fillStyle(0xfff7e0, 1).fillRoundedRect(16, -5, 17, 14, 5);
+		graphics.lineStyle(2, 0x8a6651, 1).strokeRoundedRect(16, -5, 17, 14, 5);
+		graphics.lineStyle(3, 0x8a6651, 1).strokeCircle(34, 2, 6);
+		graphics.fillStyle(0x8ec9a7, 1).fillRect(20, -1, 9, 3);
+	}
 }
 
 function drawEquippedCosmetic(graphics: Phaser.GameObjects.Graphics, cosmeticId: string | null) {
@@ -523,6 +605,11 @@ function drawEquippedCosmetic(graphics: Phaser.GameObjects.Graphics, cosmeticId:
 			graphics.lineStyle(2, 0xfff1c9, 0.92).strokeRoundedRect(-15, -70, 30, 16, 6);
 			graphics.fillStyle(0xffd98d, 1).fillCircle(10, -61, 3);
 			break;
+		case "cafe_apron":
+			graphics.fillStyle(0xf3b2bd, 1).fillRoundedRect(-17, -6, 34, 31, 7);
+			graphics.lineStyle(2, 0xfff4e3, 0.94).strokeRoundedRect(-17, -6, 34, 31, 7);
+			graphics.fillStyle(0xfff4e3, 1).fillRect(-12, 10, 24, 3);
+			break;
 	}
 }
 
@@ -540,5 +627,16 @@ function emoteGlyph(emote: string) {
 			return "🍵";
 		default:
 			return "✨";
+	}
+}
+
+function drinkGlyph(drink: string) {
+	switch (drink) {
+		case "sakura":
+			return "🌸";
+		case "mint":
+			return "🌿";
+		default:
+			return "🍵";
 	}
 }

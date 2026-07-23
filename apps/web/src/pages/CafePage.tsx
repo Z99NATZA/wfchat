@@ -275,6 +275,13 @@ function CafePage({ activityBar, backgroundImageUrl, headerControls }: CafePageP
 										<p className="mt-3 font-mono text-xs tracking-widest text-muted">
 											{room.inviteCode}
 										</p>
+										<p className="mt-2 text-xs font-semibold text-muted">
+											{t(
+												room.activityId === "table_service"
+													? "cafe.tableService.title"
+													: "cafe.activity.title"
+											)}
+										</p>
 									</div>
 								</Button>
 							))}
@@ -433,11 +440,13 @@ function CafeCosmeticCard({
 }
 
 function CosmeticPreview({ cosmeticId }: { cosmeticId: string }) {
-	const glyph = { sakura_pin: "✿", mint_scarf: "〰", tea_hat: "🍵" }[cosmeticId] ?? "✦";
+	const glyph =
+		{ sakura_pin: "✿", mint_scarf: "〰", tea_hat: "🍵", cafe_apron: "🎀" }[cosmeticId] ?? "✦";
 	const background = {
 		sakura_pin: "#f7a6b8",
 		mint_scarf: "#79c9a4",
-		tea_hat: "#88b978"
+		tea_hat: "#88b978",
+		cafe_apron: "#f3b2bd"
 	}[cosmeticId];
 	return (
 		<div

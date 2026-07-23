@@ -12,13 +12,20 @@ chat and is available at `/cafe` without login.
   game uses the account display name or a stable `Guest XXXX` name.
 - Desktop controls are WASD or arrow keys plus `E`. Mobile uses on-screen
   movement and interaction controls.
-- First-time guidance and nearby prompts explain how to collect tea and deliver
-  it to Aiko. Help remains available from the activity HUD.
-- Each round needs three delivered leaves. After an eight-second intermission,
-  the next round starts with new leaves. Each connected player can receive one
-  Cafe Star per completed round.
-- Cafe Stars unlock the server-owned Sakura Pin, Mint Scarf, and Tea Hat at 0,
-  3, and 5 stars. Equipped items are visible to all room members in real time.
+- First-time guidance and nearby prompts explain the current activity. Help
+  remains available from the activity HUD.
+- Round one is Tea Delivery. Odd rounds place three leaves around the Cafe for
+  players to collect and return to Aiko. Even rounds are Table Service: players
+  collect one prepared drink at a time from Aiko and deliver it to the matching
+  marked table.
+- Table Service has three server-owned orders. An order can be claimed by only
+  one player, and disconnecting releases that player's unfinished order.
+- Completing either activity starts an eight-second intermission before the
+  next alternating round. Each connected player can receive one Cafe Star per
+  completed round.
+- Cafe Stars unlock the server-owned Sakura Pin, Mint Scarf, Tea Hat, and Cafe
+  Apron at 0, 3, 5, and 8 stars. Equipped items are visible to all room members
+  in real time.
 - The camera follows the local player with a dead zone and keeps the room at a
   readable scale. Small viewports show part of the room instead of shrinking
   the whole map.
@@ -53,13 +60,16 @@ Lobby, progress, and cosmetic operations use `/api/cafe/*`:
   authenticated room WebSocket. `nickname` is optional.
 
 WebSocket client messages are `move`, `interact`, `emote`, and `ping`. Server
-messages are `welcome`, `snapshot`, `dialogue`, `emote`, targeted `reward`,
-`pong`, and `error`. Stable terminal error codes are `room_not_found`,
+messages are `welcome`, `snapshot`, localized-key `dialogue`, `emote`, targeted
+`reward`, `pong`, and `error`. Room snapshots identify `tea_delivery` or
+`table_service`; Table Service snapshots include order table, drink, claim,
+and delivery state. Stable terminal error codes are `room_not_found`,
 `room_full`, and `rate_limited`.
 
 The API is authoritative for room capacity, collision, coordinates, movement
-speed, activity state, rewards, cosmetics, and allowed emotes. It validates
-browser origins, message rate, JSON shape, and monotonic movement sequence
+speed, activity rotation, inventory, Table Service claims, completion, rewards,
+cosmetics, and allowed emotes. It validates browser origins, message rate, JSON
+shape, interaction distance, target ownership, and monotonic movement sequence
 numbers. The client predicts local movement and interpolates remote snapshots.
 
 When the browser goes offline, gameplay input stops immediately. Controls
@@ -92,5 +102,6 @@ context in a room. Free-text public chat is out of scope.
 ## Current Limits
 
 Rooms do not survive an API restart and are not shared across API instances.
-The MVP has one map, one activity, and three cosmetics. It has no regional
-matchmaking, moderation UI, free-text chat, AI room dialogue, or spectator mode.
+The game has one map, two alternating activities, and four cosmetics. It has no
+regional matchmaking, moderation UI, free-text chat, AI room dialogue, or
+spectator mode.

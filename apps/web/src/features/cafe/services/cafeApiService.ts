@@ -1,6 +1,6 @@
 import { isAxiosError } from "axios";
 import { apiBaseUrl, apiClient } from "@/services/apiClient";
-import type { CafeProgress, CafeRoomSummary } from "@/features/cafe/types";
+import type { CafeActivityId, CafeProgress, CafeRoomSummary } from "@/features/cafe/types";
 
 export type CafeLobbyErrorCode = "room_not_found" | "room_full" | "unavailable";
 
@@ -10,6 +10,7 @@ type ApiRoomSummary = {
 	is_private: boolean;
 	player_count: number;
 	capacity: number;
+	activity_id: CafeActivityId;
 	activity_completed: boolean;
 };
 
@@ -97,6 +98,7 @@ function toRoomSummary(room: ApiRoomSummary): CafeRoomSummary {
 		isPrivate: room.is_private,
 		playerCount: room.player_count,
 		capacity: room.capacity,
+		activityId: room.activity_id,
 		activityCompleted: room.activity_completed
 	};
 }

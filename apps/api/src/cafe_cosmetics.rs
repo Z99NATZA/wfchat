@@ -17,6 +17,10 @@ pub const CAFE_COSMETICS: &[CafeCosmeticDefinition] = &[
         id: "tea_hat",
         required_stars: 5,
     },
+    CafeCosmeticDefinition {
+        id: "cafe_apron",
+        required_stars: 8,
+    },
 ];
 
 pub fn cafe_cosmetic(id: &str) -> Option<CafeCosmeticDefinition> {
@@ -48,6 +52,10 @@ mod tests {
         assert_eq!(
             unlocked_cafe_cosmetic_ids(5),
             vec!["sakura_pin", "mint_scarf", "tea_hat"]
+        );
+        assert_eq!(
+            unlocked_cafe_cosmetic_ids(8),
+            vec!["sakura_pin", "mint_scarf", "tea_hat", "cafe_apron"]
         );
         assert!(cafe_cosmetic("client_invented").is_none());
     }

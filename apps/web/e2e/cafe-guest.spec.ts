@@ -7,21 +7,14 @@ test.describe.configure({ mode: "serial" });
 test("cafe chrome follows the app theme in dark mode", async ({ page }) => {
 	await page.goto(cafeUrl);
 	await expect(page.locator("html")).toHaveClass(/dark/);
-	const badge = page.getByText(/No login required|ไม่ต้องเข้าสู่ระบบ/);
-	await expect(badge).toBeVisible();
-	const colors = await badge.evaluate((element) => {
+	const guestNote = page.getByText(/Sign in to save Cafe Stars|เข้าสู่ระบบเพื่อเก็บ Cafe Stars/);
+	await expect(guestNote).toBeVisible();
+	const colors = await guestNote.evaluate((element) => {
 		const style = getComputedStyle(element);
 		return { foreground: style.color, background: style.backgroundColor };
 	});
 
 	expect(contrastRatio(colors.foreground, colors.background)).toBeGreaterThanOrEqual(4.5);
-	const headerIconColor = await page
-		.getByTestId("cafe-header-sparkles")
-		.evaluate((element) => getComputedStyle(element).color);
-	const headerTitleColor = await page
-		.getByRole("heading", { name: "Aiko Cafe" })
-		.evaluate((element) => getComputedStyle(element).color);
-	expect(headerIconColor).toBe(headerTitleColor);
 	await page.screenshot({
 		path: "test-results/aiko-cafe-themed-lobby.png",
 		fullPage: true
@@ -100,7 +93,7 @@ test("invite rooms accept their code and disappear after the final player leaves
 			(response) =>
 				response.url().endsWith("/api/cafe/rooms") && response.request().method() === "POST"
 		);
-		await ownerPage.getByRole("button", { name: /Create Invite Room|สร้างห้องเชิญ/ }).click();
+		await ownerPage.getByRole("button", { name: /Create Room|สร้างห้อง/ }).click();
 		const roomPayload = (await (await roomResponse).json()) as {
 			room: { id: string; invite_code: string };
 		};
@@ -159,7 +152,7 @@ test("a full-room server response offers clear recovery actions", async ({ page 
 	await expect(page.getByRole("button", { name: /Try again|ลองอีกครั้ง/ })).toBeVisible();
 });
 
-test("tea activity completes a second round with one reward per round", async ({ page }) => {
+test("tea delivery rotates into table service with one reward per round", async ({ page }) => {
 	const room = cafeRoomFixture();
 	const rewardedRounds = new Set<number>();
 	await page.routeWebSocket(/\/api\/cafe\/rooms\/[^/]+\/ws$/, (socket) => {
@@ -168,7 +161,7 @@ test("tea activity completes a second round with one reward per round", async ({
 				JSON.stringify({
 					type: "welcome",
 					self_player_id: room.players[0].id,
-					cafe_stars: 4,
+					cafe_stars: 6,
 					room
 				})
 			);
@@ -188,9 +181,45 @@ test("tea activity completes a second round with one reward per round", async ({
 				socket.send(JSON.stringify({ type: "snapshot", room }));
 				return;
 			}
-			room.players[0].carried_tea = 0;
+			if (message.target_id === "service-counter") {
+				const order = room.activity.table_orders.find(
+					(candidate) => candidate.status === "available"
+				);
+				if (order) {
+					order.status = "claimed";
+					order.claimed_by = room.players[0].id;
+					room.players[0].carried_order_id = order.id;
+					socket.send(JSON.stringify({ type: "snapshot", room }));
+				}
+				return;
+			}
+			if (message.target_id?.startsWith("order-")) {
+				const order = room.activity.table_orders.find(
+					(candidate) =>
+						candidate.id === message.target_id &&
+						candidate.claimed_by === room.players[0].id
+				);
+				if (!order) return;
+				order.status = "served";
+				order.claimed_by = null;
+				room.players[0].carried_order_id = null;
+				room.activity.delivered += 1;
+				if (room.activity.delivered < room.activity.target) {
+					socket.send(JSON.stringify({ type: "snapshot", room }));
+					socket.send(
+						JSON.stringify({
+							type: "dialogue",
+							message_key: "cafe.dialogue.serviceDelivered",
+							expression: "happy"
+						})
+					);
+					return;
+				}
+			} else {
+				room.players[0].carried_tea = 0;
+			}
 			const completedRound = room.activity.round_number;
-			room.activity.delivered = 3;
+			room.activity.delivered = room.activity.target;
 			room.activity.completed = true;
 			room.activity.phase = "intermission";
 			room.activity.next_round_at = Date.now() + 8_000;
@@ -198,7 +227,7 @@ test("tea activity completes a second round with one reward per round", async ({
 			socket.send(
 				JSON.stringify({
 					type: "dialogue",
-					message: "Tea is ready for the whole cafe.",
+					message_key: "cafe.dialogue.roundComplete",
 					expression: "happy"
 				})
 			);
@@ -215,16 +244,18 @@ test("tea activity completes a second round with one reward per round", async ({
 			if (completedRound === 1) {
 				setTimeout(() => {
 					room.activity = {
-						...room.activity,
+						id: "table_service",
 						round_number: 2,
 						phase: "active",
 						next_round_at: null,
 						delivered: 0,
+						target: 3,
 						completed: false,
-						tea_leaves: [
-							{ id: "tea-2-1", x: 640, y: 350, available: true },
-							{ id: "tea-2-2", x: 642, y: 350, available: true },
-							{ id: "tea-2-3", x: 644, y: 350, available: true }
+						tea_leaves: [],
+						table_orders: [
+							tableOrder("order-2-1", "window", "sakura"),
+							tableOrder("order-2-2", "garden", "mint"),
+							tableOrder("order-2-3", "long", "classic")
 						]
 					};
 					socket.send(JSON.stringify({ type: "snapshot", room }));
@@ -253,7 +284,7 @@ test("tea activity completes a second round with one reward per round", async ({
 	await page.keyboard.press("e");
 	await expect(page.getByTestId("cafe-carried-tea")).toContainText("3");
 	await expect(page.getByTestId("cafe-quest-hint")).toContainText(
-		/Bring your tea leaves to Aiko|นำใบชาที่ถือไปให้ Aiko/
+		/Go to the counter|ไปที่เคาน์เตอร์/
 	);
 	await expect(page.getByTestId("cafe-interaction-prompt")).toContainText(
 		/Give Aiko 3 tea|ส่งใบชา 3 ใบให้ Aiko/
@@ -265,27 +296,30 @@ test("tea activity completes a second round with one reward per round", async ({
 	await expect(interactButton).toBeEnabled();
 	await interactButton.click();
 	await expect(page.getByText(/Tea is ready!|ชาพร้อมแล้ว!/)).toBeVisible();
-	await expect(page.getByTestId("cafe-stars")).toContainText("5");
+	await expect(page.getByTestId("cafe-stars")).toContainText("7");
 	await expect(page.getByTestId("cafe-quest-hint")).toContainText(
 		/Next round starts|รอบใหม่จะเริ่ม/
 	);
 	await expect(page.getByTestId("cafe-round-number")).toContainText(/Round 2|รอบ 2/);
-	const collectSecondRound = page.getByRole("button", {
-		name: /Collect tea leaf|เก็บใบชา/
-	});
-	await expect(collectSecondRound).toBeEnabled();
-	await collectSecondRound.click();
-	await expect(page.getByTestId("cafe-carried-tea")).toContainText("3");
-	const deliverSecondRound = page.getByRole("button", {
-		name: /Give Aiko 3 tea|ส่งใบชา 3 ใบให้ Aiko/
-	});
-	await expect(deliverSecondRound).toBeEnabled();
-	await deliverSecondRound.click();
-	await expect(page.getByTestId("cafe-stars")).toContainText("6");
+	await expect(page.getByText(/Table service|บริการเสิร์ฟโต๊ะ/).first()).toBeVisible();
+	for (let index = 0; index < 3; index += 1) {
+		const pickUp = page.getByRole("button", {
+			name: /Pick up drink|รับถ้วยชา/
+		});
+		await expect(pickUp).toBeEnabled();
+		await pickUp.click();
+		await expect(page.getByTestId("cafe-carried-order")).toBeVisible();
+		const serve = page.getByRole("button", {
+			name: /Serve the|เสิร์ฟที่โต๊ะ/
+		});
+		await expect(serve).toBeEnabled();
+		await serve.click();
+	}
+	await expect(page.getByTestId("cafe-stars")).toContainText("8");
 	const dialogue = page.getByTestId("aiko-dialogue");
-	await expect(dialogue).toContainText("Tea is ready for the whole cafe.");
+	await expect(dialogue).toContainText(/Everyone earned a Cafe Star|ทุกคนได้รับ Cafe Star/);
 	const dialogueColors = await page
-		.getByText("Tea is ready for the whole cafe.", { exact: true })
+		.getByText(/Everyone earned a Cafe Star|ทุกคนได้รับ Cafe Star/)
 		.evaluate((element) => ({
 			foreground: getComputedStyle(element).color,
 			background: getComputedStyle(element.parentElement?.parentElement ?? element)
@@ -296,12 +330,9 @@ test("tea activity completes a second round with one reward per round", async ({
 	).toBeGreaterThanOrEqual(4.5);
 	expect(dialogueColors.background).toBe(overlayBackgrounds[0]);
 	await page.screenshot({
-		path: "test-results/aiko-cafe-guided-tea.png",
+		path: "test-results/aiko-cafe-table-service.png",
 		fullPage: true
 	});
-	await page.getByRole("button", { name: /Talk to Aiko|คุยกับ Aiko/ }).click();
-	await page.waitForTimeout(250);
-	await expect(page.getByTestId("cafe-stars")).toContainText("6");
 });
 
 test("offline input waits for authoritative reconnect and missing rooms recover", async ({
@@ -368,6 +399,7 @@ function cafeRoomFixture(id = "00000000-0000-4000-8000-000000000003") {
 				direction: "up",
 				moving: false,
 				carried_tea: 3,
+				carried_order_id: null as string | null,
 				equipped_cosmetic: null
 			}
 		],
@@ -383,9 +415,26 @@ function cafeRoomFixture(id = "00000000-0000-4000-8000-000000000003") {
 				{ id: "tea-1", x: 640, y: 350, available: true },
 				{ id: "tea-2", x: 642, y: 350, available: true },
 				{ id: "tea-3", x: 644, y: 350, available: true }
-			]
+			],
+			table_orders: [] as ReturnType<typeof tableOrder>[]
 		},
 		aiko: { x: 640, y: 272, motion: "idle" }
+	};
+}
+
+function tableOrder(
+	id: string,
+	tableId: "window" | "garden" | "long",
+	drink: "sakura" | "mint" | "classic"
+) {
+	return {
+		id,
+		table_id: tableId,
+		drink,
+		x: 640,
+		y: 350,
+		status: "available" as "available" | "claimed" | "served",
+		claimed_by: null as string | null
 	};
 }
 

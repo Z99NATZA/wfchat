@@ -1,4 +1,5 @@
 export type CafeDirection = "up" | "down" | "left" | "right";
+export type CafeActivityId = "tea_delivery" | "table_service";
 
 export type CafeConnectionState =
 	"connecting" | "connected" | "offline" | "reconnecting" | "closed";
@@ -17,6 +18,7 @@ export type CafeRoomSummary = {
 	isPrivate: boolean;
 	playerCount: number;
 	capacity: number;
+	activityId: CafeActivityId;
 	activityCompleted: boolean;
 };
 
@@ -29,6 +31,7 @@ export type CafePlayerState = {
 	direction: CafeDirection;
 	moving: boolean;
 	carriedTea: number;
+	carriedOrderId: string | null;
 	equippedCosmetic: string | null;
 };
 
@@ -40,7 +43,7 @@ export type CafeTeaLeaf = {
 };
 
 export type CafeActivityState = {
-	id: "tea_delivery";
+	id: CafeActivityId;
 	roundNumber: number;
 	phase: "active" | "intermission";
 	nextRoundAt: number | null;
@@ -48,6 +51,17 @@ export type CafeActivityState = {
 	target: number;
 	completed: boolean;
 	teaLeaves: CafeTeaLeaf[];
+	tableOrders: CafeTableOrder[];
+};
+
+export type CafeTableOrder = {
+	id: string;
+	tableId: "window" | "garden" | "long";
+	drink: "sakura" | "mint" | "classic";
+	x: number;
+	y: number;
+	status: "available" | "claimed" | "served";
+	claimedBy: string | null;
 };
 
 export type CafeRoomState = {
@@ -80,7 +94,7 @@ export type CafeCosmetic = {
 };
 
 export type CafeDialogue = {
-	message: string;
+	messageKey: string;
 	expression: "neutral" | "happy" | "shy";
 };
 

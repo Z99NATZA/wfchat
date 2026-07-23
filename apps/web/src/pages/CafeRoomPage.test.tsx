@@ -140,7 +140,7 @@ describe("CafeRoomPage", () => {
 			cafeStars: 2,
 			connectionState: "connected",
 			dialogue: {
-				message: "Bring the leaves to the counter.",
+				messageKey: "cafe.dialogue.teaCollected",
 				expression: "happy"
 			},
 			error: null
@@ -162,7 +162,7 @@ describe("CafeRoomPage", () => {
 		);
 		expect(gameCanvas.props?.interactionLabels.deliverTea).toBe("cafe.room.deliverTea");
 		const dialogue = screen.getByTestId("aiko-dialogue");
-		expect(dialogue.textContent).toContain("Bring the leaves to the counter.");
+		expect(dialogue.textContent).toContain("cafe.dialogue.teaCollected");
 		expect(dialogue.className).toContain("bg-dialog-soft");
 	});
 
@@ -184,6 +184,54 @@ describe("CafeRoomPage", () => {
 		expect(desktopHint.className).toContain("hidden sm:inline");
 		expect(mobileHint.textContent).toBe("cafe.activity.findHintMobile");
 		expect(mobileHint.className).toContain("sm:hidden");
+	});
+
+	it("guides table service players to their claimed table", () => {
+		const room = roomFixture();
+		room.activity = {
+			id: "table_service",
+			roundNumber: 2,
+			phase: "active",
+			nextRoundAt: null,
+			delivered: 1,
+			target: 3,
+			completed: false,
+			teaLeaves: [],
+			tableOrders: [
+				{
+					id: "order-2-1",
+					tableId: "garden",
+					drink: "mint",
+					x: 906,
+					y: 411,
+					status: "claimed",
+					claimedBy: room.players[0].id
+				}
+			]
+		};
+		room.players[0].carriedTea = 0;
+		room.players[0].carriedOrderId = "order-2-1";
+		Object.assign(roomHook.value, {
+			room,
+			selfPlayerId: room.players[0].id,
+			connectionState: "connected",
+			error: null
+		});
+
+		renderRoomPage();
+
+		expect(screen.getByText("cafe.tableService.title")).toBeTruthy();
+		expect(screen.getByTestId("cafe-carried-order").textContent).toContain(
+			"cafe.tableService.carrying"
+		);
+		expect(screen.getByTestId("cafe-quest-hint-desktop").textContent).toBe(
+			"cafe.tableService.deliverHintDesktop"
+		);
+		expect(screen.getByTestId("cafe-quest-hint-mobile").textContent).toBe(
+			"cafe.tableService.deliverHintMobile"
+		);
+		expect(gameCanvas.props?.interactionLabels.pickUpDrink).toBe("cafe.tableService.pickUp");
+		expect(gameCanvas.props?.interactionLabels.serveDrink).toBe("cafe.tableService.serve");
 	});
 
 	it("blocks room controls immediately while the browser is offline", () => {
@@ -271,6 +319,7 @@ function roomFixture(): CafeRoomState {
 				direction: "up",
 				moving: false,
 				carriedTea: 2,
+				carriedOrderId: null,
 				equippedCosmetic: "mint_scarf"
 			}
 		],
@@ -282,7 +331,8 @@ function roomFixture(): CafeRoomState {
 			delivered: 1,
 			target: 3,
 			completed: false,
-			teaLeaves: []
+			teaLeaves: [],
+			tableOrders: []
 		},
 		aiko: { x: 640, y: 272, motion: "idle" }
 	};

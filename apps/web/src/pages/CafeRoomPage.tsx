@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Navigate, useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, CircleHelp, Copy, Leaf, Star, Wifi, WifiOff } from "lucide-react";
+import { ArrowLeft, CircleHelp, Coffee, Copy, Leaf, Star, Wifi, WifiOff } from "lucide-react";
 import AppHeaderBar from "@/components/header/AppHeaderBar";
 import {
 	AppHeaderDesktopControls,
@@ -42,6 +42,16 @@ function CafeRoomContent({
 	const [showGuide, setShowGuide] = useState(shouldShowCafeGuide);
 	const selfPlayer = cafe.room?.players.find((player) => player.id === cafe.selfPlayerId);
 	const carriedTea = selfPlayer?.carriedTea ?? 0;
+	const isTableService = cafe.room?.activity.id === "table_service";
+	const carriedOrder = cafe.room?.activity.tableOrders.find(
+		(order) => order.id === selfPlayer?.carriedOrderId
+	);
+	const carriedDrink = carriedOrder
+		? t(`cafe.tableService.drink.${carriedOrder.drink}`)
+		: t("cafe.tableService.drink.generic");
+	const carriedTable = carriedOrder
+		? t(`cafe.tableService.table.${carriedOrder.tableId}`)
+		: t("cafe.tableService.table.generic");
 	const inputEnabled = cafe.connectionState === "connected";
 	const roundCountdown = useRoundCountdown(cafe.room?.activity.nextRoundAt ?? null);
 	const isIntermission = cafe.room?.activity.phase === "intermission";
@@ -103,11 +113,17 @@ function CafeRoomContent({
 						collectTea: t("cafe.room.collectTea"),
 						deliverTea: t("cafe.room.deliverTea", { count: carriedTea }),
 						talkToAiko: t("cafe.room.talkToAiko"),
+						pickUpDrink: t("cafe.tableService.pickUp"),
+						serveDrink: t("cafe.tableService.serve", { table: carriedTable }),
+						findCounter: t("cafe.tableService.findCounter"),
+						findTable: t("cafe.tableService.findTable", { table: carriedTable }),
 						idle: t("cafe.room.moveCloser")
 					}}
 					loadingLabel={t("cafe.room.connecting")}
 				/>
-				{cafe.room && showGuide && <CafeWelcomeGuide onDismiss={dismissGuide} />}
+				{cafe.room && showGuide && (
+					<CafeWelcomeGuide activityId={cafe.room.activity.id} onDismiss={dismissGuide} />
+				)}
 				<div className="pointer-events-none absolute left-3 right-3 top-3 z-30 flex items-start justify-between gap-3">
 					<div
 						className="max-w-[min(75%,24rem)] rounded-xl border border-dialog-border bg-dialog-soft px-3 py-2 text-app-text shadow-soft"
@@ -116,7 +132,7 @@ function CafeRoomContent({
 						<div className="flex items-center justify-between gap-3">
 							<div className="flex items-center gap-2">
 								<p className="text-[11px] font-semibold uppercase tracking-wide text-muted">
-									{t("cafe.activity.title")}
+									{t(activityTitleKey(cafe.room?.activity.id))}
 								</p>
 								{cafe.room && (
 									<span
@@ -140,11 +156,20 @@ function CafeRoomContent({
 						</div>
 						<p className="mt-1 text-sm font-semibold">
 							{isIntermission
-								? t("cafe.activity.complete")
-								: t("cafe.activity.progress", {
-										current: cafe.room?.activity.delivered ?? 0,
-										target: cafe.room?.activity.target ?? 3
-									})}
+								? t(
+										isTableService
+											? "cafe.tableService.complete"
+											: "cafe.activity.complete"
+									)
+								: t(
+										isTableService
+											? "cafe.tableService.progress"
+											: "cafe.activity.progress",
+										{
+											current: cafe.room?.activity.delivered ?? 0,
+											target: cafe.room?.activity.target ?? 3
+										}
+									)}
 						</p>
 						{!isIntermission && carriedTea > 0 && (
 							<p
@@ -153,6 +178,18 @@ function CafeRoomContent({
 							>
 								<Leaf size={13} aria-hidden="true" />
 								{t("cafe.activity.carried", { count: carriedTea })}
+							</p>
+						)}
+						{!isIntermission && carriedOrder && (
+							<p
+								className="mt-2 inline-flex items-center gap-1.5 rounded-md border border-dialog-border bg-dialog-panel px-2 py-1 text-xs font-semibold text-app-text"
+								data-testid="cafe-carried-order"
+							>
+								<Coffee size={13} aria-hidden="true" />
+								{t("cafe.tableService.carrying", {
+									drink: carriedDrink,
+									table: carriedTable
+								})}
 							</p>
 						)}
 						<p
@@ -171,17 +208,29 @@ function CafeRoomContent({
 										className="hidden sm:inline"
 										data-testid="cafe-quest-hint-desktop"
 									>
-										{carriedTea > 0
-											? t("cafe.activity.returnHintDesktop")
-											: t("cafe.activity.findHintDesktop")}
+										{isTableService
+											? carriedOrder
+												? t("cafe.tableService.deliverHintDesktop", {
+														table: carriedTable
+													})
+												: t("cafe.tableService.pickupHintDesktop")
+											: carriedTea > 0
+												? t("cafe.activity.returnHintDesktop")
+												: t("cafe.activity.findHintDesktop")}
 									</span>
 									<span
 										className="sm:hidden"
 										data-testid="cafe-quest-hint-mobile"
 									>
-										{carriedTea > 0
-											? t("cafe.activity.returnHintMobile")
-											: t("cafe.activity.findHintMobile")}
+										{isTableService
+											? carriedOrder
+												? t("cafe.tableService.deliverHintMobile", {
+														table: carriedTable
+													})
+												: t("cafe.tableService.pickupHintMobile")
+											: carriedTea > 0
+												? t("cafe.activity.returnHintMobile")
+												: t("cafe.activity.findHintMobile")}
 									</span>
 								</>
 							)}
@@ -233,7 +282,7 @@ function CafeRoomContent({
 								Aiko
 							</p>
 							<p className="mt-1 text-sm font-medium leading-5 text-app-text">
-								{cafe.dialogue.message}
+								{t(cafe.dialogue.messageKey)}
 							</p>
 						</div>
 					</div>
@@ -285,8 +334,15 @@ function CafeRoomContent({
 	);
 }
 
-function CafeWelcomeGuide({ onDismiss }: { onDismiss: () => void }) {
+function CafeWelcomeGuide({
+	activityId,
+	onDismiss
+}: {
+	activityId: CafeRoomState["activity"]["id"];
+	onDismiss: () => void;
+}) {
 	const { t } = useI18n();
+	const tableService = activityId === "table_service";
 	return (
 		<div className="absolute inset-0 z-[70] flex items-center justify-center bg-app-bg/72 p-4 backdrop-blur-[3px]">
 			<div
@@ -296,15 +352,33 @@ function CafeWelcomeGuide({ onDismiss }: { onDismiss: () => void }) {
 				aria-labelledby="cafe-guide-title"
 			>
 				<div className="mx-auto flex size-12 items-center justify-center rounded-full border border-dialog-border bg-dialog-soft text-2xl shadow-inner">
-					🍃
+					{tableService ? "☕" : "🍃"}
 				</div>
 				<h2 id="cafe-guide-title" className="mt-3 text-xl font-bold">
-					{t("cafe.guide.title")}
+					{t(tableService ? "cafe.tableService.guideTitle" : "cafe.guide.title")}
 				</h2>
-				<p className="mt-2 text-sm leading-6 text-muted">{t("cafe.guide.description")}</p>
+				<p className="mt-2 text-sm leading-6 text-muted">
+					{t(
+						tableService
+							? "cafe.tableService.guideDescription"
+							: "cafe.guide.description"
+					)}
+				</p>
 				<div className="mt-4 rounded-2xl border border-dialog-border bg-dialog-soft px-4 py-3 text-sm font-semibold leading-6 text-app-text">
-					<span className="hidden sm:inline">{t("cafe.guide.desktopControls")}</span>
-					<span className="sm:hidden">{t("cafe.guide.mobileControls")}</span>
+					<span className="hidden sm:inline">
+						{t(
+							tableService
+								? "cafe.tableService.guideDesktopControls"
+								: "cafe.guide.desktopControls"
+						)}
+					</span>
+					<span className="sm:hidden">
+						{t(
+							tableService
+								? "cafe.tableService.guideMobileControls"
+								: "cafe.guide.mobileControls"
+						)}
+					</span>
 				</div>
 				<Button className="mt-5" size="lg" variant="action" onClick={onDismiss}>
 					{t("cafe.guide.start")}
@@ -342,6 +416,14 @@ function CafeRoomSidebar({ room }: { room: CafeRoomState | null }) {
 						{player.carriedTea > 0 && (
 							<span className="text-xs text-muted">🍃 {player.carriedTea}</span>
 						)}
+						{player.carriedOrderId && (
+							<span
+								className="text-xs text-muted"
+								aria-label={t("cafe.tableService.memberCarrying")}
+							>
+								☕
+							</span>
+						)}
 						{player.equippedCosmetic && (
 							<span
 								className="flex size-7 items-center justify-center rounded-full border border-app-border bg-app-panel text-sm text-app-text"
@@ -365,7 +447,9 @@ function CafeRoomDetails({ room }: { room: CafeRoomState | null }) {
 	return (
 		<aside className="hidden min-h-0 border-l border-app-border bg-app-panel/62 xl:flex xl:flex-col">
 			<div className="border-b border-app-border p-4">
-				<p className="font-semibold text-app-text">{t("cafe.activity.title")}</p>
+				<p className="font-semibold text-app-text">
+					{t(activityTitleKey(room?.activity.id))}
+				</p>
 				{room && (
 					<p className="mt-1 text-xs text-muted">
 						{t("cafe.activity.round", { round: room.activity.roundNumber })}
@@ -375,7 +459,13 @@ function CafeRoomDetails({ room }: { room: CafeRoomState | null }) {
 			<div className="space-y-4 p-4">
 				<div className="rounded-xl border border-app-border bg-app-soft p-4">
 					<div className="flex items-center justify-between text-sm">
-						<span className="text-muted">{t("cafe.activity.teaLeaves")}</span>
+						<span className="text-muted">
+							{t(
+								room?.activity.id === "table_service"
+									? "cafe.tableService.ordersServed"
+									: "cafe.activity.teaLeaves"
+							)}
+						</span>
 						<span className="font-semibold text-app-text">
 							{room?.activity.delivered ?? 0}/{room?.activity.target ?? 3}
 						</span>
@@ -489,8 +579,19 @@ function isUuid(value: string) {
 	return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
 
+function activityTitleKey(activityId: CafeRoomState["activity"]["id"] | undefined) {
+	return activityId === "table_service" ? "cafe.tableService.title" : "cafe.activity.title";
+}
+
 function cosmeticGlyph(cosmeticId: string) {
-	return { sakura_pin: "✿", mint_scarf: "〰", tea_hat: "🍵" }[cosmeticId] ?? "✦";
+	return (
+		{
+			sakura_pin: "✿",
+			mint_scarf: "〰",
+			tea_hat: "🍵",
+			cafe_apron: "🎀"
+		}[cosmeticId] ?? "✦"
+	);
 }
 
 const CAFE_GUIDE_STORAGE_KEY = "wfchat_cafe_guide_seen_v1";

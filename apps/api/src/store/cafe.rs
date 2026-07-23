@@ -273,6 +273,19 @@ mod tests {
             .equip_cafe_cosmetic(second_owner, Some("tea_hat"))
             .await
             .expect("new account cosmetic should equip"));
+        let shared_progress = store
+            .add_cafe_stars(second_owner, 3)
+            .await
+            .expect("eighth account star should persist");
+        assert_eq!(shared_progress.cafe_stars, 8);
+        assert!(shared_progress
+            .unlocked_cosmetics
+            .iter()
+            .any(|id| id == "cafe_apron"));
+        assert!(store
+            .equip_cafe_cosmetic(second_owner, Some("cafe_apron"))
+            .await
+            .expect("Cafe Apron should equip at eight stars"));
         assert_eq!(
             store
                 .get_cafe_progress(OwnerScope::from_session(&registered))
@@ -280,7 +293,7 @@ mod tests {
                 .expect("first session should see latest account loadout")
                 .equipped_cosmetic
                 .as_deref(),
-            Some("tea_hat")
+            Some("cafe_apron")
         );
 
         sqlx::query("delete from auth_sessions where id = $1")

@@ -21,6 +21,7 @@ type ApiPlayer = {
 	direction: CafeDirection;
 	moving: boolean;
 	carried_tea: number;
+	carried_order_id: string | null;
 	equipped_cosmetic: string | null;
 };
 
@@ -33,7 +34,7 @@ type ApiRoom = {
 	map_height: number;
 	players: ApiPlayer[];
 	activity: {
-		id: "tea_delivery";
+		id: "tea_delivery" | "table_service";
 		round_number: number;
 		phase: "active" | "intermission";
 		next_round_at: number | null;
@@ -41,6 +42,15 @@ type ApiRoom = {
 		target: number;
 		completed: boolean;
 		tea_leaves: Array<{ id: string; x: number; y: number; available: boolean }>;
+		table_orders: Array<{
+			id: string;
+			table_id: "window" | "garden" | "long";
+			drink: "sakura" | "mint" | "classic";
+			x: number;
+			y: number;
+			status: "available" | "claimed" | "served";
+			claimed_by: string | null;
+		}>;
 	};
 	aiko: CafeRoomState["aiko"];
 };
@@ -48,7 +58,7 @@ type ApiRoom = {
 type ServerMessage =
 	| { type: "welcome"; self_player_id: string; cafe_stars: number; room: ApiRoom }
 	| { type: "snapshot"; room: ApiRoom }
-	| { type: "dialogue"; message: string; expression: CafeDialogue["expression"] }
+	| { type: "dialogue"; message_key: string; expression: CafeDialogue["expression"] }
 	| { type: "emote"; player_id: string; emote: string }
 	| { type: "reward"; player_id: string; earned_stars: number }
 	| { type: "pong" }
@@ -192,7 +202,10 @@ export function useCafeRoom(roomId: string) {
 					setRoom(toRoomState(message.room));
 					break;
 				case "dialogue":
-					setDialogue({ message: message.message, expression: message.expression });
+					setDialogue({
+						messageKey: message.message_key,
+						expression: message.expression
+					});
 					if (dialogueTimerRef.current !== null) {
 						window.clearTimeout(dialogueTimerRef.current);
 					}
@@ -324,6 +337,7 @@ function toRoomState(room: ApiRoom): CafeRoomState {
 			direction: player.direction,
 			moving: player.moving,
 			carriedTea: player.carried_tea,
+			carriedOrderId: player.carried_order_id,
 			equippedCosmetic: player.equipped_cosmetic
 		})),
 		activity: {
@@ -339,6 +353,15 @@ function toRoomState(room: ApiRoom): CafeRoomState {
 				x: leaf.x,
 				y: leaf.y,
 				available: leaf.available
+			})),
+			tableOrders: room.activity.table_orders.map((order) => ({
+				id: order.id,
+				tableId: order.table_id,
+				drink: order.drink,
+				x: order.x,
+				y: order.y,
+				status: order.status,
+				claimedBy: order.claimed_by
 			}))
 		},
 		aiko: room.aiko
