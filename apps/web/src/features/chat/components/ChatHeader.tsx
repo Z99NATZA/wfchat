@@ -1,12 +1,9 @@
-import { Trash2 } from "lucide-react";
 import AppHeaderBar from "@/components/header/AppHeaderBar";
 import {
 	AppHeaderDesktopControls,
 	AppHeaderMobileControls
 } from "@/components/header/AppHeaderControls";
-import IconButton from "@/components/ui/IconButton";
 import StatusDot from "@/components/ui/StatusDot";
-import { useI18n } from "@/i18n/i18nContext";
 import type { AppFont } from "@/types/font";
 import type { ChatPersona } from "@/types/chat";
 import type { Theme } from "@/types/theme";
@@ -15,9 +12,6 @@ type ChatHeaderProps = {
 	persona: ChatPersona;
 	theme: Theme;
 	font: AppFont;
-	canClearChat: boolean;
-	isClearing?: boolean;
-	onClearChat: () => void;
 	onFontChange: (font: AppFont) => void;
 	onOpenSidebar: () => void;
 	onToggleTheme: () => void;
@@ -32,9 +26,6 @@ function ChatHeader({
 	persona,
 	theme,
 	font,
-	canClearChat,
-	isClearing = false,
-	onClearChat,
 	onFontChange,
 	onOpenSidebar,
 	onToggleTheme,
@@ -44,7 +35,6 @@ function ChatHeader({
 	onOpenProfile,
 	onOpenSettings
 }: ChatHeaderProps) {
-	const { t } = useI18n();
 	const controlProps = {
 		theme,
 		font,
@@ -56,17 +46,6 @@ function ChatHeader({
 		onOpenSettings,
 		onToggleTheme
 	};
-	const clearChatAction = (
-		<IconButton
-			variant="danger"
-			aria-label={t("chat.header.clearChat")}
-			disabled={!canClearChat || isClearing}
-			title={canClearChat ? t("chat.header.clearChat") : t("chat.header.noMessagesToClear")}
-			onClick={onClearChat}
-		>
-			<Trash2 size={18} aria-hidden="true" />
-		</IconButton>
-	);
 
 	return (
 		<AppHeaderBar
@@ -80,12 +59,8 @@ function ChatHeader({
 			}
 			title={persona.name}
 			titleAccessory={<StatusDot />}
-			desktopActions={
-				<AppHeaderDesktopControls {...controlProps} trailingActions={clearChatAction} />
-			}
-			mobileMenuContent={
-				<AppHeaderMobileControls {...controlProps} actions={clearChatAction} />
-			}
+			desktopActions={<AppHeaderDesktopControls {...controlProps} />}
+			mobileMenuContent={<AppHeaderMobileControls {...controlProps} />}
 		/>
 	);
 }

@@ -16,7 +16,6 @@ import {
 	ScanFace,
 	Settings2,
 	Sparkles,
-	Trash2,
 	type LucideIcon
 } from "lucide-react";
 import type { ReactNode } from "react";
@@ -150,16 +149,6 @@ type Model2DHeaderProps = {
 
 function Model2DHeader({ controls }: Model2DHeaderProps) {
 	const { t } = useI18n();
-	const deletePlaceholder = (
-		<IconButton
-			variant="danger"
-			aria-label={t("model2d.header.deleteDisabled")}
-			disabled
-			title={t("model2d.header.deleteDisabled")}
-		>
-			<Trash2 size={18} aria-hidden="true" />
-		</IconButton>
-	);
 
 	return (
 		<AppHeaderBar
@@ -169,12 +158,8 @@ function Model2DHeader({ controls }: Model2DHeaderProps) {
 				</span>
 			}
 			title={t("model2d.header.title")}
-			desktopActions={
-				<AppHeaderDesktopControls {...controls} trailingActions={deletePlaceholder} />
-			}
-			mobileMenuContent={
-				<AppHeaderMobileControls {...controls} actions={deletePlaceholder} />
-			}
+			desktopActions={<AppHeaderDesktopControls {...controls} />}
+			mobileMenuContent={<AppHeaderMobileControls {...controls} />}
 		/>
 	);
 }

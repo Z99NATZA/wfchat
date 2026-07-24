@@ -26,7 +26,7 @@ show a memory list or per-item controls.
 ## Chat Components
 
 - `ChatSidebar`: persona chats, search, selection, and deletion.
-- `ChatHeader`: active persona and chat actions.
+- `ChatHeader`: active persona and shared app controls.
 - `ChatMessageList`: virtualized timeline and scroll state.
 - `ChatMessageContent`: user plain text/images and assistant Markdown.
 - `ChatComposer`: text, quick prompts, images, microphone, and send state.

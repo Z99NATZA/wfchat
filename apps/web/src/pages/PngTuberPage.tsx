@@ -25,7 +25,6 @@ import {
 	Move,
 	ScanFace,
 	Sparkles,
-	Trash2,
 	UserRound
 } from "lucide-react";
 import { useI18n } from "@/i18n/i18nContext";
@@ -266,16 +265,6 @@ type PngTuberHeaderProps = {
 
 function PngTuberHeader({ controls }: PngTuberHeaderProps) {
 	const { t } = useI18n();
-	const deletePlaceholder = (
-		<IconButton
-			variant="danger"
-			aria-label={t("pngtuber.header.deleteDisabled")}
-			disabled
-			title={t("pngtuber.header.deleteDisabled")}
-		>
-			<Trash2 size={18} aria-hidden="true" />
-		</IconButton>
-	);
 
 	return (
 		<AppHeaderBar
@@ -285,12 +274,8 @@ function PngTuberHeader({ controls }: PngTuberHeaderProps) {
 				</span>
 			}
 			title={t("pngtuber.header.title")}
-			desktopActions={
-				<AppHeaderDesktopControls {...controls} trailingActions={deletePlaceholder} />
-			}
-			mobileMenuContent={
-				<AppHeaderMobileControls {...controls} actions={deletePlaceholder} />
-			}
+			desktopActions={<AppHeaderDesktopControls {...controls} />}
+			mobileMenuContent={<AppHeaderMobileControls {...controls} />}
 		/>
 	);
 }

@@ -195,11 +195,22 @@ describe("CafePage", () => {
 		await waitFor(() =>
 			expect(serviceMocks.equipCafeCosmetic).toHaveBeenCalledWith("mint_scarf")
 		);
-		expect(screen.getByRole("button", { name: "cafe.cosmetics.equipped" })).toBeTruthy();
-		expect(screen.getByRole("button", { name: "cafe.cosmetics.locked" })).toHaveProperty(
-			"disabled",
-			true
-		);
+		const equippedStatus = screen.getByRole("status", {
+			name: "cafe.cosmetics.equipped"
+		});
+		expect(equippedStatus.textContent).toBe("cafe.cosmetics.equip");
+		expect(equippedStatus.className).not.toContain("border");
+		expect(equippedStatus.className).not.toContain("bg-");
+		expect(screen.getByLabelText("cafe.cosmetics.locked")).toBeTruthy();
+		expect(screen.getByTestId("cafe-cosmetic-track").className).toContain("overflow-x-auto");
+		const equippedPreview = screen.getByTestId("cafe-cosmetic-preview-mint_scarf");
+		const lockedPreview = screen.getByTestId("cafe-cosmetic-preview-tea_hat");
+		expect(equippedPreview.className).toContain("bg-app-panel/70");
+		expect(equippedPreview.getAttribute("style")).not.toContain("background-color");
+		expect(equippedPreview.closest("article")?.className).toContain("border-transparent");
+		expect(equippedPreview.closest("article")?.className).toContain("bg-app-soft/70");
+		expect(lockedPreview.className).toContain("opacity-55");
+		expect(lockedPreview.className).toContain("grayscale");
 		expect(screen.queryByText("cafe.cosmetics.unlocked")).toBeNull();
 		expect(screen.queryByText("cafe.cosmetics.sakura_pin.description")).toBeNull();
 		expect(screen.getByLabelText("cafe.cosmetics.needStars").textContent).toContain("5");
@@ -240,6 +251,6 @@ describe("CafePage", () => {
 		await waitFor(() =>
 			expect(serviceMocks.equipCafeCosmetic).toHaveBeenCalledWith("cafe_apron")
 		);
-		expect(screen.getByRole("button", { name: "cafe.cosmetics.equipped" })).toBeTruthy();
+		expect(screen.getByRole("status", { name: "cafe.cosmetics.equipped" })).toBeTruthy();
 	});
 });

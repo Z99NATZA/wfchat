@@ -219,9 +219,6 @@ function ChatPage({
 					persona={chat.activePersona}
 					theme={theme}
 					font={font}
-					canClearChat={!chat.isActiveChatReadOnly && chat.messages.length > 0}
-					isClearing={chat.isClearing}
-					onClearChat={chat.clearChat}
 					onFontChange={onFontChange}
 					onOpenSidebar={chat.openSidebar}
 					onToggleTheme={onToggleTheme}
