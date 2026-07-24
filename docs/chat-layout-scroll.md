@@ -14,11 +14,15 @@ The page/body, header, and composer do not scroll during normal chat use.
 
 ## Auto-Scroll
 
-- New content follows the bottom only while the user is already near it.
+- New content follows the bottom only while the user is already near it, except
+  that starting a user send always brings the new turn into view.
 - Scrolling upward disables forced following and shows `Jump to latest` with a
   new-message count.
 - Changing the active chat resets transient list state and scrolls the new chat
   directly to its latest message.
+- Layout-driven height growth while restoring a chat keeps following the bottom;
+  only upward movement backed by wheel, touch/pointer, scrollbar, or keyboard
+  input disables the pending alignment.
 
 ## Virtualization
 

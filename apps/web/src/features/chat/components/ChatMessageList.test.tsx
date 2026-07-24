@@ -612,6 +612,7 @@ describe("ChatMessageList streaming state", () => {
 		await new Promise((resolve) => requestAnimationFrame(resolve));
 		vi.mocked(HTMLElement.prototype.scrollTo).mockClear();
 
+		fireEvent.wheel(scrollContainer, { deltaY: -50 });
 		scrollContainer.scrollTop = 1_450;
 		fireEvent.scroll(scrollContainer);
 		rerender(
@@ -627,6 +628,127 @@ describe("ChatMessageList streaming state", () => {
 		await new Promise((resolve) => requestAnimationFrame(resolve));
 
 		expect(HTMLElement.prototype.scrollTo).not.toHaveBeenCalled();
+	});
+
+	it("follows a send from above the bottom but still allows scrolling up during the response", async () => {
+		const initialMessages = Array.from({ length: 12 }, (_, index) =>
+			message(`assistant-${index}`, "companion", `message ${index}`)
+		);
+		const userMessage = message("local-user-new", "user", "new question");
+		const { container, rerender } = render(
+			<ChatMessageList
+				activeChatId="active-chat"
+				messages={initialMessages}
+				companionName="Aiko"
+				companionAvatarUrl="/images/aiko-avatar.png"
+			/>
+		);
+		const scrollContainer = container.querySelector(".chat-scroll") as HTMLDivElement;
+
+		Object.defineProperty(scrollContainer, "clientHeight", { configurable: true, value: 500 });
+		Object.defineProperty(scrollContainer, "scrollHeight", {
+			configurable: true,
+			value: 2_000
+		});
+		scrollContainer.scrollTop = 1_500;
+		fireEvent.scroll(scrollContainer);
+		await new Promise((resolve) => requestAnimationFrame(resolve));
+		vi.mocked(HTMLElement.prototype.scrollTo).mockClear();
+
+		fireEvent.wheel(scrollContainer, { deltaY: -500 });
+		scrollContainer.scrollTop = 300;
+		fireEvent.scroll(scrollContainer);
+		rerender(
+			<ChatMessageList
+				activeChatId="active-chat"
+				messages={[...initialMessages, userMessage]}
+				companionName="Aiko"
+				companionAvatarUrl="/images/aiko-avatar.png"
+				isSending
+			/>
+		);
+		await new Promise((resolve) => requestAnimationFrame(resolve));
+
+		expect(HTMLElement.prototype.scrollTo).toHaveBeenCalledWith({
+			top: scrollContainer.scrollHeight,
+			behavior: "smooth"
+		});
+
+		scrollContainer.scrollTop = 1_500;
+		fireEvent.scroll(scrollContainer);
+		vi.mocked(HTMLElement.prototype.scrollTo).mockClear();
+		fireEvent.wheel(scrollContainer, { deltaY: -400 });
+		scrollContainer.scrollTop = 1_100;
+		fireEvent.scroll(scrollContainer);
+		rerender(
+			<ChatMessageList
+				activeChatId="active-chat"
+				messages={[
+					...initialMessages,
+					userMessage,
+					message("local-assistant-new", "companion", "partial response")
+				]}
+				companionName="Aiko"
+				companionAvatarUrl="/images/aiko-avatar.png"
+				isSending
+			/>
+		);
+		await new Promise((resolve) => requestAnimationFrame(resolve));
+
+		expect(HTMLElement.prototype.scrollTo).not.toHaveBeenCalled();
+	});
+
+	it("keeps following when the final server bubble replaces a streaming row after a layout shift", async () => {
+		const initialMessages = Array.from({ length: 10 }, (_, index) =>
+			message(`assistant-${index}`, "companion", `message ${index}`)
+		);
+		const userMessage = message("local-user-new", "user", "new question");
+		const streamingMessage = message(
+			"local-assistant-new",
+			"companion",
+			"nearly complete response"
+		);
+		const { container, rerender } = render(
+			<ChatMessageList
+				activeChatId="active-chat"
+				messages={[...initialMessages, userMessage, streamingMessage]}
+				companionName="Aiko"
+				companionAvatarUrl="/images/aiko-avatar.png"
+				isSending
+			/>
+		);
+		const scrollContainer = container.querySelector(".chat-scroll") as HTMLDivElement;
+
+		Object.defineProperty(scrollContainer, "clientHeight", { configurable: true, value: 500 });
+		Object.defineProperty(scrollContainer, "scrollHeight", {
+			configurable: true,
+			value: 2_000
+		});
+		scrollContainer.scrollTop = 1_500;
+		fireEvent.scroll(scrollContainer);
+		await new Promise((resolve) => requestAnimationFrame(resolve));
+		vi.mocked(HTMLElement.prototype.scrollTo).mockClear();
+
+		scrollContainer.scrollTop = 1_350;
+		fireEvent.scroll(scrollContainer);
+		rerender(
+			<ChatMessageList
+				activeChatId="active-chat"
+				messages={[
+					...initialMessages,
+					userMessage,
+					message("server-assistant-new", "companion", "complete response")
+				]}
+				companionName="Aiko"
+				companionAvatarUrl="/images/aiko-avatar.png"
+			/>
+		);
+		await new Promise((resolve) => requestAnimationFrame(resolve));
+
+		expect(HTMLElement.prototype.scrollTo).toHaveBeenCalledWith({
+			top: scrollContainer.scrollHeight,
+			behavior: "smooth"
+		});
 	});
 
 	it("scrolls to the latest message when switching chats after the user scrolled upward", async () => {
@@ -656,6 +778,7 @@ describe("ChatMessageList streaming state", () => {
 		await new Promise((resolve) => requestAnimationFrame(resolve));
 		vi.mocked(HTMLElement.prototype.scrollTo).mockClear();
 
+		fireEvent.wheel(scrollContainer, { deltaY: -400 });
 		scrollContainer.scrollTop = 1_100;
 		fireEvent.scroll(scrollContainer);
 		rerender(
@@ -671,6 +794,52 @@ describe("ChatMessageList streaming state", () => {
 		expect(HTMLElement.prototype.scrollTo).toHaveBeenCalledWith({
 			top: scrollContainer.scrollHeight,
 			behavior: "auto"
+		});
+	});
+
+	it("keeps following the latest message while a restored timeline grows after auto-scroll", async () => {
+		const initialMessages = Array.from({ length: 12 }, (_, index) =>
+			message(`restored-${index}`, "companion", `restored message ${index}`)
+		);
+		const { container, rerender } = render(
+			<ChatMessageList
+				activeChatId="restored-chat"
+				messages={initialMessages}
+				companionName="Aiko"
+				companionAvatarUrl="/images/aiko-avatar.png"
+			/>
+		);
+		const scrollContainer = container.querySelector(".chat-scroll") as HTMLDivElement;
+		let scrollHeight = 2_000;
+
+		Object.defineProperty(scrollContainer, "clientHeight", { configurable: true, value: 500 });
+		Object.defineProperty(scrollContainer, "scrollHeight", {
+			configurable: true,
+			get: () => scrollHeight
+		});
+		await new Promise((resolve) => requestAnimationFrame(resolve));
+		vi.mocked(HTMLElement.prototype.scrollTo).mockClear();
+
+		scrollContainer.scrollTop = 1_100;
+		fireEvent.scroll(scrollContainer);
+		scrollHeight = 3_000;
+		rerender(
+			<ChatMessageList
+				activeChatId="restored-chat"
+				messages={initialMessages.map((item, index) =>
+					index === initialMessages.length - 1
+						? { ...item, text: item.text.repeat(80) }
+						: item
+				)}
+				companionName="Aiko"
+				companionAvatarUrl="/images/aiko-avatar.png"
+			/>
+		);
+		await new Promise((resolve) => requestAnimationFrame(resolve));
+
+		expect(HTMLElement.prototype.scrollTo).toHaveBeenCalledWith({
+			top: scrollHeight,
+			behavior: "smooth"
 		});
 	});
 });

@@ -12,8 +12,11 @@ import {
 } from "lucide-react";
 import {
 	type CSSProperties,
+	type KeyboardEvent as ReactKeyboardEvent,
+	type PointerEvent as ReactPointerEvent,
 	type ReactNode,
 	type UIEvent,
+	type WheelEvent as ReactWheelEvent,
 	useCallback,
 	useEffect,
 	useLayoutEffect,
@@ -61,6 +64,7 @@ type VirtualRange = {
 
 const DEFAULT_VIEWPORT_HEIGHT = 720;
 const MESSAGE_ROW_GAP_PX = 16;
+const USER_SCROLL_INTENT_WINDOW_MS = 400;
 const VIRTUAL_OVERSCAN_ROWS = 8;
 
 function ChatMessageList({
@@ -86,8 +90,11 @@ function ChatMessageList({
 	const lastScrollTopRef = useRef(0);
 	const latestMessageCountRef = useRef(messages.length);
 	const previousMessageCountRef = useRef(messages.length);
+	const previousIsSendingRef = useRef(isSending);
 	const previousRowIdsRef = useRef<string[]>([]);
 	const shouldAutoScrollAfterChatChangeRef = useRef(false);
+	const scrollPointerIdRef = useRef<number | null>(null);
+	const upwardScrollIntentUntilRef = useRef(0);
 	const rowTopByIdRef = useRef<Map<string, number>>(new Map());
 	const scrollToBottomFrameRef = useRef<number | null>(null);
 	const [hiddenUserMessageIds, setHiddenUserMessageIds] = useState<Set<string>>(new Set());
@@ -162,25 +169,35 @@ function ChatMessageList({
 	);
 	const virtualRows = messageRows.slice(virtualRange.startIndex, virtualRange.endIndex);
 
-	const scheduleScrollToBottom = useCallback((behavior: ScrollBehavior = "smooth") => {
-		const container = scrollContainerRef.current;
-
-		if (!container) {
+	const cancelScheduledScrollToBottom = useCallback(() => {
+		if (scrollToBottomFrameRef.current === null) {
 			return;
 		}
 
-		if (scrollToBottomFrameRef.current !== null) {
-			window.cancelAnimationFrame(scrollToBottomFrameRef.current);
-		}
-
-		scrollToBottomFrameRef.current = window.requestAnimationFrame(() => {
-			scrollToBottomFrameRef.current = null;
-			container.scrollTo({
-				top: container.scrollHeight,
-				behavior
-			});
-		});
+		window.cancelAnimationFrame(scrollToBottomFrameRef.current);
+		scrollToBottomFrameRef.current = null;
 	}, []);
+
+	const scheduleScrollToBottom = useCallback(
+		(behavior: ScrollBehavior = "smooth") => {
+			const container = scrollContainerRef.current;
+
+			if (!container) {
+				return;
+			}
+
+			cancelScheduledScrollToBottom();
+
+			scrollToBottomFrameRef.current = window.requestAnimationFrame(() => {
+				scrollToBottomFrameRef.current = null;
+				container.scrollTo({
+					top: container.scrollHeight,
+					behavior
+				});
+			});
+		},
+		[cancelScheduledScrollToBottom]
+	);
 
 	const updateViewportState = useCallback(() => {
 		const container = scrollContainerRef.current;
@@ -237,7 +254,7 @@ function ChatMessageList({
 
 			const container = scrollContainerRef.current;
 
-			if (container && shouldStickToBottomRef.current && isNearScrollBottom(container, 8)) {
+			if (container && shouldStickToBottomRef.current) {
 				scheduleScrollToBottom("auto");
 			}
 		},
@@ -248,8 +265,17 @@ function ChatMessageList({
 		const { scrollTop: nextScrollTop, scrollHeight, clientHeight } = event.currentTarget;
 		const distanceFromBottom = scrollHeight - (nextScrollTop + clientHeight);
 		const isScrollingUp = nextScrollTop < lastScrollTopRef.current - 1;
+		const hasUserUpwardScrollIntent =
+			scrollPointerIdRef.current !== null || Date.now() <= upwardScrollIntentUntilRef.current;
 		lastScrollTopRef.current = nextScrollTop;
-		shouldStickToBottomRef.current = isScrollingUp ? false : distanceFromBottom < 80;
+
+		if (isScrollingUp && hasUserUpwardScrollIntent) {
+			shouldStickToBottomRef.current = false;
+			cancelScheduledScrollToBottom();
+		} else if (distanceFromBottom < 80) {
+			shouldStickToBottomRef.current = true;
+		}
+
 		setScrollTop(nextScrollTop);
 		setViewportHeight(clientHeight > 0 ? clientHeight : DEFAULT_VIEWPORT_HEIGHT);
 		setVirtualTimelineTop(
@@ -262,6 +288,35 @@ function ChatMessageList({
 		}
 	}
 
+	function handleScrollWheel(event: ReactWheelEvent<HTMLDivElement>) {
+		if (event.deltaY < 0) {
+			markUpwardScrollIntent();
+		} else if (event.deltaY > 0) {
+			upwardScrollIntentUntilRef.current = 0;
+		}
+	}
+
+	function handleScrollPointerDown(event: ReactPointerEvent<HTMLDivElement>) {
+		if (event.pointerType !== "mouse" || event.target === event.currentTarget) {
+			scrollPointerIdRef.current = event.pointerId;
+		}
+	}
+
+	function handleScrollKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
+		if (
+			event.key === "ArrowUp" ||
+			event.key === "Home" ||
+			event.key === "PageUp" ||
+			(event.key === " " && event.shiftKey)
+		) {
+			markUpwardScrollIntent();
+		}
+	}
+
+	function markUpwardScrollIntent() {
+		upwardScrollIntentUntilRef.current = Date.now() + USER_SCROLL_INTENT_WINDOW_MS;
+	}
+
 	useLayoutEffect(() => {
 		rowTopByIdRef.current = rowMetrics.topById;
 	}, [rowMetrics.topById]);
@@ -270,6 +325,8 @@ function ChatMessageList({
 		shouldStickToBottomRef.current = true;
 		shouldAutoScrollAfterChatChangeRef.current = true;
 		lastScrollTopRef.current = 0;
+		scrollPointerIdRef.current = null;
+		upwardScrollIntentUntilRef.current = 0;
 		previousMessageCountRef.current = latestMessageCountRef.current;
 		previousRowIdsRef.current = [];
 		setHiddenUserMessageIds(new Set());
@@ -335,7 +392,17 @@ function ChatMessageList({
 		const previousMessageCount = previousMessageCountRef.current;
 		const nextMessageCount = messages.length;
 		const newMessageCount = Math.max(nextMessageCount - previousMessageCount, 0);
+		const didStartSending = isSending && !previousIsSendingRef.current;
 		previousMessageCountRef.current = nextMessageCount;
+		previousIsSendingRef.current = isSending;
+
+		if (didStartSending) {
+			shouldStickToBottomRef.current = true;
+			scheduleScrollToBottom("smooth");
+			setShowJumpToLatest(false);
+			setUnseenMessageCount(0);
+			return;
+		}
 
 		if (newMessageCount > 0 && !shouldStickToBottomRef.current) {
 			setUnseenMessageCount((count) => count + newMessageCount);
@@ -357,10 +424,21 @@ function ChatMessageList({
 	}, [messages]);
 
 	useEffect(() => {
-		return () => {
-			if (scrollToBottomFrameRef.current !== null) {
-				window.cancelAnimationFrame(scrollToBottomFrameRef.current);
+		return cancelScheduledScrollToBottom;
+	}, [cancelScheduledScrollToBottom]);
+
+	useEffect(() => {
+		function clearScrollPointerIntent(event: PointerEvent) {
+			if (scrollPointerIdRef.current === event.pointerId) {
+				scrollPointerIdRef.current = null;
 			}
+		}
+
+		window.addEventListener("pointerup", clearScrollPointerIntent);
+		window.addEventListener("pointercancel", clearScrollPointerIntent);
+		return () => {
+			window.removeEventListener("pointerup", clearScrollPointerIntent);
+			window.removeEventListener("pointercancel", clearScrollPointerIntent);
 		};
 	}, []);
 
@@ -615,6 +693,9 @@ function ChatMessageList({
 			<div
 				ref={scrollContainerRef}
 				onScroll={handleScroll}
+				onWheel={handleScrollWheel}
+				onPointerDown={handleScrollPointerDown}
+				onKeyDown={handleScrollKeyDown}
 				className="chat-scroll h-full overflow-y-auto px-4 py-6 lg:px-8"
 				style={
 					bottomClearancePx > 0 ? { paddingBottom: `${bottomClearancePx}px` } : undefined
@@ -735,10 +816,6 @@ function assistantSpeechLabel(
 	}
 
 	return t("chat.messageList.playAssistantSpeech");
-}
-
-function isNearScrollBottom(container: HTMLDivElement, thresholdPx: number): boolean {
-	return container.scrollHeight - (container.scrollTop + container.clientHeight) <= thresholdPx;
 }
 
 function VirtualMessageRow({
