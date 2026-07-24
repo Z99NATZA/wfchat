@@ -146,7 +146,7 @@ function ChatSidebar({
 									</span>
 								</span>
 								{persona.unreadCount > 0 && (
-									<span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-primary text-[11px] font-semibold text-white">
+									<span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-primary text-[11px] font-semibold text-primary-text">
 										{persona.unreadCount}
 									</span>
 								)}
@@ -220,7 +220,7 @@ function ChatSidebar({
 										<Ellipsis size={14} aria-hidden="true" />
 									</IconButton>
 									{isMenuOpen && (
-										<div className="absolute right-1.5 top-9 z-20 min-w-36 rounded-lg border border-app-border bg-app-panel/82 p-1 shadow-soft">
+										<div className="absolute right-1.5 top-9 z-20 min-w-36 rounded-lg border border-app-border bg-app-panel/82 p-1">
 											<Button
 												onClick={async () => {
 													setActiveSessionMenuId(null);

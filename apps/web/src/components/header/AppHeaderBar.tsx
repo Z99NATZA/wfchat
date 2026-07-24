@@ -90,7 +90,7 @@ function AppHeaderBar({
 							<Ellipsis size={18} aria-hidden="true" />
 						</IconButton>
 						{isMobileMenuOpen && (
-							<div className="mobile-app-surface-panel absolute right-0 top-11 z-30 w-64 rounded-lg border border-app-border p-2 shadow-soft">
+							<div className="mobile-app-surface-panel absolute right-0 top-11 z-30 w-64 rounded-lg border border-app-border p-2">
 								{mobileMenuContent}
 							</div>
 						)}

@@ -119,6 +119,8 @@ describe("ChatMessageContent", () => {
 		expect(link.getAttribute("target")).toBe("_blank");
 		expect(link.getAttribute("rel")).toContain("noreferrer");
 		expect(link.getAttribute("rel")).toContain("noopener");
+		expect(link.className).toContain("text-primary-text");
+		expect(link.className.split(/\s+/)).not.toContain("text-primary");
 	});
 
 	it("does not turn raw HTML into live DOM", () => {

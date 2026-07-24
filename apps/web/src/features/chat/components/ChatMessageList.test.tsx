@@ -162,13 +162,15 @@ describe("ChatMessageList streaming state", () => {
 		expect(userBubble?.className).toContain("sm:max-w-[min(32rem,70%)]");
 		expect(userBubble?.className).toContain("rounded-lg");
 		expect(userBubble?.className).toContain("px-4");
+		expect(userBubble?.className).toContain("bg-primary");
+		expect(userBubble?.className).toContain("text-primary-text");
+		expect(userBubble?.className).not.toContain("text-white");
 		expect(assistantBubble?.className).toContain("min-w-0");
 		expect(assistantBubble?.className).toContain("flex-1");
 		expect(assistantBubble?.className).not.toContain("rounded-lg");
 		expect(assistantBubble?.className).not.toContain("border-app-border");
 		expect(assistantBubble?.className).not.toContain("bg-app-panel/92");
 		expect(assistantBubble?.className).not.toContain("px-4");
-		expect(assistantBubble?.className).not.toContain("shadow-soft");
 	});
 
 	it("reserves bottom space when an overlay clearance is provided", () => {

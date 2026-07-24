@@ -51,7 +51,7 @@ const AvatarOverlay = forwardRef<HTMLDivElement, AvatarOverlayProps>(function Av
 			style={{ bottom: `calc(${bottomOffsetPx}px + 0.75rem)` }}
 			aria-label={t("pngtuber.header.title")}
 		>
-			<div className="relative h-full overflow-hidden rounded-lg border border-app-border bg-app-panel/92 shadow-soft">
+			<div className="relative h-full overflow-hidden rounded-lg border border-app-border bg-app-panel/92">
 				<div className="absolute inset-x-3 bottom-5 h-14 rounded-full border border-primary/15 bg-primary/8 md:h-20" />
 				<div className="absolute inset-2 flex items-end justify-center">
 					<PngTuberRenderer

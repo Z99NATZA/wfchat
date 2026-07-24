@@ -363,7 +363,7 @@ function ChatComposer({
 					</p>
 				) : null}
 				<form
-					className="flex items-center gap-2 rounded-lg border border-app-border bg-app-soft/82 p-2 shadow-soft focus-within:border-primary focus-within:ring-4 focus-within:ring-primary/15"
+					className="flex items-center gap-2 rounded-lg border border-app-border bg-app-soft/82 p-2 focus-within:border-primary focus-within:ring-4 focus-within:ring-primary/15"
 					onSubmit={handleSubmit}
 				>
 					<IconButton

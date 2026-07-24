@@ -126,7 +126,7 @@ function CafeRoomContent({
 				)}
 				<div className="pointer-events-none absolute left-3 right-3 top-3 z-30 flex items-start justify-between gap-3">
 					<div
-						className="max-w-[min(75%,24rem)] rounded-xl border border-dialog-border bg-dialog-soft px-3 py-2 text-app-text shadow-soft"
+						className="max-w-[min(75%,24rem)] rounded-xl border border-dialog-border bg-dialog-soft px-3 py-2 text-app-text"
 						data-testid="cafe-activity-hud"
 					>
 						<div className="flex items-center justify-between gap-3">
@@ -237,7 +237,7 @@ function CafeRoomContent({
 						</p>
 					</div>
 					<div
-						className="rounded-xl border border-dialog-border bg-dialog-soft px-3 py-2 text-app-text shadow-soft"
+						className="rounded-xl border border-dialog-border bg-dialog-soft px-3 py-2 text-app-text"
 						data-testid="cafe-stars"
 					>
 						<p className="flex items-center gap-2 text-sm font-semibold">
@@ -247,7 +247,7 @@ function CafeRoomContent({
 					</div>
 				</div>
 				<div
-					className="absolute bottom-3 left-1/2 z-30 flex -translate-x-1/2 gap-1 rounded-full border border-dialog-border bg-dialog-soft p-1.5 text-app-text shadow-soft max-sm:bottom-24"
+					className="absolute bottom-3 left-1/2 z-30 flex -translate-x-1/2 gap-1 rounded-full border border-dialog-border bg-dialog-soft p-1.5 text-app-text max-sm:bottom-24"
 					data-testid="cafe-emotes"
 				>
 					{["wave", "heart", "happy", "tea"].map((value) => (
@@ -265,7 +265,7 @@ function CafeRoomContent({
 				</div>
 				{cafe.dialogue && (
 					<div
-						className="absolute bottom-28 left-1/2 z-40 flex w-[min(92%,34rem)] -translate-x-1/2 items-center gap-3 rounded-2xl border border-dialog-border bg-dialog-soft p-3 text-app-text shadow-soft max-sm:bottom-44"
+						className="absolute bottom-28 left-1/2 z-40 flex w-[min(92%,34rem)] -translate-x-1/2 items-center gap-3 rounded-2xl border border-dialog-border bg-dialog-soft p-3 text-app-text max-sm:bottom-44"
 						data-testid="aiko-dialogue"
 						role="status"
 						aria-live="polite"
@@ -288,13 +288,13 @@ function CafeRoomContent({
 					</div>
 				)}
 				{cafe.connectionState === "reconnecting" && (
-					<div className="absolute inset-x-0 top-0 z-50 border-b border-dialog-border bg-dialog-soft px-3 py-1.5 text-center text-xs font-semibold text-app-text shadow-soft">
+					<div className="absolute inset-x-0 top-0 z-50 border-b border-dialog-border bg-dialog-soft px-3 py-1.5 text-center text-xs font-semibold text-app-text">
 						{t("cafe.room.reconnecting")}
 					</div>
 				)}
 				{cafe.connectionState === "offline" && (
 					<div
-						className="absolute inset-x-0 top-0 z-50 border-b border-dialog-border bg-dialog-soft px-3 py-2 text-center text-xs font-semibold text-app-text shadow-soft"
+						className="absolute inset-x-0 top-0 z-50 border-b border-dialog-border bg-dialog-soft px-3 py-2 text-center text-xs font-semibold text-app-text"
 						data-testid="cafe-offline-status"
 						role="status"
 					>
@@ -303,7 +303,7 @@ function CafeRoomContent({
 				)}
 				{cafe.error && cafe.connectionState !== "closed" && (
 					<div
-						className="absolute left-1/2 top-20 z-50 -translate-x-1/2 rounded-lg border border-red-400/30 bg-dialog-soft px-4 py-2 text-sm text-red-500 shadow-soft"
+						className="absolute left-1/2 top-20 z-50 -translate-x-1/2 rounded-lg border border-red-400/30 bg-dialog-soft px-4 py-2 text-sm text-red-500"
 						role="status"
 					>
 						{t(roomErrorTranslationKey(cafe.error))}
@@ -319,7 +319,7 @@ function CafeRoomContent({
 				{cafe.room && (
 					<button
 						type="button"
-						className="absolute right-3 top-20 z-30 rounded-lg border border-dialog-border bg-dialog-soft px-3 py-2 text-xs font-semibold text-app-text shadow-soft transition hover:bg-dialog-panel focus:outline-none focus:ring-2 focus:ring-primary/35 dark:focus:ring-action-ring/25"
+						className="absolute right-3 top-20 z-30 rounded-lg border border-dialog-border bg-dialog-soft px-3 py-2 text-xs font-semibold text-app-text transition hover:bg-dialog-panel focus:outline-none focus:ring-2 focus:ring-primary/35 dark:focus:ring-action-ring/25"
 						onClick={() => void copyInviteCode()}
 						data-testid="cafe-invite-code"
 					>
@@ -346,12 +346,12 @@ function CafeWelcomeGuide({
 	return (
 		<div className="absolute inset-0 z-[70] flex items-center justify-center bg-app-bg/72 p-4 backdrop-blur-[3px]">
 			<div
-				className="w-full max-w-md rounded-3xl border border-dialog-border bg-dialog-panel p-5 text-center text-app-text shadow-soft sm:p-6"
+				className="w-full max-w-md rounded-3xl border border-dialog-border bg-dialog-panel p-5 text-center text-app-text sm:p-6"
 				role="dialog"
 				aria-modal="true"
 				aria-labelledby="cafe-guide-title"
 			>
-				<div className="mx-auto flex size-12 items-center justify-center rounded-full border border-dialog-border bg-dialog-soft text-2xl shadow-inner">
+				<div className="mx-auto flex size-12 items-center justify-center rounded-full border border-dialog-border bg-dialog-soft text-2xl">
 					{tableService ? "☕" : "🍃"}
 				</div>
 				<h2 id="cafe-guide-title" className="mt-3 text-xl font-bold">
@@ -520,7 +520,7 @@ function CafeRoomRecovery({
 	return (
 		<div className="absolute inset-0 z-60 flex items-center justify-center bg-app-bg/72 p-4">
 			<div
-				className="w-full max-w-md rounded-2xl border border-dialog-border bg-dialog-soft p-5 text-center shadow-soft sm:p-6"
+				className="w-full max-w-md rounded-2xl border border-dialog-border bg-dialog-soft p-5 text-center sm:p-6"
 				role="alert"
 			>
 				<WifiOff className="mx-auto text-muted" size={30} aria-hidden="true" />

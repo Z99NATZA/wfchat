@@ -36,7 +36,7 @@ function createMarkdownComponents({
 					href={href}
 					target="_blank"
 					rel="noreferrer noopener"
-					className="break-words font-medium text-primary underline decoration-primary/35 underline-offset-2 transition hover:decoration-primary"
+					className="break-words font-medium text-primary-text underline decoration-primary-text/35 underline-offset-2 transition hover:decoration-primary-text"
 				>
 					{children}
 				</a>
@@ -100,7 +100,7 @@ function createMarkdownComponents({
 					checked={checked}
 					disabled
 					readOnly
-					className="mr-2 translate-y-[1px] accent-primary"
+					className="mr-2 translate-y-[1px] accent-primary-text"
 					aria-label={checked ? "Completed task" : "Pending task"}
 				/>
 			);

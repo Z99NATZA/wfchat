@@ -124,7 +124,7 @@ function CafePage({ activityBar, backgroundImageUrl, headerControls }: CafePageP
 			>
 				<div className="mx-auto max-w-5xl space-y-5">
 					<div
-						className="overflow-hidden rounded-2xl border border-app-border bg-app-panel/76 shadow-soft"
+						className="overflow-hidden rounded-2xl border border-app-border bg-app-panel/76"
 						data-testid="cafe-entry-panel"
 					>
 						<div className="grid gap-6 p-5 sm:p-7 lg:grid-cols-[1.25fr_0.75fr] lg:items-center">
@@ -218,7 +218,7 @@ function CafePage({ activityBar, backgroundImageUrl, headerControls }: CafePageP
 							<img
 								src="/images/aiko-cafe/aiko-host-v1.png"
 								alt={t("cafe.lobby.aikoAlt")}
-								className="mx-auto h-52 w-auto object-contain drop-shadow-xl sm:h-56"
+								className="mx-auto h-52 w-auto object-contain sm:h-56"
 							/>
 						</div>
 					</div>
@@ -315,7 +315,7 @@ function CafeCosmeticWardrobe({
 	const isSaving = pendingCosmetic !== undefined;
 	return (
 		<section
-			className="rounded-2xl border border-app-border bg-app-panel/76 p-3 shadow-soft sm:p-4"
+			className="rounded-2xl border border-app-border bg-app-panel/76 p-3 sm:p-4"
 			aria-labelledby="cafe-cosmetics-title"
 			data-testid="cafe-cosmetic-wardrobe"
 		>
@@ -407,7 +407,7 @@ function CafeCosmeticCard({
 				<CosmeticPreview cosmeticId={cosmetic.id} muted={!cosmetic.unlocked} />
 				{!cosmetic.unlocked && (
 					<span
-						className="absolute right-2 top-2 inline-flex items-center gap-1 rounded-full border border-app-border bg-app-panel/92 px-2 py-1 text-xs font-semibold text-app-text shadow-soft"
+						className="absolute right-2 top-2 inline-flex items-center gap-1 rounded-full border border-app-border bg-app-panel/92 px-2 py-1 text-xs font-semibold text-app-text"
 						aria-label={t("cafe.cosmetics.needStars", {
 							count: cosmetic.requiredStars
 						})}
@@ -464,7 +464,7 @@ function CosmeticPreview({ cosmeticId, muted }: { cosmeticId: string; muted: boo
 	}[cosmeticId];
 	return (
 		<div
-			className={`flex h-12 items-center justify-center rounded-lg border border-app-border bg-app-panel/70 text-2xl shadow-inner transition ${
+			className={`flex h-12 items-center justify-center rounded-lg border border-app-border bg-app-panel/70 text-2xl transition ${
 				muted ? "opacity-55 grayscale" : ""
 			}`}
 			style={{ color: accent ?? "var(--color-app-text)" }}

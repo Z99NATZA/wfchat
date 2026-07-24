@@ -9,19 +9,20 @@ surfaces. Components use semantic tokens, not raw colors.
 - `app-*`: translucent persistent chrome and content surfaces that may reveal
   the user's background image.
 - `dialog-*`: solid controls and modal surfaces such as confirms and alerts.
-- `action-*`: high-contrast command controls.
+- `action-*`: theme-adaptive command controls.
 
-| Intent | Typical utility |
-| --- | --- |
-| App base | `bg-app-bg` |
-| Large shell | `bg-app-panel/62 border-app-border` |
-| Popover/menu | `bg-app-panel/82` |
-| User chat bubble/floating control | `bg-app-panel/92` |
-| Nested field/control | `bg-app-soft` or `bg-app-soft/82` |
-| Primary text | `text-app-text` |
-| Secondary text | `text-muted` |
-| Dialog shell | `bg-dialog-panel border-dialog-border` |
-| Dialog field/control | `bg-dialog-soft border-dialog-border` |
+| Intent               | Typical utility                        |
+| -------------------- | -------------------------------------- |
+| App base             | `bg-app-bg`                            |
+| Large shell          | `bg-app-panel/62 border-app-border`    |
+| Popover/menu         | `bg-app-panel/82`                      |
+| Floating control     | `bg-app-panel/92`                      |
+| Nested field/control | `bg-app-soft` or `bg-app-soft/82`      |
+| Primary surface      | `bg-primary text-primary-text`         |
+| Primary text         | `text-app-text`                        |
+| Secondary text       | `text-muted`                           |
+| Dialog shell         | `bg-dialog-panel border-dialog-border` |
+| Dialog field/control | `bg-dialog-soft border-dialog-border`  |
 
 Use `Button` for text-bearing buttons and `IconButton` for icon-only controls.
 Their variants own color, border, hover, focus, disabled, destructive, and
@@ -56,6 +57,11 @@ Do not add feature-specific scrollbar colors when it applies.
 - Use `app-*` for persistent page chrome and `dialog-*` for contained modal
   surfaces and controls.
 - Keep nested controls and user message bubbles more opaque than their shell.
+- Pair `bg-primary` with `text-primary-text`; the foreground adapts to the
+  light or dark primary surface.
+- Separate surfaces with color and borders. Do not add box shadows, inset
+  shadows, text shadows, or drop shadows. Focus and status rings remain allowed;
+  they communicate interaction or state rather than visual depth.
 - Do not hard-code hex/RGB values or use raw `bg-white`, `bg-slate-*`, or
   `bg-zinc-*` for application surfaces.
 - Check light/dark themes, wallpaper on/off, hover/focus, and mobile overlays

@@ -563,7 +563,7 @@ function ChatMessageList({
 								<Ellipsis size={14} aria-hidden="true" />
 							</IconButton>
 							{isMenuOpen && (
-								<div className="absolute bottom-8 left-0 z-20 min-w-44 rounded-lg border border-app-border bg-app-panel/92 p-1 text-app-text shadow-soft">
+								<div className="absolute bottom-8 left-0 z-20 min-w-44 rounded-lg border border-app-border bg-app-panel/92 p-1 text-app-text">
 									<Button
 										onClick={() => hideUserMessage(message.id)}
 										variant="ghost"
@@ -583,7 +583,7 @@ function ChatMessageList({
 						className={cn(
 							isUser ? userMessageBubbleClassName : assistantMessageLayoutClassName,
 							isUser
-								? "rounded-lg bg-primary px-4 py-3 text-white shadow-soft dark:border dark:border-app-border dark:bg-primary dark:text-app-text"
+								? "rounded-lg bg-primary px-4 py-3 text-primary-text dark:border dark:border-app-border"
 								: undefined
 						)}
 					>
@@ -603,7 +603,7 @@ function ChatMessageList({
 							<p
 								className={cn(
 									"text-[11px]",
-									isUser ? "text-white/75 dark:text-muted" : "text-muted"
+									isUser ? "text-primary-text/70" : "text-muted"
 								)}
 							>
 								{message.time}
@@ -677,7 +677,7 @@ function ChatMessageList({
 				</article>
 				{dateLabel && (
 					<div className="flex justify-center">
-						<span className="rounded-full border border-app-border bg-app-soft px-3 py-1 text-xs font-medium text-muted shadow-soft">
+						<span className="rounded-full border border-app-border bg-app-soft px-3 py-1 text-xs font-medium text-muted">
 							{dateLabel}
 						</span>
 					</div>
@@ -700,7 +700,7 @@ function ChatMessageList({
 				}
 			>
 				<div className="mx-auto flex max-w-3xl items-center gap-3 rounded-lg border border-primary/20 bg-primary/8 p-3 text-sm text-app-text dark:border-app-border dark:bg-app-soft">
-					<div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary text-white">
+					<div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-text">
 						<Wand2 size={17} aria-hidden="true" />
 					</div>
 					<p className="min-w-0 flex-1">
@@ -787,7 +787,7 @@ function ChatMessageList({
 						<ArrowDown size={16} aria-hidden="true" />
 						{t("chat.messageList.jumpToLatest")}
 						{unseenMessageCount > 0 && (
-							<span className="rounded-full bg-primary px-2 py-0.5 text-xs font-semibold text-white dark:border dark:border-action-border dark:bg-muted/25 dark:text-app-text">
+							<span className="rounded-full bg-primary px-2 py-0.5 text-xs font-semibold text-primary-text dark:border dark:border-action-border dark:bg-muted/25">
 								+{unseenMessageCount}
 							</span>
 						)}
@@ -1038,7 +1038,7 @@ function ChatMessageAttachmentPreview({
 	const [didFail, setDidFail] = useState(false);
 	const frameClassName = cn(
 		"block overflow-hidden rounded-md border",
-		isUser ? "border-white/20 dark:border-app-border" : "border-app-border"
+		isUser ? "border-primary-text/20 dark:border-app-border" : "border-app-border"
 	);
 
 	function handleOpenPreview() {
@@ -1129,7 +1129,7 @@ function ChatMessageAttachmentPreview({
 			className={cn(
 				frameClassName,
 				"flex aspect-square max-h-56 w-full flex-col items-center justify-center gap-2 bg-app-soft px-3 text-center text-xs",
-				isUser ? "text-white/80 dark:text-muted" : "text-muted"
+				isUser ? "text-primary-text/70" : "text-muted"
 			)}
 			role={didFail ? "alert" : "status"}
 			aria-label={didFail ? t("chat.messageList.imageAttachmentMissing") : alt}

@@ -114,8 +114,8 @@ function Dialog({
 				aria-describedby={description ? "wfchat-dialog-description" : undefined}
 				className={
 					size === "wide"
-						? "relative w-full max-w-4xl overflow-hidden rounded-xl border border-dialog-border bg-dialog-soft text-app-text shadow-soft"
-						: "relative w-full max-w-md overflow-hidden rounded-xl border border-dialog-border bg-dialog-soft text-app-text shadow-soft"
+						? "relative w-full max-w-4xl overflow-hidden rounded-xl border border-dialog-border bg-dialog-soft text-app-text"
+						: "relative w-full max-w-md overflow-hidden rounded-xl border border-dialog-border bg-dialog-soft text-app-text"
 				}
 				style={{
 					transform: `translate(${offset.x}px, ${offset.y}px)`

@@ -126,7 +126,7 @@ function Model2DStage() {
 				<div className="absolute left-1/2 top-0 h-full w-px bg-app-border/70" />
 				<div className="absolute inset-x-[18%] bottom-[18%] h-px bg-primary/25" />
 				<div className="relative flex h-full items-center justify-center p-6">
-					<div className="flex aspect-[3/4] h-full max-h-[42rem] min-h-0 w-full max-w-[32rem] flex-col items-center justify-center rounded-lg border border-dashed border-app-border bg-app-panel/60 shadow-soft">
+					<div className="flex aspect-[3/4] h-full max-h-[42rem] min-h-0 w-full max-w-[32rem] flex-col items-center justify-center rounded-lg border border-dashed border-app-border bg-app-panel/60">
 						<div className="flex size-24 items-center justify-center rounded-2xl border border-app-border bg-app-soft text-muted">
 							<ScanFace size={42} aria-hidden="true" />
 						</div>
@@ -153,7 +153,7 @@ function Model2DHeader({ controls }: Model2DHeaderProps) {
 	return (
 		<AppHeaderBar
 			leading={
-				<span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary text-white shadow-soft sm:size-11">
+				<span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-text sm:size-11">
 					<Layers size={21} aria-hidden="true" />
 				</span>
 			}

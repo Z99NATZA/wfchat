@@ -240,7 +240,7 @@ function CafeGameCanvas({
 			</div>
 			<button
 				type="button"
-				className="absolute bottom-[max(1.25rem,env(safe-area-inset-bottom))] right-4 z-40 flex h-16 min-w-20 max-w-28 items-center justify-center rounded-2xl border border-action-border bg-action px-3 text-center text-xs font-bold leading-4 text-action-text shadow-soft transition hover:bg-action-hover focus:outline-none focus:ring-4 focus:ring-action-ring/25 disabled:border-app-border disabled:bg-app-soft disabled:text-muted sm:hidden"
+				className="absolute bottom-[max(1.25rem,env(safe-area-inset-bottom))] right-4 z-40 flex h-16 min-w-20 max-w-28 items-center justify-center rounded-2xl border border-action-border bg-action px-3 text-center text-xs font-bold leading-4 text-action-text transition hover:bg-action-hover focus:outline-none focus:ring-4 focus:ring-action-ring/25 disabled:border-app-border disabled:bg-app-soft disabled:text-muted sm:hidden"
 				disabled={!inputEnabled || !currentInteractionTarget}
 				onClick={() => {
 					if (currentInteractionTarget) {
@@ -253,7 +253,7 @@ function CafeGameCanvas({
 			</button>
 			{inputEnabled && currentInteractionTarget && (
 				<div
-					className="absolute bottom-16 left-1/2 z-50 hidden -translate-x-1/2 items-center gap-2 rounded-xl border border-dialog-border bg-dialog-soft px-4 py-2.5 text-sm font-semibold text-app-text shadow-soft sm:flex"
+					className="absolute bottom-16 left-1/2 z-50 hidden -translate-x-1/2 items-center gap-2 rounded-xl border border-dialog-border bg-dialog-soft px-4 py-2.5 text-sm font-semibold text-app-text sm:flex"
 					data-testid="cafe-interaction-prompt"
 					role="status"
 					aria-live="polite"
@@ -303,7 +303,7 @@ function DirectionButton({
 	return (
 		<button
 			type="button"
-			className={`flex size-12 touch-none select-none items-center justify-center rounded-xl border border-dialog-border bg-dialog-soft text-lg text-app-text shadow-soft transition hover:bg-dialog-panel focus:outline-none focus:ring-2 focus:ring-primary/35 disabled:cursor-not-allowed disabled:opacity-50 dark:focus:ring-action-ring/25 ${className ?? ""}`}
+			className={`flex size-12 touch-none select-none items-center justify-center rounded-xl border border-dialog-border bg-dialog-soft text-lg text-app-text transition hover:bg-dialog-panel focus:outline-none focus:ring-2 focus:ring-primary/35 disabled:cursor-not-allowed disabled:opacity-50 dark:focus:ring-action-ring/25 ${className ?? ""}`}
 			disabled={disabled}
 			aria-label={label}
 			onKeyDown={(event) => {

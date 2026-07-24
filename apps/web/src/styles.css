@@ -6,6 +6,7 @@
 @theme {
 	--color-primary: var(--brand-primary);
 	--color-primary-600: var(--brand-primary-hover);
+	--color-primary-text: var(--brand-primary-text);
 	--color-app-bg: var(--app-bg);
 	--color-app-panel: var(--app-panel);
 	--color-app-soft: var(--app-soft);
@@ -20,26 +21,26 @@
 	--color-action-text: var(--action-text);
 	--color-action-ring: var(--action-ring);
 	--color-muted: var(--muted);
-	--shadow-soft: 0 14px 36px -26px rgb(15 23 42 / 0.55);
 }
 
 @layer base {
 	:root {
-		--brand-primary: #315f9f;
-		--brand-primary-hover: #284f86;
+		--brand-primary: #e2e8f0;
+		--brand-primary-hover: #cbd5e1;
+		--brand-primary-text: #1e293b;
 
-		--app-bg: #f5f7fb;
-		--app-panel: rgb(251 252 255 / 0.9);
-		--app-soft: rgb(238 242 248 / 0.82);
+		--app-bg: #f8fafc;
+		--app-panel: rgb(255 255 255 / 0.92);
+		--app-soft: rgb(241 245 249 / 0.88);
 
-		--app-text: #202633;
-		--muted: #607087;
+		--app-text: #1e293b;
+		--muted: #64748b;
 
-		--app-border: rgb(216 222 234 / 0.78);
+		--app-border: rgb(203 213 225 / 0.78);
 
 		--dialog-panel: #ffffff;
-		--dialog-soft: #f0f3f9;
-		--dialog-border: #d8deea;
+		--dialog-soft: #f1f5f9;
+		--dialog-border: #cbd5e1;
 
 		--wfchat-bg-image: none;
 		--wfchat-bg-render-size: cover;
@@ -48,13 +49,17 @@
 		--wfchat-surface-bg-opacity: 0;
 		--app-bg-image-opacity: 0.06;
 
-		--action-bg: #315f9f;
-		--action-bg-hover: #284f86;
-		--action-border: #315f9f;
-		--action-text: #ffffff;
-		--action-ring: rgb(49 95 159 / 0.3);
-		--chat-scrollbar-thumb: color-mix(in srgb, var(--brand-primary) 45%, transparent);
-		--chat-scrollbar-thumb-hover: color-mix(in srgb, var(--brand-primary) 68%, transparent);
+		--action-bg: #e2e8f0;
+		--action-bg-hover: #cbd5e1;
+		--action-border: #cbd5e1;
+		--action-text: #1e293b;
+		--action-ring: rgb(100 116 139 / 0.3);
+		--chat-scrollbar-thumb: color-mix(in srgb, var(--brand-primary-text) 30%, transparent);
+		--chat-scrollbar-thumb-hover: color-mix(
+			in srgb,
+			var(--brand-primary-text) 50%,
+			transparent
+		);
 
 		--app-font-family:
 			Inter, "Noto Sans Thai", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
@@ -64,6 +69,7 @@
 	.dark {
 		--brand-primary: #282c33;
 		--brand-primary-hover: #2f343e;
+		--brand-primary-text: #f2f5f8;
 		--app-bg: #282c33;
 		--app-panel: rgb(59 65 77 / 0.88);
 		--app-soft: rgb(47 52 62 / 0.72);
@@ -242,7 +248,7 @@
 	}
 
 	.icon-button--default {
-		@apply border-app-border bg-app-soft text-muted hover:border-primary hover:text-primary focus:ring-4 focus:ring-primary/15 dark:hover:border-action-border dark:hover:bg-action-hover dark:hover:text-app-text dark:focus:ring-action-ring/25;
+		@apply border-app-border bg-app-soft text-muted hover:border-primary hover:text-primary-text focus:ring-4 focus:ring-primary/15 dark:hover:border-action-border dark:hover:bg-action-hover dark:hover:text-app-text dark:focus:ring-action-ring/25;
 	}
 
 	.icon-button--action {
@@ -262,7 +268,7 @@
 	}
 
 	.icon-button--selected {
-		@apply border-primary bg-app-soft text-primary focus:ring-2 focus:ring-primary/25 dark:border-action-border dark:bg-action-hover dark:text-app-text dark:focus:ring-action-ring/25;
+		@apply border-primary bg-app-soft text-primary-text focus:ring-2 focus:ring-primary/25 dark:border-action-border dark:bg-action-hover dark:text-app-text dark:focus:ring-action-ring/25;
 	}
 
 	.icon-button:disabled {
@@ -330,19 +336,19 @@
 	}
 
 	.button--action {
-		@apply border-action-border bg-action text-action-text shadow-soft hover:border-primary hover:bg-action-hover focus:ring-4 focus:ring-action-ring/25 disabled:border-app-border disabled:bg-app-border disabled:text-muted disabled:shadow-none dark:hover:border-muted dark:hover:text-app-text;
+		@apply border-action-border bg-action text-action-text hover:border-primary hover:bg-action-hover focus:ring-4 focus:ring-action-ring/25 disabled:border-app-border disabled:bg-app-border disabled:text-muted dark:hover:border-muted dark:hover:text-app-text;
 	}
 
 	.button--primary {
-		@apply border-primary bg-primary text-white hover:bg-primary-600 focus:ring-4 focus:ring-primary/15 disabled:shadow-none dark:border-action-border dark:bg-action dark:text-action-text dark:hover:bg-action-hover dark:hover:text-app-text dark:focus:ring-action-ring/25;
+		@apply border-primary bg-primary text-primary-text hover:bg-primary-600 focus:ring-4 focus:ring-primary/15 dark:border-action-border dark:bg-action dark:text-action-text dark:hover:bg-action-hover dark:hover:text-app-text dark:focus:ring-action-ring/25;
 	}
 
 	.button--app-secondary {
-		@apply border-app-border bg-app-soft text-app-text hover:border-primary hover:text-primary focus:ring-2 focus:ring-primary/20 dark:hover:border-action-border dark:hover:bg-action-hover dark:hover:text-app-text dark:focus:ring-action-ring/25;
+		@apply border-app-border bg-app-soft text-app-text hover:border-primary hover:text-primary-text focus:ring-2 focus:ring-primary/20 dark:hover:border-action-border dark:hover:bg-action-hover dark:hover:text-app-text dark:focus:ring-action-ring/25;
 	}
 
 	.button--dialog-secondary {
-		@apply border-dialog-border bg-dialog-soft text-app-text hover:border-primary hover:text-primary focus:ring-2 focus:ring-primary/20 dark:hover:border-action-border dark:hover:bg-dialog-panel dark:hover:text-app-text dark:focus:ring-action-ring/25;
+		@apply border-dialog-border bg-dialog-soft text-app-text hover:border-primary hover:text-primary-text focus:ring-2 focus:ring-primary/20 dark:hover:border-action-border dark:hover:bg-dialog-panel dark:hover:text-app-text dark:focus:ring-action-ring/25;
 	}
 
 	.button--destructive {
@@ -350,11 +356,11 @@
 	}
 
 	.button--chip {
-		@apply border-app-border bg-app-soft/76 text-app-text shadow-soft hover:border-primary/50 hover:bg-app-panel/86 focus:ring-2 focus:ring-primary/25 disabled:hover:border-app-border disabled:hover:bg-app-soft/76;
+		@apply border-app-border bg-app-soft/76 text-app-text hover:border-primary/50 hover:bg-app-panel/86 focus:ring-2 focus:ring-primary/25 disabled:hover:border-app-border disabled:hover:bg-app-soft/76;
 	}
 
 	.button--floating {
-		@apply border-app-border bg-app-panel/92 text-app-text shadow-soft hover:border-primary hover:text-primary focus:ring-4 focus:ring-primary/15 dark:border-action-border dark:bg-dialog-panel dark:text-app-text dark:hover:border-muted dark:hover:bg-action-hover dark:hover:text-app-text dark:focus:ring-action-ring/25;
+		@apply border-app-border bg-app-panel/92 text-app-text hover:border-primary hover:text-primary-text focus:ring-4 focus:ring-primary/15 dark:border-action-border dark:bg-dialog-panel dark:text-app-text dark:hover:border-muted dark:hover:bg-action-hover dark:hover:text-app-text dark:focus:ring-action-ring/25;
 	}
 
 	.button--ghost {

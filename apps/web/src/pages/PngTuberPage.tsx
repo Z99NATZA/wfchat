@@ -144,13 +144,13 @@ function PngTuberPage({ activityBar, backgroundImageUrl, headerControls }: PngTu
 									expression: t(activeEmotion.labelKey)
 								})}
 							/>
-							<div className="absolute bottom-4 right-4 z-20 flex items-center gap-2 rounded-lg border border-app-border bg-app-panel/92 px-3 py-2 text-xs text-muted shadow-soft">
+							<div className="absolute bottom-4 right-4 z-20 flex items-center gap-2 rounded-lg border border-app-border bg-app-panel/92 px-3 py-2 text-xs text-muted">
 								<MessageCircle size={14} aria-hidden="true" />
 								{t(motionStateLabelKey(motionState))}
 							</div>
 						</div>
 					</div>
-					<div className="pointer-events-none absolute bottom-4 left-4 flex items-center gap-2 rounded-lg border border-app-border bg-app-panel/92 px-3 py-2 text-xs text-muted shadow-soft">
+					<div className="pointer-events-none absolute bottom-4 left-4 flex items-center gap-2 rounded-lg border border-app-border bg-app-panel/92 px-3 py-2 text-xs text-muted">
 						<CircleDot size={14} aria-hidden="true" />
 						{t(activeEmotion.descriptionKey)}
 					</div>
@@ -269,7 +269,7 @@ function PngTuberHeader({ controls }: PngTuberHeaderProps) {
 	return (
 		<AppHeaderBar
 			leading={
-				<span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary text-white shadow-soft sm:size-11">
+				<span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-text sm:size-11">
 					<UserRound size={21} aria-hidden="true" />
 				</span>
 			}
