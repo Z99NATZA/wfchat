@@ -140,7 +140,7 @@ describe("ChatMessageList streaming state", () => {
 		expect(screen.getAllByText("Aiko is thinking...")).toHaveLength(1);
 	});
 
-	it("keeps user bubbles compact and gives assistant bubbles more readable width", () => {
+	it("keeps user bubbles compact and renders assistant content flat at full row width", () => {
 		const { container } = render(
 			<ChatMessageList
 				messages={[
@@ -160,9 +160,15 @@ describe("ChatMessageList streaming state", () => {
 		const assistantBubble = container.querySelector('[data-message-bubble="companion"]');
 
 		expect(userBubble?.className).toContain("sm:max-w-[min(32rem,70%)]");
+		expect(userBubble?.className).toContain("rounded-lg");
+		expect(userBubble?.className).toContain("px-4");
 		expect(assistantBubble?.className).toContain("min-w-0");
-		expect(assistantBubble?.className).toContain("sm:max-w-[min(42rem,calc(100%-2.75rem))]");
-		expect(assistantBubble?.className).not.toContain("sm:max-w-[min(32rem,70%)]");
+		expect(assistantBubble?.className).toContain("flex-1");
+		expect(assistantBubble?.className).not.toContain("rounded-lg");
+		expect(assistantBubble?.className).not.toContain("border-app-border");
+		expect(assistantBubble?.className).not.toContain("bg-app-panel/92");
+		expect(assistantBubble?.className).not.toContain("px-4");
+		expect(assistantBubble?.className).not.toContain("shadow-soft");
 	});
 
 	it("reserves bottom space when an overlay clearance is provided", () => {
@@ -180,7 +186,7 @@ describe("ChatMessageList streaming state", () => {
 		expect(scrollContainer.style.paddingBottom).toBe("320px");
 	});
 
-	it("uses the wider assistant layout for the standalone thinking bubble", () => {
+	it("uses the flat full-width assistant layout for the standalone thinking state", () => {
 		const { container } = render(
 			<ChatMessageList
 				messages={[message("local-user", "user", "hello")]}
@@ -193,7 +199,10 @@ describe("ChatMessageList streaming state", () => {
 		const assistantBubble = container.querySelector('[data-message-bubble="companion"]');
 
 		expect(assistantBubble?.className).toContain("min-w-0");
-		expect(assistantBubble?.className).toContain("sm:max-w-[min(42rem,calc(100%-2.75rem))]");
+		expect(assistantBubble?.className).toContain("flex-1");
+		expect(assistantBubble?.className).not.toContain("rounded-lg");
+		expect(assistantBubble?.className).not.toContain("bg-app-panel/92");
+		expect(assistantBubble?.className).not.toContain("px-4");
 	});
 
 	it("copies raw assistant message text", async () => {

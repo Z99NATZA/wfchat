@@ -18,7 +18,7 @@ Assistant messages render with `react-markdown` and `remark-gfm`:
 
 Raw HTML stays inert because no raw-HTML plugin is enabled. External links open
 in a new tab with `noopener noreferrer`. Tables and code blocks scroll inside
-the assistant bubble and must not create page-level horizontal overflow.
+the assistant content region and must not create page-level horizontal overflow.
 
 Assistant messages with non-empty text expose a full-message copy action. Fenced
 code blocks also expose a code-only copy action and show the language label when
@@ -47,12 +47,14 @@ collapse Shiki's dynamic imports into one large manual chunk.
 ## Streaming And Layout
 
 SSE tokens append to one `local-assistant-*` optimistic message. An empty
-placeholder shows the thinking state inside that bubble; the list must not add a
+placeholder shows the thinking state inside that row; the list must not add a
 second standalone thinking bubble.
 
-Assistant bubbles are wider than user bubbles. The virtualized message list
-supports variable heights and remounts, so render effects, observers, and timers
-must clean up on unmount.
+User messages use compact right-aligned bubbles. Assistant messages and the
+standalone thinking state render as flat, full-width content beside the avatar
+without an enclosing surface, border, shadow, or horizontal padding. The
+virtualized message list supports variable heights and remounts, so render
+effects, observers, and timers must clean up on unmount.
 
 ## Boundaries
 

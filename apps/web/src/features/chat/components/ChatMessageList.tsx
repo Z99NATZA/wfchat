@@ -109,8 +109,7 @@ function ChatMessageList({
 		() => new Map()
 	);
 	const userMessageBubbleClassName = "max-w-[min(30rem,72vw)] sm:max-w-[min(32rem,70%)]";
-	const assistantMessageBubbleClassName =
-		"min-w-0 max-w-[calc(100%-2.75rem)] sm:max-w-[min(42rem,calc(100%-2.75rem))] lg:max-w-[min(44rem,calc(100%-2.75rem))]";
+	const assistantMessageLayoutClassName = "min-w-0 flex-1 py-1 text-app-text";
 	latestMessageCountRef.current = messages.length;
 	const visibleMessages = useMemo(
 		() =>
@@ -529,8 +528,8 @@ function ChatMessageList({
 			<div className="space-y-4">
 				<article
 					className={cn(
-						"group flex items-end gap-2",
-						isUser ? "justify-end" : "justify-start"
+						"group flex",
+						isUser ? "items-end justify-end gap-2" : "items-start gap-3"
 					)}
 				>
 					{!isUser && (
@@ -582,11 +581,10 @@ function ChatMessageList({
 					<div
 						data-message-bubble={message.author}
 						className={cn(
-							isUser ? userMessageBubbleClassName : assistantMessageBubbleClassName,
-							"rounded-lg px-4 py-3 shadow-soft",
+							isUser ? userMessageBubbleClassName : assistantMessageLayoutClassName,
 							isUser
-								? "bg-primary text-white dark:border dark:border-app-border dark:bg-primary dark:text-app-text"
-								: "border border-app-border bg-app-panel/92 text-app-text"
+								? "rounded-lg bg-primary px-4 py-3 text-white shadow-soft dark:border dark:border-app-border dark:bg-primary dark:text-app-text"
+								: undefined
 						)}
 					>
 						{message.attachments && message.attachments.length > 0 ? (
@@ -753,7 +751,7 @@ function ChatMessageList({
 
 					<div className={cn("flex flex-col gap-4", messageRows.length > 0 && "mt-0")}>
 						{shouldShowThinkingBubble && (
-							<article className="flex items-end gap-3 justify-start">
+							<article className="flex items-start gap-3">
 								<img
 									className="size-9 shrink-0 rounded-lg object-cover"
 									src={companionAvatarUrl}
@@ -761,10 +759,7 @@ function ChatMessageList({
 								/>
 								<div
 									data-message-bubble="companion"
-									className={cn(
-										assistantMessageBubbleClassName,
-										"rounded-lg border border-app-border bg-app-panel/92 px-4 py-3 text-app-text shadow-soft"
-									)}
+									className={assistantMessageLayoutClassName}
 								>
 									<p className="text-sm leading-6 text-app-text">
 										{t("chat.messageList.thinking", { name: companionName })}

@@ -16,7 +16,7 @@ surfaces. Components use semantic tokens, not raw colors.
 | App base | `bg-app-bg` |
 | Large shell | `bg-app-panel/62 border-app-border` |
 | Popover/menu | `bg-app-panel/82` |
-| Chat bubble/floating control | `bg-app-panel/92` |
+| User chat bubble/floating control | `bg-app-panel/92` |
 | Nested field/control | `bg-app-soft` or `bg-app-soft/82` |
 | Primary text | `text-app-text` |
 | Secondary text | `text-muted` |
@@ -55,8 +55,7 @@ Do not add feature-specific scrollbar colors when it applies.
 
 - Use `app-*` for persistent page chrome and `dialog-*` for contained modal
   surfaces and controls.
-- Keep nested controls more opaque than their shell and message content more
-  opaque than the main layout.
+- Keep nested controls and user message bubbles more opaque than their shell.
 - Do not hard-code hex/RGB values or use raw `bg-white`, `bg-slate-*`, or
   `bg-zinc-*` for application surfaces.
 - Check light/dark themes, wallpaper on/off, hover/focus, and mobile overlays
