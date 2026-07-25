@@ -29,6 +29,10 @@ chat and is available at `/cafe` without login.
 - The camera follows the local player with a dead zone and keeps the room at a
   readable scale. Small viewports show part of the room instead of shrinking
   the whole map.
+- Player avatars use a local four-direction chibi sprite sheet. The existing
+  authoritative `direction` and `moving` fields select idle and walk frames;
+  player colors remain visible through the foot ring while cosmetics and
+  carried items render as separate overlays.
 
 The Phaser game loads only on `/cafe/rooms/:roomId`, so it is excluded from the
 initial chat bundle. Active rooms and gameplay simulation live in the API
