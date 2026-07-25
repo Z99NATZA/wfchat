@@ -654,11 +654,7 @@ function drawEquippedCosmetic(
 			graphics.fillStyle(0xffe4a8, 1).fillCircle(cosmeticSide(direction), -78, 3.5);
 			break;
 		case "mint_scarf":
-			graphics.fillStyle(0x79c9a4, 1).fillRoundedRect(-22, -53, 44, 9, 4);
-			graphics
-				.fillStyle(0x5ba985, 1)
-				.fillRoundedRect(direction === "left" ? -18 : 9, -47, 9, 25, 4);
-			graphics.lineStyle(2, 0xe8fff2, 0.86).strokeRoundedRect(-22, -53, 44, 9, 4);
+			drawMintScarf(graphics, direction);
 			break;
 		case "tea_hat":
 			graphics.fillStyle(0x6f9f62, 1).fillEllipse(0, -91, 55, 12);
@@ -667,11 +663,104 @@ function drawEquippedCosmetic(
 			graphics.fillStyle(0xffd98d, 1).fillCircle(11, -97, 3);
 			break;
 		case "cafe_apron":
-			graphics.fillStyle(0xf3b2bd, 0.96).fillRoundedRect(-19, -43, 38, 38, 8);
-			graphics.lineStyle(2, 0xfff4e3, 0.94).strokeRoundedRect(-19, -43, 38, 38, 8);
-			graphics.fillStyle(0xfff4e3, 1).fillRect(-13, -19, 26, 3);
+			drawCafeApron(graphics, direction);
 			break;
 	}
+}
+
+function drawMintScarf(graphics: Phaser.GameObjects.Graphics, direction: CafeDirection) {
+	const mint = 0x79c9a4;
+	const shadow = 0x4f9f7a;
+	const highlight = 0xe8fff2;
+
+	if (direction === "up") {
+		graphics.fillStyle(shadow, 0.95);
+		graphics.fillTriangle(-7, -46, -1, -46, -5, -33);
+		graphics.fillStyle(mint, 1);
+		graphics.fillTriangle(0, -46, 6, -46, 4, -35);
+		graphics.fillEllipse(0, -49, 27, 9);
+		graphics.lineStyle(2, shadow, 0.9).strokeEllipse(0, -49, 27, 9);
+		graphics.lineStyle(1, highlight, 0.8).lineBetween(-8, -51, 8, -51);
+		return;
+	}
+
+	if (direction === "left" || direction === "right") {
+		const facing = direction === "left" ? -1 : 1;
+		const knotX = facing * 8;
+
+		graphics.fillStyle(shadow, 0.96);
+		graphics.fillTriangle(
+			knotX - facing * 2,
+			-46,
+			knotX + facing * 3,
+			-45,
+			knotX - facing,
+			-31
+		);
+		graphics.fillStyle(mint, 1).fillEllipse(0, -50, 23, 9);
+		graphics.lineStyle(2, shadow, 0.9).strokeEllipse(0, -50, 23, 9);
+		graphics.fillStyle(shadow, 1).fillCircle(knotX, -46, 4);
+		graphics.fillStyle(highlight, 0.78).fillCircle(knotX - facing, -47, 1.4);
+		return;
+	}
+
+	graphics.fillStyle(shadow, 0.96);
+	graphics.fillTriangle(4, -46, 10, -45, 7, -30);
+	graphics.fillStyle(mint, 1);
+	graphics.fillTriangle(8, -45, 14, -44, 12, -34);
+	graphics.fillEllipse(0, -51, 28, 10);
+	graphics.lineStyle(2, shadow, 0.9).strokeEllipse(0, -51, 28, 10);
+	graphics.fillStyle(shadow, 1).fillCircle(8, -46, 4.5);
+	graphics.fillStyle(highlight, 0.82).fillCircle(7, -47, 1.5);
+}
+
+function drawCafeApron(graphics: Phaser.GameObjects.Graphics, direction: CafeDirection) {
+	const pink = 0xf3b2bd;
+	const highlight = 0xfff4e3;
+	const outline = 0xd98fa2;
+
+	if (direction === "up") {
+		graphics.fillStyle(pink, 0.78).fillRoundedRect(-14, -24, 28, 5, 2);
+		graphics.lineStyle(2, outline, 0.82).strokeRoundedRect(-14, -24, 28, 5, 2);
+		graphics.fillStyle(pink, 0.84);
+		graphics.fillTriangle(-2, -21, -12, -27, -11, -16);
+		graphics.fillTriangle(2, -21, 12, -27, 11, -16);
+		graphics.fillStyle(highlight, 0.9).fillCircle(0, -21, 3);
+		return;
+	}
+
+	if (direction === "left" || direction === "right") {
+		const facing = direction === "left" ? -1 : 1;
+		const front = facing * 5;
+		const y = -5;
+		graphics.lineStyle(2, pink, 0.82);
+		graphics.lineBetween(-front, -42 + y, front, -36 + y);
+		graphics.fillStyle(pink, 0.72).fillRoundedRect(front - 6, -37 + y, 12, 12, 4);
+		graphics.lineStyle(2, outline, 0.82).strokeRoundedRect(front - 6, -37 + y, 12, 12, 4);
+		graphics.fillStyle(pink, 0.76).fillRoundedRect(-12, -25 + y, 24, 4, 2);
+		graphics.fillTriangle(-10, -21 + y, 10, -21 + y, front + facing * 11, -8 + y);
+		graphics.fillTriangle(-10, -21 + y, front + facing * 11, -8 + y, -front, -8 + y);
+		graphics.lineStyle(2, outline, 0.82);
+		graphics.lineBetween(10, -21 + y, front + facing * 11, -8 + y);
+		graphics.lineBetween(front + facing * 11, -8 + y, -front, -8 + y);
+		return;
+	}
+
+	const y = -9;
+	graphics.lineStyle(2, pink, 0.82);
+	graphics.lineBetween(-12, -43 + y, -6, -37 + y);
+	graphics.lineBetween(12, -43 + y, 6, -37 + y);
+	graphics.fillStyle(pink, 0.7).fillRoundedRect(-7, -38 + y, 14, 13, 4);
+	graphics.lineStyle(2, outline, 0.82).strokeRoundedRect(-7, -38 + y, 14, 13, 4);
+	graphics.fillStyle(pink, 0.76).fillRoundedRect(-14, -25 + y, 28, 4, 2);
+	graphics.fillTriangle(-12, -21 + y, 12, -21 + y, -17, -8 + y);
+	graphics.fillTriangle(12, -21 + y, 17, -8 + y, -17, -8 + y);
+	graphics.lineStyle(2, outline, 0.82);
+	graphics.lineBetween(-12, -21 + y, 12, -21 + y);
+	graphics.lineBetween(12, -21 + y, 17, -8 + y);
+	graphics.lineBetween(17, -8 + y, -17, -8 + y);
+	graphics.lineBetween(-17, -8 + y, -12, -21 + y);
+	graphics.lineStyle(2, highlight, 0.88).strokeRoundedRect(-5, -17 + y, 10, 6, 2);
 }
 
 function drawCarriedDrink(graphics: Phaser.GameObjects.Graphics) {
