@@ -29,7 +29,7 @@ show a memory list or per-item controls.
 - `ChatHeader`: active persona and shared app controls.
 - `ChatMessageList`: virtualized timeline and scroll state.
 - `ChatMessageContent`: user plain text/images and assistant Markdown.
-- `ChatComposer`: text, quick prompts, images, microphone, and send state.
+- `ChatComposer`: text, images, microphone, and send state.
 - `ChatDetailsPanel`: persona profile, tone, and conversation guidance.
 
 ## Boundaries

@@ -409,7 +409,6 @@ function chatState({
 		isSending,
 		messages,
 		openSidebar: vi.fn(),
-		quickPrompts: [],
 		refreshRemoteState: vi.fn(),
 		isMarkdownQaEnabled: false,
 		loadMarkdownQaMessages: vi.fn(),

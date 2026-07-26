@@ -654,6 +654,19 @@ mod tests {
     }
 
     #[test]
+    fn build_messages_includes_aiko_profile_facts_in_character_prompt() {
+        let payload = serde_json::to_value(build_messages("aiko_default", &[]))
+            .expect("messages should serialize");
+        let prompt = payload[0]["content"]
+            .as_str()
+            .expect("character prompt should be text");
+
+        assert!(prompt.contains("Birthday: 2000-05-27."));
+        assert!(prompt.contains("Height: 175 cm."));
+        assert!(prompt.contains("Weight: 58 kg."));
+    }
+
+    #[test]
     fn build_messages_serializes_image_messages_as_openai_parts() {
         let messages = vec![AiMessage::with_parts(
             AiRole::User,

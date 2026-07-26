@@ -167,8 +167,7 @@ describe("useChatSession streaming sendMessage", () => {
 		mocks.getChatUiConfig.mockResolvedValue({
 			personas: [persona],
 			assistantSpeechEnabled: false,
-			userTranscriptionEnabled: false,
-			quickPrompts: []
+			userTranscriptionEnabled: false
 		});
 		mocks.listPersonaChats.mockResolvedValue([]);
 		mocks.claimPersonaFollowUp.mockResolvedValue(null);
@@ -635,27 +634,11 @@ describe("useChatSession streaming sendMessage", () => {
 		expect(result.current.messages.some((item) => item.text.includes("<script>"))).toBe(true);
 	});
 
-	it("exposes quick prompts from chat UI config", async () => {
-		mocks.getChatUiConfig.mockResolvedValue({
-			personas: [persona],
-			assistantSpeechEnabled: false,
-			userTranscriptionEnabled: false,
-			quickPrompts: ["Make it sweeter", "Suggest a reply"]
-		});
-
-		const { result } = renderHook(() => useChatSession());
-
-		await waitFor(() =>
-			expect(result.current.quickPrompts).toEqual(["Make it sweeter", "Suggest a reply"])
-		);
-	});
-
 	it("exposes assistant speech capability from chat UI config", async () => {
 		mocks.getChatUiConfig.mockResolvedValue({
 			personas: [persona],
 			assistantSpeechEnabled: true,
-			userTranscriptionEnabled: false,
-			quickPrompts: []
+			userTranscriptionEnabled: false
 		});
 
 		const { result } = renderHook(() => useChatSession());
@@ -769,8 +752,7 @@ describe("useChatSession streaming sendMessage", () => {
 		mocks.getChatUiConfig.mockResolvedValue({
 			personas: [persona],
 			assistantSpeechEnabled: false,
-			userTranscriptionEnabled: true,
-			quickPrompts: []
+			userTranscriptionEnabled: true
 		});
 
 		const { result } = renderHook(() => useChatSession());

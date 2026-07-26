@@ -82,71 +82,23 @@ describe("ChatComposer", () => {
 		);
 	}
 
-	it("fills the draft when a quick prompt is selected without sending", () => {
-		const onDraftChange = vi.fn();
-		const onSend = vi.fn();
-
+	it("shares the conversation canvas without a full-width divider or panel", () => {
 		render(
 			<ChatComposer
 				draft=""
 				font="inter"
 				companionName="Aiko"
-				quickPrompts={["Make it sweeter", "Suggest a reply"]}
-				onDraftChange={onDraftChange}
-				onSend={onSend}
-			/>
-		);
-
-		fireEvent.click(screen.getByRole("button", { name: "Make it sweeter" }));
-
-		expect(onDraftChange).toHaveBeenCalledWith("Make it sweeter");
-		expect(onSend).not.toHaveBeenCalled();
-	});
-
-	it("places the caret at the end after selecting a quick prompt", async () => {
-		function ControlledComposer() {
-			const [draft, setDraft] = useState("");
-
-			return (
-				<ChatComposer
-					draft={draft}
-					font="inter"
-					companionName="Aiko"
-					quickPrompts={["Suggest a reply"]}
-					onDraftChange={setDraft}
-					onSend={vi.fn()}
-				/>
-			);
-		}
-
-		render(<ControlledComposer />);
-
-		fireEvent.click(screen.getByRole("button", { name: "Suggest a reply" }));
-
-		await new Promise((resolve) => requestAnimationFrame(resolve));
-
-		const textarea = screen.getByPlaceholderText("Message Aiko") as HTMLTextAreaElement;
-		expect(textarea.value).toBe("Suggest a reply");
-		expect(textarea.selectionStart).toBe("Suggest a reply".length);
-		expect(textarea.selectionEnd).toBe("Suggest a reply".length);
-	});
-
-	it("disables quick prompts while waiting for an assistant response", () => {
-		render(
-			<ChatComposer
-				draft=""
-				font="inter"
-				companionName="Aiko"
-				quickPrompts={["Suggest a reply"]}
 				onDraftChange={vi.fn()}
 				onSend={vi.fn()}
-				isSending
 			/>
 		);
 
-		expect(
-			(screen.getByRole("button", { name: "Suggest a reply" }) as HTMLButtonElement).disabled
-		).toBe(true);
+		const surface = screen.getByTestId("chat-composer-surface");
+		expect(surface.className).not.toContain("border-t");
+		expect(surface.className).not.toContain("bg-app-panel");
+		expect(screen.getByRole("textbox").closest("form")?.className).toContain(
+			"border-app-border"
+		);
 	});
 
 	it("disables browser writing corrections in the message input", () => {

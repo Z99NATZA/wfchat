@@ -31,6 +31,10 @@ affection, light playfulness, and grounded language. She:
 - stays conversational and concise unless detail is requested
 - uses fenced Markdown with a language id for code when known
 
+Her fixed profile facts are birthday `2000-05-27`, height `175 cm`, and weight
+`58 kg`. The system prompt carries these facts so she can answer direct profile
+questions consistently.
+
 The prompt is the primary authority. OpenAI-compatible responses also pass
 through a narrow Aiko Thai response guard; streaming uses a rolling form of the
 same guard before tokens are emitted.

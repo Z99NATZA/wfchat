@@ -10,7 +10,6 @@ import {
 import { Image, LoaderCircle, Mic, Paperclip, Send, Square, X } from "lucide-react";
 import { useDialog } from "@/components/dialog/DialogContext";
 import { useI18n } from "@/i18n/i18nContext";
-import Button from "@/components/ui/Button";
 import IconButton from "@/components/ui/IconButton";
 import type { UserSpeechInputState } from "@/features/chat/hooks/useUserSpeechTranscription";
 import type { AppFont } from "@/types/font";
@@ -20,7 +19,6 @@ type ChatComposerProps = {
 	draft: string;
 	font: AppFont;
 	companionName: string;
-	quickPrompts?: string[];
 	onDraftChange: (draft: string) => void;
 	onSend: (
 		imageAttachments?: PendingChatImageAttachment[]
@@ -53,7 +51,6 @@ function ChatComposer({
 	draft,
 	font,
 	companionName,
-	quickPrompts = [],
 	onDraftChange,
 	onSend,
 	isDisabled = false,
@@ -268,25 +265,6 @@ function ChatComposer({
 		});
 	}
 
-	function handleQuickPromptSelect(prompt: string) {
-		if (isDisabled || isSending) {
-			return;
-		}
-
-		onDraftChange(prompt);
-		requestAnimationFrame(() => {
-			const textarea = textareaRef.current;
-
-			if (!textarea) {
-				return;
-			}
-
-			focusComposerTextArea(textarea);
-			textarea.setSelectionRange(prompt.length, prompt.length);
-		});
-	}
-
-	const visibleQuickPrompts = quickPrompts.filter((prompt) => prompt.trim().length > 0);
 	const speechStatus = userSpeechInput.status;
 	const isSpeechInputActive =
 		speechStatus === "requesting" ||
@@ -300,28 +278,10 @@ function ChatComposer({
 		<div
 			onDragOver={handleDragOver}
 			onDrop={handleDrop}
-			className="sticky bottom-0 z-20 border-t border-app-border bg-app-panel/62 px-4 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-4 lg:px-8"
+			className="sticky bottom-0 z-20 px-4 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-4 lg:px-8"
+			data-testid="chat-composer-surface"
 		>
 			<div className="mx-auto flex max-w-3xl flex-col gap-2">
-				{visibleQuickPrompts.length > 0 ? (
-					<div
-						className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1"
-						aria-label={t("chat.composer.quickPrompts")}
-					>
-						{visibleQuickPrompts.map((prompt) => (
-							<Button
-								key={prompt}
-								variant="chip"
-								size="xs"
-								shape="pill"
-								disabled={isDisabled || isSending}
-								onClick={() => handleQuickPromptSelect(prompt)}
-							>
-								{prompt}
-							</Button>
-						))}
-					</div>
-				) : null}
 				{selectedImages.length > 0 ? (
 					<div className="flex gap-2 overflow-x-auto rounded-lg border border-app-border bg-app-soft/82 p-2">
 						{selectedImages.map((image) => (

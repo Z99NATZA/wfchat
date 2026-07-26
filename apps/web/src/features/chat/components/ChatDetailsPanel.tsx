@@ -1,4 +1,3 @@
-import { Languages, Sparkles } from "lucide-react";
 import { useI18n } from "@/i18n/i18nContext";
 import type { ChatPersona } from "@/types/chat";
 
@@ -11,7 +10,11 @@ type ChatPersonaDetailsProps = {
 	compact?: boolean;
 };
 
-const toneItems = ["Calm", "Warm", "Lightly playful", "Respectful"];
+const AIKO_PROFILE = {
+	birthday: "2000-05-27",
+	height: "175 cm",
+	weight: "58 kg"
+} as const;
 
 function ChatDetailsPanel({ persona }: ChatDetailsPanelProps) {
 	return (
@@ -24,26 +27,37 @@ function ChatDetailsPanel({ persona }: ChatDetailsPanelProps) {
 }
 
 export function ChatPersonaDetails({ persona, compact = false }: ChatPersonaDetailsProps) {
-	const { locale, t } = useI18n();
-	const toneItemsByLocale =
-		locale === "th" ? ["สุขุม", "อบอุ่น", "ขี้เล่นเล็กน้อย", "ให้เกียรติ"] : toneItems;
+	const { t } = useI18n();
+	const profileRows: Array<{
+		label: string;
+		value: string;
+	}> = [
+		{
+			label: t("chat.details.birthday"),
+			value: AIKO_PROFILE.birthday
+		},
+		{
+			label: t("chat.details.height"),
+			value: AIKO_PROFILE.height
+		},
+		{
+			label: t("chat.details.weight"),
+			value: AIKO_PROFILE.weight
+		}
+	];
 
 	return (
 		<div
 			className={compact ? "" : "flex min-h-0 flex-1 flex-col"}
 			data-testid="chat-persona-details"
 		>
-			<div className={`border-b border-app-border ${compact ? "p-4" : "p-5"}`}>
+			<div className={compact ? "p-4 pb-0" : "p-5 pb-0"}>
 				<div className="relative overflow-hidden rounded-lg bg-app-soft">
 					<img
 						className={`${compact ? "aspect-[16/9]" : "aspect-[16/11]"} w-full object-cover`}
 						src={persona.avatarUrl}
 						alt={`${persona.name} profile`}
 					/>
-				</div>
-				<div className="mt-4">
-					<h2 className="text-lg font-semibold">{persona.name}</h2>
-					<p className="text-sm text-muted">{persona.title}</p>
 				</div>
 			</div>
 
@@ -53,64 +67,17 @@ export function ChatPersonaDetails({ persona, compact = false }: ChatPersonaDeta
 				}
 			>
 				<section>
-					{!compact && (
-						<h3 className="text-sm font-semibold">
-							{t("chat.details.about", { name: persona.name })}
-						</h3>
-					)}
-					<p
-						className={`${compact ? "" : "mt-3"} rounded-lg border border-app-border bg-app-soft p-4 text-sm leading-6 text-muted`}
-					>
-						{t("chat.details.aboutText", { name: persona.name })}
-					</p>
-				</section>
-
-				<section>
-					<h3 className="text-sm font-semibold">{t("chat.details.tone")}</h3>
-					<div className="mt-3 flex flex-wrap gap-2">
-						{toneItemsByLocale.map((tone) => (
-							<span
-								key={tone}
-								className="rounded-lg border border-app-border bg-app-soft px-3 py-2 text-xs font-medium text-muted"
-							>
-								{tone}
-							</span>
+					<h3 className="text-sm font-semibold">{t("chat.details.profile")}</h3>
+					<dl className="mt-3 space-y-3" data-testid="chat-persona-profile-facts">
+						{profileRows.map((row) => (
+							<div key={row.label}>
+								<dt className="text-xs font-medium text-muted">{row.label}</dt>
+								<dd className="mt-0.5 text-sm font-semibold text-app-text">
+									{row.value}
+								</dd>
+							</div>
 						))}
-					</div>
-				</section>
-
-				<section>
-					<h3 className="text-sm font-semibold">{t("chat.details.conversation")}</h3>
-					<div className="mt-3 space-y-2">
-						<div className="flex items-center gap-3 rounded-lg border border-app-border bg-app-soft p-3">
-							<div className="flex size-9 items-center justify-center rounded-lg bg-sky-500/10 text-sky-600 dark:bg-sky-300/15 dark:text-sky-200">
-								<Languages size={18} aria-hidden="true" />
-							</div>
-							<div>
-								<p className="text-sm font-medium">
-									{t("chat.details.repliesInLanguage")}
-								</p>
-								<p className="text-xs text-muted">
-									{t("chat.details.repliesInLanguageDesc", {
-										name: persona.name
-									})}
-								</p>
-							</div>
-						</div>
-						<div className="flex items-center gap-3 rounded-lg border border-app-border bg-app-soft p-3">
-							<div className="flex size-9 items-center justify-center rounded-lg bg-sky-500/10 text-sky-600 dark:bg-sky-300/15 dark:text-sky-200">
-								<Sparkles size={18} aria-hidden="true" />
-							</div>
-							<div>
-								<p className="text-sm font-medium">
-									{t("chat.details.gentleMode")}
-								</p>
-								<p className="text-xs text-muted">
-									{t("chat.details.gentleModeDesc")}
-								</p>
-							</div>
-						</div>
-					</div>
+					</dl>
 				</section>
 			</div>
 		</div>

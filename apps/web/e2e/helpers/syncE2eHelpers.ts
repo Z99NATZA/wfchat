@@ -445,7 +445,6 @@ function chatUiConfigFixture(personaId: string) {
 				avatar_url: "/images/aiko-avatar.png"
 			}
 		],
-		quick_prompts: ["Hello"],
 		voice: {
 			assistant_speech_enabled: false,
 			user_transcription_enabled: false,

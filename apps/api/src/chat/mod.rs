@@ -170,7 +170,6 @@ struct ChatCompletionContext {
 #[derive(Serialize)]
 struct ChatUiConfigResponse {
     personas: Vec<characters::CharacterUiResponse>,
-    quick_prompts: Vec<&'static str>,
     voice: ChatVoiceConfigResponse,
 }
 
@@ -221,7 +220,6 @@ async fn list_chats_for_persona(
 async fn get_chat_ui_config(State(state): State<AppState>) -> Json<ChatUiConfigResponse> {
     Json(ChatUiConfigResponse {
         personas: characters::list_chat_ui_characters(),
-        quick_prompts: vec!["Make it sweeter", "Add playful banter", "Suggest a reply"],
         voice: ChatVoiceConfigResponse {
             assistant_speech_enabled: matches!(
                 state.config.ai_voice_provider.as_str(),
@@ -1456,6 +1454,9 @@ mod tests {
             .await
             .expect("body should collect");
         let payload: Value = serde_json::from_slice(&body).expect("config should be json");
+        assert_eq!(payload.as_object().map(serde_json::Map::len), Some(2));
+        assert!(payload.get("personas").is_some());
+        assert!(payload.get("voice").is_some());
         assert_eq!(payload["voice"]["assistant_speech_enabled"], true);
         assert_eq!(payload["voice"]["user_transcription_enabled"], true);
         assert_eq!(

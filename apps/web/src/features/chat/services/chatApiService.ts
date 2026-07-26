@@ -118,7 +118,6 @@ type ApiChatUiPersona = {
 
 type ApiChatUiConfig = {
 	personas: ApiChatUiPersona[];
-	quick_prompts: string[];
 	voice?: {
 		assistant_speech_enabled?: boolean;
 		user_transcription_enabled?: boolean;
@@ -320,7 +319,6 @@ export async function getChatUiConfig(): Promise<{
 	userTranscriptionEnabled: boolean;
 	voiceCredits: VoiceCredit[];
 	personas: ChatPersona[];
-	quickPrompts: string[];
 }> {
 	const response = await apiClient.get<ApiChatUiConfig>("/api/chat-ui/config");
 
@@ -339,8 +337,7 @@ export async function getChatUiConfig(): Promise<{
 			lastActiveAt: persona.last_active_at,
 			unreadCount: persona.unread_count,
 			avatarUrl: persona.avatar_url
-		})),
-		quickPrompts: response.data.quick_prompts
+		}))
 	};
 }
 

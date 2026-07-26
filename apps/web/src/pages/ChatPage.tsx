@@ -255,7 +255,6 @@ function ChatPage({
 							draft={chat.draft}
 							font={font}
 							companionName={chat.activePersona.name}
-							quickPrompts={chat.quickPrompts}
 							isDisabled={chat.isActiveChatReadOnly}
 							isSending={chat.isSending}
 							isUserSpeechInputEnabled={isUserSpeechInputEnabled}
