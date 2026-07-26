@@ -399,9 +399,85 @@
 		animation: pngtuber-think 1.8s ease-in-out infinite;
 	}
 
+	.cafe-quick-join-sparkle {
+		position: absolute;
+		z-index: 0;
+		color: rgb(147 197 253 / 0.9);
+		font-size: 0.875rem;
+		line-height: 1;
+		opacity: 0;
+		pointer-events: none;
+		text-shadow: 0 0 0.3rem rgb(96 165 250 / 0.35);
+		transform: translate(0, 0) rotate(0deg) scale(0.35);
+		will-change: opacity, transform;
+	}
+
+	.cafe-quick-join-effect[data-active="true"] .cafe-quick-join-sparkle {
+		animation: cafe-quick-join-sparkle 4.8s ease-out infinite;
+	}
+
+	.cafe-quick-join-sparkle--one {
+		--cafe-sparkle-x: -0.65rem;
+		--cafe-sparkle-y: -0.8rem;
+		left: -0.15rem;
+		top: 52%;
+		animation-delay: 0s;
+	}
+
+	.cafe-quick-join-sparkle--two {
+		--cafe-sparkle-x: 0.4rem;
+		--cafe-sparkle-y: -0.75rem;
+		right: 0.8rem;
+		top: -0.35rem;
+		font-size: 0.75rem;
+		animation-delay: -1.2s;
+	}
+
+	.cafe-quick-join-sparkle--three {
+		--cafe-sparkle-x: 0.7rem;
+		--cafe-sparkle-y: -0.45rem;
+		bottom: -0.25rem;
+		right: -0.15rem;
+		font-size: 0.675rem;
+		animation-delay: -2.4s;
+	}
+
+	.cafe-quick-join-sparkle--four {
+		--cafe-sparkle-x: -0.3rem;
+		--cafe-sparkle-y: -0.7rem;
+		left: 32%;
+		top: -0.25rem;
+		font-size: 0.625rem;
+		animation-delay: -3.6s;
+	}
+
+	.cafe-quick-join-effect[data-active="true"]:hover .cafe-quick-join-sparkle {
+		color: rgb(191 219 254);
+	}
+
+	.cafe-lobby-aiko-aura {
+		background: radial-gradient(ellipse at center, rgb(96 165 250 / 0.1) 0%, transparent 70%);
+		filter: blur(0.25rem);
+	}
+
+	.cafe-lobby-aiko-idle {
+		animation: cafe-lobby-aiko-idle 5.6s ease-in-out infinite;
+		transform-origin: 50% 92%;
+		will-change: transform;
+	}
+
+	.cafe-lobby-aiko-shadow {
+		animation: cafe-lobby-aiko-shadow 5.6s ease-in-out infinite;
+		transform-origin: center;
+		will-change: opacity, transform;
+	}
+
 	@media (prefers-reduced-motion: reduce) {
 		.pngtuber-avatar-expression,
-		.pngtuber-avatar {
+		.pngtuber-avatar,
+		.cafe-quick-join-effect[data-active="true"] .cafe-quick-join-sparkle,
+		.cafe-lobby-aiko-idle,
+		.cafe-lobby-aiko-shadow {
 			animation: none;
 		}
 	}
@@ -491,5 +567,53 @@
 
 	70% {
 		transform: translateY(0.05rem) rotate(1deg) scale(1);
+	}
+}
+
+@keyframes cafe-quick-join-sparkle {
+	0%,
+	55%,
+	100% {
+		opacity: 0;
+		transform: translate(0, 0) rotate(0deg) scale(0.35);
+	}
+
+	64% {
+		opacity: 0.9;
+	}
+
+	84% {
+		opacity: 0.45;
+		transform: translate(var(--cafe-sparkle-x), var(--cafe-sparkle-y)) rotate(24deg) scale(1);
+	}
+
+	94% {
+		opacity: 0;
+		transform: translate(calc(var(--cafe-sparkle-x) * 1.25), calc(var(--cafe-sparkle-y) * 1.25))
+			rotate(38deg) scale(0.7);
+	}
+}
+
+@keyframes cafe-lobby-aiko-idle {
+	0%,
+	100% {
+		transform: translateY(0) scale(1);
+	}
+
+	50% {
+		transform: translateY(-0.1875rem) scale(1.008);
+	}
+}
+
+@keyframes cafe-lobby-aiko-shadow {
+	0%,
+	100% {
+		opacity: 0.7;
+		transform: scaleX(1);
+	}
+
+	50% {
+		opacity: 0.45;
+		transform: scaleX(0.9);
 	}
 }

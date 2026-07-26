@@ -156,19 +156,51 @@ function CafePage({ activityBar, backgroundImageUrl, headerControls }: CafePageP
 											}
 										/>
 									</div>
-									<Button
-										variant="primary"
-										size="lg"
-										disabled={pendingAction !== null}
-										onClick={() => void openRoom("quick", quickJoinCafe)}
+									<div
+										className="cafe-quick-join-effect relative isolate shrink-0"
+										data-active={pendingAction === null}
+										data-testid="cafe-quick-join-effect"
 									>
-										<DoorOpen size={18} aria-hidden="true" />
-										{pendingAction === "quick"
-											? t("cafe.lobby.joining")
-											: t("cafe.lobby.quickJoin")}
-									</Button>
+										<span
+											className="cafe-quick-join-sparkle cafe-quick-join-sparkle--one"
+											aria-hidden="true"
+										>
+											✦
+										</span>
+										<span
+											className="cafe-quick-join-sparkle cafe-quick-join-sparkle--two"
+											aria-hidden="true"
+										>
+											✧
+										</span>
+										<span
+											className="cafe-quick-join-sparkle cafe-quick-join-sparkle--three"
+											aria-hidden="true"
+										>
+											✦
+										</span>
+										<span
+											className="cafe-quick-join-sparkle cafe-quick-join-sparkle--four"
+											aria-hidden="true"
+										>
+											✧
+										</span>
+										<Button
+											variant="primary"
+											size="lg"
+											className="relative z-10 rounded-lg"
+											disabled={pendingAction !== null}
+											onClick={() => void openRoom("quick", quickJoinCafe)}
+										>
+											<DoorOpen size={18} aria-hidden="true" />
+											{pendingAction === "quick"
+												? t("cafe.lobby.joining")
+												: t("cafe.lobby.quickJoin")}
+										</Button>
+									</div>
 									<Button
 										size="lg"
+										className="rounded-lg"
 										disabled={pendingAction !== null}
 										onClick={() =>
 											void openRoom("create", () => createCafeRoom(true))
@@ -198,6 +230,7 @@ function CafePage({ activityBar, backgroundImageUrl, headerControls }: CafePageP
 										/>
 										<Button
 											type="submit"
+											className="rounded-lg"
 											disabled={!inviteCode.trim() || pendingAction !== null}
 										>
 											{pendingAction === "code"
@@ -215,11 +248,24 @@ function CafePage({ activityBar, backgroundImageUrl, headerControls }: CafePageP
 									</p>
 								)}
 							</div>
-							<img
-								src="/images/aiko-cafe/aiko-host-v1.png"
-								alt={t("cafe.lobby.aikoAlt")}
-								className="mx-auto h-52 w-auto object-contain sm:h-56"
-							/>
+							<div
+								className="relative isolate mx-auto flex h-52 w-full max-w-64 items-end justify-center sm:h-56"
+								data-testid="cafe-lobby-aiko"
+							>
+								<span
+									className="cafe-lobby-aiko-aura absolute inset-x-6 bottom-3 top-5 -z-10"
+									aria-hidden="true"
+								/>
+								<span
+									className="cafe-lobby-aiko-shadow absolute bottom-1 -z-10 h-3 w-24 rounded-full bg-black/20 blur-sm"
+									aria-hidden="true"
+								/>
+								<img
+									src="/images/aiko-cafe/aiko-host-v1.png"
+									alt={t("cafe.lobby.aikoAlt")}
+									className="cafe-lobby-aiko-idle h-full w-auto object-contain"
+								/>
+							</div>
 						</div>
 					</div>
 

@@ -105,6 +105,21 @@ describe("CafePage", () => {
 		);
 
 		const quickJoin = await screen.findByRole("button", { name: "cafe.lobby.quickJoin" });
+		const createRoom = screen.getByRole("button", { name: "cafe.lobby.createRoom" });
+		const joinWithCode = screen.getByRole("button", { name: "cafe.lobby.joinCode" });
+		for (const formButton of [quickJoin, createRoom, joinWithCode]) {
+			expect(formButton.className).toContain("rounded-lg");
+			expect(formButton.className).not.toContain("rounded-xl");
+		}
+		expect(quickJoin.className).not.toContain("cafe-quick-join-effect");
+		expect(createRoom.className).not.toContain("cafe-quick-join-effect");
+		const quickJoinEffect = screen.getByTestId("cafe-quick-join-effect");
+		expect(quickJoinEffect.contains(quickJoin)).toBe(true);
+		expect(quickJoinEffect.querySelectorAll(".cafe-quick-join-sparkle")).toHaveLength(4);
+		expect(quickJoinEffect.getAttribute("data-active")).toBe("true");
+		const lobbyAiko = screen.getByTestId("cafe-lobby-aiko");
+		expect(lobbyAiko.querySelector(".cafe-lobby-aiko-idle")).toBeTruthy();
+		expect(lobbyAiko.querySelector(".cafe-lobby-aiko-shadow")).toBeTruthy();
 		expect(screen.getByTestId("cafe-lobby-scroll").className).toContain("chat-scroll");
 		expect(screen.queryByText("cafe.lobby.guestFriendly")).toBeNull();
 		expect(screen.getByText("cafe.lobby.heroDescription")).toBeTruthy();
