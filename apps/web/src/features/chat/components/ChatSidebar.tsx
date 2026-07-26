@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Ellipsis, Plus, Search, Sparkles, Trash2, X } from "lucide-react";
 import Button from "@/components/ui/Button";
 import IconButton from "@/components/ui/IconButton";
+import { ChatPersonaDetails } from "@/features/chat/components/ChatDetailsPanel";
 import { useI18n } from "@/i18n/i18nContext";
 import type { ChatPersona, ChatSessionSummary } from "@/types/chat";
 import { cn } from "@/utils/classNames";
@@ -11,6 +12,7 @@ type ChatSidebarProps = {
 	personas: ChatPersona[];
 	sessions: ChatSessionSummary[];
 	activeSessionId: string | null;
+	activePersona: ChatPersona;
 	activePersonaId: string;
 	isOpen: boolean;
 	isCreatingSession?: boolean;
@@ -27,6 +29,7 @@ function ChatSidebar({
 	personas,
 	sessions,
 	activeSessionId,
+	activePersona,
 	activePersonaId,
 	isOpen,
 	isCreatingSession = false,
@@ -95,173 +98,186 @@ function ChatSidebar({
 						</IconButton>
 					</div>
 
-					<div className="border-b border-app-border p-4">
-						<label className="relative block">
-							<Search
-								className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted"
-								size={17}
-								aria-hidden="true"
-							/>
-							<input
-								className="h-11 w-full rounded-lg border border-app-border bg-app-soft pl-10 pr-3 text-sm text-app-text outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/25"
-								placeholder={t("chat.sidebar.searchChats")}
-								type="search"
-								value={searchQuery}
-								onChange={(event) => onSearchQueryChange(event.target.value)}
-							/>
-						</label>
-					</div>
+					<div className="chat-scroll flex-1 overflow-y-auto">
+						<div className="border-b border-app-border p-4">
+							<label className="relative block">
+								<Search
+									className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted"
+									size={17}
+									aria-hidden="true"
+								/>
+								<input
+									className="h-11 w-full rounded-lg border border-app-border bg-app-soft pl-10 pr-3 text-sm text-app-text outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/25"
+									placeholder={t("chat.sidebar.searchChats")}
+									type="search"
+									value={searchQuery}
+									onChange={(event) => onSearchQueryChange(event.target.value)}
+								/>
+							</label>
+						</div>
 
-					<nav
-						className="space-y-2 border-b border-app-border p-3"
-						aria-label={t("chat.sidebar.companions")}
-					>
-						{personas.map((persona) => (
-							<Button
-								key={persona.id}
-								variant={persona.id === activePersonaId ? "selected" : "ghost"}
-								size="row"
-								align="start"
-								fullWidth
-								onClick={() => onSelectPersona(persona.id)}
-							>
-								<div className="size-11 shrink-0 overflow-hidden rounded-lg border-2 border-primary/35 bg-app-soft">
-									<img
-										className="h-full w-full object-cover"
-										src={persona.avatarUrl}
-										alt={`${persona.name} avatar`}
-									/>
-								</div>
-								<span className="min-w-0 flex-1">
-									<span className="flex items-center justify-between gap-3">
-										<span className="truncate text-sm font-semibold">
-											{persona.name}
-										</span>
-										<span className="text-xs text-muted">
-											{persona.lastActiveAt}
-										</span>
-									</span>
-									<span className="mt-1 block truncate text-xs text-muted">
-										{persona.lastMessage}
-									</span>
-								</span>
-								{persona.unreadCount > 0 && (
-									<span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-primary text-[11px] font-semibold text-primary-text">
-										{persona.unreadCount}
-									</span>
-								)}
-							</Button>
-						))}
-					</nav>
-
-					<div className="flex items-center justify-between px-4 pt-3">
-						<p className="text-xs font-semibold uppercase tracking-wide text-muted">
-							{t("chat.sidebar.chats")}
-						</p>
-						<Button
-							onClick={onCreateSession}
-							disabled={isCreatingSession}
-							variant="action"
-							size="sm"
+						<nav
+							className="space-y-2 border-b border-app-border p-3"
+							aria-label={t("chat.sidebar.companions")}
 						>
-							<Plus size={14} aria-hidden="true" />
-							{t("chat.sidebar.newChat")}
-						</Button>
-					</div>
-					<div className="chat-scroll flex-1 space-y-1 overflow-y-auto px-3 py-3">
-						{sessions.map((session) => {
-							const isMenuOpen = activeSessionMenuId === session.id;
-							return (
-								<div
-									key={session.id}
-									ref={isMenuOpen ? sessionMenuRef : null}
-									className={cn(
-										"group relative rounded-lg border transition",
-										session.id === activeSessionId
-											? "border-primary/30 bg-primary/10"
-											: "border-transparent hover:border-app-border hover:bg-app-soft"
-									)}
+							{personas.map((persona) => (
+								<Button
+									key={persona.id}
+									variant={persona.id === activePersonaId ? "selected" : "ghost"}
+									size="row"
+									align="start"
+									fullWidth
+									onClick={() => onSelectPersona(persona.id)}
 								>
-									<Button
-										onClick={() => onSelectSession(session.id)}
-										variant="ghost"
-										size="menu"
-										align="start"
-										fullWidth
-										className="pr-10"
-									>
-										<span className="min-w-0">
-											<span className="block truncate text-sm font-medium text-app-text">
-												{session.lastMessage || t("chat.sidebar.newChat")}
+									<div className="size-11 shrink-0 overflow-hidden rounded-lg border-2 border-primary/35 bg-app-soft">
+										<img
+											className="h-full w-full object-cover"
+											src={persona.avatarUrl}
+											alt={`${persona.name} avatar`}
+										/>
+									</div>
+									<span className="min-w-0 flex-1">
+										<span className="flex items-center justify-between gap-3">
+											<span className="truncate text-sm font-semibold">
+												{persona.name}
 											</span>
-											<span className="mt-1 block text-[11px] text-muted">
-												{formatMessageTime(
-													new Date(session.updatedAt * 1000)
-												)}
+											<span className="text-xs text-muted">
+												{persona.lastActiveAt}
 											</span>
 										</span>
-									</Button>
-									<IconButton
-										size="xs"
-										variant={isMenuOpen ? "selected" : "ghost"}
-										aria-label={t("chat.sidebar.chatActions")}
-										onClick={() =>
-											setActiveSessionMenuId((currentId) =>
-												currentId === session.id ? null : session.id
-											)
-										}
+										<span className="mt-1 block truncate text-xs text-muted">
+											{persona.lastMessage}
+										</span>
+									</span>
+									{persona.unreadCount > 0 && (
+										<span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-primary text-[11px] font-semibold text-primary-text">
+											{persona.unreadCount}
+										</span>
+									)}
+								</Button>
+							))}
+						</nav>
+
+						<details
+							className="border-b border-app-border"
+							data-testid="chat-sidebar-persona-details"
+						>
+							<summary className="cursor-pointer px-4 py-3 text-sm font-semibold text-app-text transition hover:bg-app-soft">
+								{t("chat.details.about", { name: activePersona.name })}
+							</summary>
+							<ChatPersonaDetails persona={activePersona} compact />
+						</details>
+
+						<div className="flex items-center justify-between px-4 pt-3">
+							<p className="text-xs font-semibold uppercase tracking-wide text-muted">
+								{t("chat.sidebar.chats")}
+							</p>
+							<Button
+								onClick={onCreateSession}
+								disabled={isCreatingSession}
+								variant="action"
+								size="sm"
+							>
+								<Plus size={14} aria-hidden="true" />
+								{t("chat.sidebar.newChat")}
+							</Button>
+						</div>
+						<div className="space-y-1 px-3 py-3">
+							{sessions.map((session) => {
+								const isMenuOpen = activeSessionMenuId === session.id;
+								return (
+									<div
+										key={session.id}
+										ref={isMenuOpen ? sessionMenuRef : null}
 										className={cn(
-											"absolute right-1.5 top-1.5",
-											isMenuOpen
-												? "opacity-100"
-												: "opacity-100 lg:opacity-0 lg:group-hover:opacity-100 lg:group-focus-within:opacity-100"
+											"group relative rounded-lg border transition",
+											session.id === activeSessionId
+												? "border-primary/30 bg-primary/10"
+												: "border-transparent hover:border-app-border hover:bg-app-soft"
 										)}
 									>
-										<Ellipsis size={14} aria-hidden="true" />
-									</IconButton>
-									{isMenuOpen && (
-										<div className="absolute right-1.5 top-9 z-20 min-w-36 rounded-lg border border-app-border bg-app-panel/82 p-1">
-											<Button
-												onClick={async () => {
-													setActiveSessionMenuId(null);
-													await onDeleteSession(session.id);
-												}}
-												variant="ghostDestructive"
-												size="menu"
-												align="start"
-												fullWidth
-											>
-												<Trash2 size={14} aria-hidden="true" />
-												{t("chat.sidebar.deleteChat")}
-											</Button>
-										</div>
-									)}
-								</div>
-							);
-						})}
-						{sessions.length === 0 && (
-							<p className="rounded-lg border border-dashed border-app-border px-3 py-3 text-xs text-muted">
-								{t("chat.sidebar.noChatsFound")}
-							</p>
-						)}
-					</div>
+										<Button
+											onClick={() => onSelectSession(session.id)}
+											variant="ghost"
+											size="menu"
+											align="start"
+											fullWidth
+											className="pr-10"
+										>
+											<span className="min-w-0">
+												<span className="block truncate text-sm font-medium text-app-text">
+													{session.lastMessage ||
+														t("chat.sidebar.newChat")}
+												</span>
+												<span className="mt-1 block text-[11px] text-muted">
+													{formatMessageTime(
+														new Date(session.updatedAt * 1000)
+													)}
+												</span>
+											</span>
+										</Button>
+										<IconButton
+											size="xs"
+											variant={isMenuOpen ? "selected" : "ghost"}
+											aria-label={t("chat.sidebar.chatActions")}
+											onClick={() =>
+												setActiveSessionMenuId((currentId) =>
+													currentId === session.id ? null : session.id
+												)
+											}
+											className={cn(
+												"absolute right-1.5 top-1.5",
+												isMenuOpen
+													? "opacity-100"
+													: "opacity-100 lg:opacity-0 lg:group-hover:opacity-100 lg:group-focus-within:opacity-100"
+											)}
+										>
+											<Ellipsis size={14} aria-hidden="true" />
+										</IconButton>
+										{isMenuOpen && (
+											<div className="absolute right-1.5 top-9 z-20 min-w-36 rounded-lg border border-app-border bg-app-panel/82 p-1">
+												<Button
+													onClick={async () => {
+														setActiveSessionMenuId(null);
+														await onDeleteSession(session.id);
+													}}
+													variant="ghostDestructive"
+													size="menu"
+													align="start"
+													fullWidth
+												>
+													<Trash2 size={14} aria-hidden="true" />
+													{t("chat.sidebar.deleteChat")}
+												</Button>
+											</div>
+										)}
+									</div>
+								);
+							})}
+							{sessions.length === 0 && (
+								<p className="rounded-lg border border-dashed border-app-border px-3 py-3 text-xs text-muted">
+									{t("chat.sidebar.noChatsFound")}
+								</p>
+							)}
+						</div>
 
-					<div className="border-t border-app-border p-4">
-						<div
-							className="rounded-lg bg-app-soft p-3 opacity-70"
-							title={t("common.notSupportedYet")}
-						>
-							<div className="flex items-center gap-3">
-								<div className="flex size-9 items-center justify-center rounded-lg bg-sky-500/10 text-sky-600 dark:bg-sky-300/15 dark:text-sky-200">
-									<Sparkles size={18} aria-hidden="true" />
-								</div>
-								<div className="min-w-0">
-									<p className="text-sm font-semibold">
-										{t("chat.sidebar.moodSync")}
-									</p>
-									<p className="truncate text-xs text-muted">
-										{t("chat.sidebar.moodSyncDetail")}
-									</p>
+						<div className="border-t border-app-border p-4">
+							<div
+								className="rounded-lg bg-app-soft p-3 opacity-70"
+								title={t("common.notSupportedYet")}
+							>
+								<div className="flex items-center gap-3">
+									<div className="flex size-9 items-center justify-center rounded-lg bg-sky-500/10 text-sky-600 dark:bg-sky-300/15 dark:text-sky-200">
+										<Sparkles size={18} aria-hidden="true" />
+									</div>
+									<div className="min-w-0">
+										<p className="text-sm font-semibold">
+											{t("chat.sidebar.moodSync")}
+										</p>
+										<p className="truncate text-xs text-muted">
+											{t("chat.sidebar.moodSyncDetail")}
+										</p>
+									</div>
 								</div>
 							</div>
 						</div>

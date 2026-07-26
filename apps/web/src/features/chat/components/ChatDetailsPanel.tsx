@@ -6,19 +6,37 @@ type ChatDetailsPanelProps = {
 	persona: ChatPersona;
 };
 
+type ChatPersonaDetailsProps = {
+	persona: ChatPersona;
+	compact?: boolean;
+};
+
 const toneItems = ["Calm", "Warm", "Lightly playful", "Respectful"];
 
 function ChatDetailsPanel({ persona }: ChatDetailsPanelProps) {
+	return (
+		<aside
+			className="hidden min-h-0 w-14 shrink-0 border-l border-app-border bg-app-panel/62 xl:flex xl:flex-col"
+			data-testid="chat-details-panel"
+			data-persona-id={persona.id}
+		/>
+	);
+}
+
+export function ChatPersonaDetails({ persona, compact = false }: ChatPersonaDetailsProps) {
 	const { locale, t } = useI18n();
 	const toneItemsByLocale =
 		locale === "th" ? ["สุขุม", "อบอุ่น", "ขี้เล่นเล็กน้อย", "ให้เกียรติ"] : toneItems;
 
 	return (
-		<aside className="hidden min-h-0 border-l border-app-border bg-app-panel/62 xl:flex xl:flex-col">
-			<div className="border-b border-app-border p-5">
+		<div
+			className={compact ? "" : "flex min-h-0 flex-1 flex-col"}
+			data-testid="chat-persona-details"
+		>
+			<div className={`border-b border-app-border ${compact ? "p-4" : "p-5"}`}>
 				<div className="relative overflow-hidden rounded-lg bg-app-soft">
 					<img
-						className="aspect-[16/11] w-full object-cover"
+						className={`${compact ? "aspect-[16/9]" : "aspect-[16/11]"} w-full object-cover`}
 						src={persona.avatarUrl}
 						alt={`${persona.name} profile`}
 					/>
@@ -29,12 +47,20 @@ function ChatDetailsPanel({ persona }: ChatDetailsPanelProps) {
 				</div>
 			</div>
 
-			<div className="chat-scroll flex-1 space-y-5 overflow-y-auto p-5">
+			<div
+				className={
+					compact ? "space-y-5 p-4" : "chat-scroll flex-1 space-y-5 overflow-y-auto p-5"
+				}
+			>
 				<section>
-					<h3 className="text-sm font-semibold">
-						{t("chat.details.about", { name: persona.name })}
-					</h3>
-					<p className="mt-3 rounded-lg border border-app-border bg-app-soft p-4 text-sm leading-6 text-muted">
+					{!compact && (
+						<h3 className="text-sm font-semibold">
+							{t("chat.details.about", { name: persona.name })}
+						</h3>
+					)}
+					<p
+						className={`${compact ? "" : "mt-3"} rounded-lg border border-app-border bg-app-soft p-4 text-sm leading-6 text-muted`}
+					>
 						{t("chat.details.aboutText", { name: persona.name })}
 					</p>
 				</section>
@@ -87,7 +113,7 @@ function ChatDetailsPanel({ persona }: ChatDetailsPanelProps) {
 					</div>
 				</section>
 			</div>
-		</aside>
+		</div>
 	);
 }
 

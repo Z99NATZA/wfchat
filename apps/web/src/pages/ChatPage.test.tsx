@@ -19,14 +19,14 @@ vi.mock("@/layouts/AppLayout", () => ({
 		sidebar
 	}: {
 		children: ReactNode;
-		details: ReactNode;
+		details?: ReactNode;
 		header: ReactNode;
 		sidebar: ReactNode;
 	}) => (
 		<div>
 			<div>{sidebar}</div>
 			<div>{header}</div>
-			<div>{details}</div>
+			{details ? <div data-testid="layout-details">{details}</div> : null}
 			{children}
 		</div>
 	)
@@ -55,7 +55,7 @@ vi.mock("@/features/chat/components/ChatHeader", () => ({
 }));
 
 vi.mock("@/features/chat/components/ChatDetailsPanel", () => ({
-	default: () => <div data-testid="chat-details" />
+	default: () => <aside className="hidden xl:flex" data-testid="chat-details-panel" />
 }));
 
 vi.mock("@/features/chat/components/ChatComposer", () => ({
@@ -110,6 +110,11 @@ describe("ChatPage assistant speech visibility", () => {
 		renderChatPage({ isAssistantSpeechVisible: true });
 
 		expect(screen.getByTestId("chat-message-list").dataset.assistantSpeechEnabled).toBe("true");
+		const details = screen.getByTestId("chat-details-panel");
+		expect(screen.getByTestId("layout-details").contains(details)).toBe(true);
+		expect(details.childElementCount).toBe(0);
+		expect(details.className).toContain("hidden");
+		expect(details.className).toContain("xl:flex");
 	});
 
 	it("hides assistant speech actions when user preference is disabled", () => {

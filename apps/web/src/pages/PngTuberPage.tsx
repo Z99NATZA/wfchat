@@ -6,11 +6,7 @@ import {
 } from "@/components/header/AppHeaderControls";
 import Button from "@/components/ui/Button";
 import IconButton from "@/components/ui/IconButton";
-import {
-	AIKO_PNGTUBER_EMOTIONS,
-	type AikoEmotionId,
-	type AikoPngTuberEmotion
-} from "@/features/avatar/data/aikoPngTuber";
+import { AIKO_PNGTUBER_EMOTIONS, type AikoEmotionId } from "@/features/avatar/data/aikoPngTuber";
 import PngTuberRenderer from "@/features/avatar/renderers/pngtuber/PngTuberRenderer";
 import { useAvatarRuntime } from "@/features/avatar/runtime/avatarRuntimeContext";
 import type { AvatarMotionState } from "@/features/avatar/runtime/avatarRuntimeTypes";
@@ -19,10 +15,8 @@ import { useMemo, type ReactNode } from "react";
 import {
 	Brain,
 	CircleDot,
-	Eye,
 	type LucideIcon,
 	MessageCircle,
-	Move,
 	ScanFace,
 	Sparkles,
 	UserRound
@@ -34,16 +28,6 @@ type PngTuberPageProps = {
 	backgroundImageUrl: string;
 	headerControls: AppHeaderControlProps;
 };
-
-const pngTuberAssets = [
-	{ nameKey: "pngtuber.assets.aikoPngTuber", statusKey: "pngtuber.assets.ready", active: true },
-	{ nameKey: "pngtuber.assets.expressionSet", statusKey: "pngtuber.assets.ready", active: false },
-	{
-		nameKey: "pngtuber.assets.aiStateBridge",
-		statusKey: "pngtuber.assets.markerOnly",
-		active: false
-	}
-];
 
 const pngTuberMotionControls: Array<{
 	id: AvatarMotionState;
@@ -87,7 +71,7 @@ function PngTuberPage({ activityBar, backgroundImageUrl, headerControls }: PngTu
 				/>
 			}
 			header={<PngTuberHeader controls={headerControls} />}
-			details={<PngTuberInspector activeEmotion={activeEmotion} motionState={motionState} />}
+			details={<PngTuberInspector />}
 		>
 			<section className="flex min-h-0 flex-1 flex-col bg-app-bg/40">
 				<div className="flex h-12 shrink-0 items-center justify-between border-b border-app-border bg-app-panel/62 px-4 text-xs text-muted">
@@ -155,7 +139,7 @@ function PngTuberPage({ activityBar, backgroundImageUrl, headerControls }: PngTu
 						{t(activeEmotion.descriptionKey)}
 					</div>
 					<div
-						className="absolute inset-x-4 top-4 z-30 flex flex-wrap justify-center gap-2"
+						className="absolute inset-x-4 top-4 z-30 flex flex-wrap justify-center gap-2 lg:hidden"
 						data-pngtuber-emotion-strip
 					>
 						{AIKO_PNGTUBER_EMOTIONS.map((emotion) => (
@@ -185,7 +169,10 @@ function PngTuberSidebar({ activeEmotionId, onEmotionChange }: PngTuberSidebarPr
 	const { t } = useI18n();
 
 	return (
-		<aside className="hidden h-full w-[18.5rem] shrink-0 border-r border-app-border bg-app-panel/62 lg:flex lg:flex-col">
+		<aside
+			className="hidden h-full w-[18.5rem] shrink-0 border-r border-app-border bg-app-panel/62 lg:flex lg:flex-col"
+			data-testid="pngtuber-sidebar"
+		>
 			<div className="flex h-16 items-center border-b border-app-border px-5">
 				<div>
 					<p className="text-base font-semibold text-app-text">
@@ -195,39 +182,8 @@ function PngTuberSidebar({ activeEmotionId, onEmotionChange }: PngTuberSidebarPr
 				</div>
 			</div>
 
-			<div className="border-b border-app-border p-4">
-				<div className="grid grid-cols-3 gap-2">
-					<ToolButton icon={Move} label={t("pngtuber.tools.pose")} active />
-					<ToolButton icon={Sparkles} label={t("pngtuber.tools.expression")} />
-					<ToolButton icon={Eye} label={t("pngtuber.tools.view")} />
-				</div>
-			</div>
 			<div className="flex-1 overflow-y-auto p-3">
 				<p className="px-1 pb-2 text-xs font-semibold uppercase text-muted">
-					{t("pngtuber.sidebar.assets")}
-				</p>
-				<div className="space-y-2">
-					{pngTuberAssets.map((asset) => (
-						<Button
-							key={asset.nameKey}
-							variant={asset.active ? "selected" : "ghost"}
-							size="row"
-							align="start"
-							fullWidth
-						>
-							<span className="flex size-10 shrink-0 items-center justify-center rounded-lg border border-app-border bg-app-soft text-muted">
-								<UserRound size={18} aria-hidden="true" />
-							</span>
-							<span className="min-w-0 flex-1">
-								<span className="block truncate text-sm font-semibold text-app-text">
-									{t(asset.nameKey)}
-								</span>
-								<span className="text-xs text-muted">{t(asset.statusKey)}</span>
-							</span>
-						</Button>
-					))}
-				</div>
-				<p className="px-1 pb-2 pt-5 text-xs font-semibold uppercase text-muted">
 					{t("pngtuber.sidebar.expressions")}
 				</p>
 				<div className="space-y-2">
@@ -280,59 +236,12 @@ function PngTuberHeader({ controls }: PngTuberHeaderProps) {
 	);
 }
 
-type PngTuberInspectorProps = {
-	activeEmotion: AikoPngTuberEmotion;
-	motionState: AvatarMotionState;
-};
-
-function PngTuberInspector({ activeEmotion, motionState }: PngTuberInspectorProps) {
-	const { t } = useI18n();
-	const inspectorRows = [
-		{ label: t("pngtuber.inspector.expression"), value: t(activeEmotion.labelKey) },
-		{ label: t("pngtuber.inspector.motion"), value: t(motionStateLabelKey(motionState)) },
-		{ label: t("pngtuber.inspector.asset"), value: activeEmotion.assetUrl },
-		{ label: t("pngtuber.inspector.bridge"), value: t("pngtuber.inspector.bridgePending") }
-	];
-
+function PngTuberInspector() {
 	return (
-		<aside className="hidden min-h-0 border-l border-app-border bg-app-panel/62 xl:flex xl:flex-col">
-			<div className="border-b border-app-border px-4 py-4">
-				<p className="text-sm font-semibold text-app-text">
-					{t("pngtuber.inspector.title")}
-				</p>
-				<p className="mt-1 text-xs text-muted">{t("pngtuber.inspector.subtitle")}</p>
-			</div>
-			<div className="space-y-3 overflow-y-auto p-4">
-				{inspectorRows.map((row) => (
-					<div
-						key={row.label}
-						className="rounded-lg border border-app-border bg-app-soft p-3"
-					>
-						<p className="text-xs font-semibold text-muted">{row.label}</p>
-						<p className="mt-1 text-sm text-app-text">{row.value}</p>
-					</div>
-				))}
-			</div>
-		</aside>
-	);
-}
-
-type ToolButtonProps = {
-	icon: LucideIcon;
-	label: string;
-	active?: boolean;
-};
-
-function ToolButton({ icon: Icon, label, active = false }: ToolButtonProps) {
-	return (
-		<IconButton
-			variant={active ? "selected" : "default"}
-			fullWidth
-			aria-label={label}
-			title={label}
-		>
-			<Icon size={17} aria-hidden="true" />
-		</IconButton>
+		<aside
+			className="hidden min-h-0 w-14 shrink-0 border-l border-app-border bg-app-panel/62 xl:flex xl:flex-col"
+			data-testid="pngtuber-details"
+		/>
 	);
 }
 

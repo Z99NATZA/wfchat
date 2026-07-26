@@ -26,13 +26,13 @@ vi.mock("@/layouts/AppLayout", () => ({
 		sidebar
 	}: {
 		children: ReactNode;
-		details: ReactNode;
+		details?: ReactNode;
 		sidebar: ReactNode;
 	}) => (
 		<div>
 			{sidebar}
 			{children}
-			{details}
+			{details ? <div data-testid="layout-details">{details}</div> : null}
 		</div>
 	)
 }));
@@ -109,6 +109,26 @@ describe("CafePage", () => {
 		expect(screen.queryByText("cafe.lobby.guestFriendly")).toBeNull();
 		expect(screen.getByText("cafe.lobby.heroDescription")).toBeTruthy();
 		expect(screen.getByText("cafe.sidebar.guestNote")).toBeTruthy();
+		expect(
+			screen
+				.getByTestId("cafe-lobby-sidebar")
+				.contains(screen.getByTestId("cafe-sidebar-activity"))
+		).toBe(true);
+		expect(screen.getByTestId("cafe-sidebar-activity").textContent).toContain(
+			"cafe.details.today"
+		);
+		expect(screen.getByTestId("cafe-sidebar-activity").textContent).toContain(
+			"cafe.activity.title"
+		);
+		expect(screen.getByTestId("cafe-sidebar-activity").textContent).toContain(
+			"cafe.activity.description"
+		);
+		const details = screen.getByTestId("cafe-lobby-details");
+		expect(screen.getByTestId("layout-details").contains(details)).toBe(true);
+		expect(details.childElementCount).toBe(0);
+		expect(details.className).toContain("hidden");
+		expect(details.className).toContain("w-14");
+		expect(details.className).toContain("xl:flex");
 		expect(screen.queryByText("cafe.details.capacity")).toBeNull();
 		expect(
 			screen

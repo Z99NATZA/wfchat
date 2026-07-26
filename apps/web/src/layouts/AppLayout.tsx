@@ -79,7 +79,7 @@ function AppLayout({
 				<section className="flex min-w-0 flex-1 flex-col">
 					{header}
 
-					<div className="grid min-h-0 flex-1 overflow-hidden grid-cols-1 xl:grid-cols-[minmax(0,1fr)_21rem]">
+					<div className="grid min-h-0 flex-1 grid-cols-1 overflow-hidden xl:grid-cols-[minmax(0,1fr)_auto]">
 						<div className="flex min-h-0 flex-col">{children}</div>
 						{details}
 					</div>

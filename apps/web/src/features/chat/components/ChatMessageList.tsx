@@ -716,12 +716,7 @@ function ChatMessageList({
 				<div ref={virtualTimelineRef} className="mx-auto mt-5 max-w-3xl">
 					{visibleMessages.length === 0 && !isSending && (
 						<div className="rounded-lg border border-dashed border-app-border bg-app-panel/92 px-5 py-8 text-center">
-							<p className="text-sm font-semibold text-app-text">
-								{t("chat.messageList.emptyTitle", { name: companionName })}
-							</p>
-							<p className="mt-2 text-sm text-muted">
-								{t("chat.messageList.emptyDesc")}
-							</p>
+							<p className="text-sm text-muted">{t("chat.messageList.emptyDesc")}</p>
 						</div>
 					)}
 

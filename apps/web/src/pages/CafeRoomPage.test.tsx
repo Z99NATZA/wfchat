@@ -53,7 +53,21 @@ vi.mock("@/features/cafe/components/CafeGameCanvas", () => ({
 	}
 }));
 vi.mock("@/layouts/AppLayout", () => ({
-	default: ({ children }: { children: ReactNode }) => <div>{children}</div>
+	default: ({
+		children,
+		details,
+		sidebar
+	}: {
+		children: ReactNode;
+		details?: ReactNode;
+		sidebar: ReactNode;
+	}) => (
+		<div>
+			{sidebar}
+			{children}
+			{details ? <div data-testid="layout-details">{details}</div> : null}
+		</div>
+	)
 }));
 vi.mock("@/components/header/AppHeaderBar", () => ({ default: () => null }));
 vi.mock("@/components/header/AppHeaderControls", () => ({
@@ -186,6 +200,39 @@ describe("CafeRoomPage", () => {
 		expect(mobileHint.className).toContain("sm:hidden");
 	});
 
+	it("keeps room activity in the sidebar and mounts an empty desktop right rail", () => {
+		const room = roomFixture();
+		Object.assign(roomHook.value, {
+			room,
+			selfPlayerId: room.players[0].id,
+			connectionState: "connected",
+			error: null
+		});
+
+		renderRoomPage();
+
+		expect(
+			screen
+				.getByTestId("cafe-room-sidebar")
+				.contains(screen.getByTestId("cafe-room-activity-details"))
+		).toBe(true);
+		expect(screen.getByTestId("cafe-room-activity-details").textContent).toContain(
+			"cafe.activity.title"
+		);
+		expect(screen.getByTestId("cafe-room-activity-details").textContent).toContain(
+			"cafe.activity.teaLeaves"
+		);
+		expect(screen.getByTestId("cafe-room-activity-details").textContent).toContain(
+			"cafe.room.controls"
+		);
+		const details = screen.getByTestId("cafe-room-details");
+		expect(screen.getByTestId("layout-details").contains(details)).toBe(true);
+		expect(details.childElementCount).toBe(0);
+		expect(details.className).toContain("hidden");
+		expect(details.className).toContain("w-14");
+		expect(details.className).toContain("xl:flex");
+	});
+
 	it("guides table service players to their claimed table", () => {
 		const room = roomFixture();
 		room.activity = {
@@ -220,7 +267,7 @@ describe("CafeRoomPage", () => {
 
 		renderRoomPage();
 
-		expect(screen.getByText("cafe.tableService.title")).toBeTruthy();
+		expect(screen.getAllByText("cafe.tableService.title")).toHaveLength(2);
 		expect(screen.getByTestId("cafe-carried-order").textContent).toContain(
 			"cafe.tableService.carrying"
 		);

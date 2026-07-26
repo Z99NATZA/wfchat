@@ -94,6 +94,19 @@ describe("ChatMessageList streaming state", () => {
 		cleanup();
 	});
 
+	it("shows only the prompt in an empty chat", () => {
+		render(
+			<ChatMessageList
+				messages={[]}
+				companionName="Aiko"
+				companionAvatarUrl="/images/aiko-avatar.png"
+			/>
+		);
+
+		expect(screen.getByText("chat.messageList.emptyDesc")).toBeTruthy();
+		expect(screen.queryByText("chat.messageList.emptyTitle")).toBeNull();
+	});
+
 	it("shows the thinking bubble while waiting for streaming to start", () => {
 		render(
 			<ChatMessageList

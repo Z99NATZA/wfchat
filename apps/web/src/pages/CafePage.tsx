@@ -495,14 +495,17 @@ function CafeHeader({ controls }: { controls: AppHeaderControlProps }) {
 function CafeLobbySidebar({ progress }: { progress: CafeProgress }) {
 	const { t } = useI18n();
 	return (
-		<aside className="hidden h-full w-[18.5rem] shrink-0 border-r border-app-border bg-app-panel/62 lg:flex lg:flex-col">
+		<aside
+			className="hidden h-full w-[18.5rem] shrink-0 border-r border-app-border bg-app-panel/62 lg:flex lg:flex-col"
+			data-testid="cafe-lobby-sidebar"
+		>
 			<div className="flex h-16 items-center border-b border-app-border px-5">
 				<div>
 					<p className="font-semibold text-app-text">{t("cafe.sidebar.title")}</p>
 					<p className="text-xs text-muted">{t("cafe.sidebar.subtitle")}</p>
 				</div>
 			</div>
-			<div className="space-y-3 p-4">
+			<div className="chat-scroll flex-1 space-y-3 overflow-y-auto p-4">
 				<div className="rounded-xl border border-app-border bg-app-soft p-4">
 					<div className="flex items-center gap-2 text-sm font-semibold text-app-text">
 						<Star size={17} className="text-muted" aria-hidden="true" />
@@ -512,6 +515,15 @@ function CafeLobbySidebar({ progress }: { progress: CafeProgress }) {
 						{progress.cafeStars}
 					</p>
 				</div>
+				<section data-testid="cafe-sidebar-activity">
+					<p className="text-sm font-semibold text-app-text">{t("cafe.details.today")}</p>
+					<div className="mt-3 rounded-xl border border-app-border bg-app-soft p-4">
+						<p className="font-semibold text-app-text">{t("cafe.activity.title")}</p>
+						<p className="mt-2 text-sm leading-6 text-muted">
+							{t("cafe.activity.description")}
+						</p>
+					</div>
+				</section>
 				<div className="rounded-xl border border-app-border bg-app-soft p-4 text-sm leading-6 text-muted">
 					{t("cafe.sidebar.guestNote")}
 				</div>
@@ -520,22 +532,12 @@ function CafeLobbySidebar({ progress }: { progress: CafeProgress }) {
 	);
 }
 
-function CafeLobbyDetails() {
-	const { t } = useI18n();
+export function CafeLobbyDetails() {
 	return (
-		<aside className="hidden min-h-0 border-l border-app-border bg-app-panel/62 xl:flex xl:flex-col">
-			<div className="border-b border-app-border p-4">
-				<p className="font-semibold text-app-text">{t("cafe.details.today")}</p>
-			</div>
-			<div className="space-y-3 p-4">
-				<div className="rounded-xl border border-app-border bg-app-soft p-4">
-					<p className="font-semibold text-app-text">{t("cafe.activity.title")}</p>
-					<p className="mt-2 text-sm leading-6 text-muted">
-						{t("cafe.activity.description")}
-					</p>
-				</div>
-			</div>
-		</aside>
+		<aside
+			className="hidden min-h-0 w-14 shrink-0 border-l border-app-border bg-app-panel/62 xl:flex xl:flex-col"
+			data-testid="cafe-lobby-details"
+		/>
 	);
 }
 

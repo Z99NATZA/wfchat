@@ -202,6 +202,7 @@ function ChatPage({
 					personas={chat.personas}
 					sessions={chat.sessions}
 					activeSessionId={chat.activeChatId}
+					activePersona={chat.activePersona}
 					activePersonaId={chat.activePersona.id}
 					isOpen={chat.isSidebarOpen}
 					isCreatingSession={chat.isCreatingSession}

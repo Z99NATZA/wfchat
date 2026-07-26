@@ -391,7 +391,10 @@ function CafeWelcomeGuide({
 function CafeRoomSidebar({ room }: { room: CafeRoomState | null }) {
 	const { t } = useI18n();
 	return (
-		<aside className="hidden h-full w-[18.5rem] shrink-0 border-r border-app-border bg-app-panel/62 lg:flex lg:flex-col">
+		<aside
+			className="hidden h-full w-[18.5rem] shrink-0 border-r border-app-border bg-app-panel/62 lg:flex lg:flex-col"
+			data-testid="cafe-room-sidebar"
+		>
 			<div className="flex h-16 items-center border-b border-app-border px-5">
 				<div>
 					<p className="font-semibold text-app-text">{t("cafe.room.members")}</p>
@@ -400,53 +403,62 @@ function CafeRoomSidebar({ room }: { room: CafeRoomState | null }) {
 					</p>
 				</div>
 			</div>
-			<div className="space-y-2 overflow-y-auto p-3">
-				{room?.players.map((player) => (
-					<div
-						key={player.id}
-						className="flex items-center gap-3 rounded-lg border border-app-border bg-app-soft p-3"
-					>
-						<span
-							className="size-3 rounded-full"
-							style={{ backgroundColor: player.color }}
-						/>
-						<span className="min-w-0 flex-1 truncate text-sm font-semibold text-app-text">
-							{player.name}
-						</span>
-						{player.carriedTea > 0 && (
-							<span className="text-xs text-muted">🍃 {player.carriedTea}</span>
-						)}
-						{player.carriedOrderId && (
+			<div className="chat-scroll flex-1 overflow-y-auto">
+				<CafeRoomActivityDetails room={room} compact />
+				<div className="space-y-2 p-3">
+					{room?.players.map((player) => (
+						<div
+							key={player.id}
+							className="flex items-center gap-3 rounded-lg border border-app-border bg-app-soft p-3"
+						>
 							<span
-								className="text-xs text-muted"
-								aria-label={t("cafe.tableService.memberCarrying")}
-							>
-								☕
+								className="size-3 rounded-full"
+								style={{ backgroundColor: player.color }}
+							/>
+							<span className="min-w-0 flex-1 truncate text-sm font-semibold text-app-text">
+								{player.name}
 							</span>
-						)}
-						{player.equippedCosmetic && (
-							<span
-								className="flex size-7 items-center justify-center rounded-full border border-app-border bg-app-panel text-sm text-app-text"
-								aria-label={t("cafe.cosmetics.wearing", {
-									name: t(`cafe.cosmetics.${player.equippedCosmetic}.name`)
-								})}
-								data-testid={`cafe-member-cosmetic-${player.id}`}
-							>
-								{cosmeticGlyph(player.equippedCosmetic)}
-							</span>
-						)}
-					</div>
-				))}
+							{player.carriedTea > 0 && (
+								<span className="text-xs text-muted">🍃 {player.carriedTea}</span>
+							)}
+							{player.carriedOrderId && (
+								<span
+									className="text-xs text-muted"
+									aria-label={t("cafe.tableService.memberCarrying")}
+								>
+									☕
+								</span>
+							)}
+							{player.equippedCosmetic && (
+								<span
+									className="flex size-7 items-center justify-center rounded-full border border-app-border bg-app-panel text-sm text-app-text"
+									aria-label={t("cafe.cosmetics.wearing", {
+										name: t(`cafe.cosmetics.${player.equippedCosmetic}.name`)
+									})}
+									data-testid={`cafe-member-cosmetic-${player.id}`}
+								>
+									{cosmeticGlyph(player.equippedCosmetic)}
+								</span>
+							)}
+						</div>
+					))}
+				</div>
 			</div>
 		</aside>
 	);
 }
 
-function CafeRoomDetails({ room }: { room: CafeRoomState | null }) {
+function CafeRoomActivityDetails({
+	room,
+	compact = false
+}: {
+	room: CafeRoomState | null;
+	compact?: boolean;
+}) {
 	const { t } = useI18n();
 	return (
-		<aside className="hidden min-h-0 border-l border-app-border bg-app-panel/62 xl:flex xl:flex-col">
-			<div className="border-b border-app-border p-4">
+		<section data-testid="cafe-room-activity-details">
+			<div className={`border-b border-app-border ${compact ? "p-3" : "p-4"}`}>
 				<p className="font-semibold text-app-text">
 					{t(activityTitleKey(room?.activity.id))}
 				</p>
@@ -456,7 +468,7 @@ function CafeRoomDetails({ room }: { room: CafeRoomState | null }) {
 					</p>
 				)}
 			</div>
-			<div className="space-y-4 p-4">
+			<div className={`space-y-4 ${compact ? "p-3" : "p-4"}`}>
 				<div className="rounded-xl border border-app-border bg-app-soft p-4">
 					<div className="flex items-center justify-between text-sm">
 						<span className="text-muted">
@@ -483,7 +495,17 @@ function CafeRoomDetails({ room }: { room: CafeRoomState | null }) {
 					{t("cafe.room.controls")}
 				</div>
 			</div>
-		</aside>
+		</section>
+	);
+}
+
+export function CafeRoomDetails({ room }: { room: CafeRoomState | null }) {
+	return (
+		<aside
+			className="hidden min-h-0 w-14 shrink-0 border-l border-app-border bg-app-panel/62 xl:flex xl:flex-col"
+			data-testid="cafe-room-details"
+			data-room-id={room?.id}
+		/>
 	);
 }
 
