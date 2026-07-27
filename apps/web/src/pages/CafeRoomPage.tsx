@@ -1,6 +1,17 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Navigate, useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, CircleHelp, Coffee, Copy, Leaf, Star, Wifi, WifiOff } from "lucide-react";
+import {
+	ArrowLeft,
+	CircleHelp,
+	Clock3,
+	Coffee,
+	Copy,
+	Flame,
+	Leaf,
+	Star,
+	Wifi,
+	WifiOff
+} from "lucide-react";
 import AppHeaderBar from "@/components/header/AppHeaderBar";
 import {
 	AppHeaderDesktopControls,
@@ -43,6 +54,7 @@ function CafeRoomContent({
 	const selfPlayer = cafe.room?.players.find((player) => player.id === cafe.selfPlayerId);
 	const carriedTea = selfPlayer?.carriedTea ?? 0;
 	const isTableService = cafe.room?.activity.id === "table_service";
+	const isCafeRush = cafe.room?.activity.id === "cafe_rush";
 	const carriedOrder = cafe.room?.activity.tableOrders.find(
 		(order) => order.id === selfPlayer?.carriedOrderId
 	);
@@ -54,6 +66,12 @@ function CafeRoomContent({
 		: t("cafe.tableService.table.generic");
 	const inputEnabled = cafe.connectionState === "connected";
 	const roundCountdown = useRoundCountdown(cafe.room?.activity.nextRoundAt ?? null);
+	const rushCountdown = useRoundCountdown(cafe.room?.activity.endsAt ?? null);
+	const comboCountdown = useRoundCountdown(cafe.room?.activity.comboExpiresAt ?? null);
+	const rushCombo =
+		cafe.room?.activity.comboExpiresAt && comboCountdown === 0
+			? 0
+			: (cafe.room?.activity.combo ?? 0);
 	const isIntermission = cafe.room?.activity.phase === "intermission";
 
 	function dismissGuide() {
@@ -117,6 +135,9 @@ function CafeRoomContent({
 						serveDrink: t("cafe.tableService.serve", { table: carriedTable }),
 						findCounter: t("cafe.tableService.findCounter"),
 						findTable: t("cafe.tableService.findTable", { table: carriedTable }),
+						prepareOrder: t("cafe.rush.prepareOrder"),
+						findIngredient: t("cafe.rush.findIngredient"),
+						returnIngredient: t("cafe.rush.returnIngredient"),
 						idle: t("cafe.room.moveCloser")
 					}}
 					loadingLabel={t("cafe.room.connecting")}
@@ -157,27 +178,58 @@ function CafeRoomContent({
 						<p className="mt-1 text-sm font-semibold">
 							{isIntermission
 								? t(
-										isTableService
-											? "cafe.tableService.complete"
-											: "cafe.activity.complete"
+										isCafeRush
+											? cafe.room?.activity.completed
+												? "cafe.rush.complete"
+												: "cafe.rush.timeUp"
+											: isTableService
+												? "cafe.tableService.complete"
+												: "cafe.activity.complete"
 									)
 								: t(
-										isTableService
-											? "cafe.tableService.progress"
-											: "cafe.activity.progress",
+										isCafeRush
+											? "cafe.rush.progress"
+											: isTableService
+												? "cafe.tableService.progress"
+												: "cafe.activity.progress",
 										{
 											current: cafe.room?.activity.delivered ?? 0,
 											target: cafe.room?.activity.target ?? 3
 										}
 									)}
 						</p>
+						{isCafeRush && !isIntermission && (
+							<div className="mt-2 flex flex-wrap gap-2">
+								<span
+									className="inline-flex items-center gap-1.5 rounded-md border border-dialog-border bg-dialog-panel px-2 py-1 text-xs font-bold text-app-text"
+									data-testid="cafe-rush-timer"
+								>
+									<Clock3 size={13} aria-hidden="true" />
+									{t("cafe.rush.timer", { seconds: rushCountdown })}
+								</span>
+								<span
+									className="inline-flex items-center gap-1.5 rounded-md border border-dialog-border bg-dialog-panel px-2 py-1 text-xs font-bold text-app-text"
+									data-testid="cafe-rush-combo"
+								>
+									<Flame size={13} aria-hidden="true" />
+									{t("cafe.rush.combo", {
+										combo: rushCombo
+									})}
+								</span>
+							</div>
+						)}
 						{!isIntermission && carriedTea > 0 && (
 							<p
 								className="mt-2 inline-flex items-center gap-1.5 rounded-md border border-dialog-border bg-dialog-panel px-2 py-1 text-xs font-semibold text-app-text"
 								data-testid="cafe-carried-tea"
 							>
 								<Leaf size={13} aria-hidden="true" />
-								{t("cafe.activity.carried", { count: carriedTea })}
+								{t(
+									isCafeRush
+										? "cafe.rush.carryingIngredient"
+										: "cafe.activity.carried",
+									{ count: carriedTea }
+								)}
 							</p>
 						)}
 						{!isIntermission && carriedOrder && (
@@ -208,29 +260,29 @@ function CafeRoomContent({
 										className="hidden sm:inline"
 										data-testid="cafe-quest-hint-desktop"
 									>
-										{isTableService
-											? carriedOrder
-												? t("cafe.tableService.deliverHintDesktop", {
-														table: carriedTable
-													})
-												: t("cafe.tableService.pickupHintDesktop")
-											: carriedTea > 0
-												? t("cafe.activity.returnHintDesktop")
-												: t("cafe.activity.findHintDesktop")}
+										{t(
+											cafeQuestHintKey(
+												cafe.room,
+												carriedTea,
+												Boolean(carriedOrder),
+												false
+											),
+											{ table: carriedTable }
+										)}
 									</span>
 									<span
 										className="sm:hidden"
 										data-testid="cafe-quest-hint-mobile"
 									>
-										{isTableService
-											? carriedOrder
-												? t("cafe.tableService.deliverHintMobile", {
-														table: carriedTable
-													})
-												: t("cafe.tableService.pickupHintMobile")
-											: carriedTea > 0
-												? t("cafe.activity.returnHintMobile")
-												: t("cafe.activity.findHintMobile")}
+										{t(
+											cafeQuestHintKey(
+												cafe.room,
+												carriedTea,
+												Boolean(carriedOrder),
+												true
+											),
+											{ table: carriedTable }
+										)}
 									</span>
 								</>
 							)}
@@ -343,6 +395,8 @@ function CafeWelcomeGuide({
 }) {
 	const { t } = useI18n();
 	const tableService = activityId === "table_service";
+	const cafeRush = activityId === "cafe_rush";
+	const guidePrefix = cafeRush ? "cafe.rush" : tableService ? "cafe.tableService" : "cafe.guide";
 	return (
 		<div className="absolute inset-0 z-[70] flex items-center justify-center bg-app-bg/72 p-4 backdrop-blur-[3px]">
 			<div
@@ -352,31 +406,25 @@ function CafeWelcomeGuide({
 				aria-labelledby="cafe-guide-title"
 			>
 				<div className="mx-auto flex size-12 items-center justify-center rounded-full border border-dialog-border bg-dialog-soft text-2xl">
-					{tableService ? "☕" : "🍃"}
+					{cafeRush ? "⏱️" : tableService ? "☕" : "🍃"}
 				</div>
 				<h2 id="cafe-guide-title" className="mt-3 text-xl font-bold">
-					{t(tableService ? "cafe.tableService.guideTitle" : "cafe.guide.title")}
+					{t(`${guidePrefix}.${cafeRush || tableService ? "guideTitle" : "title"}`)}
 				</h2>
 				<p className="mt-2 text-sm leading-6 text-muted">
 					{t(
-						tableService
-							? "cafe.tableService.guideDescription"
-							: "cafe.guide.description"
+						`${guidePrefix}.${cafeRush || tableService ? "guideDescription" : "description"}`
 					)}
 				</p>
 				<div className="mt-4 rounded-2xl border border-dialog-border bg-dialog-soft px-4 py-3 text-sm font-semibold leading-6 text-app-text">
 					<span className="hidden sm:inline">
 						{t(
-							tableService
-								? "cafe.tableService.guideDesktopControls"
-								: "cafe.guide.desktopControls"
+							`${guidePrefix}.${cafeRush || tableService ? "guideDesktopControls" : "desktopControls"}`
 						)}
 					</span>
 					<span className="sm:hidden">
 						{t(
-							tableService
-								? "cafe.tableService.guideMobileControls"
-								: "cafe.guide.mobileControls"
+							`${guidePrefix}.${cafeRush || tableService ? "guideMobileControls" : "mobileControls"}`
 						)}
 					</span>
 				</div>
@@ -473,7 +521,8 @@ function CafeRoomActivityDetails({
 					<div className="flex items-center justify-between text-sm">
 						<span className="text-muted">
 							{t(
-								room?.activity.id === "table_service"
+								room?.activity.id === "table_service" ||
+									room?.activity.id === "cafe_rush"
 									? "cafe.tableService.ordersServed"
 									: "cafe.activity.teaLeaves"
 							)}
@@ -602,7 +651,37 @@ function isUuid(value: string) {
 }
 
 function activityTitleKey(activityId: CafeRoomState["activity"]["id"] | undefined) {
-	return activityId === "table_service" ? "cafe.tableService.title" : "cafe.activity.title";
+	switch (activityId) {
+		case "table_service":
+			return "cafe.tableService.title";
+		case "cafe_rush":
+			return "cafe.rush.title";
+		default:
+			return "cafe.activity.title";
+	}
+}
+
+function cafeQuestHintKey(
+	room: CafeRoomState | null,
+	carriedTea: number,
+	hasCarriedOrder: boolean,
+	mobile: boolean
+) {
+	const device = mobile ? "Mobile" : "Desktop";
+	if (room?.activity.id === "table_service") {
+		return hasCarriedOrder
+			? `cafe.tableService.deliverHint${device}`
+			: `cafe.tableService.pickupHint${device}`;
+	}
+	if (room?.activity.id === "cafe_rush") {
+		if (hasCarriedOrder) return `cafe.rush.deliverHint${device}`;
+		if (carriedTea > 0) return `cafe.rush.prepareHint${device}`;
+		if (room.activity.tableOrders.some((order) => order.status === "available")) {
+			return `cafe.rush.pickupHint${device}`;
+		}
+		return `cafe.rush.findHint${device}`;
+	}
+	return carriedTea > 0 ? `cafe.activity.returnHint${device}` : `cafe.activity.findHint${device}`;
 }
 
 function cosmeticGlyph(cosmeticId: string) {

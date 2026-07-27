@@ -1,5 +1,7 @@
 use std::{
     collections::{HashMap, VecDeque},
+    future::Future,
+    pin::Pin,
     sync::Arc,
     time::{Duration, Instant},
 };
@@ -38,6 +40,8 @@ const MOVE_SPEED: f32 = 210.0;
 const MAX_MESSAGES_PER_WINDOW: usize = 45;
 const MESSAGE_WINDOW: Duration = Duration::from_secs(2);
 const ROUND_INTERMISSION: Duration = Duration::from_secs(8);
+const CAFE_RUSH_DURATION: Duration = Duration::from_secs(90);
+const CAFE_RUSH_COMBO_WINDOW: Duration = Duration::from_secs(15);
 const MAX_CAFE_PLAYER_NAME_CHARS: usize = 24;
 const SERVICE_COUNTER_TARGET_ID: &str = "service-counter";
 const CAFE_MAP_LAYOUT: CafeMapLayout = CafeMapLayout {
@@ -79,6 +83,24 @@ const TABLE_SERVICE_ORDERS: [(&str, &str, &str); 3] = [
     ("long", "classic", "table-long"),
 ];
 
+const CAFE_RUSH_ORDERS: [(&str, &str, &str); 6] = [
+    ("window", "sakura", "table-window"),
+    ("garden", "mint", "table-garden"),
+    ("long", "classic", "table-long"),
+    ("garden", "sakura", "table-garden"),
+    ("window", "classic", "table-window"),
+    ("long", "mint", "table-long"),
+];
+
+const CAFE_RUSH_INGREDIENTS: [(f32, f32); 6] = [
+    (142.0, 224.0),
+    (1138.0, 248.0),
+    (1064.0, 682.0),
+    (186.0, 666.0),
+    (1094.0, 570.0),
+    (832.0, 300.0),
+];
+
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/cafe/rooms", get(list_rooms).post(create_room))
@@ -115,6 +137,7 @@ struct CafePlayer {
     direction: Direction,
     moving: bool,
     carried_tea: u8,
+    carried_rush_ingredient_ids: Vec<String>,
     carried_order_id: Option<String>,
     equipped_cosmetic: Option<String>,
     last_sequence: u64,
@@ -229,8 +252,12 @@ struct CafeActivity {
     round_number: u32,
     phase: CafeActivityPhase,
     next_round_at: Option<i64>,
+    ends_at: Option<i64>,
     delivered: u8,
     target: u8,
+    combo: u8,
+    best_combo: u8,
+    combo_expires_at: Option<i64>,
     completed: bool,
     tea_leaves: Vec<CafeTeaLeaf>,
     table_orders: Vec<CafeTableOrder>,
@@ -260,11 +287,13 @@ struct CafeTableOrder {
 enum CafeActivityId {
     TeaDelivery,
     TableService,
+    CafeRush,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 enum CafeTableOrderStatus {
+    WaitingIngredient,
     Available,
     Claimed,
     Served,
@@ -430,11 +459,11 @@ impl CafeInteractionResult {
 }
 
 impl CafeActivity {
-    fn for_round(round_number: u32) -> Self {
-        if round_number.is_multiple_of(2) {
-            Self::table_service(round_number)
-        } else {
-            Self::tea_delivery(round_number)
+    fn for_round(round_number: u32, player_count: usize) -> Self {
+        match round_number % 3 {
+            1 => Self::tea_delivery(round_number),
+            2 => Self::table_service(round_number),
+            _ => Self::cafe_rush(round_number, player_count),
         }
     }
 
@@ -445,8 +474,12 @@ impl CafeActivity {
             round_number,
             phase: CafeActivityPhase::Active,
             next_round_at: None,
+            ends_at: None,
             delivered: 0,
             target: 3,
+            combo: 0,
+            best_combo: 0,
+            combo_expires_at: None,
             completed: false,
             tea_leaves: layout
                 .into_iter()
@@ -468,8 +501,12 @@ impl CafeActivity {
             round_number,
             phase: CafeActivityPhase::Active,
             next_round_at: None,
+            ends_at: None,
             delivered: 0,
             target: TABLE_SERVICE_ORDERS.len() as u8,
+            combo: 0,
+            best_combo: 0,
+            combo_expires_at: None,
             completed: false,
             tea_leaves: Vec::new(),
             table_orders: TABLE_SERVICE_ORDERS
@@ -490,6 +527,61 @@ impl CafeActivity {
                 .collect(),
         }
     }
+
+    fn cafe_rush(round_number: u32, player_count: usize) -> Self {
+        let target = cafe_rush_target(player_count);
+        let now = Utc::now().timestamp_millis();
+        Self {
+            id: CafeActivityId::CafeRush,
+            round_number,
+            phase: CafeActivityPhase::Active,
+            next_round_at: None,
+            ends_at: Some(now + i64::try_from(CAFE_RUSH_DURATION.as_millis()).unwrap_or(i64::MAX)),
+            delivered: 0,
+            target,
+            combo: 0,
+            best_combo: 0,
+            combo_expires_at: None,
+            completed: false,
+            tea_leaves: CAFE_RUSH_INGREDIENTS
+                .into_iter()
+                .take(usize::from(target))
+                .enumerate()
+                .map(|(index, (x, y))| CafeTeaLeaf {
+                    id: format!("tea-{round_number}-{}", index + 1),
+                    x,
+                    y,
+                    available: true,
+                })
+                .collect(),
+            table_orders: CAFE_RUSH_ORDERS
+                .into_iter()
+                .take(usize::from(target))
+                .enumerate()
+                .map(|(index, (table_id, drink, target_id))| {
+                    let target = cafe_map_interaction_target(target_id);
+                    CafeTableOrder {
+                        id: format!("order-{round_number}-{}", index + 1),
+                        table_id,
+                        drink,
+                        x: target.x,
+                        y: target.y,
+                        status: CafeTableOrderStatus::WaitingIngredient,
+                        claimed_by: None,
+                    }
+                })
+                .collect(),
+        }
+    }
+}
+
+fn cafe_rush_target(player_count: usize) -> u8 {
+    u8::try_from(
+        player_count
+            .saturating_add(2)
+            .clamp(3, CAFE_RUSH_ORDERS.len()),
+    )
+    .unwrap_or(CAFE_RUSH_ORDERS.len() as u8)
 }
 
 impl CafeHub {
@@ -570,30 +662,40 @@ impl CafeHub {
 
     async fn leave(&self, room_id: Uuid, player_id: Uuid) {
         let mut rooms = self.rooms.lock().await;
-        let should_remove = if let Some(room) = rooms.get_mut(&room_id) {
-            let player = room.players.remove(&player_id);
-            if let Some(order_id) = player.and_then(|player| player.carried_order_id) {
-                if let Some(order) = room
-                    .activity
-                    .table_orders
-                    .iter_mut()
-                    .find(|order| order.id == order_id && order.claimed_by == Some(player_id))
-                {
-                    order.status = CafeTableOrderStatus::Available;
-                    order.claimed_by = None;
+        let should_remove =
+            if let Some(room) = rooms.get_mut(&room_id) {
+                let player = room.players.remove(&player_id);
+                if let Some(player) = player {
+                    for ingredient_id in player.carried_rush_ingredient_ids {
+                        if let Some(ingredient) = room
+                            .activity
+                            .tea_leaves
+                            .iter_mut()
+                            .find(|ingredient| ingredient.id == ingredient_id)
+                        {
+                            ingredient.available = true;
+                        }
+                    }
+                    if let Some(order_id) = player.carried_order_id {
+                        if let Some(order) = room.activity.table_orders.iter_mut().find(|order| {
+                            order.id == order_id && order.claimed_by == Some(player_id)
+                        }) {
+                            order.status = CafeTableOrderStatus::Available;
+                            order.claimed_by = None;
+                        }
+                    }
                 }
-            }
-            if room.players.is_empty() {
-                true
+                if room.players.is_empty() {
+                    true
+                } else {
+                    let _ = room.sender.send(CafeServerMessage::Snapshot {
+                        room: room_state(room),
+                    });
+                    false
+                }
             } else {
-                let _ = room.sender.send(CafeServerMessage::Snapshot {
-                    room: room_state(room),
-                });
                 false
-            }
-        } else {
-            false
-        };
+            };
 
         if should_remove {
             rooms.remove(&room_id);
@@ -713,9 +815,18 @@ impl CafeHub {
                 room.activity.tea_leaves[leaf_index].available = false;
                 if let Some(player) = room.players.get_mut(&player_id) {
                     player.carried_tea = player.carried_tea.saturating_add(1);
+                    if room.activity.id == CafeActivityId::CafeRush {
+                        player
+                            .carried_rush_ingredient_ids
+                            .push(room.activity.tea_leaves[leaf_index].id.clone());
+                    }
                 }
                 let _ = room.sender.send(CafeServerMessage::Dialogue {
-                    message_key: "cafe.dialogue.teaCollected",
+                    message_key: if room.activity.id == CafeActivityId::CafeRush {
+                        "cafe.dialogue.rushIngredientCollected"
+                    } else {
+                        "cafe.dialogue.teaCollected"
+                    },
                     expression: "happy",
                 });
                 let _ = room.sender.send(CafeServerMessage::Snapshot {
@@ -723,6 +834,10 @@ impl CafeHub {
                 });
             }
             return CafeInteractionResult::none();
+        }
+
+        if room.activity.id == CafeActivityId::CafeRush {
+            return interact_cafe_rush(room, player_id, player_position, target_id);
         }
 
         if target_id != "aiko"
@@ -784,32 +899,80 @@ impl CafeHub {
         }
     }
 
-    async fn start_next_round(&self, room_id: Uuid, completed_round: u32) -> bool {
+    fn start_next_round(
+        &self,
+        room_id: Uuid,
+        completed_round: u32,
+    ) -> Pin<Box<dyn Future<Output = bool> + Send + '_>> {
+        Box::pin(async move {
+            let mut rooms = self.rooms.lock().await;
+            let Some(room) = rooms.get_mut(&room_id) else {
+                return false;
+            };
+            if room.activity.round_number != completed_round
+                || room.activity.phase != CafeActivityPhase::Intermission
+            {
+                return false;
+            }
+
+            let next_round = completed_round.saturating_add(1);
+            room.activity = CafeActivity::for_round(next_round, room.players.len());
+            for player in room.players.values_mut() {
+                player.carried_tea = 0;
+                player.carried_rush_ingredient_ids.clear();
+                player.carried_order_id = None;
+            }
+            let _ = room.sender.send(CafeServerMessage::Snapshot {
+                room: room_state(room),
+            });
+            let _ = room.sender.send(CafeServerMessage::Dialogue {
+                message_key: match room.activity.id {
+                    CafeActivityId::TeaDelivery => "cafe.dialogue.teaRoundReady",
+                    CafeActivityId::TableService => "cafe.dialogue.serviceRoundReady",
+                    CafeActivityId::CafeRush => "cafe.dialogue.rushRoundReady",
+                },
+                expression: "happy",
+            });
+            let starts_cafe_rush = room.activity.id == CafeActivityId::CafeRush;
+            drop(rooms);
+            if starts_cafe_rush {
+                tokio::spawn(run_cafe_rush_timer(self.clone(), room_id, next_round));
+            }
+            true
+        })
+    }
+
+    async fn expire_cafe_rush(&self, room_id: Uuid, round_number: u32) -> bool {
         let mut rooms = self.rooms.lock().await;
         let Some(room) = rooms.get_mut(&room_id) else {
             return false;
         };
-        if room.activity.round_number != completed_round
-            || room.activity.phase != CafeActivityPhase::Intermission
+        if room.activity.id != CafeActivityId::CafeRush
+            || room.activity.round_number != round_number
+            || room.activity.phase != CafeActivityPhase::Active
+            || room.activity.completed
         {
             return false;
         }
 
-        let next_round = completed_round.saturating_add(1);
-        room.activity = CafeActivity::for_round(next_round);
+        room.activity.phase = CafeActivityPhase::Intermission;
+        room.activity.ends_at = None;
+        room.activity.combo_expires_at = None;
+        room.activity.next_round_at = Some(
+            Utc::now().timestamp_millis()
+                + i64::try_from(ROUND_INTERMISSION.as_millis()).unwrap_or(i64::MAX),
+        );
         for player in room.players.values_mut() {
             player.carried_tea = 0;
+            player.carried_rush_ingredient_ids.clear();
             player.carried_order_id = None;
         }
+        let _ = room.sender.send(CafeServerMessage::Dialogue {
+            message_key: "cafe.dialogue.rushTimeUp",
+            expression: "neutral",
+        });
         let _ = room.sender.send(CafeServerMessage::Snapshot {
             room: room_state(room),
-        });
-        let _ = room.sender.send(CafeServerMessage::Dialogue {
-            message_key: match room.activity.id {
-                CafeActivityId::TeaDelivery => "cafe.dialogue.teaRoundReady",
-                CafeActivityId::TableService => "cafe.dialogue.serviceRoundReady",
-            },
-            expression: "happy",
         });
         true
     }
@@ -842,6 +1005,14 @@ impl CafeHub {
                 });
             }
         }
+    }
+}
+
+async fn run_cafe_rush_timer(cafe: CafeHub, room_id: Uuid, round_number: u32) {
+    tokio::time::sleep(CAFE_RUSH_DURATION).await;
+    if cafe.expire_cafe_rush(room_id, round_number).await {
+        tokio::time::sleep(ROUND_INTERMISSION).await;
+        cafe.start_next_round(room_id, round_number).await;
     }
 }
 
@@ -896,6 +1067,108 @@ fn interact_table_service(
         return CafeInteractionResult::none();
     }
 
+    serve_claimed_order(room, player_id, player_position, target_id)
+}
+
+fn interact_cafe_rush(
+    room: &mut CafeRoom,
+    player_id: Uuid,
+    player_position: (f32, f32),
+    target_id: &str,
+) -> CafeInteractionResult {
+    if target_id != SERVICE_COUNTER_TARGET_ID {
+        return serve_claimed_order(room, player_id, player_position, target_id);
+    }
+
+    let counter = cafe_map_interaction_target(SERVICE_COUNTER_TARGET_ID);
+    if distance_between(player_position, (counter.x, counter.y))
+        > CAFE_MAP_LAYOUT.host_interaction_radius
+    {
+        return CafeInteractionResult::none();
+    }
+    if room
+        .players
+        .get(&player_id)
+        .is_some_and(|player| player.carried_order_id.is_some())
+    {
+        let _ = room.sender.send(CafeServerMessage::Dialogue {
+            message_key: "cafe.dialogue.serviceAlreadyCarrying",
+            expression: "neutral",
+        });
+        return CafeInteractionResult::none();
+    }
+
+    let has_ingredient = room
+        .players
+        .get(&player_id)
+        .is_some_and(|player| !player.carried_rush_ingredient_ids.is_empty());
+    if has_ingredient {
+        if let Some(order) = room
+            .activity
+            .table_orders
+            .iter_mut()
+            .find(|order| order.status == CafeTableOrderStatus::WaitingIngredient)
+        {
+            order.status = CafeTableOrderStatus::Available;
+            if let Some(player) = room.players.get_mut(&player_id) {
+                player.carried_tea = player.carried_tea.saturating_sub(1);
+                player.carried_rush_ingredient_ids.pop();
+            }
+            let _ = room.sender.send(CafeServerMessage::Dialogue {
+                message_key: "cafe.dialogue.rushOrderPrepared",
+                expression: "happy",
+            });
+            let _ = room.sender.send(CafeServerMessage::Snapshot {
+                room: room_state(room),
+            });
+            return CafeInteractionResult::none();
+        }
+    }
+
+    if let Some(order) = room
+        .activity
+        .table_orders
+        .iter_mut()
+        .find(|order| order.status == CafeTableOrderStatus::Available)
+    {
+        order.status = CafeTableOrderStatus::Claimed;
+        order.claimed_by = Some(player_id);
+        if let Some(player) = room.players.get_mut(&player_id) {
+            player.carried_order_id = Some(order.id.clone());
+        }
+        let _ = room.sender.send(CafeServerMessage::Dialogue {
+            message_key: "cafe.dialogue.rushOrderPickedUp",
+            expression: "happy",
+        });
+        let _ = room.sender.send(CafeServerMessage::Snapshot {
+            room: room_state(room),
+        });
+        return CafeInteractionResult::none();
+    }
+
+    let message_key = if room
+        .activity
+        .table_orders
+        .iter()
+        .any(|order| order.status == CafeTableOrderStatus::WaitingIngredient)
+    {
+        "cafe.dialogue.rushFindIngredient"
+    } else {
+        "cafe.dialogue.serviceOrdersClaimed"
+    };
+    let _ = room.sender.send(CafeServerMessage::Dialogue {
+        message_key,
+        expression: "neutral",
+    });
+    CafeInteractionResult::none()
+}
+
+fn serve_claimed_order(
+    room: &mut CafeRoom,
+    player_id: Uuid,
+    player_position: (f32, f32),
+    target_id: &str,
+) -> CafeInteractionResult {
     let Some(order_index) = room
         .activity
         .table_orders
@@ -931,11 +1204,28 @@ fn interact_table_service(
         .delivered
         .saturating_add(1)
         .min(room.activity.target);
+    if room.activity.id == CafeActivityId::CafeRush {
+        let now = Utc::now().timestamp_millis();
+        room.activity.combo = if room
+            .activity
+            .combo_expires_at
+            .is_some_and(|expires_at| expires_at >= now)
+        {
+            room.activity.combo.saturating_add(1)
+        } else {
+            1
+        };
+        room.activity.best_combo = room.activity.best_combo.max(room.activity.combo);
+        room.activity.combo_expires_at =
+            Some(now + i64::try_from(CAFE_RUSH_COMBO_WINDOW.as_millis()).unwrap_or(i64::MAX));
+    }
     let completed_now = !room.activity.completed && room.activity.delivered >= room.activity.target;
     room.activity.completed = room.activity.completed || completed_now;
     let completed_round = completed_now.then_some(room.activity.round_number);
     if completed_now {
         room.activity.phase = CafeActivityPhase::Intermission;
+        room.activity.ends_at = None;
+        room.activity.combo_expires_at = None;
         room.activity.next_round_at = Some(
             Utc::now().timestamp_millis()
                 + i64::try_from(ROUND_INTERMISSION.as_millis()).unwrap_or(i64::MAX),
@@ -949,6 +1239,8 @@ fn interact_table_service(
     let _ = room.sender.send(CafeServerMessage::Dialogue {
         message_key: if completed_now {
             "cafe.dialogue.roundComplete"
+        } else if room.activity.id == CafeActivityId::CafeRush {
+            "cafe.dialogue.rushOrderDelivered"
         } else {
             "cafe.dialogue.serviceDelivered"
         },
@@ -1331,6 +1623,7 @@ fn new_player(
         direction: Direction::Up,
         moving: false,
         carried_tea: 0,
+        carried_rush_ingredient_ids: Vec::new(),
         carried_order_id: None,
         equipped_cosmetic,
         last_sequence: 0,
@@ -1349,7 +1642,7 @@ fn new_room(is_private: bool, rooms: &HashMap<Uuid, CafeRoom>) -> CafeRoom {
         invite_code,
         is_private,
         players: HashMap::new(),
-        activity: CafeActivity::for_round(1),
+        activity: CafeActivity::for_round(1, 0),
         sender,
     }
 }
@@ -1846,6 +2139,167 @@ mod tests {
         assert_eq!(completion.awarded_owners.len(), 1);
         let duplicate = hub.interact(room.id, first.id, &released_order_id).await;
         assert_eq!(duplicate.completed_round, None);
+    }
+
+    #[tokio::test]
+    async fn cafe_rush_scales_and_moves_ingredients_through_the_order_pipeline() {
+        let hub = CafeHub::default();
+        let room = hub.create_room(false).await;
+        let first = guest();
+        let second = guest();
+        let counter = cafe_map_interaction_target(SERVICE_COUNTER_TARGET_ID);
+        hub.join(room.id, new_player(&first, "Guest RUSH".to_owned(), None))
+            .await
+            .expect("first player should join");
+        hub.join(
+            room.id,
+            new_player(&second, "Guest HELPER".to_owned(), None),
+        )
+        .await
+        .expect("second player should join");
+        let ingredient = {
+            let mut rooms = hub.rooms.lock().await;
+            let room = rooms.get_mut(&room.id).expect("room should exist");
+            room.activity = CafeActivity::cafe_rush(3, room.players.len());
+            let ingredient = room.activity.tea_leaves[0].clone();
+            let player = room
+                .players
+                .get_mut(&first.id)
+                .expect("first player should exist");
+            player.x = ingredient.x;
+            player.y = ingredient.y;
+            ingredient
+        };
+
+        hub.interact(room.id, first.id, &ingredient.id).await;
+        {
+            let mut rooms = hub.rooms.lock().await;
+            let player = rooms
+                .get_mut(&room.id)
+                .and_then(|room| room.players.get_mut(&first.id))
+                .expect("first player should exist");
+            player.x = counter.x;
+            player.y = counter.y + 80.0;
+        }
+        hub.interact(room.id, first.id, SERVICE_COUNTER_TARGET_ID)
+            .await;
+        {
+            let rooms = hub.rooms.lock().await;
+            let room = rooms.get(&room.id).expect("room should exist");
+            assert_eq!(room.activity.target, 4);
+            assert_eq!(room.players[&first.id].carried_tea, 0);
+            assert_eq!(
+                room.activity.table_orders[0].status,
+                CafeTableOrderStatus::Available
+            );
+        }
+
+        hub.interact(room.id, first.id, SERVICE_COUNTER_TARGET_ID)
+            .await;
+        let order = {
+            let mut rooms = hub.rooms.lock().await;
+            let room = rooms.get_mut(&room.id).expect("room should exist");
+            let order_id = room.players[&first.id]
+                .carried_order_id
+                .clone()
+                .expect("prepared order should be claimed");
+            let order = room
+                .activity
+                .table_orders
+                .iter()
+                .find(|order| order.id == order_id)
+                .expect("claimed order should exist")
+                .clone();
+            let player = room
+                .players
+                .get_mut(&first.id)
+                .expect("first player should exist");
+            player.x = order.x;
+            player.y = order.y + 50.0;
+            order
+        };
+        hub.interact(room.id, first.id, &order.id).await;
+
+        let rooms = hub.rooms.lock().await;
+        let activity = &rooms.get(&room.id).expect("room should exist").activity;
+        assert_eq!(activity.delivered, 1);
+        assert_eq!(activity.combo, 1);
+        assert_eq!(activity.best_combo, 1);
+        assert!(activity.combo_expires_at.is_some());
+        assert!(activity.ends_at.is_some());
+    }
+
+    #[tokio::test]
+    async fn cafe_rush_disconnect_returns_work_and_timeout_unblocks_the_room() {
+        let hub = CafeHub::default();
+        let room = hub.create_room(false).await;
+        let ingredient_holder = guest();
+        let order_holder = guest();
+        let observer = guest();
+        for (session, name) in [
+            (&ingredient_holder, "Guest LEAF"),
+            (&order_holder, "Guest ORDER"),
+            (&observer, "Guest WATCH"),
+        ] {
+            hub.join(room.id, new_player(session, name.to_owned(), None))
+                .await
+                .expect("player should join");
+        }
+        let (ingredient_id, order_id) = {
+            let mut rooms = hub.rooms.lock().await;
+            let room = rooms.get_mut(&room.id).expect("room should exist");
+            room.activity = CafeActivity::cafe_rush(3, room.players.len());
+            let ingredient_id = room.activity.tea_leaves[0].id.clone();
+            room.activity.tea_leaves[0].available = false;
+            let order_id = room.activity.table_orders[0].id.clone();
+            room.activity.table_orders[0].status = CafeTableOrderStatus::Claimed;
+            room.activity.table_orders[0].claimed_by = Some(order_holder.id);
+            let ingredient_player = room
+                .players
+                .get_mut(&ingredient_holder.id)
+                .expect("ingredient holder should exist");
+            ingredient_player.carried_tea = 1;
+            ingredient_player
+                .carried_rush_ingredient_ids
+                .push(ingredient_id.clone());
+            room.players
+                .get_mut(&order_holder.id)
+                .expect("order holder should exist")
+                .carried_order_id = Some(order_id.clone());
+            (ingredient_id, order_id)
+        };
+
+        hub.leave(room.id, ingredient_holder.id).await;
+        hub.leave(room.id, order_holder.id).await;
+        {
+            let rooms = hub.rooms.lock().await;
+            let room = rooms
+                .get(&room.id)
+                .expect("observer should keep room alive");
+            assert!(room
+                .activity
+                .tea_leaves
+                .iter()
+                .find(|ingredient| ingredient.id == ingredient_id)
+                .is_some_and(|ingredient| ingredient.available));
+            let order = room
+                .activity
+                .table_orders
+                .iter()
+                .find(|order| order.id == order_id)
+                .expect("released order should remain");
+            assert_eq!(order.status, CafeTableOrderStatus::Available);
+            assert_eq!(order.claimed_by, None);
+        }
+
+        assert!(hub.expire_cafe_rush(room.id, 3).await);
+        assert!(!hub.expire_cafe_rush(room.id, 3).await);
+        let rooms = hub.rooms.lock().await;
+        let activity = &rooms.get(&room.id).expect("room should remain").activity;
+        assert_eq!(activity.phase, CafeActivityPhase::Intermission);
+        assert!(!activity.completed);
+        assert!(activity.ends_at.is_none());
+        assert!(activity.next_round_at.is_some());
     }
 
     #[tokio::test]

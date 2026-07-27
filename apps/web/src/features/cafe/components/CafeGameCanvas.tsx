@@ -25,6 +25,9 @@ type CafeGameCanvasProps = {
 		serveDrink: string;
 		findCounter: string;
 		findTable: string;
+		prepareOrder: string;
+		findIngredient: string;
+		returnIngredient: string;
 		idle: string;
 	};
 	loadingLabel: string;
@@ -49,6 +52,9 @@ function CafeGameCanvas({
 	const [interactionTarget, setInteractionTarget] = useState<string | null>(null);
 	const selfPlayer = room?.players.find((player) => player.id === selfPlayerId);
 	const carriedTea = selfPlayer?.carriedTea ?? 0;
+	const isCafeRush = room?.activity.id === "cafe_rush";
+	const isServiceActivity =
+		room?.activity.id === "table_service" || room?.activity.id === "cafe_rush";
 	const carriedOrder = room?.activity.tableOrders.find(
 		(order) =>
 			order.id === selfPlayer?.carriedOrderId &&
@@ -65,34 +71,48 @@ function CafeGameCanvas({
 			room.mapLayout.hostInteractionRadius;
 	const effectiveInteractionTarget = staleTeaTarget
 		? carriedTea > 0 && isNearAiko
-			? "aiko"
+			? isCafeRush
+				? "service-counter"
+				: "aiko"
 			: null
 		: interactionTarget;
 	const tableTargetIsStale =
-		room?.activity.id === "table_service" &&
+		isServiceActivity &&
 		effectiveInteractionTarget !== null &&
 		(effectiveInteractionTarget === "service-counter"
 			? Boolean(selfPlayer?.carriedOrderId) ||
-				!room.activity.tableOrders.some((order) => order.status === "available")
+				(isCafeRush
+					? carriedTea === 0 &&
+						!room.activity.tableOrders.some((order) => order.status === "available")
+					: !room.activity.tableOrders.some((order) => order.status === "available"))
 			: effectiveInteractionTarget.startsWith("order-") &&
 				effectiveInteractionTarget !== carriedOrder?.id);
 	const currentInteractionTarget = tableTargetIsStale ? null : effectiveInteractionTarget;
-	const interactionLabel =
-		room?.activity.id === "table_service"
-			? currentInteractionTarget === "service-counter"
-				? interactionLabels.pickUpDrink
-				: currentInteractionTarget?.startsWith("order-")
-					? interactionLabels.serveDrink
-					: carriedOrder
-						? interactionLabels.findTable
+	const interactionLabel = isServiceActivity
+		? currentInteractionTarget === "service-counter"
+			? isCafeRush && carriedTea > 0
+				? interactionLabels.prepareOrder
+				: interactionLabels.pickUpDrink
+			: currentInteractionTarget?.startsWith("order-")
+				? interactionLabels.serveDrink
+				: carriedOrder
+					? interactionLabels.findTable
+					: isCafeRush
+						? carriedTea > 0
+							? interactionLabels.returnIngredient
+							: room?.activity.tableOrders.some(
+										(order) => order.status === "available"
+								  )
+								? interactionLabels.findCounter
+								: interactionLabels.findIngredient
 						: interactionLabels.findCounter
-			: currentInteractionTarget
-				? currentInteractionTarget === "aiko"
-					? carriedTea > 0
-						? interactionLabels.deliverTea
-						: interactionLabels.talkToAiko
-					: interactionLabels.collectTea
-				: interactionLabels.idle;
+		: currentInteractionTarget
+			? currentInteractionTarget === "aiko"
+				? carriedTea > 0
+					? interactionLabels.deliverTea
+					: interactionLabels.talkToAiko
+				: interactionLabels.collectTea
+			: interactionLabels.idle;
 	movementRef.current = onMovement;
 	interactRef.current = onInteract;
 
@@ -156,7 +176,9 @@ function CafeGameCanvas({
 			selfPlayer !== undefined &&
 			Math.hypot(selfPlayer.x - room.aiko.x, selfPlayer.y - room.aiko.y) <=
 				room.mapLayout.hostInteractionRadius;
-		sceneRef.current?.setInteractionTarget(isNearAiko ? "aiko" : null);
+		sceneRef.current?.setInteractionTarget(
+			isNearAiko ? (room.activity.id === "cafe_rush" ? "service-counter" : "aiko") : null
+		);
 	}, [interactionTarget, room, selfPlayerId]);
 
 	useEffect(() => {

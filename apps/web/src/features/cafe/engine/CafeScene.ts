@@ -314,7 +314,11 @@ export class CafeScene extends Phaser.Scene {
 				this.createTableOrder(order.id, order.x, order.y, order.drink);
 			visual.setVisible(order.status !== "served");
 			visual.setAlpha(
-				order.status === "available" || order.claimedBy === this.selfPlayerId ? 1 : 0.46
+				order.status === "waiting_ingredient"
+					? 0.28
+					: order.status === "available" || order.claimedBy === this.selfPlayerId
+						? 1
+						: 0.46
 			);
 			visual.setScale(order.claimedBy === this.selfPlayerId ? 1.12 : 1);
 		}
@@ -324,7 +328,10 @@ export class CafeScene extends Phaser.Scene {
 				(room.activity.id === "tea_delivery"
 					? (selfPlayer?.carriedTea ?? 0) > 0
 					: !selfPlayer?.carriedOrderId &&
-						room.activity.tableOrders.some((order) => order.status === "available"))
+						((room.activity.id === "cafe_rush" && (selfPlayer?.carriedTea ?? 0) > 0) ||
+							room.activity.tableOrders.some(
+								(order) => order.status === "available"
+							)))
 		);
 		if (this.aiko) {
 			this.aiko.setTint(room.activity.completed ? 0xfff2b8 : 0xffffff);
@@ -469,7 +476,10 @@ export class CafeScene extends Phaser.Scene {
 		);
 		let nextTarget: string | null = null;
 		const selfPlayer = this.room.players.find((player) => player.id === this.selfPlayerId);
-		if (this.room.activity.id === "tea_delivery") {
+		if (
+			this.room.activity.id === "tea_delivery" ||
+			(this.room.activity.id === "cafe_rush" && !selfPlayer?.carriedOrderId)
+		) {
 			let nearestDistance = Number.POSITIVE_INFINITY;
 			for (const leaf of this.room.activity.teaLeaves) {
 				if (!leaf.available) {
@@ -489,17 +499,22 @@ export class CafeScene extends Phaser.Scene {
 					nearestDistance = distance;
 				}
 			}
-			const aikoDistance = Phaser.Math.Distance.Between(
+			const counterDistance = Phaser.Math.Distance.Between(
 				localPosition.x,
 				localPosition.y,
 				this.room.aiko.x,
 				this.room.aiko.y
 			);
+			const canUseCounter =
+				this.room.activity.id === "tea_delivery" ||
+				(selfPlayer?.carriedTea ?? 0) > 0 ||
+				this.room.activity.tableOrders.some((order) => order.status === "available");
 			if (
-				aikoDistance <= this.room.mapLayout.hostInteractionRadius &&
-				aikoDistance < nearestDistance
+				canUseCounter &&
+				counterDistance <= this.room.mapLayout.hostInteractionRadius &&
+				counterDistance < nearestDistance
 			) {
-				nextTarget = "aiko";
+				nextTarget = this.room.activity.id === "cafe_rush" ? "service-counter" : "aiko";
 			}
 		} else if (selfPlayer?.carriedOrderId) {
 			const order = this.room.activity.tableOrders.find(
@@ -515,7 +530,10 @@ export class CafeScene extends Phaser.Scene {
 			) {
 				nextTarget = order.id;
 			}
-		} else if (this.room.activity.tableOrders.some((order) => order.status === "available")) {
+		} else if (
+			(this.room.activity.id === "cafe_rush" && (selfPlayer?.carriedTea ?? 0) > 0) ||
+			this.room.activity.tableOrders.some((order) => order.status === "available")
+		) {
 			const counterDistance = Phaser.Math.Distance.Between(
 				localPosition.x,
 				localPosition.y,

@@ -50,12 +50,16 @@ type ApiRoom = {
 	};
 	players: ApiPlayer[];
 	activity: {
-		id: "tea_delivery" | "table_service";
+		id: "tea_delivery" | "table_service" | "cafe_rush";
 		round_number: number;
 		phase: "active" | "intermission";
 		next_round_at: number | null;
+		ends_at: number | null;
 		delivered: number;
 		target: number;
+		combo: number;
+		best_combo: number;
+		combo_expires_at: number | null;
 		completed: boolean;
 		tea_leaves: Array<{ id: string; x: number; y: number; available: boolean }>;
 		table_orders: Array<{
@@ -64,7 +68,7 @@ type ApiRoom = {
 			drink: "sakura" | "mint" | "classic";
 			x: number;
 			y: number;
-			status: "available" | "claimed" | "served";
+			status: "waiting_ingredient" | "available" | "claimed" | "served";
 			claimed_by: string | null;
 		}>;
 	};
@@ -360,8 +364,12 @@ function toRoomState(room: ApiRoom): CafeRoomState {
 			roundNumber: room.activity.round_number,
 			phase: room.activity.phase,
 			nextRoundAt: room.activity.next_round_at,
+			endsAt: room.activity.ends_at ?? null,
 			delivered: room.activity.delivered,
 			target: room.activity.target,
+			combo: room.activity.combo ?? 0,
+			bestCombo: room.activity.best_combo ?? 0,
+			comboExpiresAt: room.activity.combo_expires_at ?? null,
 			completed: room.activity.completed,
 			teaLeaves: room.activity.tea_leaves.map((leaf) => ({
 				id: leaf.id,

@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-const cafeUrl = "http://localhost:5173/cafe";
+const cafeUrl = process.env.WFCHAT_CAFE_E2E_URL ?? "http://localhost:5173/cafe";
 
 test.describe.configure({ mode: "serial" });
 
@@ -152,6 +152,61 @@ test("a full-room server response offers clear recovery actions", async ({ page 
 	await expect(page.getByRole("button", { name: /Try again|ลองอีกครั้ง/ })).toBeVisible();
 });
 
+test("Cafe Rush exposes its shared timer, combo, and ingredient handoff on mobile", async ({
+	page
+}) => {
+	const rushRoomId = "00000000-0000-4000-8000-000000000005";
+	const room = cafeRoomFixture(rushRoomId);
+	room.players[0].carried_tea = 1;
+	room.activity = {
+		id: "cafe_rush",
+		round_number: 3,
+		phase: "active",
+		next_round_at: null,
+		ends_at: Date.now() + 60_000,
+		delivered: 1,
+		target: 3,
+		combo: 2,
+		best_combo: 2,
+		combo_expires_at: Date.now() + 10_000,
+		completed: false,
+		tea_leaves: [],
+		table_orders: [
+			{
+				...tableOrder("order-3-1", "window", "sakura"),
+				status: "waiting_ingredient" as const
+			}
+		]
+	};
+	await page.routeWebSocket(new RegExp(`/api/cafe/rooms/${rushRoomId}/ws$`), (socket) => {
+		setTimeout(() => {
+			socket.send(
+				JSON.stringify({
+					type: "welcome",
+					self_player_id: room.players[0].id,
+					cafe_stars: 4,
+					room
+				})
+			);
+		}, 50);
+	});
+
+	await page.setViewportSize({ width: 390, height: 844 });
+	await page.goto(`${cafeUrl}/rooms/${rushRoomId}`);
+
+	await expect(page.getByRole("dialog")).toContainText(
+		/Beat the Cafe Rush together|ช่วยกันผ่านช่วงเร่งด่วน/
+	);
+	await expect(page.getByTestId("cafe-rush-timer")).toContainText(/left|เหลือ/);
+	await expect(page.getByTestId("cafe-rush-combo")).toContainText(/2/);
+	await expect(page.getByTestId("cafe-quest-hint-mobile")).toContainText(
+		/Return to the counter|กลับเคาน์เตอร์/
+	);
+	await expect(
+		page.getByRole("button", { name: /Prepare rush order|เตรียมออเดอร์ด่วน/ })
+	).toBeVisible();
+});
+
 test("tea delivery rotates into table service with one reward per round", async ({ page }) => {
 	const room = cafeRoomFixture();
 	const rewardedRounds = new Set<number>();
@@ -248,8 +303,12 @@ test("tea delivery rotates into table service with one reward per round", async 
 						round_number: 2,
 						phase: "active",
 						next_round_at: null,
+						ends_at: null,
 						delivered: 0,
 						target: 3,
+						combo: 0,
+						best_combo: 0,
+						combo_expires_at: null,
 						completed: false,
 						tea_leaves: [],
 						table_orders: [
@@ -417,8 +476,12 @@ function cafeRoomFixture(id = "00000000-0000-4000-8000-000000000003") {
 			round_number: 1,
 			phase: "active",
 			next_round_at: null,
+			ends_at: null,
 			delivered: 0,
 			target: 3,
+			combo: 0,
+			best_combo: 0,
+			combo_expires_at: null,
 			completed: false,
 			tea_leaves: [
 				{ id: "tea-1", x: 640, y: 350, available: true },
@@ -442,7 +505,7 @@ function tableOrder(
 		drink,
 		x: 640,
 		y: 350,
-		status: "available" as "available" | "claimed" | "served",
+		status: "available" as "waiting_ingredient" | "available" | "claimed" | "served",
 		claimed_by: null as string | null
 	};
 }

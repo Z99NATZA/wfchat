@@ -14,15 +14,22 @@ chat and is available at `/cafe` without login.
   movement and interaction controls.
 - First-time guidance and nearby prompts explain the current activity. Help
   remains available from the activity HUD.
-- Round one is Tea Delivery. Odd rounds place three leaves around the Cafe for
-  players to collect and return to Aiko. Even rounds are Table Service: players
-  collect one prepared drink at a time from Aiko and deliver it to the matching
-  marked table.
+- Activities rotate through Tea Delivery, Table Service, and Cafe Rush. Tea
+  Delivery places three leaves around the Cafe for players to collect and return
+  to Aiko. Table Service lets players collect one prepared drink at a time from
+  Aiko and deliver it to the matching marked table.
 - Table Service has three server-owned orders. An order can be claimed by only
   one player, and disconnecting releases that player's unfinished order.
-- Completing either activity starts an eight-second intermission before the
-  next alternating round. Each connected player can receive one Cafe Star per
-  completed round.
+- Cafe Rush is a 90-second shared round. Its target scales from three orders for
+  one player up to six orders for four or more players. Players collect glowing
+  ingredients, prepare drinks at Aiko's counter, then any player can claim each
+  prepared drink and deliver it to the marked table.
+- Rush deliveries made within 15 seconds of the previous delivery extend the
+  shared combo. Disconnecting returns carried Rush ingredients and claimed
+  drinks so another player can continue. A timed-out Rush moves to intermission
+  without awarding a star and never blocks later rounds.
+- Completing an activity starts an eight-second intermission before the next
+  round. Each connected player can receive one Cafe Star per completed round.
 - Cafe Stars unlock the server-owned Sakura Pin, Mint Scarf, Tea Hat, and Cafe
   Apron at 0, 3, 5, and 8 stars. Equipped items are visible to all room members
   in real time.
@@ -72,14 +79,16 @@ Lobby, progress, and cosmetic operations use `/api/cafe/*`:
 
 WebSocket client messages are `move`, `interact`, `emote`, and `ping`. Server
 messages are `welcome`, `snapshot`, localized-key `dialogue`, `emote`, targeted
-`reward`, `pong`, and `error`. Room snapshots identify `tea_delivery` or
-`table_service`; Table Service snapshots include order table, drink, claim,
-and delivery state. Each room state also carries the versioned authoritative map
-layout used by the client. Stable terminal error codes are `room_not_found`,
+`reward`, `pong`, and `error`. Room snapshots identify `tea_delivery`,
+`table_service`, or `cafe_rush`. Service snapshots include order table, drink,
+preparation, claim, and delivery state; Rush snapshots also include its deadline
+and current and best combo. Each room state carries the versioned authoritative
+map layout used by the client. Stable terminal error codes are `room_not_found`,
 `room_full`, and `rate_limited`.
 
 The API is authoritative for room capacity, collision, coordinates, movement
 speed, activity rotation, inventory, Table Service claims, completion, rewards,
+Cafe Rush deadlines, order preparation, combo windows, player-count scaling,
 cosmetics, and allowed emotes. It validates browser origins, message rate, JSON
 shape, interaction distance, target ownership, and monotonic movement sequence
 numbers. The client predicts local movement from the server-provided layout and
@@ -119,6 +128,6 @@ context in a room. Free-text public chat is out of scope.
 ## Current Limits
 
 Rooms do not survive an API restart and are not shared across API instances.
-The game has one map, two alternating activities, and four cosmetics. It has no
+The game has one map, three rotating activities, and four cosmetics. It has no
 regional matchmaking, moderation UI, free-text chat, AI room dialogue, or
 spectator mode.

@@ -1,5 +1,5 @@
 export type CafeDirection = "up" | "down" | "left" | "right";
-export type CafeActivityId = "tea_delivery" | "table_service";
+export type CafeActivityId = "tea_delivery" | "table_service" | "cafe_rush";
 
 export type CafeConnectionState =
 	"connecting" | "connected" | "offline" | "reconnecting" | "closed";
@@ -47,8 +47,12 @@ export type CafeActivityState = {
 	roundNumber: number;
 	phase: "active" | "intermission";
 	nextRoundAt: number | null;
+	endsAt: number | null;
 	delivered: number;
 	target: number;
+	combo: number;
+	bestCombo: number;
+	comboExpiresAt: number | null;
 	completed: boolean;
 	teaLeaves: CafeTeaLeaf[];
 	tableOrders: CafeTableOrder[];
@@ -60,7 +64,7 @@ export type CafeTableOrder = {
 	drink: "sakura" | "mint" | "classic";
 	x: number;
 	y: number;
-	status: "available" | "claimed" | "served";
+	status: "waiting_ingredient" | "available" | "claimed" | "served";
 	claimedBy: string | null;
 };
 

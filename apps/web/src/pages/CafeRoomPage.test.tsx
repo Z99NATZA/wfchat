@@ -240,8 +240,12 @@ describe("CafeRoomPage", () => {
 			roundNumber: 2,
 			phase: "active",
 			nextRoundAt: null,
+			endsAt: null,
 			delivered: 1,
 			target: 3,
+			combo: 0,
+			bestCombo: 0,
+			comboExpiresAt: null,
 			completed: false,
 			teaLeaves: [],
 			tableOrders: [
@@ -281,6 +285,59 @@ describe("CafeRoomPage", () => {
 		expect(gameCanvas.props?.interactionLabels.serveDrink).toBe("cafe.tableService.serve");
 	});
 
+	it("shows Cafe Rush timer, combo, ingredient handoff, and mobile guidance", () => {
+		const room = roomFixture();
+		room.activity = {
+			id: "cafe_rush",
+			roundNumber: 3,
+			phase: "active",
+			nextRoundAt: null,
+			endsAt: Date.now() + 60_000,
+			delivered: 1,
+			target: 4,
+			combo: 2,
+			bestCombo: 2,
+			comboExpiresAt: Date.now() + 10_000,
+			completed: false,
+			teaLeaves: [],
+			tableOrders: [
+				{
+					id: "order-3-1",
+					tableId: "window",
+					drink: "sakura",
+					x: 250,
+					y: 383,
+					status: "waiting_ingredient",
+					claimedBy: null
+				}
+			]
+		};
+		room.players[0].carriedTea = 1;
+		Object.assign(roomHook.value, {
+			room,
+			selfPlayerId: room.players[0].id,
+			connectionState: "connected",
+			error: null
+		});
+
+		renderRoomPage();
+
+		expect(screen.getByRole("dialog").textContent).toContain("cafe.rush.guideTitle");
+		expect(screen.getByTestId("cafe-rush-timer").textContent).toContain("cafe.rush.timer");
+		expect(screen.getByTestId("cafe-rush-combo").textContent).toContain("cafe.rush.combo");
+		expect(screen.getByTestId("cafe-carried-tea").textContent).toContain(
+			"cafe.rush.carryingIngredient"
+		);
+		expect(screen.getByTestId("cafe-quest-hint-desktop").textContent).toBe(
+			"cafe.rush.prepareHintDesktop"
+		);
+		expect(screen.getByTestId("cafe-quest-hint-mobile").textContent).toBe(
+			"cafe.rush.prepareHintMobile"
+		);
+		expect(gameCanvas.props?.interactionLabels.prepareOrder).toBe("cafe.rush.prepareOrder");
+		expect(gameCanvas.props?.interactionLabels.findIngredient).toBe("cafe.rush.findIngredient");
+	});
+
 	it("blocks room controls immediately while the browser is offline", () => {
 		const room = roomFixture();
 		Object.assign(roomHook.value, {
@@ -310,6 +367,7 @@ describe("CafeRoomPage", () => {
 			roundNumber: 2,
 			phase: "intermission",
 			nextRoundAt: Date.now() + 5_000,
+			endsAt: null,
 			delivered: 3,
 			completed: true
 		};
@@ -384,8 +442,12 @@ function roomFixture(): CafeRoomState {
 			roundNumber: 1,
 			phase: "active",
 			nextRoundAt: null,
+			endsAt: null,
 			delivered: 1,
 			target: 3,
+			combo: 0,
+			bestCombo: 0,
+			comboExpiresAt: null,
 			completed: false,
 			teaLeaves: [],
 			tableOrders: []
