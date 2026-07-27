@@ -1,5 +1,7 @@
 # WaifuChat
 
+2026-05-27
+
 WaifuChat is a full-stack chat app with a React frontend, Rust API, and PostgreSQL database.
 
 ![WaifuChat interface](docs/images/wfchat-chat-interface.png)

@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
 
 const currentDir = path.dirname(fileURLToPath(import.meta.url));
+const apiProxyTarget = process.env.WFCHAT_API_PROXY_TARGET ?? "http://localhost:8080";
 
 const markdownChunkPackages = [
 	"react-markdown",
@@ -66,7 +67,7 @@ export default defineConfig({
 		port: 5173,
 		proxy: {
 			"/api": {
-				target: "http://localhost:8080",
+				target: apiProxyTarget,
 				changeOrigin: true
 			}
 		}

@@ -80,3 +80,53 @@ jobs:
 
       - name: Run Clippy
         run: cargo clippy -- -D warnings
+
+  e2e:
+    name: E2E Smoke
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: wfchat_e2e
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d wfchat_e2e"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+
+      - name: Install web dependencies
+        run: npm ci --prefix apps/web
+
+      - name: Install Chromium
+        run: npx --prefix apps/web playwright install chromium --with-deps
+
+      - name: Run full-stack smoke test
+        env:
+          WFCHAT_E2E_DATABASE_URL: postgres://postgres:postgres@localhost:5432/wfchat_e2e
+        run: npm --prefix apps/web run test:e2e:smoke
+
+      - name: Upload Playwright failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: playwright-e2e-smoke
+          path: apps/web/test-results/
+          if-no-files-found: ignore
+          retention-days: 7
