@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Navigate, useNavigate, useParams } from "react-router-dom";
 import {
 	ArrowLeft,
@@ -8,6 +8,7 @@ import {
 	Copy,
 	Flame,
 	Leaf,
+	MessageCircle,
 	Star,
 	Wifi,
 	WifiOff
@@ -23,6 +24,7 @@ import Button from "@/components/ui/Button";
 import AppLayout from "@/layouts/AppLayout";
 import { useI18n } from "@/i18n/i18nContext";
 import CafeGameCanvas from "@/features/cafe/components/CafeGameCanvas";
+import CafeRoomChat from "@/features/cafe/components/CafeRoomChat";
 import { useCafeRoom } from "@/features/cafe/hooks/useCafeRoom";
 import type { CafeConnectionState, CafeRoomErrorCode, CafeRoomState } from "@/features/cafe/types";
 
@@ -51,6 +53,9 @@ function CafeRoomContent({
 	const cafe = useCafeRoom(roomId);
 	const [copied, setCopied] = useState(false);
 	const [showGuide, setShowGuide] = useState(shouldShowCafeGuide);
+	const [showChat, setShowChat] = useState(false);
+	const [unreadChatCount, setUnreadChatCount] = useState(0);
+	const seenLatestChatIdRef = useRef<string | null>(null);
 	const selfPlayer = cafe.room?.players.find((player) => player.id === cafe.selfPlayerId);
 	const carriedTea = selfPlayer?.carriedTea ?? 0;
 	const isTableService = cafe.room?.activity.id === "table_service";
@@ -73,6 +78,21 @@ function CafeRoomContent({
 			? 0
 			: (cafe.room?.activity.combo ?? 0);
 	const isIntermission = cafe.room?.activity.phase === "intermission";
+
+	useEffect(() => {
+		const message = cafe.latestChatMessage;
+		if (!message || seenLatestChatIdRef.current === message.id) {
+			return;
+		}
+		seenLatestChatIdRef.current = message.id;
+		if (message.playerId === cafe.selfPlayerId || showChat) return;
+		setUnreadChatCount((current) => current + 1);
+	}, [cafe.latestChatMessage, cafe.selfPlayerId, showChat]);
+
+	function openChat() {
+		setShowChat(true);
+		setUnreadChatCount(0);
+	}
 
 	function dismissGuide() {
 		setShowGuide(false);
@@ -123,8 +143,9 @@ function CafeRoomContent({
 					room={cafe.room}
 					selfPlayerId={cafe.selfPlayerId}
 					connectionEpoch={cafe.connectionEpoch}
-					inputEnabled={inputEnabled}
+					inputEnabled={inputEnabled && !showChat}
 					emote={cafe.emote}
+					chatMessage={cafe.latestChatMessage}
 					onMovement={cafe.sendMovement}
 					onInteract={cafe.interact}
 					interactionLabels={{
@@ -142,6 +163,39 @@ function CafeRoomContent({
 					}}
 					loadingLabel={t("cafe.room.connecting")}
 				/>
+				{showChat ? (
+					<div
+						className="absolute bottom-16 left-3 z-[65] h-[min(28rem,calc(100%-5rem))] w-[min(22rem,calc(100%-1.5rem))] max-sm:bottom-[calc(max(1rem,env(safe-area-inset-bottom))+13.5rem)] max-sm:right-3 max-sm:h-[min(24rem,calc(100%-15rem))] max-sm:w-auto"
+						data-testid="cafe-chat-panel-position"
+					>
+						<CafeRoomChat
+							events={cafe.chatEvents}
+							selfPlayerId={cafe.selfPlayerId}
+							connected={inputEnabled}
+							error={cafe.chatError}
+							onClose={() => setShowChat(false)}
+							onSend={cafe.sendChat}
+						/>
+					</div>
+				) : (
+					<button
+						type="button"
+						className="absolute bottom-3 left-3 z-40 flex size-11 items-center justify-center rounded-full border border-dialog-border bg-dialog-soft text-app-text shadow-lg transition hover:bg-dialog-panel focus:outline-none focus:ring-4 focus:ring-primary/25 max-sm:bottom-[calc(max(1rem,env(safe-area-inset-bottom))+10rem)]"
+						onClick={openChat}
+						aria-label={t("cafe.chat.open")}
+						data-testid="cafe-chat-open"
+					>
+						<MessageCircle size={19} aria-hidden="true" />
+						{unreadChatCount > 0 && (
+							<span
+								className="absolute -right-1 -top-1 flex min-w-5 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold leading-5 text-white"
+								data-testid="cafe-chat-unread"
+							>
+								{Math.min(unreadChatCount, 99)}
+							</span>
+						)}
+					</button>
+				)}
 				{cafe.room && showGuide && (
 					<CafeWelcomeGuide activityId={cafe.room.activity.id} onDismiss={dismissGuide} />
 				)}

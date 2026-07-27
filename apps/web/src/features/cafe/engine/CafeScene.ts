@@ -1,5 +1,6 @@
 import Phaser from "phaser";
 import type {
+	CafeChatEvent,
 	CafeDirection,
 	CafeEmote,
 	CafeMapLayout,
@@ -42,6 +43,7 @@ type PlayerVisual = {
 	sprite: Phaser.GameObjects.Sprite;
 	accessories: Phaser.GameObjects.Graphics;
 	label: Phaser.GameObjects.Text;
+	chatBubble: Phaser.GameObjects.Text | null;
 	targetX: number;
 	targetY: number;
 	direction: CafeDirection;
@@ -253,6 +255,45 @@ export class CafeScene extends Phaser.Scene {
 		});
 	}
 
+	showChatMessage(event: CafeChatEvent) {
+		if (!this.sys.isActive() || event.kind !== "message" || !event.text) {
+			return;
+		}
+		const visual = this.playerVisuals.get(event.playerId);
+		if (!visual) {
+			return;
+		}
+		visual.chatBubble?.destroy();
+		const bubbleText =
+			event.text.length > 90 ? `${event.text.slice(0, 89).trimEnd()}…` : event.text;
+		const bubble = this.add
+			.text(0, playerLabelY(visual.equippedCosmetic) - 14, bubbleText, {
+				fontFamily: "sans-serif",
+				fontSize: "14px",
+				fontStyle: "bold",
+				color: "#2f2430",
+				backgroundColor: "rgba(255,255,255,0.96)",
+				padding: { x: 9, y: 6 },
+				align: "center",
+				wordWrap: { width: 220, useAdvancedWrap: true }
+			})
+			.setOrigin(0.5, 1);
+		visual.container.add(bubble);
+		visual.chatBubble = bubble;
+		this.tweens.add({
+			targets: bubble,
+			alpha: 0,
+			delay: 4200,
+			duration: 800,
+			onComplete: () => {
+				if (visual.chatBubble === bubble) {
+					visual.chatBubble = null;
+				}
+				bubble.destroy();
+			}
+		});
+	}
+
 	private renderRoom(room: CafeRoomState) {
 		this.applyMapLayout(room.mapLayout);
 		const activePlayerIds = new Set(room.players.map((player) => player.id));
@@ -372,6 +413,7 @@ export class CafeScene extends Phaser.Scene {
 			sprite,
 			accessories,
 			label,
+			chatBubble: null,
 			targetX: player.x,
 			targetY: player.y,
 			direction: player.direction,

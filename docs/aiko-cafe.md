@@ -14,6 +14,10 @@ chat and is available at `/cafe` without login.
   movement and interaction controls.
 - First-time guidance and nearby prompts explain the current activity. Help
   remains available from the activity HUD.
+- Room members can exchange short text messages in a collapsible panel. New
+  messages also appear briefly above the sender's avatar, while join and leave
+  notices and unread counts make other visitors visible without interrupting
+  play.
 - Activities rotate through Tea Delivery, Table Service, and Cafe Rush. Tea
   Delivery places three leaves around the Cafe for players to collect and return
   to Aiko. Table Service lets players collect one prepared drink at a time from
@@ -77,9 +81,11 @@ Lobby, progress, and cosmetic operations use `/api/cafe/*`:
 - `GET /api/cafe/rooms/:roomId/ws?nickname=<temporary-name>` opens the
   authenticated room WebSocket. `nickname` is optional.
 
-WebSocket client messages are `move`, `interact`, `emote`, and `ping`. Server
-messages are `welcome`, `snapshot`, localized-key `dialogue`, `emote`, targeted
-`reward`, `pong`, and `error`. Room snapshots identify `tea_delivery`,
+WebSocket client messages are `move`, `interact`, `emote`, `chat`, and `ping`.
+Server messages are `welcome`, `snapshot`, localized-key `dialogue`, `emote`,
+`chat_event`, `chat_error`, targeted `reward`, `pong`, and `error`. Welcome
+messages include up to 30 recent room chat and presence events. Room snapshots
+identify `tea_delivery`,
 `table_service`, or `cafe_rush`. Service snapshots include order table, drink,
 preparation, claim, and delivery state; Rush snapshots also include its deadline
 and current and best combo. Each room state carries the versioned authoritative
@@ -91,8 +97,11 @@ speed, activity rotation, inventory, Table Service claims, completion, rewards,
 Cafe Rush deadlines, order preparation, combo windows, player-count scaling,
 cosmetics, and allowed emotes. It validates browser origins, message rate, JSON
 shape, interaction distance, target ownership, and monotonic movement sequence
-numbers. The client predicts local movement from the server-provided layout and
-interpolates remote snapshots; it contains no independent collider constants.
+numbers. Room chat is normalized and limited to 200 characters, rejects control
+characters and common web-link prefixes, and allows at most five messages per
+connection in ten seconds. The client predicts local movement from the
+server-provided layout and interpolates remote snapshots; it contains no
+independent collider constants.
 
 When the browser goes offline, gameplay input stops immediately. Controls
 resume only after a reconnected socket receives a fresh `welcome` snapshot.
@@ -112,7 +121,9 @@ points, and local player collision radius when a room URL includes
 
 Cafe dialogue is deterministic and uses public room events only. It does not
 call an AI provider or load automatic memory. Never expose owner-scoped learned
-context in a room. Free-text public chat is out of scope.
+context in a room. Room chat is ephemeral, text-only, scoped to the current Cafe
+room, and removed with the room; it is not written to PostgreSQL or automatic
+memory.
 
 ## Ownership
 
@@ -129,5 +140,5 @@ context in a room. Free-text public chat is out of scope.
 
 Rooms do not survive an API restart and are not shared across API instances.
 The game has one map, three rotating activities, and four cosmetics. It has no
-regional matchmaking, moderation UI, free-text chat, AI room dialogue, or
-spectator mode.
+regional matchmaking, moderation UI, global chat, AI room dialogue, or spectator
+mode.

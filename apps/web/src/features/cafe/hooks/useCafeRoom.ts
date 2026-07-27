@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { cafeSocketUrl } from "@/features/cafe/services/cafeApiService";
 import { readCafePlayerName } from "@/features/cafe/services/cafePlayerName";
 import type {
+	CafeChatErrorCode,
+	CafeChatEvent,
 	CafeConnectionState,
 	CafeDialogue,
 	CafeDirection,
@@ -12,6 +14,16 @@ import type {
 } from "@/features/cafe/types";
 
 const MAX_RECONNECT_ATTEMPTS = 5;
+const CHAT_HISTORY_LIMIT = 30;
+
+type ApiChatEvent = {
+	id: string;
+	kind: CafeChatEvent["kind"];
+	player_id: string;
+	player_name: string;
+	text: string | null;
+	created_at: number;
+};
 
 type ApiPlayer = {
 	id: string;
@@ -76,10 +88,18 @@ type ApiRoom = {
 };
 
 type ServerMessage =
-	| { type: "welcome"; self_player_id: string; cafe_stars: number; room: ApiRoom }
+	| {
+			type: "welcome";
+			self_player_id: string;
+			cafe_stars: number;
+			room: ApiRoom;
+			chat_history?: ApiChatEvent[];
+	  }
 	| { type: "snapshot"; room: ApiRoom }
 	| { type: "dialogue"; message_key: string; expression: CafeDialogue["expression"] }
 	| { type: "emote"; player_id: string; emote: string }
+	| { type: "chat_event"; event: ApiChatEvent }
+	| { type: "chat_error"; code: CafeChatErrorCode }
 	| { type: "reward"; player_id: string; earned_stars: number }
 	| { type: "pong" }
 	| { type: "error"; code?: string; message: string };
@@ -92,6 +112,9 @@ export function useCafeRoom(roomId: string) {
 	const [connectionEpoch, setConnectionEpoch] = useState(0);
 	const [dialogue, setDialogue] = useState<CafeDialogue | null>(null);
 	const [emote, setEmote] = useState<CafeEmote | null>(null);
+	const [chatEvents, setChatEvents] = useState<CafeChatEvent[]>([]);
+	const [latestChatMessage, setLatestChatMessage] = useState<CafeChatEvent | null>(null);
+	const [chatError, setChatError] = useState<CafeChatErrorCode | null>(null);
 	const [error, setError] = useState<CafeRoomErrorCode | null>(null);
 	const [retryKey, setRetryKey] = useState(0);
 	const socketRef = useRef<WebSocket | null>(null);
@@ -112,6 +135,9 @@ export function useCafeRoom(roomId: string) {
 		readyRef.current = false;
 		setConnectionState(onlineRef.current ? "connecting" : "offline");
 		setError(null);
+		setChatEvents([]);
+		setLatestChatMessage(null);
+		setChatError(null);
 		let disposed = false;
 
 		function clearReconnectTimer() {
@@ -214,6 +240,9 @@ export function useCafeRoom(roomId: string) {
 					setSelfPlayerId(message.self_player_id);
 					setCafeStars(message.cafe_stars);
 					setRoom(toRoomState(message.room));
+					setChatEvents((message.chat_history ?? []).map(toChatEvent));
+					setLatestChatMessage(null);
+					setChatError(null);
 					setConnectionEpoch((current) => current + 1);
 					setConnectionState("connected");
 					setError(null);
@@ -238,6 +267,23 @@ export function useCafeRoom(roomId: string) {
 						emote: message.emote,
 						key: emoteKeyRef.current
 					});
+					break;
+				case "chat_event": {
+					const event = toChatEvent(message.event);
+					setChatEvents((current) => {
+						if (current.some((item) => item.id === event.id)) return current;
+						return [...current, event].slice(-CHAT_HISTORY_LIMIT);
+					});
+					if (event.kind === "message") {
+						setLatestChatMessage(event);
+						if (event.playerId === selfPlayerIdRef.current) {
+							setChatError(null);
+						}
+					}
+					break;
+				}
+				case "chat_error":
+					setChatError(message.code);
 					break;
 				case "reward":
 					if (message.player_id === selfPlayerIdRef.current) {
@@ -293,7 +339,9 @@ export function useCafeRoom(roomId: string) {
 		const socket = socketRef.current;
 		if (readyRef.current && onlineRef.current && socket?.readyState === WebSocket.OPEN) {
 			socket.send(JSON.stringify(message));
+			return true;
 		}
+		return false;
 	}, []);
 
 	const sendMovement = useCallback(
@@ -307,6 +355,13 @@ export function useCafeRoom(roomId: string) {
 		[send]
 	);
 	const sendEmote = useCallback((value: string) => send({ type: "emote", emote: value }), [send]);
+	const sendChat = useCallback(
+		(text: string) => {
+			setChatError(null);
+			return send({ type: "chat", text });
+		},
+		[send]
+	);
 	const retryConnection = useCallback(() => {
 		setRoom(null);
 		setSelfPlayerId(null);
@@ -321,11 +376,15 @@ export function useCafeRoom(roomId: string) {
 		connectionState,
 		dialogue,
 		emote,
+		chatEvents,
+		latestChatMessage,
+		chatError,
 		error,
 		retryConnection,
 		sendMovement,
 		interact,
-		sendEmote
+		sendEmote,
+		sendChat
 	};
 }
 
@@ -402,6 +461,17 @@ function toMapLayout(layout: ApiRoom["map_layout"]): CafeMapLayout {
 		playerSpawn: layout.player_spawn,
 		colliders: layout.colliders,
 		interactionTargets: layout.interaction_targets
+	};
+}
+
+function toChatEvent(event: ApiChatEvent): CafeChatEvent {
+	return {
+		id: event.id,
+		kind: event.kind,
+		playerId: event.player_id,
+		playerName: event.player_name,
+		text: event.text,
+		createdAt: event.created_at
 	};
 }
 

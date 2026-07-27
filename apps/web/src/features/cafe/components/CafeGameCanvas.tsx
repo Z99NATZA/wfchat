@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import Phaser from "phaser";
 import { CafeScene } from "@/features/cafe/engine/CafeScene";
-import type { CafeDirection, CafeEmote, CafeRoomState } from "@/features/cafe/types";
+import type { CafeChatEvent, CafeDirection, CafeEmote, CafeRoomState } from "@/features/cafe/types";
 
 type CafeGameCanvasProps = {
 	room: CafeRoomState | null;
@@ -9,6 +9,7 @@ type CafeGameCanvasProps = {
 	connectionEpoch: number;
 	inputEnabled: boolean;
 	emote: CafeEmote | null;
+	chatMessage: CafeChatEvent | null;
 	onMovement: (
 		x: number,
 		y: number,
@@ -39,6 +40,7 @@ function CafeGameCanvas({
 	connectionEpoch,
 	inputEnabled,
 	emote,
+	chatMessage,
 	onMovement,
 	onInteract,
 	interactionLabels,
@@ -204,6 +206,12 @@ function CafeGameCanvas({
 			sceneRef.current?.showEmote(emote);
 		}
 	}, [emote]);
+
+	useEffect(() => {
+		if (chatMessage) {
+			sceneRef.current?.showChatMessage(chatMessage);
+		}
+	}, [chatMessage]);
 
 	function setDirection(x: number, y: number) {
 		if (inputEnabled) {

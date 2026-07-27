@@ -135,3 +135,14 @@ export type CafeEmote = {
 	emote: string;
 	key: number;
 };
+
+export type CafeChatEvent = {
+	id: string;
+	kind: "message" | "joined" | "left";
+	playerId: string;
+	playerName: string;
+	text: string | null;
+	createdAt: number;
+};
+
+export type CafeChatErrorCode = "empty" | "too_long" | "links_not_allowed" | "rate_limited";

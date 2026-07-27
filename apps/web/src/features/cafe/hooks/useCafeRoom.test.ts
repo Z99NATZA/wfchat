@@ -124,7 +124,17 @@ describe("useCafeRoom", () => {
 				type: "welcome",
 				self_player_id: room.players[0].id,
 				cafe_stars: 3,
-				room
+				room,
+				chat_history: [
+					{
+						id: "44444444-4444-4444-8444-444444444444",
+						kind: "joined",
+						player_id: room.players[0].id,
+						player_name: room.players[0].name,
+						text: null,
+						created_at: 1_700_000_000_000
+					}
+				]
 			});
 		});
 
@@ -145,16 +155,22 @@ describe("useCafeRoom", () => {
 			width: 120,
 			height: 122
 		});
+		expect(result.current.chatEvents[0]).toMatchObject({
+			kind: "joined",
+			playerName: "Guest TEST"
+		});
 
 		act(() => {
 			result.current.sendMovement(650, 700, "right", true, 1);
 			result.current.interact("tea-1");
 			result.current.sendEmote("wave");
+			result.current.sendChat("Hello cafe");
 		});
 		expect(first.sent.map((value) => JSON.parse(value))).toEqual([
 			{ type: "move", x: 650, y: 700, direction: "right", moving: true, sequence: 1 },
 			{ type: "interact", target_id: "tea-1" },
-			{ type: "emote", emote: "wave" }
+			{ type: "emote", emote: "wave" },
+			{ type: "chat", text: "Hello cafe" }
 		]);
 		act(() => vi.advanceTimersByTime(10_000));
 		expect(JSON.parse(first.sent.at(-1) ?? "{}")).toEqual({ type: "ping" });
@@ -169,7 +185,7 @@ describe("useCafeRoom", () => {
 		unmount();
 	});
 
-	it("applies public dialogue, emotes, and earned stars", () => {
+	it("applies public dialogue, emotes, room chat, and earned stars", () => {
 		const { result } = renderHook(() => useCafeRoom(room.id));
 		const socket = FakeWebSocket.instances[0];
 		act(() => {
@@ -187,6 +203,18 @@ describe("useCafeRoom", () => {
 			});
 			socket.message({ type: "emote", player_id: room.players[0].id, emote: "tea" });
 			socket.message({
+				type: "chat_event",
+				event: {
+					id: "55555555-5555-4555-8555-555555555555",
+					kind: "message",
+					player_id: room.players[0].id,
+					player_name: "Guest TEST",
+					text: "Tea is ready!",
+					created_at: 1_700_000_000_100
+				}
+			});
+			socket.message({ type: "chat_error", code: "rate_limited" });
+			socket.message({
 				type: "reward",
 				player_id: room.players[0].id,
 				earned_stars: 1
@@ -203,6 +231,9 @@ describe("useCafeRoom", () => {
 			expression: "happy"
 		});
 		expect(result.current.emote?.emote).toBe("tea");
+		expect(result.current.latestChatMessage?.text).toBe("Tea is ready!");
+		expect(result.current.chatEvents.at(-1)?.playerName).toBe("Guest TEST");
+		expect(result.current.chatError).toBe("rate_limited");
 		expect(result.current.cafeStars).toBe(2);
 	});
 

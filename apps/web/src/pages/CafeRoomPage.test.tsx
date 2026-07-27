@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import CafeRoomPage from "@/pages/CafeRoomPage";
 import type {
+	CafeChatEvent,
 	CafeConnectionState,
 	CafeDialogue,
 	CafeRoomErrorCode,
@@ -23,11 +24,15 @@ const roomHook = vi.hoisted(() => ({
 		connectionState: "closed" as CafeConnectionState,
 		dialogue: null as CafeDialogue | null,
 		emote: null,
+		chatEvents: [] as CafeChatEvent[],
+		latestChatMessage: null as CafeChatEvent | null,
+		chatError: null,
 		error: "room_full" as CafeRoomErrorCode | null,
 		retryConnection: vi.fn(),
 		sendMovement: vi.fn(),
 		interact: vi.fn(),
-		sendEmote: vi.fn()
+		sendEmote: vi.fn(),
+		sendChat: vi.fn(() => true)
 	}
 }));
 
@@ -116,6 +121,9 @@ describe("CafeRoomPage", () => {
 			connectionState: "closed",
 			dialogue: null,
 			emote: null,
+			chatEvents: [],
+			latestChatMessage: null,
+			chatError: null,
 			error: "room_full"
 		});
 	});
@@ -336,6 +344,59 @@ describe("CafeRoomPage", () => {
 		);
 		expect(gameCanvas.props?.interactionLabels.prepareOrder).toBe("cafe.rush.prepareOrder");
 		expect(gameCanvas.props?.interactionLabels.findIngredient).toBe("cafe.rush.findIngredient");
+	});
+
+	it("shows unread room chat, presence history, and sends a message without moving", () => {
+		const room = roomFixture();
+		const otherMessage: CafeChatEvent = {
+			id: "44444444-4444-4444-8444-444444444444",
+			kind: "message",
+			playerId: "55555555-5555-4555-8555-555555555555",
+			playerName: "Mint Friend",
+			text: "Hello cafe",
+			createdAt: Date.now()
+		};
+		Object.assign(roomHook.value, {
+			room,
+			selfPlayerId: room.players[0].id,
+			connectionState: "connected",
+			chatEvents: [
+				{
+					...otherMessage,
+					id: "33333333-3333-4333-8333-333333333333",
+					kind: "joined",
+					text: null
+				},
+				otherMessage
+			],
+			latestChatMessage: otherMessage,
+			error: null
+		});
+
+		renderRoomPage();
+
+		expect(screen.getByTestId("cafe-chat-unread").textContent).toBe("1");
+		const openChatButton = screen.getByRole("button", { name: "cafe.chat.open" });
+		expect(openChatButton.className).toContain("bottom-3");
+		expect(openChatButton.className).toContain("left-3");
+		expect(openChatButton.className).toContain("max-sm:bottom-");
+		fireEvent.click(openChatButton);
+		expect(screen.getByTestId("cafe-room-chat")).toBeTruthy();
+		const chatPanelPosition = screen.getByTestId("cafe-chat-panel-position");
+		expect(chatPanelPosition.className).toContain("bottom-16");
+		expect(chatPanelPosition.className).toContain("left-3");
+		expect(chatPanelPosition.className).toContain("max-sm:bottom-");
+		expect(screen.getByTestId("cafe-chat-presence").textContent).toContain(
+			"cafe.chat.playerJoined"
+		);
+		expect(screen.getByTestId("cafe-chat-message").textContent).toContain("Hello cafe");
+		expect(gameCanvas.props?.inputEnabled).toBe(false);
+
+		fireEvent.change(screen.getByLabelText("cafe.chat.inputLabel"), {
+			target: { value: "Nice to meet you" }
+		});
+		fireEvent.click(screen.getByRole("button", { name: "cafe.chat.send" }));
+		expect(roomHook.value.sendChat).toHaveBeenCalledWith("Nice to meet you");
 	});
 
 	it("blocks room controls immediately while the browser is offline", () => {

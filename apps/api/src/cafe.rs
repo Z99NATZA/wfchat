@@ -39,6 +39,10 @@ const ROOM_CAPACITY: usize = 8;
 const MOVE_SPEED: f32 = 210.0;
 const MAX_MESSAGES_PER_WINDOW: usize = 45;
 const MESSAGE_WINDOW: Duration = Duration::from_secs(2);
+const MAX_CHAT_MESSAGES_PER_WINDOW: usize = 5;
+const CHAT_MESSAGE_WINDOW: Duration = Duration::from_secs(10);
+const CHAT_HISTORY_LIMIT: usize = 30;
+const MAX_CHAT_MESSAGE_CHARS: usize = 200;
 const ROUND_INTERMISSION: Duration = Duration::from_secs(8);
 const CAFE_RUSH_DURATION: Duration = Duration::from_secs(90);
 const CAFE_RUSH_COMBO_WINDOW: Duration = Duration::from_secs(15);
@@ -123,6 +127,7 @@ struct CafeRoom {
     is_private: bool,
     players: HashMap<Uuid, CafePlayer>,
     activity: CafeActivity,
+    chat_history: VecDeque<CafeChatEvent>,
     sender: broadcast::Sender<CafeServerMessage>,
 }
 
@@ -244,6 +249,24 @@ struct CafeAikoState {
     x: f32,
     y: f32,
     motion: &'static str,
+}
+
+#[derive(Clone, Serialize)]
+struct CafeChatEvent {
+    id: Uuid,
+    kind: CafeChatEventKind,
+    player_id: Uuid,
+    player_name: String,
+    text: Option<String>,
+    created_at: i64,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+enum CafeChatEventKind {
+    Message,
+    Joined,
+    Left,
 }
 
 #[derive(Clone, Serialize)]
@@ -392,6 +415,9 @@ enum CafeClientMessage {
     Emote {
         emote: String,
     },
+    Chat {
+        text: String,
+    },
     Ping,
 }
 
@@ -402,6 +428,7 @@ enum CafeServerMessage {
         self_player_id: Uuid,
         cafe_stars: u32,
         room: CafeRoomState,
+        chat_history: Vec<CafeChatEvent>,
     },
     Snapshot {
         room: CafeRoomState,
@@ -413,6 +440,12 @@ enum CafeServerMessage {
     Emote {
         player_id: Uuid,
         emote: String,
+    },
+    ChatEvent {
+        event: CafeChatEvent,
+    },
+    ChatError {
+        code: CafeChatErrorCode,
     },
     Reward {
         player_id: Uuid,
@@ -433,6 +466,15 @@ enum CafeErrorCode {
     RateLimited,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+enum CafeChatErrorCode {
+    Empty,
+    TooLong,
+    LinksNotAllowed,
+    RateLimited,
+}
+
 #[derive(Debug, PartialEq, Eq)]
 enum CafeJoinError {
     RoomNotFound,
@@ -442,6 +484,7 @@ enum CafeJoinError {
 struct CafeJoin {
     receiver: broadcast::Receiver<CafeServerMessage>,
     snapshot: CafeRoomState,
+    chat_history: Vec<CafeChatEvent>,
 }
 
 struct CafeInteractionResult {
@@ -650,14 +693,35 @@ impl CafeHub {
             return Err(CafeJoinError::RoomFull);
         }
 
+        let was_present = room.players.contains_key(&player.id);
+        let player_id = player.id;
+        let player_name = player.name.clone();
         let receiver = room.sender.subscribe();
+        let chat_history = room.chat_history.iter().cloned().collect();
         room.players.insert(player.id, player);
         let snapshot = room_state(room);
         let _ = room.sender.send(CafeServerMessage::Snapshot {
             room: snapshot.clone(),
         });
+        if !was_present {
+            push_chat_event(
+                room,
+                CafeChatEvent {
+                    id: Uuid::new_v4(),
+                    kind: CafeChatEventKind::Joined,
+                    player_id,
+                    player_name,
+                    text: None,
+                    created_at: Utc::now().timestamp_millis(),
+                },
+            );
+        }
 
-        Ok(CafeJoin { receiver, snapshot })
+        Ok(CafeJoin {
+            receiver,
+            snapshot,
+            chat_history,
+        })
     }
 
     async fn leave(&self, room_id: Uuid, player_id: Uuid) {
@@ -665,6 +729,7 @@ impl CafeHub {
         let should_remove =
             if let Some(room) = rooms.get_mut(&room_id) {
                 let player = room.players.remove(&player_id);
+                let departed_name = player.as_ref().map(|player| player.name.clone());
                 if let Some(player) = player {
                     for ingredient_id in player.carried_rush_ingredient_ids {
                         if let Some(ingredient) = room
@@ -691,6 +756,19 @@ impl CafeHub {
                     let _ = room.sender.send(CafeServerMessage::Snapshot {
                         room: room_state(room),
                     });
+                    if let Some(player_name) = departed_name {
+                        push_chat_event(
+                            room,
+                            CafeChatEvent {
+                                id: Uuid::new_v4(),
+                                kind: CafeChatEventKind::Left,
+                                player_id,
+                                player_name,
+                                text: None,
+                                created_at: Utc::now().timestamp_millis(),
+                            },
+                        );
+                    }
                     false
                 }
             } else {
@@ -767,6 +845,32 @@ impl CafeHub {
                 emote: emote.to_owned(),
             });
         }
+    }
+
+    async fn chat(
+        &self,
+        room_id: Uuid,
+        player_id: Uuid,
+        text: &str,
+    ) -> Result<(), CafeChatErrorCode> {
+        let text = normalize_cafe_chat_message(text)?;
+        let mut rooms = self.rooms.lock().await;
+        let Some(room) = rooms.get_mut(&room_id) else {
+            return Ok(());
+        };
+        let Some(player) = room.players.get(&player_id) else {
+            return Ok(());
+        };
+        let event = CafeChatEvent {
+            id: Uuid::new_v4(),
+            kind: CafeChatEventKind::Message,
+            player_id,
+            player_name: player.name.clone(),
+            text: Some(text),
+            created_at: Utc::now().timestamp_millis(),
+        };
+        push_chat_event(room, event);
+        Ok(())
     }
 
     async fn interact(
@@ -1422,6 +1526,7 @@ async fn handle_cafe_socket(
             self_player_id: player_id,
             cafe_stars: initial_stars,
             room: joined.snapshot,
+            chat_history: joined.chat_history,
         },
     )
     .await
@@ -1431,6 +1536,7 @@ async fn handle_cafe_socket(
     }
 
     let mut recent_messages = VecDeque::new();
+    let mut recent_chat_messages = VecDeque::new();
     loop {
         tokio::select! {
             incoming = socket.recv() => {
@@ -1490,6 +1596,19 @@ async fn handle_cafe_socket(
                             CafeClientMessage::Emote { emote } => {
                                 state.cafe.emote(room_id, player_id, &emote).await;
                             }
+                            CafeClientMessage::Chat { text } => {
+                                let result = if accept_chat_message(&mut recent_chat_messages) {
+                                    state.cafe.chat(room_id, player_id, &text).await
+                                } else {
+                                    Err(CafeChatErrorCode::RateLimited)
+                                };
+                                if let Err(code) = result {
+                                    let _ = send_socket_message(
+                                        &mut socket,
+                                        &CafeServerMessage::ChatError { code },
+                                    ).await;
+                                }
+                            }
                             CafeClientMessage::Ping => {
                                 if !send_socket_message(&mut socket, &CafeServerMessage::Pong).await {
                                     break;
@@ -1546,6 +1665,50 @@ fn accept_message(recent_messages: &mut VecDeque<Instant>) -> bool {
     }
     recent_messages.push_back(now);
     true
+}
+
+fn accept_chat_message(recent_messages: &mut VecDeque<Instant>) -> bool {
+    let now = Instant::now();
+    while recent_messages
+        .front()
+        .is_some_and(|timestamp| now.duration_since(*timestamp) > CHAT_MESSAGE_WINDOW)
+    {
+        recent_messages.pop_front();
+    }
+    if recent_messages.len() >= MAX_CHAT_MESSAGES_PER_WINDOW {
+        return false;
+    }
+    recent_messages.push_back(now);
+    true
+}
+
+fn normalize_cafe_chat_message(value: &str) -> Result<String, CafeChatErrorCode> {
+    if value.chars().any(char::is_control) {
+        return Err(CafeChatErrorCode::Empty);
+    }
+    let normalized = value.split_whitespace().collect::<Vec<_>>().join(" ");
+    if normalized.is_empty() {
+        return Err(CafeChatErrorCode::Empty);
+    }
+    if normalized.chars().count() > MAX_CHAT_MESSAGE_CHARS {
+        return Err(CafeChatErrorCode::TooLong);
+    }
+    let lowercase = normalized.to_lowercase();
+    if ["http://", "https://", "www."]
+        .iter()
+        .any(|prefix| lowercase.contains(prefix))
+    {
+        return Err(CafeChatErrorCode::LinksNotAllowed);
+    }
+    Ok(normalized)
+}
+
+fn push_chat_event(room: &mut CafeRoom, event: CafeChatEvent) {
+    room.chat_history.push_back(event.clone());
+    while room.chat_history.len() > CHAT_HISTORY_LIMIT {
+        room.chat_history.pop_front();
+    }
+    let _ = room.sender.send(CafeServerMessage::ChatEvent { event });
 }
 
 async fn ensure_cafe_session(
@@ -1643,6 +1806,7 @@ fn new_room(is_private: bool, rooms: &HashMap<Uuid, CafeRoom>) -> CafeRoom {
         is_private,
         players: HashMap::new(),
         activity: CafeActivity::for_round(1, 0),
+        chat_history: VecDeque::new(),
         sender,
     }
 }
@@ -1796,6 +1960,83 @@ mod tests {
         assert_eq!(normalize_cafe_player_name("   "), None);
         assert_eq!(normalize_cafe_player_name("Tea\nFriend"), None);
         assert_eq!(normalize_cafe_player_name(&"a".repeat(25)), None);
+    }
+
+    #[test]
+    fn validates_and_rate_limits_cafe_chat_messages() {
+        assert_eq!(
+            normalize_cafe_chat_message("  hello   คาเฟ่  ").as_deref(),
+            Ok("hello คาเฟ่")
+        );
+        assert!(matches!(
+            normalize_cafe_chat_message(" \t "),
+            Err(CafeChatErrorCode::Empty)
+        ));
+        assert!(matches!(
+            normalize_cafe_chat_message(&"a".repeat(MAX_CHAT_MESSAGE_CHARS + 1)),
+            Err(CafeChatErrorCode::TooLong)
+        ));
+        assert!(matches!(
+            normalize_cafe_chat_message("visit https://example.com"),
+            Err(CafeChatErrorCode::LinksNotAllowed)
+        ));
+
+        let mut recent = VecDeque::from(vec![Instant::now(); MAX_CHAT_MESSAGES_PER_WINDOW]);
+        assert!(!accept_chat_message(&mut recent));
+    }
+
+    #[tokio::test]
+    async fn room_chat_keeps_bounded_history_and_presence_events() {
+        let hub = CafeHub::default();
+        let room = hub.create_room(false).await;
+        let first = guest();
+        let second = guest();
+        let first_join = hub
+            .join(room.id, new_player(&first, "Mint".to_owned(), None))
+            .await
+            .expect("first player should join");
+        assert!(first_join.chat_history.is_empty());
+        let second_join = hub
+            .join(room.id, new_player(&second, "Sakura".to_owned(), None))
+            .await
+            .expect("second player should join");
+        assert_eq!(second_join.chat_history.len(), 1);
+        assert_eq!(second_join.chat_history[0].kind, CafeChatEventKind::Joined);
+
+        hub.chat(room.id, first.id, "  hello   Sakura  ")
+            .await
+            .expect("valid chat should send");
+        hub.leave(room.id, second.id).await;
+
+        {
+            let rooms = hub.rooms.lock().await;
+            let room = rooms
+                .get(&room.id)
+                .expect("first player should keep room alive");
+            let events = room.chat_history.iter().collect::<Vec<_>>();
+            assert_eq!(events[2].kind, CafeChatEventKind::Message);
+            assert_eq!(events[2].player_id, first.id);
+            assert_eq!(events[2].text.as_deref(), Some("hello Sakura"));
+            assert_eq!(
+                events.last().map(|event| event.kind),
+                Some(CafeChatEventKind::Left)
+            );
+        }
+
+        for index in 0..(CHAT_HISTORY_LIMIT + 4) {
+            hub.chat(room.id, first.id, &format!("message {index}"))
+                .await
+                .expect("valid chat should send");
+        }
+        let rooms = hub.rooms.lock().await;
+        let room = rooms.get(&room.id).expect("room should remain");
+        assert_eq!(room.chat_history.len(), CHAT_HISTORY_LIMIT);
+        assert_eq!(
+            room.chat_history
+                .back()
+                .and_then(|event| event.text.as_deref()),
+            Some("message 33")
+        );
     }
 
     #[test]
@@ -1958,6 +2199,14 @@ mod tests {
             .recv()
             .await
             .expect("cosmetic snapshot should send");
+        let updated = if matches!(updated, CafeServerMessage::ChatEvent { .. }) {
+            join.receiver
+                .recv()
+                .await
+                .expect("cosmetic snapshot should follow presence")
+        } else {
+            updated
+        };
         let CafeServerMessage::Snapshot { room } = updated else {
             panic!("expected a room snapshot");
         };

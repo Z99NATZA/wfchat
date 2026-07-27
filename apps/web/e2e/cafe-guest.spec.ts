@@ -61,6 +61,19 @@ test("two guests quick join the same cafe and mobile controls stay usable", asyn
 			fullPage: true
 		});
 
+		await firstPage.getByRole("button", { name: /Open room chat|เปิดแชทในห้อง/ }).click();
+		await firstPage
+			.getByLabel(/Message the cafe room|ส่งข้อความในห้องคาเฟ่/)
+			.fill("Hello from Chrome");
+		await firstPage.getByRole("button", { name: /Send message|ส่งข้อความ/ }).click();
+		await firstPage.getByRole("button", { name: /Close room chat|ปิดแชทในห้อง/ }).click();
+		await expect(secondPage.getByTestId("cafe-chat-unread")).toHaveText("1");
+		await secondPage.getByRole("button", { name: /Open room chat|เปิดแชทในห้อง/ }).click();
+		await expect(secondPage.getByTestId("cafe-chat-history")).toContainText(
+			"Hello from Chrome"
+		);
+		await secondPage.getByRole("button", { name: /Close room chat|ปิดแชทในห้อง/ }).click();
+
 		await firstPage.setViewportSize({ width: 390, height: 844 });
 		await expect(firstPage.getByRole("button", { name: "Up" })).toBeVisible();
 		await expect(
@@ -205,6 +218,78 @@ test("Cafe Rush exposes its shared timer, combo, and ingredient handoff on mobil
 	await expect(
 		page.getByRole("button", { name: /Prepare rush order|เตรียมออเดอร์ด่วน/ })
 	).toBeVisible();
+});
+
+test("room chat shows presence, unread messages, and sends on mobile", async ({ page }) => {
+	const chatRoomId = "00000000-0000-4000-8000-000000000006";
+	const room = cafeRoomFixture(chatRoomId);
+	const friendId = "99999999-9999-4999-8999-999999999999";
+	let sendFriendMessage = () => {};
+	await page.routeWebSocket(new RegExp(`/api/cafe/rooms/${chatRoomId}/ws$`), (socket) => {
+		sendFriendMessage = () => {
+			socket.send(
+				JSON.stringify({
+					type: "chat_event",
+					event: chatEvent(friendId, "Mint Friend", "Hello from another browser")
+				})
+			);
+		};
+		setTimeout(() => {
+			socket.send(
+				JSON.stringify({
+					type: "welcome",
+					self_player_id: room.players[0].id,
+					cafe_stars: 2,
+					room,
+					chat_history: [
+						{
+							...chatEvent(friendId, "Mint Friend", null),
+							kind: "joined"
+						}
+					]
+				})
+			);
+		}, 50);
+		socket.onMessage((value) => {
+			const message = JSON.parse(String(value)) as { type: string; text?: string };
+			if (message.type === "ping") {
+				socket.send(JSON.stringify({ type: "pong" }));
+			}
+			if (message.type === "chat" && message.text) {
+				socket.send(
+					JSON.stringify({
+						type: "chat_event",
+						event: chatEvent(room.players[0].id, room.players[0].name, message.text)
+					})
+				);
+			}
+		});
+	});
+
+	await page.setViewportSize({ width: 390, height: 844 });
+	await page.goto(`${cafeUrl}/rooms/${chatRoomId}`);
+	await expect(page.getByLabel(/Connected|เชื่อมต่อแล้ว/)).toBeVisible();
+	await page.getByRole("button", { name: /Start helping Aiko|เริ่มช่วย Aiko/ }).click();
+	sendFriendMessage();
+
+	await expect(page.getByTestId("cafe-chat-unread")).toHaveText("1");
+	await page.getByRole("button", { name: /Open room chat|เปิดแชทในห้อง/ }).click();
+	const chatPanelBox = await page.getByTestId("cafe-chat-panel-position").boundingBox();
+	const cafeGameBox = await page.getByTestId("cafe-game").boundingBox();
+	const mobileUpButtonBox = await page.getByRole("button", { name: "Up" }).boundingBox();
+	expect(chatPanelBox).not.toBeNull();
+	expect(cafeGameBox).not.toBeNull();
+	expect(mobileUpButtonBox).not.toBeNull();
+	expect((chatPanelBox?.x ?? 0) - (cafeGameBox?.x ?? 0)).toBeLessThan(24);
+	expect((chatPanelBox?.y ?? 0) + (chatPanelBox?.height ?? 0)).toBeLessThan(
+		mobileUpButtonBox?.y ?? 0
+	);
+	await expect(page.getByTestId("cafe-chat-presence")).toContainText("Mint Friend");
+	await expect(page.getByTestId("cafe-chat-history")).toContainText("Hello from another browser");
+
+	await page.getByLabel(/Message the cafe room|ส่งข้อความในห้องคาเฟ่/).fill("Nice to meet you");
+	await page.getByRole("button", { name: /Send message|ส่งข้อความ/ }).click();
+	await expect(page.getByTestId("cafe-chat-history")).toContainText("Nice to meet you");
 });
 
 test("tea delivery rotates into table service with one reward per round", async ({ page }) => {
@@ -507,6 +592,17 @@ function tableOrder(
 		y: 350,
 		status: "available" as "waiting_ingredient" | "available" | "claimed" | "served",
 		claimed_by: null as string | null
+	};
+}
+
+function chatEvent(playerId: string, playerName: string, text: string | null) {
+	return {
+		id: crypto.randomUUID(),
+		kind: "message",
+		player_id: playerId,
+		player_name: playerName,
+		text,
+		created_at: Date.now()
 	};
 }
 
