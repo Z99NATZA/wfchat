@@ -525,7 +525,7 @@ function ChatMessageList({
 				: message.text;
 
 		return (
-			<div className="space-y-4">
+			<div className="space-y-3 sm:space-y-4">
 				<article
 					className={cn(
 						"group flex",
@@ -583,7 +583,7 @@ function ChatMessageList({
 						className={cn(
 							isUser ? userMessageBubbleClassName : assistantMessageLayoutClassName,
 							isUser
-								? "rounded-lg bg-primary px-4 py-3 text-primary-text dark:border dark:border-app-border"
+								? "rounded-lg bg-primary px-3 py-2.5 text-primary-text dark:border dark:border-app-border sm:px-4 sm:py-3"
 								: undefined
 						)}
 					>
@@ -694,12 +694,12 @@ function ChatMessageList({
 				onWheel={handleScrollWheel}
 				onPointerDown={handleScrollPointerDown}
 				onKeyDown={handleScrollKeyDown}
-				className="chat-scroll h-full overflow-y-auto px-4 py-6 lg:px-8"
+				className="chat-scroll h-full overflow-y-auto px-3 py-4 sm:px-4 sm:py-6 lg:px-8"
 				style={
 					bottomClearancePx > 0 ? { paddingBottom: `${bottomClearancePx}px` } : undefined
 				}
 			>
-				<div className="mx-auto flex max-w-3xl items-center gap-3 rounded-lg border border-primary/20 bg-primary/8 p-3 text-sm text-app-text dark:border-app-border dark:bg-app-soft">
+				<div className="mx-auto flex max-w-3xl items-center gap-3 rounded-lg border border-app-border bg-primary/8 p-3 text-sm text-app-text dark:bg-app-soft">
 					<div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-text">
 						<Wand2 size={17} aria-hidden="true" />
 					</div>
@@ -713,7 +713,7 @@ function ChatMessageList({
 					)}
 				</div>
 
-				<div ref={virtualTimelineRef} className="mx-auto mt-5 max-w-3xl">
+				<div ref={virtualTimelineRef} className="mx-auto mt-4 max-w-3xl sm:mt-5">
 					{visibleMessages.length === 0 && !isSending && (
 						<div className="rounded-lg border border-dashed border-app-border bg-app-panel/92 px-5 py-8 text-center">
 							<p className="text-sm text-muted">{t("chat.messageList.emptyDesc")}</p>
@@ -854,7 +854,12 @@ function VirtualMessageRow({
 	}, [onMeasuredHeight, rowId]);
 
 	return (
-		<div ref={rowRef} className="pb-4" data-virtual-message-row={rowId} style={rowStyle}>
+		<div
+			ref={rowRef}
+			className="pb-3 sm:pb-4"
+			data-virtual-message-row={rowId}
+			style={rowStyle}
+		>
 			{children}
 		</div>
 	);
@@ -1098,7 +1103,7 @@ function ChatMessageAttachmentPreview({
 				type="button"
 				className={cn(
 					frameClassName,
-					"w-full cursor-zoom-in bg-transparent p-0 text-left transition hover:opacity-95 focus:outline-none focus:ring-2 focus:ring-primary/35"
+					"w-full cursor-zoom-in border border-transparent bg-transparent p-0 text-left transition hover:opacity-95 focus:outline-none focus-visible:border-control-focus-border"
 				)}
 				aria-label={t("chat.messageList.openImagePreview", { label: alt })}
 				onClick={handleOpenPreview}

@@ -23,7 +23,7 @@ type AppHeaderDesktopControlsProps = AppHeaderControlProps & {
 };
 
 const headerFieldClassName =
-	"dark:hover:border-action-border dark:focus-within:border-action-border dark:focus-within:ring-action-ring/25";
+	"focus-within:border-control-focus-border dark:hover:border-action-border";
 
 export function AppHeaderDesktopControls({
 	theme,
@@ -46,7 +46,7 @@ export function AppHeaderDesktopControls({
 		<>
 			{leadingActions}
 			<label
-				className={`relative inline-flex h-9 w-[5.5rem] shrink-0 items-center rounded-lg border border-app-border bg-app-soft pl-2 pr-1 text-xs font-semibold text-app-text transition hover:border-primary focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/35 sm:h-10 sm:w-[6.25rem] ${headerFieldClassName}`}
+				className={`relative inline-flex h-9 w-[5.5rem] shrink-0 items-center rounded-lg border border-app-border bg-app-soft pl-2 pr-1 text-xs font-semibold text-app-text transition hover:border-primary sm:h-10 sm:w-[6.25rem] ${headerFieldClassName}`}
 			>
 				<Globe size={18} aria-hidden="true" />
 				<select
@@ -66,7 +66,7 @@ export function AppHeaderDesktopControls({
 				</select>
 			</label>
 			<label
-				className={`relative inline-flex h-9 w-28 shrink-0 items-center rounded-lg border border-app-border bg-app-soft pl-2 pr-1 text-xs font-semibold text-app-text transition hover:border-primary focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/35 sm:h-10 sm:w-40 ${headerFieldClassName}`}
+				className={`relative inline-flex h-9 w-28 shrink-0 items-center rounded-lg border border-app-border bg-app-soft pl-2 pr-1 text-xs font-semibold text-app-text transition hover:border-primary sm:h-10 sm:w-40 ${headerFieldClassName}`}
 			>
 				<Type size={18} aria-hidden="true" />
 				<select
@@ -129,7 +129,7 @@ export function AppHeaderMobileControls({
 
 	return (
 		<div className="space-y-2">
-			<label className="flex h-10 items-center rounded-lg border border-app-border bg-app-soft pl-2 pr-1 text-xs font-semibold text-app-text">
+			<label className="flex h-10 items-center rounded-lg border border-app-border bg-app-soft pl-2 pr-1 text-xs font-semibold text-app-text transition focus-within:border-control-focus-border">
 				<Globe size={18} aria-hidden="true" />
 				<select
 					value={locale}
@@ -147,7 +147,7 @@ export function AppHeaderMobileControls({
 					))}
 				</select>
 			</label>
-			<label className="flex h-10 items-center rounded-lg border border-app-border bg-app-soft pl-2 pr-1 text-xs font-semibold text-app-text">
+			<label className="flex h-10 items-center rounded-lg border border-app-border bg-app-soft pl-2 pr-1 text-xs font-semibold text-app-text transition focus-within:border-control-focus-border">
 				<Type size={18} aria-hidden="true" />
 				<select
 					value={font}

@@ -17,7 +17,7 @@ function ActivityBar() {
 
 	return (
 		<nav
-			className="app-surface-panel relative z-50 flex h-full w-14 shrink-0 flex-col items-center border-r border-app-border pb-3"
+			className="app-surface-panel relative z-50 flex h-full w-12 shrink-0 flex-col items-center border-r border-app-border pb-3 sm:w-14"
 			aria-label={t("navigation.primary")}
 		>
 			<div className="mt-3 flex w-full flex-1 flex-col items-center gap-1">
@@ -30,7 +30,7 @@ function ActivityBar() {
 							to={item.path}
 							className={({ isActive }) =>
 								cn(
-									"relative flex size-11 items-center justify-center text-muted transition hover:bg-app-soft hover:text-app-text focus:outline-none focus:ring-2 focus:ring-primary/35",
+									"relative flex size-10 items-center justify-center border border-transparent text-muted transition hover:bg-app-soft hover:text-app-text focus:outline-none focus-visible:border-control-focus-border sm:size-11",
 									isActive && "bg-primary/10 text-app-text"
 								)
 							}
@@ -41,11 +41,11 @@ function ActivityBar() {
 								<>
 									{isActive && (
 										<span
-											className="absolute left-0 h-7 w-1 rounded-r-full bg-primary"
+											className="absolute left-0 h-6 w-1 rounded-r-full bg-primary sm:h-7"
 											aria-hidden="true"
 										/>
 									)}
-									<Icon size={20} aria-hidden="true" />
+									<Icon className="size-[18px] sm:size-5" aria-hidden="true" />
 								</>
 							)}
 						</NavLink>

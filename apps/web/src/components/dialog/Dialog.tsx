@@ -104,6 +104,7 @@ function Dialog({
 			<button
 				type="button"
 				className="absolute inset-0 bg-slate-950/45"
+				tabIndex={-1}
 				onClick={onClose}
 				aria-label="Close dialog"
 			/>

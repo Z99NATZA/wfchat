@@ -171,10 +171,14 @@ describe("ChatMessageList streaming state", () => {
 
 		const userBubble = container.querySelector('[data-message-bubble="user"]');
 		const assistantBubble = container.querySelector('[data-message-bubble="companion"]');
+		const scrollContainer = container.querySelector(".chat-scroll");
 
 		expect(userBubble?.className).toContain("sm:max-w-[min(32rem,70%)]");
 		expect(userBubble?.className).toContain("rounded-lg");
-		expect(userBubble?.className).toContain("px-4");
+		expect(userBubble?.className).toContain("px-3");
+		expect(userBubble?.className).toContain("sm:px-4");
+		expect(userBubble?.className).toContain("py-2.5");
+		expect(userBubble?.className).toContain("sm:py-3");
 		expect(userBubble?.className).toContain("bg-primary");
 		expect(userBubble?.className).toContain("text-primary-text");
 		expect(userBubble?.className).not.toContain("text-white");
@@ -184,6 +188,26 @@ describe("ChatMessageList streaming state", () => {
 		expect(assistantBubble?.className).not.toContain("border-app-border");
 		expect(assistantBubble?.className).not.toContain("bg-app-panel/92");
 		expect(assistantBubble?.className).not.toContain("px-4");
+		expect(scrollContainer?.className).toContain("px-3");
+		expect(scrollContainer?.className).toContain("sm:px-4");
+		expect(scrollContainer?.className).toContain("py-4");
+		expect(scrollContainer?.className).toContain("sm:py-6");
+	});
+
+	it("uses the semantic app border for the chat banner in both themes", () => {
+		render(
+			<ChatMessageList
+				messages={[]}
+				companionName="Aiko"
+				companionAvatarUrl="/images/aiko-avatar.png"
+			/>
+		);
+
+		const banner = screen.getByText("Aiko banner").parentElement;
+
+		expect(banner?.className).toContain("border-app-border");
+		expect(banner?.className).not.toContain("border-primary/20");
+		expect(banner?.className).not.toContain("dark:border-");
 	});
 
 	it("reserves bottom space when an overlay clearance is provided", () => {

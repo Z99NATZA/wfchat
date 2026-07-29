@@ -187,7 +187,7 @@ function CafeRoomContent({
 				) : (
 					<button
 						type="button"
-						className="cafe-chat-trigger absolute bottom-3 left-3 z-40 flex size-11 items-center justify-center rounded-full transition focus:outline-none focus:ring-4 max-sm:bottom-[calc(max(1rem,env(safe-area-inset-bottom))+10rem)]"
+						className="cafe-chat-trigger absolute bottom-3 left-3 z-40 flex size-11 items-center justify-center rounded-full transition focus:outline-none max-sm:bottom-[calc(max(1rem,env(safe-area-inset-bottom))+10rem)]"
 						onClick={openChat}
 						aria-label={t("cafe.chat.open")}
 						data-testid="cafe-chat-open"
@@ -229,7 +229,7 @@ function CafeRoomContent({
 							</div>
 							<button
 								type="button"
-								className="pointer-events-auto -m-1 rounded-full p-1 text-muted transition hover:bg-dialog-panel hover:text-app-text focus:outline-none focus:ring-2 focus:ring-primary/35 dark:focus:ring-action-ring/25"
+								className="pointer-events-auto -m-1 rounded-full border border-transparent p-1 text-muted transition hover:bg-dialog-panel hover:text-app-text focus:outline-none focus-visible:border-control-focus-border"
 								onClick={() => setShowGuide(true)}
 								aria-label={t("cafe.guide.open")}
 							>
@@ -367,7 +367,7 @@ function CafeRoomContent({
 						<button
 							key={value}
 							type="button"
-							className="flex size-9 items-center justify-center rounded-full text-lg transition hover:bg-dialog-panel focus:outline-none focus:ring-2 focus:ring-primary/35 disabled:cursor-not-allowed disabled:opacity-50 dark:focus:ring-action-ring/25"
+							className="flex size-9 items-center justify-center rounded-full border border-transparent text-lg transition hover:bg-dialog-panel focus:outline-none focus-visible:border-control-focus-border disabled:cursor-not-allowed disabled:opacity-50"
 							aria-label={t(`cafe.emote.${value}`)}
 							onClick={() => cafe.sendEmote(value)}
 							disabled={!inputEnabled}
@@ -432,7 +432,7 @@ function CafeRoomContent({
 				{cafe.room && (
 					<button
 						type="button"
-						className="absolute right-3 top-20 z-30 rounded-lg border border-dialog-border bg-dialog-soft px-3 py-2 text-xs font-semibold text-app-text transition hover:bg-dialog-panel focus:outline-none focus:ring-2 focus:ring-primary/35 dark:focus:ring-action-ring/25"
+						className="absolute right-3 top-20 z-30 rounded-lg border border-dialog-border bg-dialog-soft px-3 py-2 text-xs font-semibold text-app-text transition hover:bg-dialog-panel focus:outline-none focus-visible:border-control-focus-border"
 						onClick={() => void copyInviteCode()}
 						data-testid="cafe-invite-code"
 					>

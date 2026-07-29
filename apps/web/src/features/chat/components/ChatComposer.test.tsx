@@ -94,11 +94,29 @@ describe("ChatComposer", () => {
 		);
 
 		const surface = screen.getByTestId("chat-composer-surface");
+		const form = screen.getByRole("textbox").closest("form");
 		expect(surface.className).not.toContain("border-t");
 		expect(surface.className).not.toContain("bg-app-panel");
-		expect(screen.getByRole("textbox").closest("form")?.className).toContain(
-			"border-app-border"
-		);
+		expect(surface.className).toContain("pb-[calc(0.75rem+env(safe-area-inset-bottom))]");
+		expect(surface.className).toContain("sm:pb-[calc(1rem+env(safe-area-inset-bottom))]");
+		expect(form?.className).toContain("border-app-border");
+		expect(form?.className).toContain("gap-1");
+		expect(form?.className).toContain("sm:gap-2");
+
+		const attachButton = screen.getByRole("button", {
+			name: "chat.composer.attachImage"
+		});
+		const sendButton = screen.getByRole("button", {
+			name: "chat.composer.sendMessage"
+		});
+		const attachIcon = attachButton.querySelector("svg");
+		const sendIcon = sendButton.querySelector("svg");
+		expect(attachButton.className).toContain("icon-button--md");
+		expect(sendButton.className).toContain("icon-button--md");
+		expect(attachIcon?.getAttribute("class")).toContain("size-4");
+		expect(attachIcon?.getAttribute("class")).toContain("sm:size-[18px]");
+		expect(sendIcon?.getAttribute("class")).toContain("size-4");
+		expect(sendIcon?.getAttribute("class")).toContain("sm:size-[18px]");
 	});
 
 	it("disables browser writing corrections in the message input", () => {

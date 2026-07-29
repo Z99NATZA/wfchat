@@ -69,7 +69,7 @@ function CafeRoomChat({
 				</div>
 				<button
 					type="button"
-					className="cafe-chat-close shrink-0 rounded-md p-1 transition focus:outline-none focus:ring-2"
+					className="cafe-chat-close shrink-0 rounded-md border border-transparent p-1 transition focus:outline-none"
 					aria-label={t("cafe.chat.close")}
 					onClick={onClose}
 				>
@@ -135,7 +135,7 @@ function CafeRoomChat({
 						<button
 							key={key}
 							type="button"
-							className="cafe-chat-quick min-w-0 rounded-md py-0.5 transition disabled:cursor-not-allowed disabled:opacity-50"
+							className="cafe-chat-quick min-w-0 rounded-md py-0.5 transition focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
 							disabled={!connected}
 							onClick={() => send(t(key))}
 						>
@@ -172,7 +172,7 @@ function CafeRoomChat({
 					</div>
 					<button
 						type="submit"
-						className="cafe-chat-send flex size-8 shrink-0 items-center justify-center rounded-lg transition focus:outline-none focus:ring-4 disabled:cursor-not-allowed disabled:opacity-50"
+						className="cafe-chat-send flex size-8 shrink-0 items-center justify-center rounded-lg transition focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
 						disabled={!connected || text.trim().length === 0}
 						aria-label={t("cafe.chat.send")}
 					>

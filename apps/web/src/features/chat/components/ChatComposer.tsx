@@ -7,7 +7,7 @@ import {
 	useRef,
 	useState
 } from "react";
-import { Image, LoaderCircle, Mic, Paperclip, Send, Square, X } from "lucide-react";
+import { Image, LoaderCircle, MessageCircle, Mic, Send, Square, X } from "lucide-react";
 import { useDialog } from "@/components/dialog/DialogContext";
 import { useI18n } from "@/i18n/i18nContext";
 import IconButton from "@/components/ui/IconButton";
@@ -278,7 +278,7 @@ function ChatComposer({
 		<div
 			onDragOver={handleDragOver}
 			onDrop={handleDrop}
-			className="sticky bottom-0 z-20 px-4 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-4 lg:px-8"
+			className="sticky bottom-0 z-20 px-2 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-3 sm:px-4 sm:pb-[calc(1rem+env(safe-area-inset-bottom))] sm:pt-4 lg:px-8"
 			data-testid="chat-composer-surface"
 		>
 			<div className="mx-auto flex max-w-3xl flex-col gap-2">
@@ -291,7 +291,7 @@ function ChatComposer({
 							>
 								<button
 									type="button"
-									className="block h-full w-full cursor-zoom-in bg-transparent p-0 text-left focus:outline-none focus:ring-2 focus:ring-primary/35"
+									className="block h-full w-full cursor-zoom-in border border-transparent bg-transparent p-0 text-left focus:outline-none focus-visible:border-control-focus-border"
 									aria-label={t("chat.composer.openSelectedImagePreview", {
 										label: image.name || t("chat.composer.selectedImage")
 									})}
@@ -323,17 +323,9 @@ function ChatComposer({
 					</p>
 				) : null}
 				<form
-					className="flex items-center gap-2 rounded-lg border border-app-border bg-app-soft/82 p-2 focus-within:border-primary focus-within:ring-4 focus-within:ring-primary/15"
+					className="chat-composer-form flex flex-col gap-1 rounded-lg border border-app-border bg-app-soft/82 p-1 sm:flex-row sm:items-center sm:gap-2 sm:p-2"
 					onSubmit={handleSubmit}
 				>
-					<IconButton
-						className="shrink-0"
-						aria-label={t("chat.composer.attachFile")}
-						disabled
-						title={t("common.notSupportedYet")}
-					>
-						<Paperclip size={18} aria-hidden="true" />
-					</IconButton>
 					<input
 						ref={imageInputRef}
 						className="hidden"
@@ -342,121 +334,134 @@ function ChatComposer({
 						multiple
 						onChange={handleImageInputChange}
 					/>
-					<textarea
-						ref={textareaRef}
-						autoCapitalize="off"
-						autoCorrect="off"
-						className="min-h-11 flex-1 resize-none bg-transparent px-2 py-2.5 text-sm leading-6 outline-none placeholder:text-muted"
-						value={draft}
-						placeholder={t("chat.composer.placeholder", { name: companionName })}
-						rows={1}
-						disabled={isDisabled}
-						spellCheck={false}
-						onChange={(event) => onDraftChange(event.target.value)}
-						onKeyDown={handleDraftKeyDown}
-						onPaste={handlePaste}
-					/>
-					{speechStatus === "recording" ? (
+					<div className="flex min-w-0 flex-1 items-center">
 						<span
-							className="hidden h-8 shrink-0 items-center rounded-md px-1.5 font-mono text-xs tabular-nums text-red-600 sm:flex"
-							role="status"
-							aria-label={speechStatusText}
-							aria-live="polite"
-							data-testid="chat-composer-recording-timer"
+							className="hidden size-10 shrink-0 items-center justify-center text-muted sm:flex"
+							aria-hidden="true"
 						>
-							{formatElapsedTime(recordingElapsedSeconds)}
+							<MessageCircle size={20} />
 						</span>
-					) : speechStatus === "error" ? (
-						<span
-							className="hidden max-w-36 shrink truncate text-xs text-red-600 sm:block"
-							role="alert"
-							aria-label={
-								userSpeechInput.errorDetail
-									? `${speechStatusText}: ${userSpeechInput.errorDetail}`
-									: speechStatusText
+						<textarea
+							ref={textareaRef}
+							autoCapitalize="off"
+							autoCorrect="off"
+							className="min-h-11 min-w-0 flex-1 resize-none bg-transparent py-2.5 pl-2 pr-2 text-sm leading-6 outline-none placeholder:text-muted sm:pl-0"
+							value={draft}
+							placeholder={t("chat.composer.placeholder", { name: companionName })}
+							rows={1}
+							disabled={isDisabled}
+							spellCheck={false}
+							onChange={(event) => onDraftChange(event.target.value)}
+							onKeyDown={handleDraftKeyDown}
+							onPaste={handlePaste}
+						/>
+					</div>
+					<div className="flex w-full items-center justify-between gap-2 sm:w-auto sm:justify-start">
+						{speechStatus === "recording" ? (
+							<span
+								className="hidden h-8 shrink-0 items-center rounded-md px-1.5 font-mono text-xs tabular-nums text-red-600 sm:flex"
+								role="status"
+								aria-label={speechStatusText}
+								aria-live="polite"
+								data-testid="chat-composer-recording-timer"
+							>
+								{formatElapsedTime(recordingElapsedSeconds)}
+							</span>
+						) : speechStatus === "error" ? (
+							<span
+								className="hidden max-w-36 shrink truncate text-xs text-red-600 sm:block"
+								role="alert"
+								aria-label={
+									userSpeechInput.errorDetail
+										? `${speechStatusText}: ${userSpeechInput.errorDetail}`
+										: speechStatusText
+								}
+								title={
+									userSpeechInput.errorDetail
+										? `${speechStatusText}: ${userSpeechInput.errorDetail}`
+										: speechStatusText
+								}
+							>
+								{speechStatusText}
+							</span>
+						) : speechStatus !== "idle" ? (
+							<span className="sr-only" role="status" aria-live="polite">
+								{speechStatusText}
+							</span>
+						) : null}
+						{isSpeechInputActive ? (
+							<IconButton
+								size="sm"
+								variant="ghost"
+								className="hidden sm:flex"
+								aria-label={t("chat.composer.cancelVoiceMessage")}
+								data-testid="chat-composer-speech-cancel"
+								title={t("chat.composer.cancelVoiceMessage")}
+								onClick={onCancelSpeechInput}
+							>
+								<X size={14} aria-hidden="true" />
+							</IconButton>
+						) : null}
+						<IconButton
+							className="hidden sm:flex"
+							variant={speechStatus === "recording" ? "danger" : "default"}
+							aria-label={speechInputLabel(speechStatus, t)}
+							aria-pressed={speechStatus === "recording"}
+							disabled={
+								!canUseSpeechInput ||
+								speechStatus === "requesting" ||
+								speechStatus === "transcribing"
 							}
 							title={
-								userSpeechInput.errorDetail
-									? `${speechStatusText}: ${userSpeechInput.errorDetail}`
-									: speechStatusText
+								isUserSpeechInputEnabled
+									? speechInputLabel(speechStatus, t)
+									: t("common.notSupportedYet")
+							}
+							onClick={onToggleSpeechInput}
+						>
+							{speechStatus === "requesting" || speechStatus === "transcribing" ? (
+								<LoaderCircle
+									className="animate-spin"
+									size={18}
+									aria-hidden="true"
+								/>
+							) : speechStatus === "recording" ? (
+								<Square size={18} aria-hidden="true" />
+							) : (
+								<Mic size={18} aria-hidden="true" />
+							)}
+						</IconButton>
+						<IconButton
+							className="shrink-0"
+							aria-label={t("chat.composer.attachImage")}
+							disabled={
+								isDisabled ||
+								isSending ||
+								selectedImages.length >= MAX_IMAGE_ATTACHMENTS
+							}
+							title={t("chat.composer.attachImage")}
+							onClick={handleImagePickerClick}
+						>
+							<Image className="size-4 sm:size-[18px]" aria-hidden="true" />
+						</IconButton>
+						<IconButton
+							type="submit"
+							variant="action"
+							aria-label={
+								isSending
+									? t("chat.composer.waitingForResponse")
+									: t("chat.composer.sendMessage")
+							}
+							disabled={isDisabled || isSending || !canSendMessage}
+							title={
+								isSending
+									? t("chat.composer.waitBeforeSending", { name: companionName })
+									: t("chat.composer.sendMessage")
 							}
 						>
-							{speechStatusText}
-						</span>
-					) : speechStatus !== "idle" ? (
-						<span className="sr-only" role="status" aria-live="polite">
-							{speechStatusText}
-						</span>
-					) : null}
-					{isSpeechInputActive ? (
-						<IconButton
-							size="sm"
-							variant="ghost"
-							className="hidden sm:flex"
-							aria-label={t("chat.composer.cancelVoiceMessage")}
-							data-testid="chat-composer-speech-cancel"
-							title={t("chat.composer.cancelVoiceMessage")}
-							onClick={onCancelSpeechInput}
-						>
-							<X size={14} aria-hidden="true" />
+							<Send className="size-4 sm:size-[18px]" aria-hidden="true" />
 						</IconButton>
-					) : null}
-					<IconButton
-						className="hidden sm:flex"
-						variant={speechStatus === "recording" ? "danger" : "default"}
-						aria-label={speechInputLabel(speechStatus, t)}
-						aria-pressed={speechStatus === "recording"}
-						disabled={
-							!canUseSpeechInput ||
-							speechStatus === "requesting" ||
-							speechStatus === "transcribing"
-						}
-						title={
-							isUserSpeechInputEnabled
-								? speechInputLabel(speechStatus, t)
-								: t("common.notSupportedYet")
-						}
-						onClick={onToggleSpeechInput}
-					>
-						{speechStatus === "requesting" || speechStatus === "transcribing" ? (
-							<LoaderCircle className="animate-spin" size={18} aria-hidden="true" />
-						) : speechStatus === "recording" ? (
-							<Square size={18} aria-hidden="true" />
-						) : (
-							<Mic size={18} aria-hidden="true" />
-						)}
-					</IconButton>
-					<IconButton
-						className="shrink-0"
-						aria-label={t("chat.composer.attachImage")}
-						disabled={
-							isDisabled ||
-							isSending ||
-							selectedImages.length >= MAX_IMAGE_ATTACHMENTS
-						}
-						title={t("chat.composer.attachImage")}
-						onClick={handleImagePickerClick}
-					>
-						<Image size={18} aria-hidden="true" />
-					</IconButton>
-					<IconButton
-						type="submit"
-						size="lg"
-						variant="action"
-						aria-label={
-							isSending
-								? t("chat.composer.waitingForResponse")
-								: t("chat.composer.sendMessage")
-						}
-						disabled={isDisabled || isSending || !canSendMessage}
-						title={
-							isSending
-								? t("chat.composer.waitBeforeSending", { name: companionName })
-								: t("chat.composer.sendMessage")
-						}
-					>
-						<Send size={18} aria-hidden="true" />
-					</IconButton>
+					</div>
 				</form>
 			</div>
 		</div>

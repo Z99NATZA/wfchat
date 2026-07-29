@@ -270,7 +270,7 @@ function CafeGameCanvas({
 			</div>
 			<button
 				type="button"
-				className="absolute bottom-[max(1.25rem,env(safe-area-inset-bottom))] right-4 z-40 flex h-16 min-w-20 max-w-28 items-center justify-center rounded-2xl border border-action-border bg-action px-3 text-center text-xs font-bold leading-4 text-action-text transition hover:bg-action-hover focus:outline-none focus:ring-4 focus:ring-action-ring/25 disabled:border-app-border disabled:bg-app-soft disabled:text-muted sm:hidden"
+				className="absolute bottom-[max(1.25rem,env(safe-area-inset-bottom))] right-4 z-40 flex h-16 min-w-20 max-w-28 items-center justify-center rounded-2xl border border-action-border bg-action px-3 text-center text-xs font-bold leading-4 text-action-text transition hover:bg-action-hover focus:outline-none focus-visible:border-control-focus-border disabled:border-app-border disabled:bg-app-soft disabled:text-muted sm:hidden"
 				disabled={!inputEnabled || !currentInteractionTarget}
 				onClick={() => {
 					if (currentInteractionTarget) {
@@ -333,7 +333,7 @@ function DirectionButton({
 	return (
 		<button
 			type="button"
-			className={`flex size-12 touch-none select-none items-center justify-center rounded-xl border border-dialog-border bg-dialog-soft text-lg text-app-text transition hover:bg-dialog-panel focus:outline-none focus:ring-2 focus:ring-primary/35 disabled:cursor-not-allowed disabled:opacity-50 dark:focus:ring-action-ring/25 ${className ?? ""}`}
+			className={`flex size-12 touch-none select-none items-center justify-center rounded-xl border border-dialog-border bg-dialog-soft text-lg text-app-text transition hover:bg-dialog-panel focus:outline-none focus-visible:border-control-focus-border disabled:cursor-not-allowed disabled:opacity-50 ${className ?? ""}`}
 			disabled={disabled}
 			aria-label={label}
 			onKeyDown={(event) => {

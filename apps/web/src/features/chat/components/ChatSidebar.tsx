@@ -69,14 +69,15 @@ function ChatSidebar({
 			{isOpen && (
 				<button
 					type="button"
-					className="fixed inset-y-0 left-14 right-0 z-30 bg-black/30 lg:hidden"
+					className="fixed inset-y-0 left-12 right-0 z-30 bg-black/30 sm:left-14 lg:hidden"
+					tabIndex={-1}
 					aria-label={t("chat.sidebar.closeSidebar")}
 					onClick={onCloseSidebar}
 				/>
 			)}
 			<aside
 				className={cn(
-					"mobile-app-surface-panel fixed inset-y-0 left-14 z-40 w-[18.5rem] border-r border-app-border transition-transform duration-300 lg:static lg:translate-x-0 lg:bg-app-panel/62",
+					"mobile-app-surface-panel fixed inset-y-0 left-12 z-40 w-[18.5rem] border-r border-app-border transition-transform duration-300 sm:left-14 lg:static lg:translate-x-0 lg:bg-app-panel/62",
 					isOpen ? "translate-x-0" : "-translate-x-full"
 				)}
 			>
@@ -180,7 +181,7 @@ function ChatSidebar({
 										aria-hidden="true"
 									/>
 									<input
-										className="h-11 w-full rounded-lg border border-app-border bg-app-soft pl-10 pr-3 text-sm outline-none transition placeholder:text-muted focus:border-primary/50 focus:ring-2 focus:ring-primary/20"
+										className="h-11 w-full rounded-lg border border-app-border bg-app-soft pl-10 pr-3 text-sm outline-none transition placeholder:text-muted focus:border-control-focus-border"
 										placeholder={t("chat.sidebar.searchChats")}
 										type="search"
 										value={searchQuery}
@@ -203,7 +204,7 @@ function ChatSidebar({
 											className={cn(
 												"group relative rounded-lg border transition",
 												session.id === activeSessionId
-													? "border-primary/30 bg-primary/10"
+													? "border-primary/50 bg-primary/15 dark:border-action-border dark:bg-action-hover"
 													: "border-transparent hover:border-app-border hover:bg-app-soft"
 											)}
 										>

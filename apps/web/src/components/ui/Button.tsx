@@ -10,6 +10,8 @@ type ButtonVariant =
 	| "floating"
 	| "ghost"
 	| "ghostDestructive"
+	| "segment"
+	| "segmentSelected"
 	| "selected";
 type ButtonSize = "xs" | "sm" | "md" | "lg" | "menu" | "row";
 type ButtonSurface = "app" | "dialog";
@@ -64,6 +66,10 @@ function variantClassName(variant: ButtonVariant, surface: ButtonSurface): strin
 
 	if (variant === "ghostDestructive") {
 		return "button--ghost-destructive";
+	}
+
+	if (variant === "segmentSelected") {
+		return "button--segment-selected";
 	}
 
 	return `button--${variant}`;

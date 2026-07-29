@@ -69,7 +69,17 @@ describe("AppSettingsDialog", () => {
 	it("lets users toggle assistant voice playback visibility", () => {
 		render(<AppSettingsDialog {...baseProps} />);
 
-		fireEvent.click(screen.getByRole("switch", { name: "Show voice playback" }));
+		const voiceSwitch = screen.getByRole("switch", { name: "Show voice playback" });
+		const track = voiceSwitch.querySelector("[data-switch-track]");
+		const thumb = voiceSwitch.querySelector("[data-switch-thumb]");
+
+		expect(track?.className).toContain("border-action-border");
+		expect(track?.className).toContain("bg-action");
+		expect(track?.className).not.toContain("dark:bg-");
+		expect(thumb?.className).toContain("left-6");
+		expect(thumb?.className).toContain("bg-action-text");
+
+		fireEvent.click(voiceSwitch);
 
 		expect(baseProps.onAssistantSpeechVisibleChange).toHaveBeenCalledWith(false);
 	});
@@ -77,9 +87,38 @@ describe("AppSettingsDialog", () => {
 	it("lets users toggle assistant voice auto-play", () => {
 		render(<AppSettingsDialog {...baseProps} />);
 
-		fireEvent.click(screen.getByRole("switch", { name: "Auto-play latest reply" }));
+		const autoPlaySwitch = screen.getByRole("switch", {
+			name: "Auto-play latest reply"
+		});
+		const track = autoPlaySwitch.querySelector("[data-switch-track]");
+		const thumb = autoPlaySwitch.querySelector("[data-switch-thumb]");
+
+		expect(track?.className).toContain("border-dialog-border");
+		expect(track?.className).toContain("bg-transparent");
+		expect(track?.className).not.toContain("dark:bg-");
+		expect(thumb?.className).toContain("left-1");
+		expect(thumb?.className).toContain("bg-muted/60");
+
+		fireEvent.click(autoPlaySwitch);
 
 		expect(baseProps.onAssistantSpeechAutoPlayEnabledChange).toHaveBeenCalledWith(true);
+	});
+
+	it("uses one group border and a filled borderless active segment", () => {
+		render(<AppSettingsDialog {...baseProps} />);
+
+		const activePosition = screen.getByRole("button", {
+			name: "settings.avatarOverlay.positionBottomRight"
+		});
+		const inactivePosition = screen.getByRole("button", {
+			name: "settings.avatarOverlay.positionBottomLeft"
+		});
+		const positionGroup = activePosition.parentElement;
+
+		expect(positionGroup?.className).toContain("border-dialog-border");
+		expect(activePosition.className).toContain("button--segment-selected");
+		expect(activePosition.className).not.toContain("button--selected");
+		expect(inactivePosition.className).toContain("button--segment");
 	});
 
 	it("shows configured voice credits without adding controls", () => {

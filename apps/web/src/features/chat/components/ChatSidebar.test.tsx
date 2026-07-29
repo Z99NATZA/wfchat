@@ -47,11 +47,14 @@ describe("ChatSidebar", () => {
 		);
 
 		const disclosure = screen.getByTestId("chat-sidebar-persona-details");
+		const sidebar = screen.getByRole("complementary");
 		const sidebarBody = screen.getByTestId("chat-sidebar-body");
 		const chatsSection = screen.getByTestId("chat-sidebar-chats");
 		const sessionList = screen.getByTestId("chat-sidebar-session-list");
 		const search = screen.getByPlaceholderText("chat.sidebar.searchChats");
 		expect(disclosure.hasAttribute("open")).toBe(false);
+		expect(sidebar.className).toContain("left-12");
+		expect(sidebar.className).toContain("sm:left-14");
 		expect(disclosure.className).not.toContain("border-");
 		expect(disclosure.className).toContain("overflow-y-auto");
 		expect(sidebarBody.className).toContain("overflow-hidden");
@@ -90,5 +93,42 @@ describe("ChatSidebar", () => {
 		fireEvent.click(disclosure.querySelector("summary")!);
 
 		expect(disclosure.hasAttribute("open")).toBe(true);
+	});
+
+	it("gives the active chat a clear border and filled surface in both themes", () => {
+		render(
+			<ChatSidebar
+				personas={[persona]}
+				sessions={[
+					{
+						id: "chat-1",
+						characterId: persona.id,
+						createdAt: 1,
+						updatedAt: 1,
+						lastMessage: "Current conversation"
+					}
+				]}
+				activeSessionId="chat-1"
+				activePersona={persona}
+				activePersonaId={persona.id}
+				isOpen={false}
+				searchQuery=""
+				onCreateSession={vi.fn()}
+				onSearchQueryChange={vi.fn()}
+				onCloseSidebar={vi.fn()}
+				onDeleteSession={vi.fn(async () => undefined)}
+				onSelectPersona={vi.fn()}
+				onSelectSession={vi.fn()}
+			/>
+		);
+
+		const activeChat = screen.getByRole("button", {
+			name: /Current conversation/
+		}).parentElement;
+
+		expect(activeChat?.className).toContain("border-primary/50");
+		expect(activeChat?.className).toContain("bg-primary/15");
+		expect(activeChat?.className).toContain("dark:border-action-border");
+		expect(activeChat?.className).toContain("dark:bg-action-hover");
 	});
 });

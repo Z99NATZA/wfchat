@@ -101,6 +101,7 @@ function AppSettingsDialog({
 			<button
 				type="button"
 				className="absolute inset-0 bg-black/35"
+				tabIndex={-1}
 				aria-label={t("settings.close")}
 				onClick={onClose}
 			/>
@@ -154,7 +155,7 @@ function AppSettingsDialog({
 								</span>
 								<input
 									type="url"
-									className="mt-1 w-full rounded-xl border border-dialog-border bg-dialog-soft px-3 py-3 text-sm text-app-text outline-none transition placeholder:text-muted/70 focus:border-primary"
+									className="mt-1 w-full rounded-xl border border-dialog-border bg-dialog-soft px-3 py-3 text-sm text-app-text outline-none transition placeholder:text-muted/70 focus:border-control-focus-border"
 									value={draftUrl}
 									placeholder={t("settings.background.imageUrlPlaceholder")}
 									onChange={(event) => setDraftUrl(event.target.value)}
@@ -291,14 +292,18 @@ function SwitchSetting({
 		>
 			<span className="text-sm font-semibold text-app-text">{label}</span>
 			<span
-				className={`relative h-6 w-11 shrink-0 rounded-full transition ${
-					checked ? "bg-primary dark:bg-muted/35" : "bg-muted/35 dark:bg-primary"
+				className={`relative h-6 w-11 shrink-0 rounded-full border transition-colors ${
+					checked
+						? "border-action-border bg-action"
+						: "border-dialog-border bg-transparent"
 				}`}
+				data-switch-track
 			>
 				<span
-					className={`absolute top-1 h-4 w-4 rounded-full bg-primary-text transition ${
-						checked ? "left-6" : "left-1"
+					className={`absolute top-1 h-4 w-4 rounded-full transition-all ${
+						checked ? "left-6 bg-action-text" : "left-1 bg-muted/60"
 					}`}
+					data-switch-thumb
 				/>
 			</span>
 		</Button>
@@ -328,7 +333,7 @@ function SegmentedSetting<TValue extends string>({
 					return (
 						<Button
 							key={option.value}
-							variant={isActive ? "selected" : "ghost"}
+							variant={isActive ? "segmentSelected" : "segment"}
 							size="sm"
 							fullWidth
 							aria-pressed={isActive}

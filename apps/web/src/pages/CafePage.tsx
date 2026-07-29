@@ -147,7 +147,7 @@ function CafePage({ activityBar, backgroundImageUrl, headerControls }: CafePageP
 											id="cafe-player-name"
 											type="text"
 											autoComplete="nickname"
-											className="mt-2 h-11 w-full rounded-lg border border-app-border bg-app-soft px-3 text-sm font-semibold text-app-text outline-none transition placeholder:font-normal placeholder:text-muted/70 focus:border-primary focus:ring-2 focus:ring-primary/25 dark:focus:border-action-border dark:focus:ring-action-ring/25"
+											className="mt-2 h-11 w-full rounded-lg border border-app-border bg-app-soft px-3 text-sm font-semibold text-app-text outline-none transition placeholder:font-normal placeholder:text-muted/70 focus:border-control-focus-border"
 											value={playerName}
 											maxLength={CAFE_PLAYER_NAME_MAX_LENGTH}
 											placeholder={t("cafe.lobby.playerNamePlaceholder")}
@@ -220,7 +220,7 @@ function CafePage({ activityBar, backgroundImageUrl, headerControls }: CafePageP
 									<div className="mt-2 flex flex-col gap-2 sm:flex-row">
 										<input
 											id="cafe-invite-code"
-											className="h-11 min-w-0 flex-1 rounded-lg border border-app-border bg-app-soft px-3 text-sm font-semibold uppercase tracking-[0.2em] text-app-text outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/25 dark:focus:border-action-border dark:focus:ring-action-ring/25"
+											className="h-11 min-w-0 flex-1 rounded-lg border border-app-border bg-app-soft px-3 text-sm font-semibold uppercase tracking-[0.2em] text-app-text outline-none transition focus:border-control-focus-border"
 											value={inviteCode}
 											maxLength={6}
 											placeholder={t("cafe.lobby.joinCodePlaceholder")}

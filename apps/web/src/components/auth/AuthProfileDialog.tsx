@@ -97,6 +97,7 @@ function AuthProfileDialog({
 			<button
 				type="button"
 				className="absolute inset-0 bg-black/35"
+				tabIndex={-1}
 				aria-label={t("auth.profile.close")}
 				onClick={onClose}
 			/>
@@ -188,7 +189,7 @@ function AuthProfileDialog({
 										</span>
 										<input
 											type="text"
-											className="mt-1 w-full rounded-xl border border-dialog-border bg-dialog-soft px-3 py-3 text-sm text-app-text outline-none transition placeholder:text-muted/70 focus:border-primary"
+											className="mt-1 w-full rounded-xl border border-dialog-border bg-dialog-soft px-3 py-3 text-sm text-app-text outline-none transition placeholder:text-muted/70 focus:border-control-focus-border"
 											value={displayNameDraft}
 											placeholder={t("auth.profile.displayNamePlaceholder")}
 											onChange={(event) =>
@@ -202,7 +203,7 @@ function AuthProfileDialog({
 										</span>
 										<input
 											type="url"
-											className="mt-1 w-full rounded-xl border border-dialog-border bg-dialog-soft px-3 py-3 text-sm text-app-text outline-none transition placeholder:text-muted/70 focus:border-primary"
+											className="mt-1 w-full rounded-xl border border-dialog-border bg-dialog-soft px-3 py-3 text-sm text-app-text outline-none transition placeholder:text-muted/70 focus:border-control-focus-border"
 											value={avatarUrlDraft}
 											placeholder={t("auth.profile.avatarUrlPlaceholder")}
 											onChange={(event) =>
