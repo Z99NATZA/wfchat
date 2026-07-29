@@ -18,6 +18,9 @@ The page/body, header, and composer do not scroll during normal chat use.
   that starting a user send always brings the new turn into view.
 - Scrolling upward disables forced following and shows `Jump to latest` with a
   new-message count.
+- After upward user intent disables following, it resumes only when the user
+  returns to the actual bottom; the wider near-bottom threshold must not rearm
+  following on short timelines.
 - Changing the active chat resets transient list state and scrolls the new chat
   directly to its latest message.
 - Layout-driven height growth while restoring a chat keeps following the bottom;

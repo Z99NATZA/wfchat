@@ -23,6 +23,7 @@ surfaces. Components use semantic tokens, not raw colors.
 | Secondary text       | `text-muted`                           |
 | Dialog shell         | `bg-dialog-panel border-dialog-border` |
 | Dialog field/control | `bg-dialog-soft border-dialog-border`  |
+| Control focus        | `border-control-focus-border`          |
 
 Use `Button` for text-bearing buttons and `IconButton` for icon-only controls.
 Their variants own color, border, hover, focus, disabled, destructive, and
@@ -59,9 +60,12 @@ Do not add feature-specific scrollbar colors when it applies.
 - Keep nested controls and user message bubbles more opaque than their shell.
 - Pair `bg-primary` with `text-primary-text`; the foreground adapts to the
   light or dark primary surface.
-- Separate surfaces with color and borders. Do not add box shadows, inset
-  shadows, text shadows, or drop shadows. Focus and status rings remain allowed;
-  they communicate interaction or state rather than visual depth.
+- Separate routine surfaces with color and borders rather than shadows.
+- Fields and shared buttons communicate focus with
+  `border-control-focus-border`. Do not use rings, browser outlines, or shadows
+  as focus signals.
+- Rings are reserved for non-focus decoration or status presentation, such as
+  status dots, avatars, and badges.
 - Do not hard-code hex/RGB values or use raw `bg-white`, `bg-slate-*`, or
   `bg-zinc-*` for application surfaces.
 - Check light/dark themes, wallpaper on/off, hover/focus, and mobile overlays

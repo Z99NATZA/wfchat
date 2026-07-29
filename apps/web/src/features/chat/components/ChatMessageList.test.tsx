@@ -678,6 +678,79 @@ describe("ChatMessageList streaming state", () => {
 		expect(HTMLElement.prototype.scrollTo).not.toHaveBeenCalled();
 	});
 
+	it("does not spring a short timeline back down after touch scrolling upward", async () => {
+		const initialMessages = [
+			message("user-1", "user", "hello"),
+			message("assistant-1", "companion", "hi"),
+			message("user-2", "user", "how are you"),
+			message("assistant-2", "companion", "doing well")
+		];
+		const { container, rerender } = render(
+			<ChatMessageList
+				activeChatId="short-chat"
+				messages={initialMessages}
+				companionName="Aiko"
+				companionAvatarUrl="/images/aiko-avatar.png"
+			/>
+		);
+		const scrollContainer = container.querySelector(".chat-scroll") as HTMLDivElement;
+
+		Object.defineProperty(scrollContainer, "clientHeight", { configurable: true, value: 500 });
+		Object.defineProperty(scrollContainer, "scrollHeight", {
+			configurable: true,
+			value: 560
+		});
+		scrollContainer.scrollTop = 60;
+		fireEvent.scroll(scrollContainer);
+		await new Promise((resolve) => requestAnimationFrame(resolve));
+		vi.mocked(HTMLElement.prototype.scrollTo).mockClear();
+
+		fireEvent.pointerDown(scrollContainer, { pointerId: 7, pointerType: "touch" });
+		fireEvent.pointerCancel(window, { pointerId: 7, pointerType: "touch" });
+		scrollContainer.scrollTop = 20;
+		fireEvent.scroll(scrollContainer);
+		scrollContainer.scrollTop = 0;
+		fireEvent.scroll(scrollContainer);
+		scrollContainer.scrollTop = 1;
+		fireEvent.scroll(scrollContainer);
+
+		rerender(
+			<ChatMessageList
+				activeChatId="short-chat"
+				messages={[
+					...initialMessages,
+					message("assistant-new", "companion", "new message")
+				]}
+				companionName="Aiko"
+				companionAvatarUrl="/images/aiko-avatar.png"
+			/>
+		);
+		await new Promise((resolve) => requestAnimationFrame(resolve));
+
+		expect(HTMLElement.prototype.scrollTo).not.toHaveBeenCalled();
+
+		scrollContainer.scrollTop = 55;
+		fireEvent.scroll(scrollContainer);
+		rerender(
+			<ChatMessageList
+				activeChatId="short-chat"
+				messages={[
+					...initialMessages,
+					message("assistant-new", "companion", "new message"),
+					message("assistant-latest", "companion", "latest message")
+				]}
+				companionName="Aiko"
+				companionAvatarUrl="/images/aiko-avatar.png"
+			/>
+		);
+		await new Promise((resolve) => requestAnimationFrame(resolve));
+
+		expect(HTMLElement.prototype.scrollTo).toHaveBeenCalledWith({
+			top: scrollContainer.scrollHeight,
+			behavior: "smooth"
+		});
+	});
+
 	it("follows a send from above the bottom but still allows scrolling up during the response", async () => {
 		const initialMessages = Array.from({ length: 12 }, (_, index) =>
 			message(`assistant-${index}`, "companion", `message ${index}`)

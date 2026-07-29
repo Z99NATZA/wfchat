@@ -63,6 +63,8 @@ type VirtualRange = {
 };
 
 const DEFAULT_VIEWPORT_HEIGHT = 720;
+const BOTTOM_FOLLOW_THRESHOLD_PX = 80;
+const BOTTOM_REJOIN_THRESHOLD_PX = 8;
 const MESSAGE_ROW_GAP_PX = 16;
 const USER_SCROLL_INTENT_WINDOW_MS = 400;
 const VIRTUAL_OVERSCAN_ROWS = 8;
@@ -271,7 +273,12 @@ function ChatMessageList({
 		if (isScrollingUp && hasUserUpwardScrollIntent) {
 			shouldStickToBottomRef.current = false;
 			cancelScheduledScrollToBottom();
-		} else if (distanceFromBottom < 80) {
+		} else if (
+			!isScrollingUp &&
+			(shouldStickToBottomRef.current
+				? distanceFromBottom < BOTTOM_FOLLOW_THRESHOLD_PX
+				: distanceFromBottom <= BOTTOM_REJOIN_THRESHOLD_PX)
+		) {
 			shouldStickToBottomRef.current = true;
 		}
 
@@ -282,7 +289,7 @@ function ChatMessageList({
 		);
 		setShowJumpToLatest(distanceFromBottom > 180);
 
-		if (distanceFromBottom < 80) {
+		if (distanceFromBottom < BOTTOM_FOLLOW_THRESHOLD_PX) {
 			setUnseenMessageCount(0);
 		}
 	}
@@ -429,6 +436,9 @@ function ChatMessageList({
 	useEffect(() => {
 		function clearScrollPointerIntent(event: PointerEvent) {
 			if (scrollPointerIdRef.current === event.pointerId) {
+				if (event.pointerType !== "mouse") {
+					upwardScrollIntentUntilRef.current = Date.now() + USER_SCROLL_INTENT_WINDOW_MS;
+				}
 				scrollPointerIdRef.current = null;
 			}
 		}
