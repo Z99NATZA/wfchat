@@ -129,6 +129,7 @@ export class CafeScene extends Phaser.Scene {
 				Phaser.Input.Keyboard.Key
 			>;
 		}
+		this.syncKeyboardInput();
 		if (this.room) {
 			this.renderRoom(this.room);
 		}
@@ -206,6 +207,7 @@ export class CafeScene extends Phaser.Scene {
 
 	setInputEnabled(enabled: boolean) {
 		this.inputEnabled = enabled;
+		this.syncKeyboardInput();
 		if (!enabled) {
 			this.virtualInput = { x: 0, y: 0 };
 			this.lastMoving = false;
@@ -484,6 +486,20 @@ export class CafeScene extends Phaser.Scene {
 		});
 		this.tableOrderVisuals.set(id, container);
 		return container;
+	}
+
+	private syncKeyboardInput() {
+		const keyboard = this.input?.keyboard;
+		if (!keyboard) {
+			return;
+		}
+		keyboard.resetKeys();
+		keyboard.enabled = this.inputEnabled;
+		if (this.inputEnabled) {
+			keyboard.enableGlobalCapture();
+		} else {
+			keyboard.disableGlobalCapture();
+		}
 	}
 
 	private readDirectionInput(): DirectionInput {

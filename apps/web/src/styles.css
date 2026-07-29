@@ -472,6 +472,169 @@
 		will-change: opacity, transform;
 	}
 
+	.cafe-chat-shell,
+	.cafe-chat-trigger {
+		--cafe-chat-overlay: rgb(170 108 55 / 0.36);
+		--cafe-chat-overlay-strong: rgb(120 72 42 / 0.56);
+		--cafe-chat-control: rgb(255 239 219 / 0.1);
+		--cafe-chat-control-hover: rgb(255 239 219 / 0.16);
+		--cafe-chat-border: rgb(255 232 204 / 0.22);
+		--cafe-chat-name: #4ade80;
+		--cafe-chat-message: #fff7ed;
+		--cafe-chat-muted: #d6c2b3;
+		--cafe-chat-focus: color-mix(in srgb, var(--cafe-chat-name) 36%, transparent);
+		--cafe-chat-control-active: rgb(255 247 237 / 0.72);
+		--cafe-chat-control-focus: rgb(255 247 237 / 0.28);
+		--cafe-chat-highlight: rgb(255 247 237 / 0.08);
+		--cafe-chat-shadow: rgb(0 0 0 / 0.22);
+		--cafe-chat-text-shadow: rgb(0 0 0 / 0.72);
+	}
+
+	.cafe-chat-shell {
+		color: var(--cafe-chat-message);
+		border: 1px solid var(--cafe-chat-border);
+		background: var(--cafe-chat-overlay);
+		box-shadow:
+			0 12px 30px var(--cafe-chat-shadow),
+			inset 0 1px 0 var(--cafe-chat-highlight);
+		font-weight: 400;
+		letter-spacing: 0.01em;
+	}
+
+	.cafe-chat-header {
+		border-bottom: 1px solid var(--cafe-chat-border);
+		background: var(--cafe-chat-overlay-strong);
+	}
+
+	.cafe-chat-title {
+		color: var(--cafe-chat-message);
+		font-weight: 400;
+	}
+
+	.cafe-chat-muted {
+		color: var(--cafe-chat-muted);
+	}
+
+	.cafe-chat-close {
+		color: var(--cafe-chat-muted);
+	}
+
+	.cafe-chat-close:hover {
+		color: var(--cafe-chat-message);
+		background: var(--cafe-chat-control-hover);
+	}
+
+	.cafe-chat-close:focus {
+		--tw-ring-color: var(--cafe-chat-focus);
+	}
+
+	.cafe-chat-history {
+		background: transparent;
+		scrollbar-color: var(--cafe-chat-border) transparent;
+	}
+
+	.cafe-chat-line {
+		font-size: 0.8125rem;
+		font-weight: 400;
+		line-height: 1.4;
+		letter-spacing: 0.01em;
+		text-shadow: 0 1px 2px var(--cafe-chat-text-shadow);
+	}
+
+	.cafe-chat-name {
+		color: var(--cafe-chat-name);
+		font-weight: 400;
+		white-space: nowrap;
+	}
+
+	.cafe-chat-message {
+		min-width: 0;
+		color: var(--cafe-chat-message);
+		font-weight: 400;
+	}
+
+	.cafe-chat-presence {
+		color: var(--cafe-chat-muted);
+		font-size: 0.6875rem;
+		font-weight: 400;
+		line-height: 1.4;
+		text-shadow: 0 1px 2px var(--cafe-chat-text-shadow);
+	}
+
+	.cafe-chat-composer {
+		border-top: 1px solid var(--cafe-chat-border);
+		background: var(--cafe-chat-overlay-strong);
+	}
+
+	.cafe-chat-quick {
+		color: var(--cafe-chat-message);
+		border: 1px solid var(--cafe-chat-border);
+		background: var(--cafe-chat-control);
+		padding-inline: 0.4rem;
+		font-size: clamp(0.65rem, 2.8vw, 0.75rem);
+		font-weight: 400;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.cafe-chat-quick:hover:not(:disabled) {
+		border-color: var(--cafe-chat-control-active);
+		background: var(--cafe-chat-control-hover);
+	}
+
+	.cafe-chat-input {
+		color: var(--cafe-chat-message);
+		border: 1px solid var(--cafe-chat-border);
+		background: var(--cafe-chat-control);
+		font-weight: 400;
+		letter-spacing: 0.01em;
+	}
+
+	.cafe-chat-input::placeholder {
+		color: var(--cafe-chat-muted);
+	}
+
+	.cafe-chat-input:focus {
+		border-color: var(--cafe-chat-control-active);
+		box-shadow: none;
+	}
+
+	.cafe-chat-count {
+		color: var(--cafe-chat-muted);
+	}
+
+	.cafe-chat-send {
+		color: var(--cafe-chat-message);
+		border: 1px solid var(--cafe-chat-border);
+		background: var(--cafe-chat-control);
+	}
+
+	.cafe-chat-send:hover:not(:disabled) {
+		border-color: var(--cafe-chat-control-active);
+		background: var(--cafe-chat-control-hover);
+	}
+
+	.cafe-chat-send:focus {
+		--tw-ring-color: var(--cafe-chat-control-focus);
+	}
+
+	.cafe-chat-trigger {
+		color: var(--cafe-chat-message);
+		border: 1px solid var(--cafe-chat-border);
+		background: var(--cafe-chat-overlay);
+		box-shadow: 0 8px 18px var(--cafe-chat-shadow);
+	}
+
+	.cafe-chat-trigger:hover {
+		color: var(--cafe-chat-name);
+		background: var(--cafe-chat-overlay-strong);
+	}
+
+	.cafe-chat-trigger:focus {
+		--tw-ring-color: var(--cafe-chat-focus);
+	}
+
 	@media (prefers-reduced-motion: reduce) {
 		.pngtuber-avatar-expression,
 		.pngtuber-avatar,

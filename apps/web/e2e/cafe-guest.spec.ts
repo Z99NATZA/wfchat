@@ -220,11 +220,18 @@ test("Cafe Rush exposes its shared timer, combo, and ingredient handoff on mobil
 	).toBeVisible();
 });
 
-test("room chat shows presence, unread messages, and sends on mobile", async ({ page }) => {
+test("room chat uses a compact transparent overlay and stays usable on mobile", async ({
+	page
+}) => {
 	const chatRoomId = "00000000-0000-4000-8000-000000000006";
 	const room = cafeRoomFixture(chatRoomId);
 	const friendId = "99999999-9999-4999-8999-999999999999";
 	let sendFriendMessage = () => {};
+	let movingMessages = 0;
+	await page.addInitScript(() => {
+		localStorage.setItem("wfchat.locale", "th");
+		localStorage.setItem("wfchat-theme", "light");
+	});
 	await page.routeWebSocket(new RegExp(`/api/cafe/rooms/${chatRoomId}/ws$`), (socket) => {
 		sendFriendMessage = () => {
 			socket.send(
@@ -251,9 +258,16 @@ test("room chat shows presence, unread messages, and sends on mobile", async ({ 
 			);
 		}, 50);
 		socket.onMessage((value) => {
-			const message = JSON.parse(String(value)) as { type: string; text?: string };
+			const message = JSON.parse(String(value)) as {
+				type: string;
+				text?: string;
+				moving?: boolean;
+			};
 			if (message.type === "ping") {
 				socket.send(JSON.stringify({ type: "pong" }));
+			}
+			if (message.type === "move" && message.moving) {
+				movingMessages += 1;
 			}
 			if (message.type === "chat" && message.text) {
 				socket.send(
@@ -266,13 +280,79 @@ test("room chat shows presence, unread messages, and sends on mobile", async ({ 
 		});
 	});
 
-	await page.setViewportSize({ width: 390, height: 844 });
 	await page.goto(`${cafeUrl}/rooms/${chatRoomId}`);
 	await expect(page.getByLabel(/Connected|เชื่อมต่อแล้ว/)).toBeVisible();
 	await page.getByRole("button", { name: /Start helping Aiko|เริ่มช่วย Aiko/ }).click();
 	sendFriendMessage();
 
 	await expect(page.getByTestId("cafe-chat-unread")).toHaveText("1");
+	await page.getByRole("button", { name: /Open room chat|เปิดแชทในห้อง/ }).click();
+	await expect(page.getByRole("heading", { name: "แชทในคาเฟ่" })).toBeVisible();
+	await expect(page.getByText("ข้อความจะหายไปเมื่อห้องปิด", { exact: true })).toBeVisible();
+	const chatChrome = await page.getByTestId("cafe-room-chat").evaluate((element) => {
+		const style = getComputedStyle(element);
+		return {
+			backgroundColor: style.backgroundColor,
+			backdropFilter: style.backdropFilter,
+			borderColor: style.borderTopColor,
+			color: style.color,
+			fontWeight: style.fontWeight,
+			letterSpacing: style.letterSpacing
+		};
+	});
+	expect(chatChrome.backgroundColor).toBe("rgba(170, 108, 55, 0.36)");
+	expect(chatChrome.backdropFilter).toBe("none");
+	expect(chatChrome.borderColor).toBe("rgba(255, 232, 204, 0.22)");
+	expect(chatChrome.color).toBe("rgb(255, 247, 237)");
+	expect(chatChrome.fontWeight).toBe("400");
+	expect(chatChrome.letterSpacing).not.toBe("normal");
+	await expect(page.getByTestId("cafe-chat-name")).toHaveText("[Mint F..]");
+	await expect(page.getByTestId("cafe-chat-name")).toHaveAttribute("title", "Mint Friend");
+	const chatInput = page.getByLabel(/Message the cafe room|ส่งข้อความในห้องคาเฟ่/);
+	await chatInput.click();
+	const chatNameColor = await page
+		.getByTestId("cafe-chat-name")
+		.evaluate((element) => getComputedStyle(element).color);
+	const inputChrome = await chatInput.evaluate((element) => {
+		const style = getComputedStyle(element);
+		return {
+			borderColor: style.borderColor,
+			boxShadow: style.boxShadow,
+			color: style.color
+		};
+	});
+	const sendColor = await page
+		.getByRole("button", { name: /Send message|ส่งข้อความ/ })
+		.evaluate((element) => getComputedStyle(element).color);
+	expect(chatNameColor).toBe("rgb(74, 222, 128)");
+	expect(inputChrome.color).toBe(chatChrome.color);
+	expect(inputChrome.borderColor).not.toBe(chatNameColor);
+	expect(inputChrome.boxShadow).toBe("none");
+	expect(sendColor).toBe(chatChrome.color);
+	await page.keyboard.type("wasde ไทย");
+	await expect(chatInput).toHaveValue("wasde ไทย");
+	const focusedMovingMessages = movingMessages;
+	await page.waitForTimeout(150);
+	expect(movingMessages).toBe(focusedMovingMessages);
+	await chatInput.press("Enter");
+	await expect(chatInput).toHaveValue("");
+	await expect(chatInput).not.toBeFocused();
+	await page.keyboard.down("d");
+	try {
+		await expect.poll(() => movingMessages).toBeGreaterThan(focusedMovingMessages);
+	} finally {
+		await page.keyboard.up("d");
+	}
+	await chatInput.click();
+	const desktopChatPanelBox = await page.getByTestId("cafe-chat-panel-position").boundingBox();
+	expect(desktopChatPanelBox?.height ?? Number.POSITIVE_INFINITY).toBeLessThanOrEqual(384);
+	await page.screenshot({
+		path: "test-results/aiko-cafe-chat-desktop.png",
+		fullPage: true
+	});
+
+	await page.getByRole("button", { name: /Close room chat|ปิดแชทในห้อง/ }).click();
+	await page.setViewportSize({ width: 390, height: 844 });
 	await page.getByRole("button", { name: /Open room chat|เปิดแชทในห้อง/ }).click();
 	const chatPanelBox = await page.getByTestId("cafe-chat-panel-position").boundingBox();
 	const cafeGameBox = await page.getByTestId("cafe-game").boundingBox();
@@ -290,6 +370,10 @@ test("room chat shows presence, unread messages, and sends on mobile", async ({ 
 	await page.getByLabel(/Message the cafe room|ส่งข้อความในห้องคาเฟ่/).fill("Nice to meet you");
 	await page.getByRole("button", { name: /Send message|ส่งข้อความ/ }).click();
 	await expect(page.getByTestId("cafe-chat-history")).toContainText("Nice to meet you");
+	await page.screenshot({
+		path: "test-results/aiko-cafe-chat-mobile.png",
+		fullPage: true
+	});
 });
 
 test("tea delivery rotates into table service with one reward per round", async ({ page }) => {

@@ -390,13 +390,35 @@ describe("CafeRoomPage", () => {
 			"cafe.chat.playerJoined"
 		);
 		expect(screen.getByTestId("cafe-chat-message").textContent).toContain("Hello cafe");
-		expect(gameCanvas.props?.inputEnabled).toBe(false);
+		expect(screen.getByTestId("cafe-chat-name").textContent).toBe("[Mint F..]");
+		expect(screen.getByTestId("cafe-chat-name").getAttribute("title")).toBe("Mint Friend");
+		expect(gameCanvas.props?.inputEnabled).toBe(true);
 
-		fireEvent.change(screen.getByLabelText("cafe.chat.inputLabel"), {
+		const chatInput = screen.getByLabelText("cafe.chat.inputLabel");
+		fireEvent.focus(chatInput);
+		expect(gameCanvas.props?.inputEnabled).toBe(false);
+		fireEvent.blur(chatInput);
+		expect(gameCanvas.props?.inputEnabled).toBe(true);
+
+		chatInput.focus();
+		expect(document.activeElement).toBe(chatInput);
+		fireEvent.change(chatInput, {
 			target: { value: "Nice to meet you" }
 		});
 		fireEvent.click(screen.getByRole("button", { name: "cafe.chat.send" }));
 		expect(roomHook.value.sendChat).toHaveBeenCalledWith("Nice to meet you");
+		expect((chatInput as HTMLInputElement).value).toBe("");
+		expect(document.activeElement).not.toBe(chatInput);
+		expect(gameCanvas.props?.inputEnabled).toBe(true);
+
+		roomHook.value.sendChat.mockReturnValueOnce(false);
+		chatInput.focus();
+		fireEvent.change(chatInput, {
+			target: { value: "Please retry" }
+		});
+		fireEvent.click(screen.getByRole("button", { name: "cafe.chat.send" }));
+		expect((chatInput as HTMLInputElement).value).toBe("Please retry");
+		expect(gameCanvas.props?.inputEnabled).toBe(false);
 	});
 
 	it("blocks room controls immediately while the browser is offline", () => {

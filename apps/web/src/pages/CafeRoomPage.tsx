@@ -54,6 +54,7 @@ function CafeRoomContent({
 	const [copied, setCopied] = useState(false);
 	const [showGuide, setShowGuide] = useState(shouldShowCafeGuide);
 	const [showChat, setShowChat] = useState(false);
+	const [chatInputFocused, setChatInputFocused] = useState(false);
 	const [unreadChatCount, setUnreadChatCount] = useState(0);
 	const seenLatestChatIdRef = useRef<string | null>(null);
 	const selfPlayer = cafe.room?.players.find((player) => player.id === cafe.selfPlayerId);
@@ -92,6 +93,11 @@ function CafeRoomContent({
 	function openChat() {
 		setShowChat(true);
 		setUnreadChatCount(0);
+	}
+
+	function closeChat() {
+		setChatInputFocused(false);
+		setShowChat(false);
 	}
 
 	function dismissGuide() {
@@ -143,7 +149,7 @@ function CafeRoomContent({
 					room={cafe.room}
 					selfPlayerId={cafe.selfPlayerId}
 					connectionEpoch={cafe.connectionEpoch}
-					inputEnabled={inputEnabled && !showChat}
+					inputEnabled={inputEnabled && !chatInputFocused}
 					emote={cafe.emote}
 					chatMessage={cafe.latestChatMessage}
 					onMovement={cafe.sendMovement}
@@ -165,7 +171,7 @@ function CafeRoomContent({
 				/>
 				{showChat ? (
 					<div
-						className="absolute bottom-16 left-3 z-[65] h-[min(28rem,calc(100%-5rem))] w-[min(22rem,calc(100%-1.5rem))] max-sm:bottom-[calc(max(1rem,env(safe-area-inset-bottom))+13.5rem)] max-sm:right-3 max-sm:h-[min(24rem,calc(100%-15rem))] max-sm:w-auto"
+						className="absolute bottom-16 left-3 z-[65] h-[min(24rem,calc(100%-5rem))] w-[min(21rem,calc(100%-1.5rem))] max-sm:bottom-[calc(max(1rem,env(safe-area-inset-bottom))+13.5rem)] max-sm:right-3 max-sm:h-[min(22rem,calc(100%-15rem))] max-sm:w-auto"
 						data-testid="cafe-chat-panel-position"
 					>
 						<CafeRoomChat
@@ -173,14 +179,15 @@ function CafeRoomContent({
 							selfPlayerId={cafe.selfPlayerId}
 							connected={inputEnabled}
 							error={cafe.chatError}
-							onClose={() => setShowChat(false)}
+							onClose={closeChat}
+							onInputFocusChange={setChatInputFocused}
 							onSend={cafe.sendChat}
 						/>
 					</div>
 				) : (
 					<button
 						type="button"
-						className="absolute bottom-3 left-3 z-40 flex size-11 items-center justify-center rounded-full border border-dialog-border bg-dialog-soft text-app-text shadow-lg transition hover:bg-dialog-panel focus:outline-none focus:ring-4 focus:ring-primary/25 max-sm:bottom-[calc(max(1rem,env(safe-area-inset-bottom))+10rem)]"
+						className="cafe-chat-trigger absolute bottom-3 left-3 z-40 flex size-11 items-center justify-center rounded-full transition focus:outline-none focus:ring-4 max-sm:bottom-[calc(max(1rem,env(safe-area-inset-bottom))+10rem)]"
 						onClick={openChat}
 						aria-label={t("cafe.chat.open")}
 						data-testid="cafe-chat-open"
