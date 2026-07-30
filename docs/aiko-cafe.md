@@ -13,7 +13,9 @@ chat and is available at `/cafe` without login.
 - Desktop controls are WASD or arrow keys plus `E`. Mobile uses on-screen
   movement and interaction controls. The movement pad and action button share
   one bottom control zone, while reactions open vertically above the action
-  button so the controls do not overlap.
+  button so the controls do not overlap. When the player changes direction,
+  release events from the previous direction cannot cancel the currently held
+  direction.
 - First-time guidance and nearby prompts explain the current activity. Help
   remains available from the activity HUD.
 - Room members can exchange short text messages in a collapsible panel. New

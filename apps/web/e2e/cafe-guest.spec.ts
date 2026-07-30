@@ -210,6 +210,71 @@ test("mobile overlays reserve separate control and status zones", async ({ page 
 	});
 });
 
+test("mobile movement stays active on the first hold after switching direction", async ({
+	page
+}) => {
+	const roomId = "00000000-0000-4000-8000-000000000008";
+	const room = cafeRoomFixture(roomId);
+	const movementMessages: Array<{
+		type: string;
+		direction?: string;
+		moving?: boolean;
+	}> = [];
+	await page.routeWebSocket(new RegExp(`/api/cafe/rooms/${roomId}/ws$`), (socket) => {
+		setTimeout(() => {
+			socket.send(
+				JSON.stringify({
+					type: "welcome",
+					self_player_id: room.players[0].id,
+					cafe_stars: 0,
+					room
+				})
+			);
+		}, 50);
+		socket.onMessage((value) => {
+			const message = JSON.parse(String(value)) as {
+				type: string;
+				direction?: string;
+				moving?: boolean;
+			};
+			if (message.type === "move") {
+				movementMessages.push(message);
+			}
+		});
+	});
+	await page.setViewportSize({ width: 390, height: 844 });
+	await page.goto(`${cafeUrl}/rooms/${roomId}`);
+	await page.getByRole("button", { name: /Start helping Aiko|เริ่มช่วย Aiko/ }).click();
+
+	const leftButton = page.getByRole("button", { name: "Left" });
+	const downButton = page.getByRole("button", { name: "Down" });
+	const holdDirection = async (button: typeof leftButton) => {
+		const box = await button.boundingBox();
+		expect(box).not.toBeNull();
+		await page.mouse.move(box!.x + box!.width / 2, box!.y + box!.height / 2);
+		await page.mouse.down();
+		await page.waitForTimeout(320);
+		await page.mouse.up();
+	};
+
+	await holdDirection(leftButton);
+	movementMessages.length = 0;
+	await holdDirection(downButton);
+	expect(
+		movementMessages.filter((message) => message.moving && message.direction === "down").length
+	).toBeGreaterThanOrEqual(2);
+
+	movementMessages.length = 0;
+	await holdDirection(leftButton);
+	expect(
+		movementMessages.filter((message) => message.moving && message.direction === "left").length
+	).toBeGreaterThanOrEqual(2);
+	await page.screenshot({
+		path: "test-results/aiko-cafe-direction-hold-fixed.png",
+		fullPage: true
+	});
+});
+
 test("two guests quick join the same cafe and mobile controls stay usable", async ({ browser }) => {
 	const firstContext = await browser.newContext();
 	const secondContext = await browser.newContext();

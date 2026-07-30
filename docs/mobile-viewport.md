@@ -37,7 +37,9 @@ Cafe touch controls stay inside the game surface above the bottom safe area and
 must not trigger document scrolling. The Cafe movement pad and action button
 share a bottom control zone. Reactions, room chat, dialogue, and top status
 overlays must not overlap that zone or one another at the supported narrow
-viewport. The mobile activity HUD keeps progress visible but moves detailed
+viewport. A held direction remains active when focus moves between movement
+buttons; stale release events from the previous button cannot cancel the new
+direction. The mobile activity HUD keeps progress visible but moves detailed
 active-round guidance behind its Help action. The room-chat icon stays at its
 fixed control position and toggles the panel open or closed.
 

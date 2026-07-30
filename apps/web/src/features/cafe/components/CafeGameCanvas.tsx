@@ -51,6 +51,7 @@ function CafeGameCanvas({
 	const movementRef = useRef(onMovement);
 	const interactRef = useRef(onInteract);
 	const appliedConnectionEpochRef = useRef<number | null>(null);
+	const activeVirtualDirectionRef = useRef<CafeDirection | null>(null);
 	const [interactionTarget, setInteractionTarget] = useState<string | null>(null);
 	const selfPlayer = room?.players.find((player) => player.id === selfPlayerId);
 	const carriedTea = selfPlayer?.carriedTea ?? 0;
@@ -159,6 +160,7 @@ function CafeGameCanvas({
 	useEffect(() => {
 		sceneRef.current?.setInputEnabled(inputEnabled);
 		if (!inputEnabled) {
+			activeVirtualDirectionRef.current = null;
 			setInteractionTarget(null);
 		}
 	}, [inputEnabled]);
@@ -219,6 +221,19 @@ function CafeGameCanvas({
 		}
 	}
 
+	function pressDirection(direction: CafeDirection, x: number, y: number) {
+		activeVirtualDirectionRef.current = direction;
+		setDirection(x, y);
+	}
+
+	function releaseDirection(direction: CafeDirection) {
+		if (activeVirtualDirectionRef.current !== direction) {
+			return;
+		}
+		activeVirtualDirectionRef.current = null;
+		setDirection(0, 0);
+	}
+
 	return (
 		<div
 			className="relative h-full min-h-0 overflow-hidden bg-[#ead6bc]"
@@ -242,8 +257,8 @@ function CafeGameCanvas({
 						className="col-start-2"
 						disabled={!inputEnabled}
 						label="Up"
-						onPress={() => setDirection(0, -1)}
-						onRelease={() => setDirection(0, 0)}
+						onPress={() => pressDirection("up", 0, -1)}
+						onRelease={() => releaseDirection("up")}
 					>
 						▲
 					</DirectionButton>
@@ -251,8 +266,8 @@ function CafeGameCanvas({
 						className="row-start-2"
 						disabled={!inputEnabled}
 						label="Left"
-						onPress={() => setDirection(-1, 0)}
-						onRelease={() => setDirection(0, 0)}
+						onPress={() => pressDirection("left", -1, 0)}
+						onRelease={() => releaseDirection("left")}
 					>
 						◀
 					</DirectionButton>
@@ -260,8 +275,8 @@ function CafeGameCanvas({
 						className="col-start-3 row-start-2"
 						disabled={!inputEnabled}
 						label="Right"
-						onPress={() => setDirection(1, 0)}
-						onRelease={() => setDirection(0, 0)}
+						onPress={() => pressDirection("right", 1, 0)}
+						onRelease={() => releaseDirection("right")}
 					>
 						▶
 					</DirectionButton>
@@ -269,8 +284,8 @@ function CafeGameCanvas({
 						className="col-start-2 row-start-3"
 						disabled={!inputEnabled}
 						label="Down"
-						onPress={() => setDirection(0, 1)}
-						onRelease={() => setDirection(0, 0)}
+						onPress={() => pressDirection("down", 0, 1)}
+						onRelease={() => releaseDirection("down")}
 					>
 						▼
 					</DirectionButton>
