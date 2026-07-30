@@ -11,13 +11,16 @@ chat and is available at `/cafe` without login.
 - The optional cafe name applies only to the current browser tab. If empty, the
   game uses the account display name or a stable `Guest XXXX` name.
 - Desktop controls are WASD or arrow keys plus `E`. Mobile uses on-screen
-  movement and interaction controls.
+  movement and interaction controls. The movement pad and action button share
+  one bottom control zone, while reactions open vertically above the action
+  button so the controls do not overlap.
 - First-time guidance and nearby prompts explain the current activity. Help
   remains available from the activity HUD.
 - Room members can exchange short text messages in a collapsible panel. New
   messages also appear briefly above the sender's avatar, while join and leave
   notices and unread counts make other visitors visible without interrupting
-  play.
+  play. The chat icon remains in place and toggles the panel at every viewport
+  size; the panel close button provides the same close action.
 - Activities rotate through Tea Delivery, Table Service, and Cafe Rush. Tea
   Delivery places three leaves around the Cafe for players to collect and return
   to Aiko. Table Service lets players collect one prepared drink at a time from
@@ -111,9 +114,23 @@ to lobby actions.
 
 ## UI And Privacy Rules
 
-React UI—including the lobby, panels, forms, HUD, prompts, dialogue, and mobile
-controls—uses the shared application theme. The Phaser map, characters, items,
-and in-world markers use the Cafe game palette.
+Persistent React UI inside the game surface—including the activity HUD, room
+status, movement and interaction controls, room chat, Aiko dialogue, and
+reactions—uses the Cafe game palette. Surrounding application chrome and
+interruption surfaces—including the header, sidebar, details, guide, recovery,
+and connection states—use the shared application theme. The Phaser map,
+characters, items, and in-world markers also use the Cafe game palette.
+
+On narrow viewports, the activity HUD and room status share a top row without
+overlap. The HUD keeps the activity, round, and progress visible in a compact
+card; active-round guidance opens through Help, while time-sensitive round and
+carried-item status remains visible in compact form. Chat and transient
+dialogue stay above the bottom control zone, and the reaction control is hidden
+while either of those overlays is open.
+
+The Cafe game surface suppresses text selection, native touch callouts, and
+dialogue-image dragging so touch controls do not open browser selection UI.
+Room chat explicitly restores normal text selection and input editing.
 
 Development builds show the authoritative obstacle rectangles, interaction
 points, and local player collision radius when a room URL includes

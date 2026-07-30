@@ -56,7 +56,7 @@ function CafeRoomChat({
 
 	return (
 		<section
-			className="cafe-chat-shell flex h-full min-h-0 flex-col overflow-hidden rounded-xl"
+			className="cafe-chat-shell flex h-full min-h-0 select-text flex-col overflow-hidden rounded-xl [-webkit-touch-callout:default]"
 			aria-label={t("cafe.chat.title")}
 			data-testid="cafe-room-chat"
 		>
@@ -72,6 +72,7 @@ function CafeRoomChat({
 					className="cafe-chat-close shrink-0 rounded-md border border-transparent p-1 transition focus:outline-none"
 					aria-label={t("cafe.chat.close")}
 					onClick={onClose}
+					data-testid="cafe-chat-panel-close"
 				>
 					<X size={15} aria-hidden="true" />
 				</button>

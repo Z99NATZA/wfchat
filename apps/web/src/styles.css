@@ -480,6 +480,9 @@
 		will-change: opacity, transform;
 	}
 
+	.cafe-world-overlay,
+	.cafe-world-button,
+	.cafe-world-action,
 	.cafe-chat-shell,
 	.cafe-chat-trigger {
 		--cafe-chat-overlay: rgb(170 108 55 / 0.36);
@@ -494,6 +497,86 @@
 		--cafe-chat-highlight: rgb(255 247 237 / 0.08);
 		--cafe-chat-shadow: rgb(0 0 0 / 0.22);
 		--cafe-chat-text-shadow: rgb(0 0 0 / 0.72);
+	}
+
+	.cafe-world-overlay {
+		color: var(--cafe-chat-message);
+		border: 1px solid var(--cafe-chat-border);
+		background: var(--cafe-chat-overlay);
+		box-shadow:
+			0 8px 18px var(--cafe-chat-shadow),
+			inset 0 1px 0 var(--cafe-chat-highlight);
+		text-shadow: 0 1px 2px var(--cafe-chat-text-shadow);
+	}
+
+	.cafe-world-overlay-strong {
+		background: var(--cafe-chat-overlay-strong);
+	}
+
+	.cafe-world-overlay-status {
+		background: rgb(91 54 33 / 0.72);
+	}
+
+	.cafe-world-panel {
+		color: var(--cafe-chat-message);
+		border: 1px solid var(--cafe-chat-border);
+		background: var(--cafe-chat-control);
+	}
+
+	.cafe-world-muted {
+		color: var(--cafe-chat-muted);
+	}
+
+	.cafe-world-divider {
+		border-color: var(--cafe-chat-border);
+	}
+
+	.cafe-world-control {
+		color: var(--cafe-chat-message);
+		border-color: transparent;
+		background: transparent;
+	}
+
+	.cafe-world-control:hover:not(:disabled) {
+		border-color: var(--cafe-chat-border);
+		background: var(--cafe-chat-control-hover);
+	}
+
+	.cafe-world-toggle:hover:not(:disabled),
+	.cafe-world-toggle[data-active="true"] {
+		color: var(--cafe-chat-name);
+		background: var(--cafe-chat-overlay-strong);
+	}
+
+	.cafe-world-button,
+	.cafe-world-action {
+		color: var(--cafe-chat-message);
+		border: 1px solid var(--cafe-chat-border);
+		background: rgb(82 48 29 / 0.78);
+		box-shadow:
+			0 8px 18px var(--cafe-chat-shadow),
+			inset 0 1px 0 var(--cafe-chat-highlight);
+		text-shadow: 0 1px 2px var(--cafe-chat-text-shadow);
+	}
+
+	.cafe-world-button:hover:not(:disabled),
+	.cafe-world-action:hover:not(:disabled) {
+		border-color: var(--cafe-chat-control-active);
+		background: rgb(72 40 24 / 0.9);
+	}
+
+	.cafe-world-button:disabled,
+	.cafe-world-action:disabled {
+		color: var(--cafe-chat-muted);
+		background: rgb(82 48 29 / 0.34);
+		opacity: 0.72;
+	}
+
+	.cafe-world-overlay:focus-visible,
+	.cafe-world-button:focus-visible,
+	.cafe-world-control:focus-visible,
+	.cafe-world-action:focus-visible {
+		border-color: var(--control-focus-border);
 	}
 
 	.cafe-chat-shell {
@@ -636,6 +719,11 @@
 	}
 
 	.cafe-chat-trigger:hover {
+		color: var(--cafe-chat-name);
+		background: var(--cafe-chat-overlay-strong);
+	}
+
+	.cafe-chat-trigger[data-active="true"] {
 		color: var(--cafe-chat-name);
 		background: var(--cafe-chat-overlay-strong);
 	}

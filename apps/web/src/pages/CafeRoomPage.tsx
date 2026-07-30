@@ -9,6 +9,7 @@ import {
 	Flame,
 	Leaf,
 	MessageCircle,
+	SmilePlus,
 	Star,
 	Wifi,
 	WifiOff
@@ -144,7 +145,10 @@ function CafeRoomContent({
 			}
 			details={<CafeRoomDetails room={cafe.room} />}
 		>
-			<section className="relative min-h-0 flex-1 overflow-hidden">
+			<section
+				className="relative min-h-0 flex-1 select-none overflow-hidden [-webkit-touch-callout:none]"
+				data-testid="cafe-room-surface"
+			>
 				<CafeGameCanvas
 					room={cafe.room}
 					selfPlayerId={cafe.selfPlayerId}
@@ -169,8 +173,9 @@ function CafeRoomContent({
 					}}
 					loadingLabel={t("cafe.room.connecting")}
 				/>
-				{showChat ? (
+				{showChat && (
 					<div
+						id="cafe-room-chat-panel"
 						className="absolute bottom-16 left-3 z-[65] h-[min(24rem,calc(100%-5rem))] w-[min(21rem,calc(100%-1.5rem))] max-sm:bottom-[calc(max(1rem,env(safe-area-inset-bottom))+13.5rem)] max-sm:right-3 max-sm:h-[min(22rem,calc(100%-15rem))] max-sm:w-auto"
 						data-testid="cafe-chat-panel-position"
 					>
@@ -184,41 +189,43 @@ function CafeRoomContent({
 							onSend={cafe.sendChat}
 						/>
 					</div>
-				) : (
-					<button
-						type="button"
-						className="cafe-chat-trigger absolute bottom-3 left-3 z-40 flex size-11 items-center justify-center rounded-full transition focus:outline-none max-sm:bottom-[calc(max(1rem,env(safe-area-inset-bottom))+10rem)]"
-						onClick={openChat}
-						aria-label={t("cafe.chat.open")}
-						data-testid="cafe-chat-open"
-					>
-						<MessageCircle size={19} aria-hidden="true" />
-						{unreadChatCount > 0 && (
-							<span
-								className="absolute -right-1 -top-1 flex min-w-5 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold leading-5 text-white"
-								data-testid="cafe-chat-unread"
-							>
-								{Math.min(unreadChatCount, 99)}
-							</span>
-						)}
-					</button>
 				)}
+				<button
+					type="button"
+					className={`cafe-chat-trigger absolute bottom-3 left-3 z-40 flex size-11 items-center justify-center rounded-full transition focus:outline-none max-sm:bottom-[calc(max(1rem,env(safe-area-inset-bottom))+9.5rem)] ${cafe.dialogue && !showChat ? "max-sm:hidden" : ""}`}
+					onClick={showChat ? closeChat : openChat}
+					aria-label={t(showChat ? "cafe.chat.close" : "cafe.chat.open")}
+					aria-controls="cafe-room-chat-panel"
+					aria-expanded={showChat}
+					data-active={showChat}
+					data-testid="cafe-chat-toggle"
+				>
+					<MessageCircle size={19} aria-hidden="true" />
+					{unreadChatCount > 0 && (
+						<span
+							className="absolute -right-1 -top-1 flex min-w-5 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold leading-5 text-white"
+							data-testid="cafe-chat-unread"
+						>
+							{Math.min(unreadChatCount, 99)}
+						</span>
+					)}
+				</button>
 				{cafe.room && showGuide && (
 					<CafeWelcomeGuide activityId={cafe.room.activity.id} onDismiss={dismissGuide} />
 				)}
-				<div className="pointer-events-none absolute left-3 right-3 top-3 z-30 flex items-start justify-between gap-3">
+				<div className="pointer-events-none absolute left-3 right-3 top-3 z-30 flex items-start gap-2 sm:gap-3">
 					<div
-						className="max-w-[min(75%,24rem)] rounded-xl border border-dialog-border bg-dialog-soft px-3 py-2 text-app-text"
+						className="cafe-world-overlay cafe-world-overlay-status min-w-0 max-w-96 flex-1 rounded-lg px-2 py-1.5 sm:rounded-xl sm:px-3 sm:py-2"
 						data-testid="cafe-activity-hud"
 					>
-						<div className="flex items-center justify-between gap-3">
-							<div className="flex items-center gap-2">
-								<p className="text-[11px] font-semibold uppercase tracking-wide text-muted">
+						<div className="flex items-center justify-between gap-1.5 sm:gap-3">
+							<div className="flex min-w-0 items-center gap-1 sm:gap-2">
+								<p className="cafe-world-muted truncate text-[10px] font-semibold uppercase leading-4 tracking-wide sm:text-[11px]">
 									{t(activityTitleKey(cafe.room?.activity.id))}
 								</p>
 								{cafe.room && (
 									<span
-										className="rounded-full border border-dialog-border bg-dialog-panel px-2 py-0.5 text-[10px] font-bold text-app-text"
+										className="cafe-world-panel shrink-0 rounded-full px-1.5 text-[9px] font-bold leading-4 sm:px-2 sm:py-0.5 sm:text-[10px] sm:leading-normal"
 										data-testid="cafe-round-number"
 									>
 										{t("cafe.activity.round", {
@@ -229,14 +236,14 @@ function CafeRoomContent({
 							</div>
 							<button
 								type="button"
-								className="pointer-events-auto -m-1 rounded-full border border-transparent p-1 text-muted transition hover:bg-dialog-panel hover:text-app-text focus:outline-none focus-visible:border-control-focus-border"
+								className="cafe-world-control cafe-world-muted pointer-events-auto -mr-1 flex size-8 shrink-0 items-center justify-center rounded-full border transition focus:outline-none sm:-m-1 sm:size-auto sm:p-1"
 								onClick={() => setShowGuide(true)}
 								aria-label={t("cafe.guide.open")}
 							>
-								<CircleHelp size={16} aria-hidden="true" />
+								<CircleHelp className="size-[15px] sm:size-4" aria-hidden="true" />
 							</button>
 						</div>
-						<p className="mt-1 text-sm font-semibold">
+						<p className="text-[13px] font-semibold leading-5 sm:mt-1 sm:text-sm">
 							{isIntermission
 								? t(
 										isCafeRush
@@ -260,19 +267,19 @@ function CafeRoomContent({
 									)}
 						</p>
 						{isCafeRush && !isIntermission && (
-							<div className="mt-2 flex flex-wrap gap-2">
+							<div className="mt-1 flex flex-wrap gap-1 sm:mt-2 sm:gap-2">
 								<span
-									className="inline-flex items-center gap-1.5 rounded-md border border-dialog-border bg-dialog-panel px-2 py-1 text-xs font-bold text-app-text"
+									className="cafe-world-panel inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-bold sm:gap-1.5 sm:px-2 sm:py-1 sm:text-xs"
 									data-testid="cafe-rush-timer"
 								>
-									<Clock3 size={13} aria-hidden="true" />
+									<Clock3 className="size-3 sm:size-[13px]" aria-hidden="true" />
 									{t("cafe.rush.timer", { seconds: rushCountdown })}
 								</span>
 								<span
-									className="inline-flex items-center gap-1.5 rounded-md border border-dialog-border bg-dialog-panel px-2 py-1 text-xs font-bold text-app-text"
+									className="cafe-world-panel inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-bold sm:gap-1.5 sm:px-2 sm:py-1 sm:text-xs"
 									data-testid="cafe-rush-combo"
 								>
-									<Flame size={13} aria-hidden="true" />
+									<Flame className="size-3 sm:size-[13px]" aria-hidden="true" />
 									{t("cafe.rush.combo", {
 										combo: rushCombo
 									})}
@@ -281,10 +288,10 @@ function CafeRoomContent({
 						)}
 						{!isIntermission && carriedTea > 0 && (
 							<p
-								className="mt-2 inline-flex items-center gap-1.5 rounded-md border border-dialog-border bg-dialog-panel px-2 py-1 text-xs font-semibold text-app-text"
+								className="cafe-world-panel mt-1 inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-semibold sm:mt-2 sm:gap-1.5 sm:px-2 sm:py-1 sm:text-xs"
 								data-testid="cafe-carried-tea"
 							>
-								<Leaf size={13} aria-hidden="true" />
+								<Leaf className="size-3 sm:size-[13px]" aria-hidden="true" />
 								{t(
 									isCafeRush
 										? "cafe.rush.carryingIngredient"
@@ -295,10 +302,10 @@ function CafeRoomContent({
 						)}
 						{!isIntermission && carriedOrder && (
 							<p
-								className="mt-2 inline-flex items-center gap-1.5 rounded-md border border-dialog-border bg-dialog-panel px-2 py-1 text-xs font-semibold text-app-text"
+								className="cafe-world-panel mt-1 inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-semibold sm:mt-2 sm:gap-1.5 sm:px-2 sm:py-1 sm:text-xs"
 								data-testid="cafe-carried-order"
 							>
-								<Coffee size={13} aria-hidden="true" />
+								<Coffee className="size-3 sm:size-[13px]" aria-hidden="true" />
 								{t("cafe.tableService.carrying", {
 									drink: carriedDrink,
 									table: carriedTable
@@ -306,7 +313,11 @@ function CafeRoomContent({
 							</p>
 						)}
 						<p
-							className="mt-2 border-t border-dialog-border pt-2 text-xs leading-5 text-muted"
+							className={
+								isIntermission
+									? "cafe-world-divider cafe-world-muted mt-1 border-t pt-1 text-[10px] leading-4 sm:mt-2 sm:pt-2 sm:text-xs sm:leading-5"
+									: "cafe-world-divider cafe-world-muted hidden border-t text-xs leading-5 sm:mt-2 sm:block sm:pt-2"
+							}
 							data-testid="cafe-quest-hint"
 						>
 							{isIntermission ? (
@@ -316,85 +327,70 @@ function CafeRoomContent({
 									t("cafe.activity.startingRound")
 								)
 							) : (
-								<>
-									<span
-										className="hidden sm:inline"
-										data-testid="cafe-quest-hint-desktop"
-									>
-										{t(
-											cafeQuestHintKey(
-												cafe.room,
-												carriedTea,
-												Boolean(carriedOrder),
-												false
-											),
-											{ table: carriedTable }
-										)}
-									</span>
-									<span
-										className="sm:hidden"
-										data-testid="cafe-quest-hint-mobile"
-									>
-										{t(
-											cafeQuestHintKey(
-												cafe.room,
-												carriedTea,
-												Boolean(carriedOrder),
-												true
-											),
-											{ table: carriedTable }
-										)}
-									</span>
-								</>
+								<span data-testid="cafe-quest-hint-desktop">
+									{t(
+										cafeQuestHintKey(
+											cafe.room,
+											carriedTea,
+											Boolean(carriedOrder)
+										),
+										{ table: carriedTable }
+									)}
+								</span>
 							)}
 						</p>
 					</div>
 					<div
-						className="rounded-xl border border-dialog-border bg-dialog-soft px-3 py-2 text-app-text"
-						data-testid="cafe-stars"
+						className="pointer-events-auto ml-auto flex shrink-0 flex-col items-end gap-2"
+						data-testid="cafe-room-status"
 					>
-						<p className="flex items-center gap-2 text-sm font-semibold">
-							<Star size={16} className="text-amber-300" aria-hidden="true" />
-							{cafe.cafeStars}
-						</p>
+						<div
+							className="cafe-world-overlay cafe-world-overlay-status rounded-xl px-3 py-2"
+							data-testid="cafe-stars"
+						>
+							<p className="flex items-center gap-2 text-sm font-semibold">
+								<Star size={16} className="text-amber-300" aria-hidden="true" />
+								{cafe.cafeStars}
+							</p>
+						</div>
+						{cafe.room && (
+							<button
+								type="button"
+								className="cafe-world-button rounded-lg px-3 py-2 text-xs font-semibold transition focus:outline-none"
+								onClick={() => void copyInviteCode()}
+								data-testid="cafe-invite-code"
+							>
+								<span className="flex items-center gap-2">
+									<Copy size={14} aria-hidden="true" />
+									{copied ? t("cafe.room.copied") : cafe.room.inviteCode}
+								</span>
+							</button>
+						)}
 					</div>
 				</div>
-				<div
-					className="absolute bottom-3 left-1/2 z-30 flex -translate-x-1/2 gap-1 rounded-full border border-dialog-border bg-dialog-soft p-1.5 text-app-text max-sm:bottom-24"
-					data-testid="cafe-emotes"
-				>
-					{["wave", "heart", "happy", "tea"].map((value) => (
-						<button
-							key={value}
-							type="button"
-							className="flex size-9 items-center justify-center rounded-full border border-transparent text-lg transition hover:bg-dialog-panel focus:outline-none focus-visible:border-control-focus-border disabled:cursor-not-allowed disabled:opacity-50"
-							aria-label={t(`cafe.emote.${value}`)}
-							onClick={() => cafe.sendEmote(value)}
-							disabled={!inputEnabled}
-						>
-							{{ wave: "👋", heart: "💗", happy: "✨", tea: "🍵" }[value]}
-						</button>
-					))}
-				</div>
+				<CafeEmoteControls
+					disabled={!inputEnabled}
+					hideMobile={showChat || Boolean(cafe.dialogue)}
+					onEmote={cafe.sendEmote}
+				/>
 				{cafe.dialogue && (
 					<div
-						className="absolute bottom-28 left-1/2 z-40 flex w-[min(92%,34rem)] -translate-x-1/2 items-center gap-3 rounded-2xl border border-dialog-border bg-dialog-soft p-3 text-app-text max-sm:bottom-44"
+						className="cafe-world-overlay cafe-world-overlay-strong absolute bottom-28 left-1/2 z-40 flex w-[min(92%,34rem)] -translate-x-1/2 items-center gap-3 rounded-2xl p-3 max-sm:bottom-44"
 						data-testid="aiko-dialogue"
 						role="status"
 						aria-live="polite"
 					>
-						<div className="flex size-16 shrink-0 items-end justify-center overflow-hidden rounded-xl border border-dialog-border bg-dialog-panel">
+						<div className="cafe-world-panel flex size-16 shrink-0 items-end justify-center overflow-hidden rounded-xl">
 							<img
 								src={`/images/aiko-pngtuber/aiko-${cafe.dialogue.expression}.png`}
 								alt="Aiko"
+								draggable={false}
 								className="h-16 w-14 object-contain object-bottom"
 							/>
 						</div>
 						<div className="min-w-0 py-1">
-							<p className="text-xs font-bold uppercase tracking-[0.12em] text-app-text">
-								Aiko
-							</p>
-							<p className="mt-1 text-sm font-medium leading-5 text-app-text">
+							<p className="text-xs font-bold uppercase tracking-[0.12em]">Aiko</p>
+							<p className="mt-1 text-sm font-medium leading-5">
 								{t(cafe.dialogue.messageKey)}
 							</p>
 						</div>
@@ -429,21 +425,96 @@ function CafeRoomContent({
 						onRetry={cafe.retryConnection}
 					/>
 				)}
-				{cafe.room && (
-					<button
-						type="button"
-						className="absolute right-3 top-20 z-30 rounded-lg border border-dialog-border bg-dialog-soft px-3 py-2 text-xs font-semibold text-app-text transition hover:bg-dialog-panel focus:outline-none focus-visible:border-control-focus-border"
-						onClick={() => void copyInviteCode()}
-						data-testid="cafe-invite-code"
-					>
-						<span className="flex items-center gap-2">
-							<Copy size={14} aria-hidden="true" />
-							{copied ? t("cafe.room.copied") : cafe.room.inviteCode}
-						</span>
-					</button>
-				)}
 			</section>
 		</AppLayout>
+	);
+}
+
+const CAFE_EMOTES = [
+	{ value: "wave", glyph: "👋" },
+	{ value: "heart", glyph: "💗" },
+	{ value: "happy", glyph: "✨" },
+	{ value: "tea", glyph: "🍵" }
+] as const;
+
+function CafeEmoteControls({
+	disabled,
+	hideMobile,
+	onEmote
+}: {
+	disabled: boolean;
+	hideMobile: boolean;
+	onEmote: (value: string) => void;
+}) {
+	const { t } = useI18n();
+	const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+	useEffect(() => {
+		if (disabled || hideMobile) {
+			setMobileMenuOpen(false);
+		}
+	}, [disabled, hideMobile]);
+
+	function sendEmote(value: string) {
+		onEmote(value);
+		setMobileMenuOpen(false);
+	}
+
+	return (
+		<>
+			<div
+				className="cafe-world-overlay absolute bottom-3 left-1/2 z-30 hidden -translate-x-1/2 gap-1 rounded-full p-1.5 sm:flex"
+				data-testid="cafe-emotes"
+			>
+				{CAFE_EMOTES.map(({ value, glyph }) => (
+					<button
+						key={value}
+						type="button"
+						className="cafe-world-control flex size-9 items-center justify-center rounded-full border text-lg transition focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+						aria-label={t(`cafe.emote.${value}`)}
+						onClick={() => sendEmote(value)}
+						disabled={disabled}
+					>
+						{glyph}
+					</button>
+				))}
+			</div>
+			<div
+				className={`absolute bottom-[calc(max(1rem,env(safe-area-inset-bottom))+4rem)] right-4 z-40 flex flex-col items-end gap-1 sm:hidden ${hideMobile ? "max-sm:hidden" : ""}`}
+				data-testid="cafe-mobile-emotes"
+			>
+				{mobileMenuOpen && (
+					<div
+						className="cafe-world-overlay flex w-12 flex-col items-center gap-1 rounded-2xl p-[3px]"
+						data-testid="cafe-mobile-emote-menu"
+					>
+						{CAFE_EMOTES.map(({ value, glyph }) => (
+							<button
+								key={value}
+								type="button"
+								className="cafe-world-control flex size-10 items-center justify-center rounded-xl border text-lg transition focus:outline-none"
+								aria-label={t(`cafe.emote.${value}`)}
+								onClick={() => sendEmote(value)}
+							>
+								{glyph}
+							</button>
+						))}
+					</div>
+				)}
+				<button
+					type="button"
+					className="cafe-world-overlay cafe-world-toggle flex size-12 items-center justify-center rounded-full transition focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+					aria-label={t(mobileMenuOpen ? "cafe.emote.close" : "cafe.emote.open")}
+					aria-expanded={mobileMenuOpen}
+					data-active={mobileMenuOpen}
+					onClick={() => setMobileMenuOpen((current) => !current)}
+					disabled={disabled}
+					data-testid="cafe-mobile-emote-toggle"
+				>
+					<SmilePlus size={19} aria-hidden="true" />
+				</button>
+			</div>
+		</>
 	);
 }
 
@@ -725,24 +796,22 @@ function activityTitleKey(activityId: CafeRoomState["activity"]["id"] | undefine
 function cafeQuestHintKey(
 	room: CafeRoomState | null,
 	carriedTea: number,
-	hasCarriedOrder: boolean,
-	mobile: boolean
+	hasCarriedOrder: boolean
 ) {
-	const device = mobile ? "Mobile" : "Desktop";
 	if (room?.activity.id === "table_service") {
 		return hasCarriedOrder
-			? `cafe.tableService.deliverHint${device}`
-			: `cafe.tableService.pickupHint${device}`;
+			? "cafe.tableService.deliverHintDesktop"
+			: "cafe.tableService.pickupHintDesktop";
 	}
 	if (room?.activity.id === "cafe_rush") {
-		if (hasCarriedOrder) return `cafe.rush.deliverHint${device}`;
-		if (carriedTea > 0) return `cafe.rush.prepareHint${device}`;
+		if (hasCarriedOrder) return "cafe.rush.deliverHintDesktop";
+		if (carriedTea > 0) return "cafe.rush.prepareHintDesktop";
 		if (room.activity.tableOrders.some((order) => order.status === "available")) {
-			return `cafe.rush.pickupHint${device}`;
+			return "cafe.rush.pickupHintDesktop";
 		}
-		return `cafe.rush.findHint${device}`;
+		return "cafe.rush.findHintDesktop";
 	}
-	return carriedTea > 0 ? `cafe.activity.returnHint${device}` : `cafe.activity.findHint${device}`;
+	return carriedTea > 0 ? "cafe.activity.returnHintDesktop" : "cafe.activity.findHintDesktop";
 }
 
 function cosmeticGlyph(cosmeticId: string) {

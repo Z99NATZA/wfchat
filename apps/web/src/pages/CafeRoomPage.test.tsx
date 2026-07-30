@@ -170,6 +170,9 @@ describe("CafeRoomPage", () => {
 
 		renderRoomPage();
 
+		const roomSurface = screen.getByTestId("cafe-room-surface");
+		expect(roomSurface.className).toContain("select-none");
+		expect(roomSurface.className).toContain("[-webkit-touch-callout:none]");
 		expect(screen.getByRole("dialog").textContent).toContain("cafe.guide.title");
 		fireEvent.click(screen.getByRole("button", { name: "cafe.guide.start" }));
 		expect(window.localStorage.getItem("wfchat_cafe_guide_seen_v1")).toBe("seen");
@@ -179,16 +182,17 @@ describe("CafeRoomPage", () => {
 		expect(screen.getByTestId("cafe-quest-hint-desktop").textContent).toBe(
 			"cafe.activity.returnHintDesktop"
 		);
-		expect(screen.getByTestId("cafe-quest-hint-mobile").textContent).toBe(
-			"cafe.activity.returnHintMobile"
-		);
+		expect(screen.getByTestId("cafe-quest-hint").className).toContain("hidden");
 		expect(gameCanvas.props?.interactionLabels.deliverTea).toBe("cafe.room.deliverTea");
 		const dialogue = screen.getByTestId("aiko-dialogue");
 		expect(dialogue.textContent).toContain("cafe.dialogue.teaCollected");
-		expect(dialogue.className).toContain("bg-dialog-soft");
+		expect(dialogue.className).toContain("cafe-world-overlay");
+		expect(dialogue.className).toContain("cafe-world-overlay-strong");
+		expect(dialogue.className).not.toContain("bg-dialog-soft");
+		expect(screen.getByAltText("Aiko").getAttribute("draggable")).toBe("false");
 	});
 
-	it("explains how to collect tea on desktop and mobile", () => {
+	it("keeps detailed activity guidance behind Help on mobile", () => {
 		const room = roomFixture();
 		room.players[0].carriedTea = 0;
 		Object.assign(roomHook.value, {
@@ -201,11 +205,50 @@ describe("CafeRoomPage", () => {
 		renderRoomPage();
 
 		const desktopHint = screen.getByTestId("cafe-quest-hint-desktop");
-		const mobileHint = screen.getByTestId("cafe-quest-hint-mobile");
 		expect(desktopHint.textContent).toBe("cafe.activity.findHintDesktop");
-		expect(desktopHint.className).toContain("hidden sm:inline");
-		expect(mobileHint.textContent).toBe("cafe.activity.findHintMobile");
-		expect(mobileHint.className).toContain("sm:hidden");
+		expect(screen.getByTestId("cafe-quest-hint").className).toContain("hidden");
+		expect(screen.getByTestId("cafe-quest-hint").className).toContain("sm:block");
+		expect(screen.getByRole("button", { name: "cafe.guide.open" })).toBeTruthy();
+	});
+
+	it("keeps mobile reactions collapsed and groups room status controls", () => {
+		const room = roomFixture();
+		Object.assign(roomHook.value, {
+			room,
+			selfPlayerId: room.players[0].id,
+			connectionState: "connected",
+			error: null
+		});
+
+		renderRoomPage();
+
+		const roomStatus = screen.getByTestId("cafe-room-status");
+		const activityHud = screen.getByTestId("cafe-activity-hud");
+		const stars = screen.getByTestId("cafe-stars");
+		const inviteCode = screen.getByTestId("cafe-invite-code");
+		expect(activityHud.className).toContain("cafe-world-overlay-status");
+		expect(stars.className).toContain("cafe-world-overlay-status");
+		expect(inviteCode.className).toContain("cafe-world-button");
+		expect(roomStatus.contains(stars)).toBe(true);
+		expect(roomStatus.contains(inviteCode)).toBe(true);
+		expect(screen.queryByTestId("cafe-mobile-emote-menu")).toBeNull();
+
+		fireEvent.click(screen.getByTestId("cafe-mobile-emote-toggle"));
+		const mobileMenu = screen.getByTestId("cafe-mobile-emote-menu");
+		expect(mobileMenu.className).toContain("w-12");
+		expect(mobileMenu.className).toContain("cafe-world-overlay");
+		expect(screen.getByTestId("cafe-mobile-emote-toggle").className).toContain("size-12");
+		expect(screen.getByTestId("cafe-mobile-emote-toggle").className).toContain(
+			"cafe-world-overlay"
+		);
+		const waveButton = mobileMenu.querySelector<HTMLButtonElement>(
+			'[aria-label="cafe.emote.wave"]'
+		);
+		expect(waveButton).not.toBeNull();
+		fireEvent.click(waveButton as HTMLButtonElement);
+
+		expect(roomHook.value.sendEmote).toHaveBeenCalledWith("wave");
+		expect(screen.queryByTestId("cafe-mobile-emote-menu")).toBeNull();
 	});
 
 	it("keeps room activity in the sidebar and mounts an empty desktop right rail", () => {
@@ -286,9 +329,7 @@ describe("CafeRoomPage", () => {
 		expect(screen.getByTestId("cafe-quest-hint-desktop").textContent).toBe(
 			"cafe.tableService.deliverHintDesktop"
 		);
-		expect(screen.getByTestId("cafe-quest-hint-mobile").textContent).toBe(
-			"cafe.tableService.deliverHintMobile"
-		);
+		expect(screen.getByTestId("cafe-quest-hint").className).toContain("hidden");
 		expect(gameCanvas.props?.interactionLabels.pickUpDrink).toBe("cafe.tableService.pickUp");
 		expect(gameCanvas.props?.interactionLabels.serveDrink).toBe("cafe.tableService.serve");
 	});
@@ -339,9 +380,7 @@ describe("CafeRoomPage", () => {
 		expect(screen.getByTestId("cafe-quest-hint-desktop").textContent).toBe(
 			"cafe.rush.prepareHintDesktop"
 		);
-		expect(screen.getByTestId("cafe-quest-hint-mobile").textContent).toBe(
-			"cafe.rush.prepareHintMobile"
-		);
+		expect(screen.getByTestId("cafe-quest-hint").className).toContain("hidden");
 		expect(gameCanvas.props?.interactionLabels.prepareOrder).toBe("cafe.rush.prepareOrder");
 		expect(gameCanvas.props?.interactionLabels.findIngredient).toBe("cafe.rush.findIngredient");
 	});
@@ -376,12 +415,22 @@ describe("CafeRoomPage", () => {
 		renderRoomPage();
 
 		expect(screen.getByTestId("cafe-chat-unread").textContent).toBe("1");
-		const openChatButton = screen.getByRole("button", { name: "cafe.chat.open" });
-		expect(openChatButton.className).toContain("bottom-3");
-		expect(openChatButton.className).toContain("left-3");
-		expect(openChatButton.className).toContain("max-sm:bottom-");
-		fireEvent.click(openChatButton);
-		expect(screen.getByTestId("cafe-room-chat")).toBeTruthy();
+		const chatToggle = screen.getByTestId("cafe-chat-toggle");
+		expect(chatToggle.getAttribute("aria-label")).toBe("cafe.chat.open");
+		expect(chatToggle.getAttribute("aria-expanded")).toBe("false");
+		expect(chatToggle.getAttribute("data-active")).toBe("false");
+		expect(chatToggle.className).toContain("bottom-3");
+		expect(chatToggle.className).toContain("left-3");
+		expect(chatToggle.className).toContain("max-sm:bottom-");
+		fireEvent.click(chatToggle);
+		expect(screen.getByTestId("cafe-chat-toggle")).toBe(chatToggle);
+		expect(chatToggle.getAttribute("aria-label")).toBe("cafe.chat.close");
+		expect(chatToggle.getAttribute("aria-expanded")).toBe("true");
+		expect(chatToggle.getAttribute("aria-controls")).toBe("cafe-room-chat-panel");
+		expect(chatToggle.getAttribute("data-active")).toBe("true");
+		const roomChat = screen.getByTestId("cafe-room-chat");
+		expect(roomChat.className).toContain("select-text");
+		expect(roomChat.className).toContain("[-webkit-touch-callout:default]");
 		const chatPanelPosition = screen.getByTestId("cafe-chat-panel-position");
 		expect(chatPanelPosition.className).toContain("bottom-16");
 		expect(chatPanelPosition.className).toContain("left-3");
@@ -419,6 +468,17 @@ describe("CafeRoomPage", () => {
 		fireEvent.click(screen.getByRole("button", { name: "cafe.chat.send" }));
 		expect((chatInput as HTMLInputElement).value).toBe("Please retry");
 		expect(gameCanvas.props?.inputEnabled).toBe(false);
+
+		fireEvent.click(chatToggle);
+		expect(screen.queryByTestId("cafe-room-chat")).toBeNull();
+		expect(chatToggle.getAttribute("aria-label")).toBe("cafe.chat.open");
+		expect(chatToggle.getAttribute("aria-expanded")).toBe("false");
+		expect(chatToggle.getAttribute("data-active")).toBe("false");
+
+		fireEvent.click(chatToggle);
+		fireEvent.click(screen.getByTestId("cafe-chat-panel-close"));
+		expect(screen.queryByTestId("cafe-room-chat")).toBeNull();
+		expect(chatToggle.getAttribute("aria-expanded")).toBe("false");
 	});
 
 	it("blocks room controls immediately while the browser is offline", () => {

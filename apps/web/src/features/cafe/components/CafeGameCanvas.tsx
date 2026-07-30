@@ -230,65 +230,74 @@ function CafeGameCanvas({
 					{loadingLabel}
 				</div>
 			)}
-			<div className="absolute bottom-[max(1rem,env(safe-area-inset-bottom))] left-4 z-30 grid grid-cols-3 grid-rows-3 gap-1 sm:hidden">
-				<DirectionButton
-					className="col-start-2"
-					disabled={!inputEnabled}
-					label="Up"
-					onPress={() => setDirection(0, -1)}
-					onRelease={() => setDirection(0, 0)}
-				>
-					▲
-				</DirectionButton>
-				<DirectionButton
-					className="row-start-2"
-					disabled={!inputEnabled}
-					label="Left"
-					onPress={() => setDirection(-1, 0)}
-					onRelease={() => setDirection(0, 0)}
-				>
-					◀
-				</DirectionButton>
-				<DirectionButton
-					className="col-start-3 row-start-2"
-					disabled={!inputEnabled}
-					label="Right"
-					onPress={() => setDirection(1, 0)}
-					onRelease={() => setDirection(0, 0)}
-				>
-					▶
-				</DirectionButton>
-				<DirectionButton
-					className="col-start-2 row-start-3"
-					disabled={!inputEnabled}
-					label="Down"
-					onPress={() => setDirection(0, 1)}
-					onRelease={() => setDirection(0, 0)}
-				>
-					▼
-				</DirectionButton>
-			</div>
-			<button
-				type="button"
-				className="absolute bottom-[max(1.25rem,env(safe-area-inset-bottom))] right-4 z-40 flex h-16 min-w-20 max-w-28 items-center justify-center rounded-2xl border border-action-border bg-action px-3 text-center text-xs font-bold leading-4 text-action-text transition hover:bg-action-hover focus:outline-none focus-visible:border-control-focus-border disabled:border-app-border disabled:bg-app-soft disabled:text-muted sm:hidden"
-				disabled={!inputEnabled || !currentInteractionTarget}
-				onClick={() => {
-					if (currentInteractionTarget) {
-						interactRef.current(currentInteractionTarget);
-					}
-				}}
-				aria-live="polite"
+			<div
+				className="pointer-events-none absolute inset-x-4 bottom-[max(1rem,env(safe-area-inset-bottom))] z-30 flex items-end justify-between gap-3 sm:hidden"
+				data-testid="cafe-mobile-controls"
 			>
-				{interactionLabel}
-			</button>
+				<div
+					className="pointer-events-auto grid shrink-0 grid-cols-3 grid-rows-3 gap-1"
+					data-testid="cafe-direction-pad"
+				>
+					<DirectionButton
+						className="col-start-2"
+						disabled={!inputEnabled}
+						label="Up"
+						onPress={() => setDirection(0, -1)}
+						onRelease={() => setDirection(0, 0)}
+					>
+						▲
+					</DirectionButton>
+					<DirectionButton
+						className="row-start-2"
+						disabled={!inputEnabled}
+						label="Left"
+						onPress={() => setDirection(-1, 0)}
+						onRelease={() => setDirection(0, 0)}
+					>
+						◀
+					</DirectionButton>
+					<DirectionButton
+						className="col-start-3 row-start-2"
+						disabled={!inputEnabled}
+						label="Right"
+						onPress={() => setDirection(1, 0)}
+						onRelease={() => setDirection(0, 0)}
+					>
+						▶
+					</DirectionButton>
+					<DirectionButton
+						className="col-start-2 row-start-3"
+						disabled={!inputEnabled}
+						label="Down"
+						onPress={() => setDirection(0, 1)}
+						onRelease={() => setDirection(0, 0)}
+					>
+						▼
+					</DirectionButton>
+				</div>
+				<button
+					type="button"
+					className="cafe-world-action pointer-events-auto flex h-14 min-w-20 max-w-28 items-center justify-center rounded-2xl px-3 text-center text-xs font-bold leading-4 transition focus:outline-none disabled:cursor-not-allowed"
+					disabled={!inputEnabled || !currentInteractionTarget}
+					onClick={() => {
+						if (currentInteractionTarget) {
+							interactRef.current(currentInteractionTarget);
+						}
+					}}
+					aria-live="polite"
+					data-testid="cafe-action-button"
+				>
+					{interactionLabel}
+				</button>
+			</div>
 			{inputEnabled && currentInteractionTarget && (
 				<div
-					className="absolute bottom-16 left-1/2 z-50 hidden -translate-x-1/2 items-center gap-2 rounded-xl border border-dialog-border bg-dialog-soft px-4 py-2.5 text-sm font-semibold text-app-text sm:flex"
+					className="cafe-world-overlay cafe-world-overlay-strong absolute bottom-16 left-1/2 z-50 hidden -translate-x-1/2 items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold sm:flex"
 					data-testid="cafe-interaction-prompt"
 					role="status"
 					aria-live="polite"
 				>
-					<kbd className="rounded-md border border-dialog-border bg-dialog-panel px-2 py-0.5 font-mono text-xs text-app-text">
+					<kbd className="cafe-world-panel rounded-md px-2 py-0.5 font-mono text-xs">
 						E
 					</kbd>
 					{interactionLabel}
@@ -333,7 +342,7 @@ function DirectionButton({
 	return (
 		<button
 			type="button"
-			className={`flex size-12 touch-none select-none items-center justify-center rounded-xl border border-dialog-border bg-dialog-soft text-lg text-app-text transition hover:bg-dialog-panel focus:outline-none focus-visible:border-control-focus-border disabled:cursor-not-allowed disabled:opacity-50 ${className ?? ""}`}
+			className={`cafe-world-button flex size-11 touch-none select-none items-center justify-center rounded-xl text-base transition focus:outline-none disabled:cursor-not-allowed disabled:opacity-50 ${className ?? ""}`}
 			disabled={disabled}
 			aria-label={label}
 			onKeyDown={(event) => {

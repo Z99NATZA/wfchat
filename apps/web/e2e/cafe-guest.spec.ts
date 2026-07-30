@@ -21,6 +21,120 @@ test("cafe chrome follows the app theme in dark mode", async ({ page }) => {
 	});
 });
 
+test("mobile overlays reserve separate control and status zones", async ({ page }) => {
+	const roomId = "00000000-0000-4000-8000-000000000007";
+	const room = cafeRoomFixture(roomId);
+	let showDialogue: () => void = () => undefined;
+	room.players[0].carried_tea = 0;
+	await page.routeWebSocket(new RegExp(`/api/cafe/rooms/${roomId}/ws$`), (socket) => {
+		showDialogue = () =>
+			socket.send(
+				JSON.stringify({
+					type: "dialogue",
+					message_key: "cafe.dialogue.roundComplete",
+					expression: "happy"
+				})
+			);
+		setTimeout(() => {
+			socket.send(
+				JSON.stringify({
+					type: "welcome",
+					self_player_id: room.players[0].id,
+					cafe_stars: 2,
+					room
+				})
+			);
+		}, 50);
+	});
+	await page.setViewportSize({ width: 390, height: 844 });
+	await page.goto(`${cafeUrl}/rooms/${roomId}`);
+	await expect(page.getByTestId("cafe-game")).toBeVisible();
+	await expect(page.getByRole("dialog")).toBeVisible();
+	await page.getByRole("button", { name: /Start helping Aiko|เริ่มช่วย Aiko/ }).click();
+
+	await expect(page.getByRole("button", { name: "Up" })).toBeVisible();
+	await expect(page.getByTestId("cafe-action-button")).toBeVisible();
+	await expect(page.locator("body")).toHaveJSProperty("scrollTop", 0);
+	await expect(page.getByTestId("cafe-room-surface")).toHaveCSS("user-select", "none");
+
+	const directionPadBox = await page.getByTestId("cafe-direction-pad").boundingBox();
+	const actionButtonBox = await page.getByTestId("cafe-action-button").boundingBox();
+	const activityHudBox = await page.getByTestId("cafe-activity-hud").boundingBox();
+	const roomStatusBox = await page.getByTestId("cafe-room-status").boundingBox();
+	expect(directionPadBox).not.toBeNull();
+	expect(actionButtonBox).not.toBeNull();
+	expect(activityHudBox).not.toBeNull();
+	expect(roomStatusBox).not.toBeNull();
+	expect(rectanglesOverlap(directionPadBox!, actionButtonBox!)).toBe(false);
+	expect(rectanglesOverlap(activityHudBox!, roomStatusBox!)).toBe(false);
+	expect(activityHudBox!.height).toBeLessThanOrEqual(72);
+	for (const testId of ["cafe-activity-hud", "cafe-stars", "cafe-invite-code"]) {
+		await expect(page.getByTestId(testId)).toHaveCSS(
+			"background-color",
+			testId === "cafe-invite-code" ? "rgba(82, 48, 29, 0.78)" : "rgba(91, 54, 33, 0.72)"
+		);
+	}
+	await expect(page.getByRole("button", { name: "Up" })).toHaveCSS(
+		"background-color",
+		"rgba(82, 48, 29, 0.78)"
+	);
+
+	await page.getByTestId("cafe-mobile-emote-toggle").click();
+	const emoteMenuBox = await page.getByTestId("cafe-mobile-emote-menu").boundingBox();
+	const emoteToggleBox = await page.getByTestId("cafe-mobile-emote-toggle").boundingBox();
+	expect(emoteMenuBox).not.toBeNull();
+	expect(emoteToggleBox).not.toBeNull();
+	expect(rectanglesOverlap(emoteMenuBox!, directionPadBox!)).toBe(false);
+	expect(rectanglesOverlap(emoteMenuBox!, actionButtonBox!)).toBe(false);
+	expect(emoteMenuBox!.width).toBe(emoteToggleBox!.width);
+	expect(emoteMenuBox!.x).toBe(emoteToggleBox!.x);
+	expect(emoteToggleBox!.x + emoteToggleBox!.width).toBe(
+		actionButtonBox!.x + actionButtonBox!.width
+	);
+	const mobileEmoteMenuColor = await page
+		.getByTestId("cafe-mobile-emote-menu")
+		.evaluate((element) => getComputedStyle(element).backgroundColor);
+	expect(mobileEmoteMenuColor).toBe("rgba(170, 108, 55, 0.36)");
+	await expect(page.getByTestId("cafe-mobile-emote-toggle")).toHaveCSS(
+		"background-color",
+		"rgba(120, 72, 42, 0.56)"
+	);
+	await page.screenshot({
+		path: "test-results/aiko-cafe-mobile-overlays.png",
+		fullPage: true
+	});
+	await page.getByTestId("cafe-mobile-emote-toggle").click();
+	await page.getByTestId("cafe-chat-toggle").click();
+	await expect(page.getByTestId("cafe-room-chat")).toHaveCSS("user-select", "text");
+	await expect(page.getByTestId("cafe-chat-toggle")).toHaveAttribute("aria-expanded", "true");
+	await page.getByTestId("cafe-chat-toggle").click();
+	await expect(page.getByTestId("cafe-room-chat")).toBeHidden();
+	showDialogue();
+	await expect(page.getByTestId("aiko-dialogue")).toBeVisible();
+	await expect(page.getByTestId("aiko-dialogue")).toHaveCSS(
+		"background-color",
+		"rgba(120, 72, 42, 0.56)"
+	);
+	await page.screenshot({
+		path: "test-results/aiko-cafe-world-overlays-mobile.png",
+		fullPage: true
+	});
+	await page.setViewportSize({ width: 1280, height: 720 });
+	await expect(page.getByTestId("cafe-interaction-prompt")).toBeVisible();
+	await expect(page.getByTestId("cafe-interaction-prompt")).toHaveCSS(
+		"background-color",
+		"rgba(120, 72, 42, 0.56)"
+	);
+	await expect(page.getByTestId("cafe-emotes")).toHaveCSS(
+		"background-color",
+		"rgba(170, 108, 55, 0.36)"
+	);
+	await page.screenshot({
+		path: "test-results/aiko-cafe-world-overlays-desktop.png",
+		fullPage: true
+	});
+});
+
 test("two guests quick join the same cafe and mobile controls stay usable", async ({ browser }) => {
 	const firstContext = await browser.newContext();
 	const secondContext = await browser.newContext();
@@ -66,13 +180,13 @@ test("two guests quick join the same cafe and mobile controls stay usable", asyn
 			.getByLabel(/Message the cafe room|ส่งข้อความในห้องคาเฟ่/)
 			.fill("Hello from Chrome");
 		await firstPage.getByRole("button", { name: /Send message|ส่งข้อความ/ }).click();
-		await firstPage.getByRole("button", { name: /Close room chat|ปิดแชทในห้อง/ }).click();
+		await firstPage.getByTestId("cafe-chat-panel-close").click();
 		await expect(secondPage.getByTestId("cafe-chat-unread")).toHaveText("1");
 		await secondPage.getByRole("button", { name: /Open room chat|เปิดแชทในห้อง/ }).click();
 		await expect(secondPage.getByTestId("cafe-chat-history")).toContainText(
 			"Hello from Chrome"
 		);
-		await secondPage.getByRole("button", { name: /Close room chat|ปิดแชทในห้อง/ }).click();
+		await secondPage.getByTestId("cafe-chat-panel-close").click();
 
 		await firstPage.setViewportSize({ width: 390, height: 844 });
 		await expect(firstPage.getByRole("button", { name: "Up" })).toBeVisible();
@@ -89,6 +203,18 @@ test("two guests quick join the same cafe and mobile controls stay usable", asyn
 		await secondContext.close();
 	}
 });
+
+function rectanglesOverlap(
+	first: { x: number; y: number; width: number; height: number },
+	second: { x: number; y: number; width: number; height: number }
+) {
+	return !(
+		first.x + first.width <= second.x ||
+		second.x + second.width <= first.x ||
+		first.y + first.height <= second.y ||
+		second.y + second.height <= first.y
+	);
+}
 
 test("invite rooms accept their code and disappear after the final player leaves", async ({
 	browser
@@ -212,9 +338,7 @@ test("Cafe Rush exposes its shared timer, combo, and ingredient handoff on mobil
 	);
 	await expect(page.getByTestId("cafe-rush-timer")).toContainText(/left|เหลือ/);
 	await expect(page.getByTestId("cafe-rush-combo")).toContainText(/2/);
-	await expect(page.getByTestId("cafe-quest-hint-mobile")).toContainText(
-		/Return to the counter|กลับเคาน์เตอร์/
-	);
+	await expect(page.getByTestId("cafe-quest-hint")).toBeHidden();
 	await expect(
 		page.getByRole("button", { name: /Prepare rush order|เตรียมออเดอร์ด่วน/ })
 	).toBeVisible();
@@ -351,7 +475,8 @@ test("room chat uses a compact transparent overlay and stays usable on mobile", 
 		fullPage: true
 	});
 
-	await page.getByRole("button", { name: /Close room chat|ปิดแชทในห้อง/ }).click();
+	await page.getByTestId("cafe-chat-toggle").click();
+	await expect(page.getByTestId("cafe-room-chat")).toBeHidden();
 	await page.setViewportSize({ width: 390, height: 844 });
 	await page.getByRole("button", { name: /Open room chat|เปิดแชทในห้อง/ }).click();
 	const chatPanelBox = await page.getByTestId("cafe-chat-panel-position").boundingBox();
@@ -374,6 +499,8 @@ test("room chat uses a compact transparent overlay and stays usable on mobile", 
 		path: "test-results/aiko-cafe-chat-mobile.png",
 		fullPage: true
 	});
+	await page.getByTestId("cafe-chat-toggle").click();
+	await expect(page.getByTestId("cafe-room-chat")).toBeHidden();
 });
 
 test("tea delivery rotates into table service with one reward per round", async ({ page }) => {
@@ -496,18 +623,28 @@ test("tea delivery rotates into table service with one reward per round", async 
 	await expect(page.getByLabel(/Connected|เชื่อมต่อแล้ว/)).toBeVisible();
 	await page.getByRole("button", { name: /Start helping Aiko|เริ่มช่วย Aiko/ }).click();
 	await expect(page.getByTestId("cafe-round-number")).toContainText(/Round 1|รอบ 1/);
-	const overlayBackgrounds = await Promise.all(
-		["cafe-activity-hud", "cafe-stars", "cafe-invite-code", "cafe-emotes"].map((testId) =>
+	const persistentOverlayBackgrounds = await Promise.all(
+		["cafe-activity-hud", "cafe-stars", "cafe-invite-code"].map((testId) =>
 			page
 				.getByTestId(testId)
 				.evaluate((element) => getComputedStyle(element).backgroundColor)
 		)
 	);
-	expect(new Set(overlayBackgrounds).size).toBe(1);
-	expect(overlayBackgrounds[0]).not.toMatch(/rgb\(2,\s*6,\s*23/);
-	expect(overlayBackgrounds[0]).not.toContain("rgba");
+	expect(persistentOverlayBackgrounds).toEqual([
+		"rgba(91, 54, 33, 0.72)",
+		"rgba(91, 54, 33, 0.72)",
+		"rgba(82, 48, 29, 0.78)"
+	]);
+	await expect(page.getByTestId("cafe-emotes")).toHaveCSS(
+		"background-color",
+		"rgba(170, 108, 55, 0.36)"
+	);
 	await expect(page.getByTestId("cafe-interaction-prompt")).toContainText(
 		/Collect tea leaf|เก็บใบชา/
+	);
+	await expect(page.getByTestId("cafe-interaction-prompt")).toHaveCSS(
+		"background-color",
+		"rgba(120, 72, 42, 0.56)"
 	);
 	await page.keyboard.press("e");
 	await expect(page.getByTestId("cafe-carried-tea")).toContainText("3");
@@ -522,6 +659,7 @@ test("tea delivery rotates into table service with one reward per round", async 
 		name: /Give Aiko 3 tea|ส่งใบชา 3 ใบให้ Aiko/
 	});
 	await expect(interactButton).toBeEnabled();
+	await expect(interactButton).toHaveCSS("background-color", "rgba(82, 48, 29, 0.78)");
 	await interactButton.click();
 	await expect(page.getByText(/Tea is ready!|ชาพร้อมแล้ว!/)).toBeVisible();
 	await expect(page.getByTestId("cafe-stars")).toContainText("7");
@@ -556,7 +694,7 @@ test("tea delivery rotates into table service with one reward per round", async 
 	expect(
 		contrastRatio(dialogueColors.foreground, dialogueColors.background)
 	).toBeGreaterThanOrEqual(4.5);
-	expect(dialogueColors.background).toBe(overlayBackgrounds[0]);
+	expect(dialogueColors.background).toBe("rgba(120, 72, 42, 0.56)");
 	await page.screenshot({
 		path: "test-results/aiko-cafe-table-service.png",
 		fullPage: true

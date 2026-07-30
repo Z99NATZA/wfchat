@@ -189,6 +189,8 @@
 	"cafe.guide.desktopControls": "Move with WASD or the arrow keys · Press E when an action appears",
 	"cafe.guide.mobileControls": "Use the arrow pad to move · Tap the action button when it lights up",
 	"cafe.guide.start": "Start helping Aiko",
+	"cafe.emote.open": "Open reactions",
+	"cafe.emote.close": "Close reactions",
 	"cafe.emote.wave": "Wave",
 	"cafe.emote.heart": "Heart",
 	"cafe.emote.happy": "Sparkle",

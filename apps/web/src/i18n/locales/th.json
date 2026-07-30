@@ -189,6 +189,8 @@
 	"cafe.guide.desktopControls": "เดินด้วย WASD หรือปุ่มลูกศร · กด E เมื่อมีคำสั่งขึ้น",
 	"cafe.guide.mobileControls": "ใช้ปุ่มลูกศรเพื่อเดิน · แตะปุ่มคำสั่งเมื่อปุ่มสว่าง",
 	"cafe.guide.start": "เริ่มช่วย Aiko",
+	"cafe.emote.open": "เปิดรีแอ็กชัน",
+	"cafe.emote.close": "ปิดรีแอ็กชัน",
 	"cafe.emote.wave": "โบกมือ",
 	"cafe.emote.heart": "หัวใจ",
 	"cafe.emote.happy": "ประกาย",

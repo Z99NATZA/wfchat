@@ -34,7 +34,21 @@ actions such as tapping a quick prompt may focus it.
 reserves the measured overlay height—not composer height—in the timeline.
 
 Cafe touch controls stay inside the game surface above the bottom safe area and
-must not trigger document scrolling.
+must not trigger document scrolling. The Cafe movement pad and action button
+share a bottom control zone. Reactions, room chat, dialogue, and top status
+overlays must not overlap that zone or one another at the supported narrow
+viewport. The mobile activity HUD keeps progress visible but moves detailed
+active-round guidance behind its Help action. The room-chat icon stays at its
+fixed control position and toggles the panel open or closed.
+
+Persistent UI inside the Cafe game surface—including activity and room status,
+movement and interaction controls, chat, Aiko dialogue, and reactions—uses the
+Cafe palette. Application chrome and interruption UI retain the application
+theme.
+
+The Cafe game surface disables text selection and native touch callouts to
+prevent long presses from opening browser UI. Its room-chat panel restores
+selection so messages can be copied and the input remains editable.
 
 ## Verification
 
