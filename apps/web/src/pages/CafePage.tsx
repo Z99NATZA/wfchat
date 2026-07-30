@@ -129,12 +129,9 @@ function CafePage({ activityBar, backgroundImageUrl, headerControls }: CafePageP
 					>
 						<div className="grid gap-6 p-5 sm:p-7 lg:grid-cols-[1.25fr_0.75fr] lg:items-center">
 							<div>
-								<h2 className="text-2xl font-semibold text-app-text sm:text-3xl">
+								<h2 className="text-balance text-2xl font-semibold text-app-text sm:text-3xl">
 									{t("cafe.lobby.heroTitle")}
 								</h2>
-								<p className="mt-3 max-w-2xl text-sm leading-6 text-muted">
-									{t("cafe.lobby.heroDescription")}
-								</p>
 								<div className="mt-6 flex max-w-xl flex-wrap items-end gap-3">
 									<div className="min-w-[14rem] flex-1">
 										<label
@@ -220,7 +217,7 @@ function CafePage({ activityBar, backgroundImageUrl, headerControls }: CafePageP
 									<div className="mt-2 flex flex-col gap-2 sm:flex-row">
 										<input
 											id="cafe-invite-code"
-											className="h-11 min-w-0 flex-1 rounded-lg border border-app-border bg-app-soft px-3 text-sm font-semibold uppercase tracking-[0.2em] text-app-text outline-none transition focus:border-control-focus-border"
+											className="h-11 min-w-0 w-full rounded-lg border border-app-border bg-app-soft px-3 text-sm font-semibold uppercase tracking-[0.2em] text-app-text outline-none transition focus:border-control-focus-border sm:flex-1"
 											value={inviteCode}
 											maxLength={6}
 											placeholder={t("cafe.lobby.joinCodePlaceholder")}

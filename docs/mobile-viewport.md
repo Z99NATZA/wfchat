@@ -46,6 +46,11 @@ movement and interaction controls, chat, Aiko dialogue, and reactions—uses the
 Cafe palette. Application chrome and interruption UI retain the application
 theme.
 
+On small screens, the shared application header temporarily moves above
+feature-owned overlays while its overflow menu is open. Closing the menu
+restores the header's normal layer so feature controls keep their expected
+stacking and interaction behavior.
+
 The Cafe game surface disables text selection and native touch callouts to
 prevent long presses from opening browser UI. Its room-chat panel restores
 selection so messages can be copied and the input remains editable.
@@ -58,6 +63,8 @@ virtual keyboard opened/closed:
 - the document does not scroll
 - the feature timeline does scroll
 - header, composer, and Cafe controls remain reachable
+- the Cafe lobby headline wraps into balanced lines
+- Cafe lobby form controls retain their full touch-target height
 - send completion does not reopen the mobile keyboard
 - the latest message is not covered by the PNGTuber
 

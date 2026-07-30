@@ -7,6 +7,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import CafePage from "@/pages/CafePage";
 import { CAFE_PLAYER_NAME_STORAGE_KEY } from "@/features/cafe/services/cafePlayerName";
+import en from "@/i18n/locales/en.json";
+import th from "@/i18n/locales/th.json";
 
 const serviceMocks = vi.hoisted(() => ({
 	listCafeRooms: vi.fn(),
@@ -82,6 +84,20 @@ describe("CafePage", () => {
 		window.sessionStorage.clear();
 	});
 
+	it("uses concise lobby copy in Thai and English", () => {
+		expect(th["cafe.lobby.quickJoin"]).toBe("เข้าห้อง");
+		expect(th["cafe.lobby.joinCodeTitle"]).toBe("รหัสห้อง");
+		expect(th["cafe.cosmetics.title"]).toBe("ของแต่ง");
+		expect(th["cafe.cosmetics.classic"]).toBe("ถอดของแต่ง");
+		expect("cafe.lobby.heroDescription" in th).toBe(false);
+
+		expect(en["cafe.lobby.quickJoin"]).toBe("Join");
+		expect(en["cafe.lobby.joinCodeTitle"]).toBe("Room code");
+		expect(en["cafe.cosmetics.title"]).toBe("Cosmetics");
+		expect(en["cafe.cosmetics.classic"]).toBe("Reset look");
+		expect("cafe.lobby.heroDescription" in en).toBe(false);
+	});
+
 	it("lets a guest quick join without showing a login gate", async () => {
 		serviceMocks.listCafeRooms.mockResolvedValue([room]);
 		serviceMocks.getCafeProgress.mockResolvedValue(progress);
@@ -122,7 +138,8 @@ describe("CafePage", () => {
 		expect(lobbyAiko.querySelector(".cafe-lobby-aiko-shadow")).toBeTruthy();
 		expect(screen.getByTestId("cafe-lobby-scroll").className).toContain("chat-scroll");
 		expect(screen.queryByText("cafe.lobby.guestFriendly")).toBeNull();
-		expect(screen.getByText("cafe.lobby.heroDescription")).toBeTruthy();
+		expect(screen.queryByText("cafe.lobby.heroDescription")).toBeNull();
+		expect(screen.getByText("cafe.lobby.heroTitle").className).toContain("text-balance");
 		expect(screen.getByText("cafe.sidebar.guestNote")).toBeTruthy();
 		expect(
 			screen
@@ -150,6 +167,11 @@ describe("CafePage", () => {
 				.getByTestId("cafe-entry-panel")
 				.contains(screen.getByLabelText("cafe.lobby.joinCodeTitle"))
 		).toBe(true);
+		const inviteCodeInput = screen.getByLabelText("cafe.lobby.joinCodeTitle");
+		expect(inviteCodeInput.className).toContain("h-11");
+		expect(inviteCodeInput.className).toContain("w-full");
+		expect(inviteCodeInput.className).toContain("sm:flex-1");
+		expect(inviteCodeInput.className.split(" ")).not.toContain("flex-1");
 		fireEvent.click(quickJoin);
 
 		await waitFor(() => expect(serviceMocks.quickJoinCafe).toHaveBeenCalledTimes(1));

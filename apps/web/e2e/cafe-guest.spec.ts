@@ -21,6 +21,56 @@ test("cafe chrome follows the app theme in dark mode", async ({ page }) => {
 	});
 });
 
+test("lobby keeps mobile control height and concise localized copy", async ({ page }) => {
+	await page.setViewportSize({ width: 320, height: 844 });
+	await page.goto(cafeUrl);
+
+	const playerName = page.locator("#cafe-player-name");
+	const inviteCode = page.locator("#cafe-invite-code");
+	for (const width of [320, 390]) {
+		await page.setViewportSize({ width, height: 844 });
+		await expect(playerName).toHaveCSS("height", "44px");
+		await expect(inviteCode).toHaveCSS("height", "44px");
+	}
+	await expect(page.getByRole("button", { name: "Join", exact: true })).toBeVisible();
+	await expect(page.getByText("Room code", { exact: true })).toBeVisible();
+	await expect(page.getByText("Cosmetics", { exact: true })).toBeVisible();
+	await expect(page.getByRole("button", { name: "Reset look", exact: true })).toBeVisible();
+	await expect(page.locator("[data-testid='cafe-entry-panel'] h2")).toHaveCSS(
+		"text-wrap",
+		"balance"
+	);
+	await expect(
+		page.getByText("Help Aiko prepare tea and play with up to 8 players.", {
+			exact: true
+		})
+	).toHaveCount(0);
+
+	await page.evaluate(() => localStorage.setItem("wfchat.locale", "th"));
+	await page.reload();
+	await expect(page.getByRole("button", { name: "เข้าห้อง", exact: true })).toBeVisible();
+	await expect(page.getByText("รหัสห้อง", { exact: true })).toBeVisible();
+	await expect(page.getByText("ของแต่ง", { exact: true })).toBeVisible();
+	await expect(page.getByRole("button", { name: "ถอดของแต่ง", exact: true })).toBeVisible();
+	await expect(page.locator("[data-testid='cafe-entry-panel'] h2")).toHaveCSS(
+		"text-wrap",
+		"balance"
+	);
+	await expect(
+		page.getByText("ช่วย Aiko เตรียมชา และเล่นร่วมกับผู้เล่นอื่นได้สูงสุด 8 คน", {
+			exact: true
+		})
+	).toHaveCount(0);
+	await expect(inviteCode).toHaveCSS("height", "44px");
+	await page.screenshot({
+		path: "test-results/aiko-cafe-lobby-copy-th-mobile.png",
+		fullPage: true
+	});
+
+	await page.setViewportSize({ width: 640, height: 844 });
+	await expect(inviteCode).toHaveCSS("height", "44px");
+});
+
 test("mobile overlays reserve separate control and status zones", async ({ page }) => {
 	const roomId = "00000000-0000-4000-8000-000000000007";
 	const room = cafeRoomFixture(roomId);
@@ -56,6 +106,31 @@ test("mobile overlays reserve separate control and status zones", async ({ page 
 	await expect(page.getByTestId("cafe-action-button")).toBeVisible();
 	await expect(page.locator("body")).toHaveJSProperty("scrollTop", 0);
 	await expect(page.getByTestId("cafe-room-surface")).toHaveCSS("user-select", "none");
+
+	const mobileMenuButton = page.getByRole("button", {
+		name: /More actions|การดำเนินการเพิ่มเติม/
+	});
+	await mobileMenuButton.click();
+	await expect(mobileMenuButton).toHaveAttribute("aria-expanded", "true");
+	await expect(page.locator("#app-header-mobile-menu")).toBeVisible();
+	const overlayLayers = await page.evaluate(() => {
+		const header = document.querySelector<HTMLElement>('[data-testid="app-header"]');
+		const activityHud = document.querySelector<HTMLElement>(
+			'[data-testid="cafe-activity-hud"]'
+		);
+		return {
+			header: Number(getComputedStyle(header!).zIndex),
+			cafe: Number(getComputedStyle(activityHud!.parentElement!).zIndex)
+		};
+	});
+	expect(overlayLayers.header).toBeGreaterThan(overlayLayers.cafe);
+	await page.screenshot({
+		path: "test-results/aiko-cafe-mobile-header-menu.png",
+		fullPage: true
+	});
+	await mobileMenuButton.click();
+	await expect(mobileMenuButton).toHaveAttribute("aria-expanded", "false");
+	await expect(page.getByTestId("app-header")).toHaveCSS("z-index", "20");
 
 	const directionPadBox = await page.getByTestId("cafe-direction-pad").boundingBox();
 	const actionButtonBox = await page.getByTestId("cafe-action-button").boundingBox();
@@ -144,7 +219,7 @@ test("two guests quick join the same cafe and mobile controls stay usable", asyn
 	try {
 		await firstPage.goto(cafeUrl);
 		await expect(firstPage.getByRole("heading", { name: "Aiko Cafe" })).toBeVisible();
-		await firstPage.getByRole("button", { name: /Quick Join|เข้าห้องทันที/ }).click();
+		await firstPage.getByRole("button", { name: /^Join$|^เข้าห้อง$/ }).click();
 		await expect(firstPage).toHaveURL(/\/cafe\/rooms\/[0-9a-f-]{36}$/);
 		await expect(firstPage.locator("canvas")).toBeVisible();
 		await expect(firstPage.getByRole("dialog")).toContainText(
@@ -157,7 +232,7 @@ test("two guests quick join the same cafe and mobile controls stay usable", asyn
 		await firstPage.getByRole("button", { name: /Start helping Aiko|เริ่มช่วย Aiko/ }).click();
 
 		await secondPage.goto(cafeUrl);
-		await secondPage.getByRole("button", { name: /Quick Join|เข้าห้องทันที/ }).click();
+		await secondPage.getByRole("button", { name: /^Join$|^เข้าห้อง$/ }).click();
 		await expect(secondPage).toHaveURL(firstPage.url());
 		await expect(firstPage.getByText(/^Guest [0-9A-F]{4}$/)).toHaveCount(2);
 
@@ -244,9 +319,7 @@ test("invite rooms accept their code and disappear after the final player leaves
 		contexts.push(invitedContext);
 		const invitedPage = await invitedContext.newPage();
 		await invitedPage.goto(cafeUrl);
-		await invitedPage
-			.getByLabel(/Have an invite code|มีรหัสเชิญหรือไม่/)
-			.fill(roomPayload.room.invite_code);
+		await invitedPage.getByLabel(/Room code|รหัสห้อง/).fill(roomPayload.room.invite_code);
 		await invitedPage.getByRole("button", { name: /Join by Code|เข้าด้วยรหัส/ }).click();
 		await expect(invitedPage).toHaveURL(roomUrl);
 		await expect(invitedPage.getByLabel(/Connected|เชื่อมต่อแล้ว/)).toBeVisible();

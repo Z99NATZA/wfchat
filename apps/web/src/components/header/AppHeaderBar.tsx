@@ -44,7 +44,12 @@ function AppHeaderBar({
 	}, [isMobileMenuOpen]);
 
 	return (
-		<header className="sticky top-0 z-20 border-b border-app-border bg-app-panel/62 px-3 py-2 sm:px-4 sm:py-0 lg:px-6">
+		<header
+			className={`sticky top-0 border-b border-app-border bg-app-panel/62 px-3 py-2 sm:px-4 sm:py-0 lg:px-6 ${
+				isMobileMenuOpen ? "z-[80] sm:z-20" : "z-20"
+			}`}
+			data-testid="app-header"
+		>
 			<div className="flex min-h-12 items-center justify-between gap-2 sm:h-16 sm:gap-3">
 				<div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
 					{onOpenSidebar && (
@@ -85,12 +90,17 @@ function AppHeaderBar({
 					<div className="relative ml-auto flex sm:hidden" ref={mobileMenuRef}>
 						<IconButton
 							aria-label={t("chat.header.moreActions")}
+							aria-controls="app-header-mobile-menu"
+							aria-expanded={isMobileMenuOpen}
 							onClick={() => setIsMobileMenuOpen((current) => !current)}
 						>
 							<Ellipsis size={18} aria-hidden="true" />
 						</IconButton>
 						{isMobileMenuOpen && (
-							<div className="mobile-app-surface-panel absolute right-0 top-11 z-30 w-64 rounded-lg border border-app-border p-2">
+							<div
+								className="mobile-app-surface-panel absolute right-0 top-11 z-30 w-64 rounded-lg border border-app-border p-2"
+								id="app-header-mobile-menu"
+							>
 								{mobileMenuContent}
 							</div>
 						)}

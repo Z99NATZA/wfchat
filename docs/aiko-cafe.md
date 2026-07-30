@@ -5,8 +5,8 @@ chat and is available at `/cafe` without login.
 
 ## Player Experience
 
-- `/cafe` supports Quick Join, Create Room, and Join by Code.
-- A room supports 1-8 players. Quick Join selects the busiest public room with
+- `/cafe` supports Join, Create Room, and Join by Code.
+- A room supports 1-8 players. Join selects the busiest public room with
   space; a created room also gets a six-character invite code.
 - The optional cafe name applies only to the current browser tab. If empty, the
   game uses the account display name or a stable `Guest XXXX` name.
