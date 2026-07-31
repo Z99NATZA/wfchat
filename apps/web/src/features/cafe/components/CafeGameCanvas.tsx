@@ -241,7 +241,10 @@ function CafeGameCanvas({
 		>
 			<div ref={parentRef} className="absolute inset-0" />
 			{!room && (
-				<div className="absolute inset-0 z-20 flex items-center justify-center bg-app-bg/70 text-sm font-semibold text-app-text backdrop-blur-sm">
+				<div
+					className="cafe-world-backdrop absolute inset-0 z-20 flex items-center justify-center text-sm font-semibold"
+					data-testid="cafe-loading-overlay"
+				>
 					{loadingLabel}
 				</div>
 			)}

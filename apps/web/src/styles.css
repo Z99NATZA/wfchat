@@ -509,12 +509,31 @@
 		text-shadow: 0 1px 2px var(--cafe-chat-text-shadow);
 	}
 
+	.cafe-world-backdrop {
+		color: #fff7ed;
+		background: rgb(43 22 14 / 0.72);
+	}
+
 	.cafe-world-overlay-strong {
 		background: var(--cafe-chat-overlay-strong);
 	}
 
 	.cafe-world-overlay-status {
 		background: rgb(91 54 33 / 0.72);
+	}
+
+	.cafe-world-notice-warning {
+		color: #ffedd5;
+		border-color: rgb(251 191 36 / 0.52);
+	}
+
+	.cafe-world-notice-error {
+		color: #fee2e2;
+		border-color: rgb(248 113 113 / 0.52);
+	}
+
+	.cafe-world-error-accent {
+		color: #fecaca;
 	}
 
 	.cafe-world-panel {
@@ -563,6 +582,16 @@
 	.cafe-world-action:hover:not(:disabled) {
 		border-color: var(--cafe-chat-control-active);
 		background: rgb(72 40 24 / 0.9);
+	}
+
+	.cafe-world-action-primary {
+		border-color: rgb(253 186 116 / 0.56);
+		background: rgb(126 72 37 / 0.96);
+	}
+
+	.cafe-world-action-primary:hover:not(:disabled) {
+		border-color: rgb(255 237 213 / 0.82);
+		background: rgb(105 57 30 / 0.98);
 	}
 
 	.cafe-world-button:disabled,

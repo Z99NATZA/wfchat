@@ -148,6 +148,15 @@ describe("CafeRoomPage", () => {
 		);
 
 		expect(screen.getByRole("alert").textContent).toContain("cafe.room.errorFull");
+		const recoveryBackdrop = screen.getByTestId("cafe-recovery-backdrop");
+		const recoveryDialog = screen.getByTestId("cafe-recovery-dialog");
+		expect(recoveryBackdrop.className).toContain("cafe-world-backdrop");
+		expect(recoveryBackdrop.className).not.toContain("backdrop-blur");
+		expect(recoveryDialog.className).toContain("cafe-world-overlay-strong");
+		expect(recoveryDialog.className).not.toContain("bg-dialog-soft");
+		expect(screen.getByRole("button", { name: "cafe.room.retry" }).className).toContain(
+			"cafe-world-action-primary"
+		);
 		fireEvent.click(screen.getByRole("button", { name: "cafe.room.retry" }));
 		expect(roomHook.retryConnection).toHaveBeenCalledTimes(1);
 		fireEvent.click(screen.getByRole("button", { name: "cafe.room.backToLobby" }));
@@ -173,9 +182,27 @@ describe("CafeRoomPage", () => {
 		const roomSurface = screen.getByTestId("cafe-room-surface");
 		expect(roomSurface.className).toContain("select-none");
 		expect(roomSurface.className).toContain("[-webkit-touch-callout:none]");
-		expect(screen.getByRole("dialog").textContent).toContain("cafe.guide.title");
+		const guide = screen.getByRole("dialog");
+		expect(guide.textContent).toContain("cafe.guide.title");
+		expect(guide.className).toContain("cafe-world-overlay");
+		expect(guide.className).toContain("cafe-world-overlay-strong");
+		const guideBackdrop = screen.getByTestId("cafe-guide-backdrop");
+		expect(guideBackdrop.className).toContain("cafe-world-backdrop");
+		expect(guideBackdrop.className).not.toContain("backdrop-blur");
+		expect(screen.getByTestId("cafe-guide-controls").textContent).toContain(
+			"cafe.guide.moveDesktop"
+		);
+		expect(screen.getByTestId("cafe-guide-controls").textContent).toContain(
+			"cafe.guide.actionDesktop"
+		);
+		expect(screen.getByRole("button", { name: "cafe.guide.start" }).className).toContain(
+			"cafe-world-action"
+		);
 		fireEvent.click(screen.getByRole("button", { name: "cafe.guide.start" }));
 		expect(window.localStorage.getItem("wfchat_cafe_guide_seen_v1")).toBe("seen");
+		fireEvent.click(screen.getByRole("button", { name: "cafe.guide.open" }));
+		expect(screen.getByRole("dialog").className).toContain("cafe-world-overlay-strong");
+		fireEvent.click(screen.getByRole("button", { name: "cafe.guide.start" }));
 		expect(screen.getByTestId("cafe-carried-tea").textContent).toContain(
 			"cafe.activity.carried"
 		);
@@ -493,14 +520,50 @@ describe("CafeRoomPage", () => {
 
 		renderRoomPage();
 
-		expect(screen.getByTestId("cafe-offline-status").textContent).toBe(
-			"cafe.room.offlineMessage"
-		);
+		const offlineStatus = screen.getByTestId("cafe-offline-status");
+		expect(offlineStatus.textContent).toBe("cafe.room.offlineMessage");
+		expect(offlineStatus.className).toContain("cafe-world-overlay-status");
+		expect(offlineStatus.className).toContain("cafe-world-notice-error");
+		expect(offlineStatus.className).not.toContain("bg-dialog-soft");
 		expect(gameCanvas.props?.inputEnabled).toBe(false);
 		expect(screen.getByRole("button", { name: "cafe.emote.wave" })).toHaveProperty(
 			"disabled",
 			true
 		);
+	});
+
+	it("uses the Cafe game palette while reconnecting", () => {
+		const room = roomFixture();
+		Object.assign(roomHook.value, {
+			room,
+			selfPlayerId: room.players[0].id,
+			connectionState: "reconnecting",
+			error: null
+		});
+
+		renderRoomPage();
+
+		const reconnectingStatus = screen.getByTestId("cafe-reconnecting-status");
+		expect(reconnectingStatus.className).toContain("cafe-world-overlay-status");
+		expect(reconnectingStatus.className).toContain("cafe-world-notice-warning");
+		expect(reconnectingStatus.className).not.toContain("bg-dialog-soft");
+	});
+
+	it("uses the Cafe game palette for recoverable room errors", () => {
+		const room = roomFixture();
+		Object.assign(roomHook.value, {
+			room,
+			selfPlayerId: room.players[0].id,
+			connectionState: "connected",
+			error: "connection_interrupted"
+		});
+
+		renderRoomPage();
+
+		const errorStatus = screen.getByTestId("cafe-error-status");
+		expect(errorStatus.className).toContain("cafe-world-overlay-status");
+		expect(errorStatus.className).toContain("cafe-world-notice-error");
+		expect(errorStatus.className).not.toContain("bg-dialog-soft");
 	});
 
 	it("shows the authoritative round and intermission status", () => {

@@ -99,8 +99,25 @@ test("mobile overlays reserve separate control and status zones", async ({ page 
 	await page.setViewportSize({ width: 390, height: 844 });
 	await page.goto(`${cafeUrl}/rooms/${roomId}`);
 	await expect(page.getByTestId("cafe-game")).toBeVisible();
-	await expect(page.getByRole("dialog")).toBeVisible();
-	await page.getByRole("button", { name: /Start helping Aiko|เริ่มช่วย Aiko/ }).click();
+	const guide = page.getByRole("dialog");
+	const guideStartButton = page.getByRole("button", { name: "Ok", exact: true });
+	await expect(guide).toBeVisible();
+	await expect(page.getByTestId("cafe-guide-backdrop")).toHaveCSS(
+		"background-color",
+		"rgba(43, 22, 14, 0.72)"
+	);
+	await expect(page.getByTestId("cafe-guide-backdrop")).toHaveCSS("backdrop-filter", "none");
+	await expect(guide).toHaveCSS("background-color", "rgba(120, 72, 42, 0.56)");
+	await expect(page.getByTestId("cafe-guide-controls")).toBeVisible();
+	await expect(guideStartButton).toHaveCSS("background-color", "rgba(82, 48, 29, 0.78)");
+	await page.screenshot({
+		path: "test-results/aiko-cafe-guide-game-theme-mobile.png",
+		fullPage: true
+	});
+	await guideStartButton.click();
+	await page.getByRole("button", { name: /Open cafe guide|เปิดวิธีเล่นคาเฟ่/ }).click();
+	await expect(guide).toHaveCSS("background-color", "rgba(120, 72, 42, 0.56)");
+	await guideStartButton.click();
 
 	await expect(page.getByRole("button", { name: "Up" })).toBeVisible();
 	await expect(page.getByTestId("cafe-action-button")).toBeVisible();
@@ -208,6 +225,19 @@ test("mobile overlays reserve separate control and status zones", async ({ page 
 		path: "test-results/aiko-cafe-world-overlays-desktop.png",
 		fullPage: true
 	});
+	await page.evaluate(() => {
+		localStorage.setItem("wfchat.locale", "th");
+		localStorage.removeItem("wfchat_cafe_guide_seen_v1");
+	});
+	await page.reload();
+	await expect(page.getByRole("heading", { name: "ช่วย Aiko เตรียมชา" })).toBeVisible();
+	await expect(page.getByText("ปุ่มเดิน: WASD หรือปุ่มลูกศร", { exact: true })).toBeVisible();
+	await expect(page.getByText("ปุ่ม E: โต้ตอบ", { exact: true })).toBeVisible();
+	await expect(page.getByRole("button", { name: "Ok", exact: true })).toBeVisible();
+	await page.screenshot({
+		path: "test-results/aiko-cafe-guide-thai-copy.png",
+		fullPage: true
+	});
 });
 
 test("mobile movement stays active on the first hold after switching direction", async ({
@@ -244,7 +274,7 @@ test("mobile movement stays active on the first hold after switching direction",
 	});
 	await page.setViewportSize({ width: 390, height: 844 });
 	await page.goto(`${cafeUrl}/rooms/${roomId}`);
-	await page.getByRole("button", { name: /Start helping Aiko|เริ่มช่วย Aiko/ }).click();
+	await page.getByRole("button", { name: "Ok", exact: true }).click();
 
 	const leftButton = page.getByRole("button", { name: "Left" });
 	const downButton = page.getByRole("button", { name: "Down" });
@@ -294,7 +324,7 @@ test("two guests quick join the same cafe and mobile controls stay usable", asyn
 			path: "test-results/aiko-cafe-onboarding.png",
 			fullPage: true
 		});
-		await firstPage.getByRole("button", { name: /Start helping Aiko|เริ่มช่วย Aiko/ }).click();
+		await firstPage.getByRole("button", { name: "Ok", exact: true }).click();
 
 		await secondPage.goto(cafeUrl);
 		await secondPage.getByRole("button", { name: /^Join$|^เข้าห้อง$/ }).click();
@@ -309,7 +339,7 @@ test("two guests quick join the same cafe and mobile controls stay usable", asyn
 			wardrobePage.getByRole("button", { name: /Equipped|กำลังใช้อยู่/ })
 		).toBeVisible();
 		await expect(secondPage.getByLabel(/Wearing Sakura pin|กำลังสวม ปิ่นซากุระ/)).toBeVisible();
-		await secondPage.getByRole("button", { name: /Start helping Aiko|เริ่มช่วย Aiko/ }).click();
+		await secondPage.getByRole("button", { name: "Ok", exact: true }).click();
 		await secondPage.screenshot({
 			path: "test-results/aiko-cafe-cosmetic-realtime.png",
 			fullPage: true
@@ -421,12 +451,24 @@ test("a full-room server response offers clear recovery actions", async ({ page 
 			})
 		);
 	});
-	await page.goto("http://localhost:5173/cafe/rooms/00000000-0000-4000-8000-000000000002");
+	await page.goto(`${cafeUrl}/rooms/00000000-0000-4000-8000-000000000002`);
 	await expect(page.getByRole("alert")).toContainText(
 		/room already has eight visitors|ผู้เล่นครบ 8 คน/
 	);
+	await expect(page.getByTestId("cafe-recovery-backdrop")).toHaveCSS(
+		"background-color",
+		"rgba(43, 22, 14, 0.72)"
+	);
+	await expect(page.getByTestId("cafe-recovery-backdrop")).toHaveCSS("backdrop-filter", "none");
+	await expect(page.getByTestId("cafe-recovery-dialog")).toHaveCSS(
+		"background-color",
+		"rgba(120, 72, 42, 0.56)"
+	);
 	await expect(page.getByRole("button", { name: /Back to lobby|กลับล็อบบี้/ })).toBeVisible();
-	await expect(page.getByRole("button", { name: /Try again|ลองอีกครั้ง/ })).toBeVisible();
+	await expect(page.getByRole("button", { name: /Try again|ลองอีกครั้ง/ })).toHaveCSS(
+		"background-color",
+		"rgba(126, 72, 37, 0.96)"
+	);
 });
 
 test("Cafe Rush exposes its shared timer, combo, and ingredient handoff on mobile", async ({
@@ -544,7 +586,7 @@ test("room chat uses a compact transparent overlay and stays usable on mobile", 
 
 	await page.goto(`${cafeUrl}/rooms/${chatRoomId}`);
 	await expect(page.getByLabel(/Connected|เชื่อมต่อแล้ว/)).toBeVisible();
-	await page.getByRole("button", { name: /Start helping Aiko|เริ่มช่วย Aiko/ }).click();
+	await page.getByRole("button", { name: "Ok", exact: true }).click();
 	sendFriendMessage();
 
 	await expect(page.getByTestId("cafe-chat-unread")).toHaveText("1");
@@ -759,7 +801,7 @@ test("tea delivery rotates into table service with one reward per round", async 
 
 	await page.goto("http://localhost:5173/cafe/rooms/00000000-0000-4000-8000-000000000003");
 	await expect(page.getByLabel(/Connected|เชื่อมต่อแล้ว/)).toBeVisible();
-	await page.getByRole("button", { name: /Start helping Aiko|เริ่มช่วย Aiko/ }).click();
+	await page.getByRole("button", { name: "Ok", exact: true }).click();
 	await expect(page.getByTestId("cafe-round-number")).toContainText(/Round 1|รอบ 1/);
 	const persistentOverlayBackgrounds = await Promise.all(
 		["cafe-activity-hud", "cafe-stars", "cafe-invite-code"].map((testId) =>
@@ -863,22 +905,43 @@ test("offline input waits for authoritative reconnect and missing rooms recover"
 		);
 	});
 
-	await page.goto(`http://localhost:5173/cafe/rooms/${reconnectRoomId}`);
+	await page.goto(`${cafeUrl}/rooms/${reconnectRoomId}`);
 	await expect(page.getByLabel(/Connected|เชื่อมต่อแล้ว/)).toBeVisible();
+	const connectionsBeforeOffline = connections;
 	await page.setViewportSize({ width: 390, height: 844 });
 	await expect(page.getByRole("button", { name: "Up" })).toBeEnabled();
 	await page.context().setOffline(true);
 	await expect(page.getByTestId("cafe-offline-status")).toContainText(/offline|ออฟไลน์/i);
+	await expect(page.getByTestId("cafe-offline-status")).toHaveCSS(
+		"background-color",
+		"rgba(91, 54, 33, 0.72)"
+	);
+	await expect(page.getByTestId("cafe-offline-status")).toHaveCSS(
+		"border-bottom-color",
+		"rgba(248, 113, 113, 0.52)"
+	);
 	await expect(page.getByRole("button", { name: "Up" })).toBeDisabled();
 	await page.context().setOffline(false);
-	await expect(
-		page.getByText(/Reconnecting to the cafe|กำลังเชื่อมต่อคาเฟ่อีกครั้ง/)
-	).toBeVisible();
+	const reconnectingStatus = page.getByTestId("cafe-reconnecting-status");
+	await expect(reconnectingStatus).toContainText(
+		/Reconnecting to the cafe|กำลังเชื่อมต่อคาเฟ่อีกครั้ง/
+	);
+	await expect(reconnectingStatus).toHaveCSS("border-bottom-color", "rgba(251, 191, 36, 0.52)");
 	await expect(page.getByLabel(/Connected|เชื่อมต่อแล้ว/)).toBeVisible();
 	await expect(page.getByRole("button", { name: "Up" })).toBeEnabled();
-	expect(connections).toBe(2);
+	expect(connections).toBe(connectionsBeforeOffline + 1);
 
-	await page.goto("http://localhost:5173/cafe/rooms/00000000-0000-4000-8000-000000000001");
+	const missingRoomId = "00000000-0000-4000-8000-000000000001";
+	await page.routeWebSocket(new RegExp(`/api/cafe/rooms/${missingRoomId}/ws$`), (socket) => {
+		socket.send(
+			JSON.stringify({
+				type: "error",
+				code: "room_not_found",
+				message: "Cafe room was not found"
+			})
+		);
+	});
+	await page.goto(`${cafeUrl}/rooms/${missingRoomId}`);
 	await expect(page.getByRole("alert")).toContainText(
 		/room has closed or no longer exists|ห้องนี้ปิดไปแล้ว/
 	);

@@ -89,6 +89,27 @@ describe("CafeGameCanvas mobile direction controls", () => {
 		expect(cafeScene.setVirtualInput).toHaveBeenLastCalledWith({ x: 0, y: 0 });
 	});
 
+	it("uses a dark loading overlay without large-area blur", () => {
+		render(
+			<CafeGameCanvas
+				room={null}
+				selfPlayerId={null}
+				connectionEpoch={0}
+				inputEnabled
+				emote={null}
+				chatMessage={null}
+				onMovement={vi.fn()}
+				onInteract={vi.fn()}
+				interactionLabels={interactionLabels}
+				loadingLabel="Loading"
+			/>
+		);
+
+		const loadingOverlay = screen.getByTestId("cafe-loading-overlay");
+		expect(loadingOverlay.className).toContain("cafe-world-backdrop");
+		expect(loadingOverlay.className).not.toContain("backdrop-blur");
+	});
+
 	it("still releases the active direction on blur or pointer cancellation", () => {
 		render(
 			<CafeGameCanvas

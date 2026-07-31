@@ -43,10 +43,10 @@ direction. The mobile activity HUD keeps progress visible but moves detailed
 active-round guidance behind its Help action. The room-chat icon stays at its
 fixed control position and toggles the panel open or closed.
 
-Persistent UI inside the Cafe game surface—including activity and room status,
-movement and interaction controls, chat, Aiko dialogue, and reactions—uses the
-Cafe palette. Application chrome and interruption UI retain the application
-theme.
+All UI inside the Cafe game surface—including activity and room status,
+movement and interaction controls, chat, Aiko dialogue, reactions, loading,
+connection notices, errors, and recovery—uses the Cafe palette. Application
+chrome outside the game surface retains the application theme.
 
 On small screens, the shared application header temporarily moves above
 feature-owned overlays while its overflow menu is open. Closing the menu

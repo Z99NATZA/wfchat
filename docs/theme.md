@@ -44,8 +44,11 @@ a sibling moving behind it. Settings/profile drawers use
 classes. Use the `mobile-*` variants when synchronization is needed only below
 `lg`.
 
-Do not add backdrop blur as a readability fix. Adjust semantic surface opacity
-instead. Do not use synchronized surfaces for repeated message rows.
+The Web UI does not use backdrop blur or any other blur across a large surface,
+including viewport, route, canvas, and modal backdrops. Use semantic surface
+color and opacity for separation and readability instead. Blur is limited to
+small, bounded, non-interactive decoration. Do not use synchronized surfaces
+for repeated message rows.
 
 ## Scrollbars
 

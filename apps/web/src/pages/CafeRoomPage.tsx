@@ -21,7 +21,6 @@ import {
 	type AppHeaderControlProps
 } from "@/components/header/AppHeaderControls";
 import IconButton from "@/components/ui/IconButton";
-import Button from "@/components/ui/Button";
 import AppLayout from "@/layouts/AppLayout";
 import { useI18n } from "@/i18n/i18nContext";
 import CafeGameCanvas from "@/features/cafe/components/CafeGameCanvas";
@@ -397,26 +396,31 @@ function CafeRoomContent({
 					</div>
 				)}
 				{cafe.connectionState === "reconnecting" && (
-					<div className="absolute inset-x-0 top-0 z-50 border-b border-dialog-border bg-dialog-soft px-3 py-1.5 text-center text-xs font-semibold text-app-text">
+					<CafeWorldNotice
+						className="inset-x-0 top-0 border-x-0 border-t-0 px-3 py-1.5 text-center"
+						testId="cafe-reconnecting-status"
+						tone="warning"
+					>
 						{t("cafe.room.reconnecting")}
-					</div>
+					</CafeWorldNotice>
 				)}
 				{cafe.connectionState === "offline" && (
-					<div
-						className="absolute inset-x-0 top-0 z-50 border-b border-dialog-border bg-dialog-soft px-3 py-2 text-center text-xs font-semibold text-app-text"
-						data-testid="cafe-offline-status"
-						role="status"
+					<CafeWorldNotice
+						className="inset-x-0 top-0 border-x-0 border-t-0 px-3 py-2 text-center"
+						testId="cafe-offline-status"
+						tone="error"
 					>
 						{t("cafe.room.offlineMessage")}
-					</div>
+					</CafeWorldNotice>
 				)}
 				{cafe.error && cafe.connectionState !== "closed" && (
-					<div
-						className="absolute left-1/2 top-20 z-50 -translate-x-1/2 rounded-lg border border-red-400/30 bg-dialog-soft px-4 py-2 text-sm text-red-500"
-						role="status"
+					<CafeWorldNotice
+						className="left-1/2 top-20 w-max max-w-[calc(100%_-_2rem)] -translate-x-1/2 rounded-lg px-4 py-2"
+						testId="cafe-error-status"
+						tone="error"
 					>
 						{t(roomErrorTranslationKey(cafe.error))}
-					</div>
+					</CafeWorldNotice>
 				)}
 				{cafe.error && cafe.connectionState === "closed" && (
 					<CafeRoomRecovery
@@ -528,41 +532,48 @@ function CafeWelcomeGuide({
 	const { t } = useI18n();
 	const tableService = activityId === "table_service";
 	const cafeRush = activityId === "cafe_rush";
-	const guidePrefix = cafeRush ? "cafe.rush" : tableService ? "cafe.tableService" : "cafe.guide";
+	const guideTitleKey = cafeRush
+		? "cafe.rush.guideTitle"
+		: tableService
+			? "cafe.tableService.guideTitle"
+			: "cafe.guide.title";
 	return (
-		<div className="absolute inset-0 z-[70] flex items-center justify-center bg-app-bg/72 p-4 backdrop-blur-[3px]">
+		<div
+			className="cafe-world-backdrop absolute inset-0 z-[70] flex items-center justify-center p-4"
+			data-testid="cafe-guide-backdrop"
+		>
 			<div
-				className="w-full max-w-md rounded-3xl border border-dialog-border bg-dialog-panel p-5 text-center text-app-text sm:p-6"
+				className="cafe-world-overlay cafe-world-overlay-strong w-full max-w-md rounded-3xl p-5 text-center sm:p-6"
 				role="dialog"
 				aria-modal="true"
 				aria-labelledby="cafe-guide-title"
 			>
-				<div className="mx-auto flex size-12 items-center justify-center rounded-full border border-dialog-border bg-dialog-soft text-2xl">
+				<div className="cafe-world-panel mx-auto flex size-12 items-center justify-center rounded-full text-2xl">
 					{cafeRush ? "⏱️" : tableService ? "☕" : "🍃"}
 				</div>
 				<h2 id="cafe-guide-title" className="mt-3 text-xl font-bold">
-					{t(`${guidePrefix}.${cafeRush || tableService ? "guideTitle" : "title"}`)}
+					{t(guideTitleKey)}
 				</h2>
-				<p className="mt-2 text-sm leading-6 text-muted">
-					{t(
-						`${guidePrefix}.${cafeRush || tableService ? "guideDescription" : "description"}`
-					)}
-				</p>
-				<div className="mt-4 rounded-2xl border border-dialog-border bg-dialog-soft px-4 py-3 text-sm font-semibold leading-6 text-app-text">
-					<span className="hidden sm:inline">
-						{t(
-							`${guidePrefix}.${cafeRush || tableService ? "guideDesktopControls" : "desktopControls"}`
-						)}
-					</span>
-					<span className="sm:hidden">
-						{t(
-							`${guidePrefix}.${cafeRush || tableService ? "guideMobileControls" : "mobileControls"}`
-						)}
-					</span>
+				<div
+					className="cafe-world-muted mt-4 text-sm font-semibold leading-6"
+					data-testid="cafe-guide-controls"
+				>
+					<div className="hidden sm:block">
+						<p>{t("cafe.guide.moveDesktop")}</p>
+						<p>{t("cafe.guide.actionDesktop")}</p>
+					</div>
+					<div className="sm:hidden">
+						<p>{t("cafe.guide.moveMobile")}</p>
+						<p>{t("cafe.guide.actionMobile")}</p>
+					</div>
 				</div>
-				<Button className="mt-5" size="lg" variant="action" onClick={onDismiss}>
+				<button
+					type="button"
+					className="cafe-world-action mt-5 rounded-xl px-5 py-3 text-sm font-semibold transition focus:outline-none"
+					onClick={onDismiss}
+				>
 					{t("cafe.guide.start")}
-				</Button>
+				</button>
 			</div>
 		</div>
 	);
@@ -721,25 +732,59 @@ function CafeRoomRecovery({
 }) {
 	const { t } = useI18n();
 	return (
-		<div className="absolute inset-0 z-60 flex items-center justify-center bg-app-bg/72 p-4">
+		<div
+			className="cafe-world-backdrop absolute inset-0 z-60 flex items-center justify-center p-4"
+			data-testid="cafe-recovery-backdrop"
+		>
 			<div
-				className="w-full max-w-md rounded-2xl border border-dialog-border bg-dialog-soft p-5 text-center sm:p-6"
+				className="cafe-world-overlay cafe-world-overlay-strong w-full max-w-md rounded-2xl p-5 text-center sm:p-6"
+				data-testid="cafe-recovery-dialog"
 				role="alert"
 			>
-				<WifiOff className="mx-auto text-muted" size={30} aria-hidden="true" />
-				<h2 className="mt-3 text-lg font-semibold text-app-text">
-					{t("cafe.room.connectionProblem")}
-				</h2>
-				<p className="mt-2 text-sm leading-6 text-muted">
+				<WifiOff className="cafe-world-error-accent mx-auto" size={30} aria-hidden="true" />
+				<h2 className="mt-3 text-lg font-semibold">{t("cafe.room.connectionProblem")}</h2>
+				<p className="cafe-world-muted mt-2 text-sm leading-6">
 					{t(roomErrorTranslationKey(error))}
 				</p>
 				<div className="mt-5 flex flex-col-reverse justify-center gap-2 sm:flex-row">
-					<Button onClick={onBack}>{t("cafe.room.backToLobby")}</Button>
-					<Button variant="primary" onClick={onRetry}>
+					<button
+						type="button"
+						className="cafe-world-action min-h-11 rounded-lg px-4 py-2 text-sm font-semibold transition-colors"
+						onClick={onBack}
+					>
+						{t("cafe.room.backToLobby")}
+					</button>
+					<button
+						type="button"
+						className="cafe-world-action cafe-world-action-primary min-h-11 rounded-lg px-4 py-2 text-sm font-semibold transition-colors"
+						onClick={onRetry}
+					>
 						{t("cafe.room.retry")}
-					</Button>
+					</button>
 				</div>
 			</div>
+		</div>
+	);
+}
+
+function CafeWorldNotice({
+	children,
+	className,
+	testId,
+	tone
+}: {
+	children: ReactNode;
+	className: string;
+	testId: string;
+	tone: "error" | "warning";
+}) {
+	return (
+		<div
+			className={`cafe-world-overlay cafe-world-overlay-status cafe-world-notice cafe-world-notice-${tone} absolute z-50 text-xs font-semibold ${className}`}
+			data-testid={testId}
+			role="status"
+		>
+			{children}
 		</div>
 	);
 }

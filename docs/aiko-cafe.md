@@ -116,12 +116,16 @@ to lobby actions.
 
 ## UI And Privacy Rules
 
-Persistent React UI inside the game surface—including the activity HUD, room
-status, movement and interaction controls, room chat, Aiko dialogue, and
-reactions—uses the Cafe game palette. Surrounding application chrome and
-interruption surfaces—including the header, sidebar, details, guide, recovery,
-and connection states—use the shared application theme. The Phaser map,
-characters, items, and in-world markers also use the Cafe game palette.
+All React UI rendered inside the game surface—including the activity HUD, room
+status, movement and interaction controls, room chat, Aiko dialogue, reactions,
+activity guide, loading, connection notices, errors, and recovery—uses the Cafe
+game palette. Connection state remains distinguishable through restrained
+semantic accents such as amber for reconnecting and muted red for offline or
+error states. Surrounding application chrome—including the header, sidebar, and
+details—uses the shared application theme. The Phaser map, characters, items,
+and in-world markers also use the Cafe game palette. Full-surface Cafe backdrops
+use a dark translucent game-palette fill without blur, following the
+large-surface rule in [Theme](theme.md).
 
 On narrow viewports, the activity HUD and room status share a top row without
 overlap. The HUD keeps the activity, round, and progress visible in a compact
