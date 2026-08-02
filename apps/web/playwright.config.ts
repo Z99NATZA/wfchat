@@ -4,6 +4,7 @@ export const e2ePort = 4173;
 
 export default defineConfig({
 	testDir: "./e2e",
+	testIgnore: "full-stack-smoke.spec.ts",
 	fullyParallel: true,
 	forbidOnly: Boolean(process.env.CI),
 	retries: process.env.CI ? 2 : 0,

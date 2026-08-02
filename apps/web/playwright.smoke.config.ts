@@ -25,6 +25,7 @@ const smokeWebServers = webServers.map((server) => ({
 export default defineConfig({
 	...baseConfig,
 	testMatch: "full-stack-smoke.spec.ts",
+	testIgnore: [],
 	fullyParallel: false,
 	webServer: [
 		{

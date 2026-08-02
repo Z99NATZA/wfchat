@@ -1,7 +1,7 @@
 /**
  * @vitest-environment happy-dom
  */
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
@@ -95,10 +95,22 @@ const headerControls = {
 };
 
 const storedGuideValues = new Map<string, string>();
+const clipboardWriteText = vi.fn();
+const execCommand = vi.fn();
 
 describe("CafeRoomPage", () => {
 	beforeEach(() => {
 		storedGuideValues.clear();
+		clipboardWriteText.mockResolvedValue(undefined);
+		execCommand.mockReturnValue(false);
+		Object.defineProperty(navigator, "clipboard", {
+			configurable: true,
+			value: { writeText: clipboardWriteText }
+		});
+		Object.defineProperty(document, "execCommand", {
+			configurable: true,
+			value: execCommand
+		});
 		Object.defineProperty(window, "localStorage", {
 			configurable: true,
 			value: {
@@ -111,6 +123,7 @@ describe("CafeRoomPage", () => {
 
 	afterEach(() => {
 		cleanup();
+		vi.useRealTimers();
 		vi.clearAllMocks();
 		window.localStorage.clear();
 		Object.assign(roomHook.value, {
@@ -286,6 +299,136 @@ describe("CafeRoomPage", () => {
 		expect(screen.queryByTestId("cafe-mobile-emote-menu")).toBeNull();
 	});
 
+	it("toggles room status at every viewport and preserves the choice across chat", () => {
+		const room = roomFixture();
+		Object.assign(roomHook.value, {
+			room,
+			selfPlayerId: room.players[0].id,
+			connectionState: "connected",
+			error: null
+		});
+
+		renderRoomPage();
+
+		const roomHud = screen.getByTestId("cafe-room-hud");
+		const hudToggle = screen.getByTestId("cafe-room-hud-toggle");
+		expect(roomHud.id).toBe("cafe-room-hud");
+		expect(hudToggle.getAttribute("aria-controls")).toBe("cafe-room-hud");
+		expect(hudToggle.getAttribute("aria-label")).toBe("cafe.room.hideHud");
+		expect(hudToggle.getAttribute("aria-pressed")).toBe("true");
+		expect(hudToggle.className).toContain("bottom-16");
+		expect(hudToggle.className).toContain("max-sm:bottom-");
+
+		fireEvent.click(hudToggle);
+		expect(roomHud.classList.contains("hidden")).toBe(true);
+		expect(hudToggle.getAttribute("aria-label")).toBe("cafe.room.showHud");
+		expect(hudToggle.getAttribute("aria-pressed")).toBe("false");
+
+		const chatToggle = screen.getByTestId("cafe-chat-toggle");
+		fireEvent.click(chatToggle);
+		expect(screen.queryByTestId("cafe-room-hud-toggle")).toBeNull();
+		expect(roomHud.classList.contains("hidden")).toBe(true);
+
+		fireEvent.click(chatToggle);
+		const restoredHudToggle = screen.getByTestId("cafe-room-hud-toggle");
+		expect(restoredHudToggle.getAttribute("aria-pressed")).toBe("false");
+		expect(roomHud.classList.contains("hidden")).toBe(true);
+
+		fireEvent.click(restoredHudToggle);
+		expect(roomHud.classList.contains("hidden")).toBe(false);
+	});
+
+	it("shows successful room-code copy feedback for three seconds and restarts it", async () => {
+		vi.useFakeTimers();
+		const room = roomFixture();
+		Object.assign(roomHook.value, {
+			room,
+			selfPlayerId: room.players[0].id,
+			connectionState: "connected",
+			error: null
+		});
+
+		renderRoomPage();
+
+		const inviteCode = screen.getByTestId("cafe-invite-code");
+		expect(inviteCode.textContent).toBe("ABC123");
+		expect(screen.getByTestId("cafe-invite-copy-icon")).toBeTruthy();
+
+		await act(async () => {
+			fireEvent.click(inviteCode);
+			await Promise.resolve();
+		});
+		expect(clipboardWriteText).toHaveBeenCalledWith("ABC123");
+		expect(inviteCode.textContent).toBe("ABC123");
+		expect(inviteCode.getAttribute("aria-label")).toBe("cafe.room.copied ABC123");
+		expect(screen.getByTestId("cafe-invite-check-icon")).toBeTruthy();
+
+		act(() => vi.advanceTimersByTime(2000));
+		await act(async () => {
+			fireEvent.click(inviteCode);
+			await Promise.resolve();
+		});
+		act(() => vi.advanceTimersByTime(2999));
+		expect(screen.getByTestId("cafe-invite-check-icon")).toBeTruthy();
+
+		act(() => vi.advanceTimersByTime(1));
+		expect(screen.getByTestId("cafe-invite-copy-icon")).toBeTruthy();
+		expect(clipboardWriteText).toHaveBeenCalledTimes(2);
+		expect(execCommand).not.toHaveBeenCalled();
+	});
+
+	it("falls back to a temporary text selection when the Clipboard API fails", async () => {
+		clipboardWriteText.mockRejectedValueOnce(new Error("clipboard unavailable"));
+		execCommand.mockImplementationOnce((command: string) => {
+			expect(command).toBe("copy");
+			expect(document.querySelector("textarea")?.value).toBe("ABC123");
+			return true;
+		});
+		const room = roomFixture();
+		Object.assign(roomHook.value, {
+			room,
+			selfPlayerId: room.players[0].id,
+			connectionState: "connected",
+			error: null
+		});
+
+		renderRoomPage();
+
+		const inviteCode = screen.getByTestId("cafe-invite-code");
+		await act(async () => {
+			fireEvent.click(inviteCode);
+			await Promise.resolve();
+		});
+
+		expect(screen.getByTestId("cafe-invite-check-icon")).toBeTruthy();
+		expect(inviteCode.textContent).toBe("ABC123");
+		expect(document.querySelector("textarea")).toBeNull();
+	});
+
+	it("does not show successful room-code feedback when both copy methods fail", async () => {
+		clipboardWriteText.mockRejectedValueOnce(new Error("clipboard unavailable"));
+		const room = roomFixture();
+		Object.assign(roomHook.value, {
+			room,
+			selfPlayerId: room.players[0].id,
+			connectionState: "connected",
+			error: null
+		});
+
+		renderRoomPage();
+
+		const inviteCode = screen.getByTestId("cafe-invite-code");
+		await act(async () => {
+			fireEvent.click(inviteCode);
+			await Promise.resolve();
+		});
+
+		expect(screen.getByTestId("cafe-invite-copy-icon")).toBeTruthy();
+		expect(screen.queryByTestId("cafe-invite-check-icon")).toBeNull();
+		expect(inviteCode.textContent).toBe("ABC123");
+		expect(execCommand).toHaveBeenCalledWith("copy");
+	});
+
 	it("keeps room activity in the sidebar and mounts an empty desktop right rail", () => {
 		const room = roomFixture();
 		Object.assign(roomHook.value, {
@@ -451,6 +594,8 @@ describe("CafeRoomPage", () => {
 
 		expect(screen.getByTestId("cafe-chat-unread").textContent).toBe("1");
 		const chatToggle = screen.getByTestId("cafe-chat-toggle");
+		const roomHud = screen.getByTestId("cafe-room-hud");
+		expect(roomHud.className).not.toContain("max-sm:hidden");
 		expect(chatToggle.getAttribute("aria-label")).toBe("cafe.chat.open");
 		expect(chatToggle.getAttribute("aria-expanded")).toBe("false");
 		expect(chatToggle.getAttribute("data-active")).toBe("false");
@@ -463,6 +608,7 @@ describe("CafeRoomPage", () => {
 		expect(chatToggle.getAttribute("aria-expanded")).toBe("true");
 		expect(chatToggle.getAttribute("aria-controls")).toBe("cafe-room-chat-panel");
 		expect(chatToggle.getAttribute("data-active")).toBe("true");
+		expect(roomHud.className).toContain("max-sm:hidden");
 		const roomChat = screen.getByTestId("cafe-room-chat");
 		expect(roomChat.className).toContain("select-text");
 		expect(roomChat.className).toContain("[-webkit-touch-callout:default]");
@@ -509,6 +655,7 @@ describe("CafeRoomPage", () => {
 		expect(chatToggle.getAttribute("aria-label")).toBe("cafe.chat.open");
 		expect(chatToggle.getAttribute("aria-expanded")).toBe("false");
 		expect(chatToggle.getAttribute("data-active")).toBe("false");
+		expect(roomHud.className).not.toContain("max-sm:hidden");
 
 		fireEvent.click(chatToggle);
 		fireEvent.click(screen.getByTestId("cafe-chat-panel-close"));

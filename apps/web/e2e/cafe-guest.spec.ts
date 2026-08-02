@@ -80,6 +80,18 @@ test("mobile overlays reserve separate control and status zones", async ({ page 
 			localStorage.setItem("wfchat.locale", "en");
 		}
 		localStorage.removeItem("wfchat_cafe_guide_seen_v1");
+		Object.defineProperty(navigator, "clipboard", {
+			configurable: true,
+			value: {
+				writeText: async () => {
+					throw new Error("Clipboard API blocked");
+				}
+			}
+		});
+		Object.defineProperty(document, "execCommand", {
+			configurable: true,
+			value: () => true
+		});
 	});
 	room.players[0].carried_tea = 0;
 	await page.routeWebSocket(new RegExp(`/api/cafe/rooms/${roomId}/ws$`), (socket) => {
@@ -142,6 +154,12 @@ test("mobile overlays reserve separate control and status zones", async ({ page 
 	await expect(page.getByTestId("cafe-action-button")).toBeVisible();
 	await expect(page.locator("body")).toHaveJSProperty("scrollTop", 0);
 	await expect(page.getByTestId("cafe-room-surface")).toHaveCSS("user-select", "none");
+	const inviteCodeButton = page.getByTestId("cafe-invite-code");
+	await expect(inviteCodeButton).toContainText("ABC123");
+	await expect(page.getByTestId("cafe-invite-copy-icon")).toBeVisible();
+	await inviteCodeButton.click();
+	await expect(page.getByTestId("cafe-invite-check-icon")).toBeVisible();
+	await expect(inviteCodeButton).toContainText("ABC123");
 
 	const mobileMenuButton = page.getByRole("button", {
 		name: /More actions|การดำเนินการเพิ่มเติม/
@@ -215,11 +233,26 @@ test("mobile overlays reserve separate control and status zones", async ({ page 
 		fullPage: true
 	});
 	await page.getByTestId("cafe-mobile-emote-toggle").click();
+	const mobileHudToggle = page.getByTestId("cafe-room-hud-toggle");
+	await expect(mobileHudToggle).toBeVisible();
+	await mobileHudToggle.click();
+	await expect(page.getByTestId("cafe-room-hud")).toBeHidden();
+	await expect(mobileHudToggle).toHaveAttribute("aria-pressed", "false");
+	await mobileHudToggle.click();
+	await expect(page.getByTestId("cafe-room-hud")).toBeVisible();
 	await page.getByTestId("cafe-chat-toggle").click();
 	await expect(page.getByTestId("cafe-room-chat")).toHaveCSS("user-select", "text");
+	await expect(page.getByTestId("cafe-room-hud")).toBeHidden();
+	await expect(mobileHudToggle).toBeHidden();
+	await expect(page.getByTestId("cafe-chat-toggle")).toBeVisible();
 	await expect(page.getByTestId("cafe-chat-toggle")).toHaveAttribute("aria-expanded", "true");
+	const chatInput = page.locator("#cafe-room-chat-input");
+	await chatInput.focus();
+	await expect(chatInput).toHaveCSS("border-color", "rgba(255, 247, 237, 0.72)");
 	await page.getByTestId("cafe-chat-toggle").click();
 	await expect(page.getByTestId("cafe-room-chat")).toBeHidden();
+	await expect(page.getByTestId("cafe-room-hud")).toBeVisible();
+	await expect(mobileHudToggle).toBeVisible();
 	showDialogue();
 	await expect(page.getByTestId("aiko-dialogue")).toBeVisible();
 	await expect(page.getByTestId("aiko-dialogue")).toHaveCSS(
@@ -370,7 +403,7 @@ test("two guests quick join the same cafe and mobile controls stay usable", asyn
 		await expect(wardrobePage.getByTestId("cafe-cosmetic-wardrobe")).toBeVisible();
 		await wardrobePage.getByRole("button", { name: /^Equip$|^สวมใส่$/ }).click();
 		await expect(
-			wardrobePage.getByRole("button", { name: /Equipped|กำลังใช้อยู่/ })
+			wardrobePage.getByRole("status", { name: /Equipped|กำลังใช้อยู่/ })
 		).toBeVisible();
 		await expect(secondPage.getByLabel(/Wearing Sakura pin|กำลังสวม ปิ่นซากุระ/)).toBeVisible();
 		await secondPage.getByRole("button", { name: "Ok", exact: true }).click();
@@ -624,7 +657,15 @@ test("room chat uses a compact transparent overlay and stays usable on mobile", 
 	sendFriendMessage();
 
 	await expect(page.getByTestId("cafe-chat-unread")).toHaveText("1");
+	const desktopHudToggle = page.getByTestId("cafe-room-hud-toggle");
+	await expect(desktopHudToggle).toBeVisible();
+	await desktopHudToggle.click();
+	await expect(page.getByTestId("cafe-room-hud")).toBeHidden();
+	await desktopHudToggle.click();
+	await expect(page.getByTestId("cafe-room-hud")).toBeVisible();
 	await page.getByRole("button", { name: /Open room chat|เปิดแชทในห้อง/ }).click();
+	await expect(desktopHudToggle).toBeHidden();
+	await expect(page.getByTestId("cafe-room-hud")).toBeVisible();
 	await expect(page.getByRole("heading", { name: "แชทในคาเฟ่" })).toBeVisible();
 	await expect(page.getByText("ข้อความจะหายไปเมื่อห้องปิด", { exact: true })).toBeVisible();
 	const chatChrome = await page.getByTestId("cafe-room-chat").evaluate((element) => {
@@ -691,6 +732,7 @@ test("room chat uses a compact transparent overlay and stays usable on mobile", 
 
 	await page.getByTestId("cafe-chat-toggle").click();
 	await expect(page.getByTestId("cafe-room-chat")).toBeHidden();
+	await expect(desktopHudToggle).toBeVisible();
 	await page.setViewportSize({ width: 390, height: 844 });
 	await page.getByRole("button", { name: /Open room chat|เปิดแชทในห้อง/ }).click();
 	const chatPanelBox = await page.getByTestId("cafe-chat-panel-position").boundingBox();
@@ -881,7 +923,9 @@ test("tea delivery rotates into table service with one reward per round", async 
 		/Next round starts|รอบใหม่จะเริ่ม/
 	);
 	await expect(page.getByTestId("cafe-round-number")).toContainText(/Round 2|รอบ 2/);
-	await expect(page.getByText(/Table service|บริการเสิร์ฟโต๊ะ/).first()).toBeVisible();
+	await expect(page.getByTestId("cafe-activity-hud")).toContainText(
+		/Table service|บริการเสิร์ฟโต๊ะ/
+	);
 	for (let index = 0; index < 3; index += 1) {
 		const pickUp = page.getByRole("button", {
 			name: /Pick up drink|รับถ้วยชา/

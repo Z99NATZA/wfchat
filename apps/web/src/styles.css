@@ -494,6 +494,7 @@
 		--cafe-chat-message: #fff7ed;
 		--cafe-chat-muted: #d6c2b3;
 		--cafe-chat-control-active: rgb(255 247 237 / 0.72);
+		--cafe-chat-focus-border: rgb(255 247 237 / 0.72);
 		--cafe-chat-highlight: rgb(255 247 237 / 0.08);
 		--cafe-chat-shadow: rgb(0 0 0 / 0.22);
 		--cafe-chat-text-shadow: rgb(0 0 0 / 0.72);
@@ -643,7 +644,7 @@
 	}
 
 	.cafe-chat-close:focus-visible {
-		border-color: var(--control-focus-border);
+		border-color: var(--cafe-chat-focus-border);
 	}
 
 	.cafe-chat-history {
@@ -702,7 +703,7 @@
 	}
 
 	.cafe-chat-quick:focus-visible {
-		border-color: var(--control-focus-border);
+		border-color: var(--cafe-chat-focus-border);
 	}
 
 	.cafe-chat-input {
@@ -718,7 +719,7 @@
 	}
 
 	.cafe-chat-input:focus {
-		border-color: var(--control-focus-border);
+		border-color: var(--cafe-chat-focus-border);
 	}
 
 	.cafe-chat-count {
@@ -737,7 +738,7 @@
 	}
 
 	.cafe-chat-send:focus-visible {
-		border-color: var(--control-focus-border);
+		border-color: var(--cafe-chat-focus-border);
 	}
 
 	.cafe-chat-trigger {
@@ -758,7 +759,7 @@
 	}
 
 	.cafe-chat-trigger:focus-visible {
-		border-color: var(--control-focus-border);
+		border-color: var(--cafe-chat-focus-border);
 	}
 
 	@media (prefers-reduced-motion: reduce) {

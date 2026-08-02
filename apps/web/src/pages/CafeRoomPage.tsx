@@ -2,10 +2,13 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Navigate, useNavigate, useParams } from "react-router-dom";
 import {
 	ArrowLeft,
+	Check,
 	CircleHelp,
 	Clock3,
 	Coffee,
 	Copy,
+	Eye,
+	EyeOff,
 	Flame,
 	Leaf,
 	MessageCircle,
@@ -54,8 +57,10 @@ function CafeRoomContent({
 	const [copied, setCopied] = useState(false);
 	const [showGuide, setShowGuide] = useState(shouldShowCafeGuide);
 	const [showChat, setShowChat] = useState(false);
+	const [showRoomHud, setShowRoomHud] = useState(true);
 	const [chatInputFocused, setChatInputFocused] = useState(false);
 	const [unreadChatCount, setUnreadChatCount] = useState(0);
+	const copiedResetTimeoutRef = useRef<number | null>(null);
 	const seenLatestChatIdRef = useRef<string | null>(null);
 	const selfPlayer = cafe.room?.players.find((player) => player.id === cafe.selfPlayerId);
 	const carriedTea = selfPlayer?.carriedTea ?? 0;
@@ -90,6 +95,15 @@ function CafeRoomContent({
 		setUnreadChatCount((current) => current + 1);
 	}, [cafe.latestChatMessage, cafe.selfPlayerId, showChat]);
 
+	useEffect(
+		() => () => {
+			if (copiedResetTimeoutRef.current !== null) {
+				window.clearTimeout(copiedResetTimeoutRef.current);
+			}
+		},
+		[]
+	);
+
 	function openChat() {
 		setShowChat(true);
 		setUnreadChatCount(0);
@@ -111,13 +125,19 @@ function CafeRoomContent({
 
 	async function copyInviteCode() {
 		if (!cafe.room) return;
-		try {
-			await navigator.clipboard.writeText(cafe.room.inviteCode);
-			setCopied(true);
-			window.setTimeout(() => setCopied(false), 1600);
-		} catch {
-			setCopied(false);
+		const copySucceeded = await copyTextToClipboard(cafe.room.inviteCode);
+		if (copiedResetTimeoutRef.current !== null) {
+			window.clearTimeout(copiedResetTimeoutRef.current);
+			copiedResetTimeoutRef.current = null;
 		}
+		setCopied(copySucceeded);
+		if (!copySucceeded) {
+			return;
+		}
+		copiedResetTimeoutRef.current = window.setTimeout(() => {
+			setCopied(false);
+			copiedResetTimeoutRef.current = null;
+		}, 3000);
 	}
 
 	return (
@@ -189,6 +209,24 @@ function CafeRoomContent({
 						/>
 					</div>
 				)}
+				{!showChat && (
+					<button
+						type="button"
+						className="cafe-chat-trigger absolute bottom-16 left-3 z-40 flex size-11 items-center justify-center rounded-full transition focus:outline-none max-sm:bottom-[calc(max(1rem,env(safe-area-inset-bottom))+12.75rem)]"
+						onClick={() => setShowRoomHud((current) => !current)}
+						aria-label={t(showRoomHud ? "cafe.room.hideHud" : "cafe.room.showHud")}
+						aria-controls="cafe-room-hud"
+						aria-pressed={showRoomHud}
+						data-active={showRoomHud}
+						data-testid="cafe-room-hud-toggle"
+					>
+						{showRoomHud ? (
+							<Eye size={19} aria-hidden="true" />
+						) : (
+							<EyeOff size={19} aria-hidden="true" />
+						)}
+					</button>
+				)}
 				<button
 					type="button"
 					className={`cafe-chat-trigger absolute bottom-3 left-3 z-40 flex size-11 items-center justify-center rounded-full transition focus:outline-none max-sm:bottom-[calc(max(1rem,env(safe-area-inset-bottom))+9.5rem)] ${cafe.dialogue && !showChat ? "max-sm:hidden" : ""}`}
@@ -212,7 +250,11 @@ function CafeRoomContent({
 				{cafe.room && showGuide && (
 					<CafeWelcomeGuide activityId={cafe.room.activity.id} onDismiss={dismissGuide} />
 				)}
-				<div className="pointer-events-none absolute left-3 right-3 top-3 z-30 flex items-start gap-2 sm:gap-3">
+				<div
+					id="cafe-room-hud"
+					className={`pointer-events-none absolute left-3 right-3 top-3 z-30 flex items-start gap-2 sm:gap-3 ${showRoomHud ? (showChat ? "max-sm:hidden" : "") : "hidden"}`}
+					data-testid="cafe-room-hud"
+				>
 					<div
 						className="cafe-world-overlay cafe-world-overlay-status min-w-0 max-w-96 flex-1 rounded-lg px-2 py-1.5 sm:rounded-xl sm:px-3 sm:py-2"
 						data-testid="cafe-activity-hud"
@@ -357,11 +399,28 @@ function CafeRoomContent({
 								type="button"
 								className="cafe-world-button rounded-lg px-3 py-2 text-xs font-semibold transition focus:outline-none"
 								onClick={() => void copyInviteCode()}
+								aria-label={
+									copied
+										? `${t("cafe.room.copied")} ${cafe.room.inviteCode}`
+										: cafe.room.inviteCode
+								}
 								data-testid="cafe-invite-code"
 							>
 								<span className="flex items-center gap-2">
-									<Copy size={14} aria-hidden="true" />
-									{copied ? t("cafe.room.copied") : cafe.room.inviteCode}
+									{copied ? (
+										<Check
+											size={14}
+											aria-hidden="true"
+											data-testid="cafe-invite-check-icon"
+										/>
+									) : (
+										<Copy
+											size={14}
+											aria-hidden="true"
+											data-testid="cafe-invite-copy-icon"
+										/>
+									)}
+									{cafe.room.inviteCode}
 								</span>
 							</button>
 						)}
@@ -871,6 +930,40 @@ function cosmeticGlyph(cosmeticId: string) {
 			cafe_apron: "🎀"
 		}[cosmeticId] ?? "✦"
 	);
+}
+
+async function copyTextToClipboard(text: string): Promise<boolean> {
+	if (navigator.clipboard?.writeText) {
+		try {
+			await navigator.clipboard.writeText(text);
+			return true;
+		} catch {
+			// Fall back for browsers that block the Clipboard API on HTTP/LAN origins.
+		}
+	}
+
+	const previouslyFocused =
+		document.activeElement instanceof HTMLElement ? document.activeElement : null;
+	const textarea = document.createElement("textarea");
+	textarea.value = text;
+	textarea.readOnly = true;
+	textarea.style.position = "fixed";
+	textarea.style.left = "-9999px";
+	textarea.style.top = "0";
+	textarea.style.fontSize = "16px";
+	document.body.appendChild(textarea);
+
+	try {
+		textarea.focus();
+		textarea.select();
+		textarea.setSelectionRange(0, text.length);
+		return document.execCommand("copy");
+	} catch {
+		return false;
+	} finally {
+		textarea.remove();
+		previouslyFocused?.focus({ preventScroll: true });
+	}
 }
 
 const CAFE_GUIDE_STORAGE_KEY = "wfchat_cafe_guide_seen_v1";

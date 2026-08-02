@@ -156,6 +156,8 @@
 	"cafe.room.talkToAiko": "คุยกับ Aiko",
 	"cafe.room.moveCloser": "เดินเข้าใกล้",
 	"cafe.room.copied": "คัดลอกแล้ว",
+	"cafe.room.hideHud": "ซ่อนสถานะห้อง",
+	"cafe.room.showHud": "แสดงสถานะห้อง",
 	"cafe.room.members": "คนในคาเฟ่",
 	"cafe.room.controls": "เดินด้วย WASD หรือปุ่มลูกศร กด E เมื่ออยู่ใกล้ Aiko หรือใบชา ส่วนมือถือจะแสดงปุ่มควบคุมบนหน้าจอ",
 	"cafe.chat.title": "แชทในคาเฟ่",

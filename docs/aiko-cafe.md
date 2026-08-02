@@ -17,7 +17,8 @@ chat and is available at `/cafe` without login.
   release events from the previous direction cannot cancel the currently held
   direction.
 - First-time guidance and nearby prompts explain the current activity. Help
-  remains available from the activity HUD.
+  remains available from the activity HUD, which players can show or hide at
+  every viewport size.
 - Room members can exchange short text messages in a collapsible panel. New
   messages also appear briefly above the sender's avatar, while join and leave
   notices and unread counts make other visitors visible without interrupting
@@ -128,11 +129,12 @@ use a dark translucent game-palette fill without blur, following the
 large-surface rule in [Theme](theme.md).
 
 On narrow viewports, the activity HUD and room status share a top row without
-overlap. The HUD keeps the activity, round, and progress visible in a compact
-card; active-round guidance opens through Help, while time-sensitive round and
-carried-item status remains visible in compact form. Chat and transient
-dialogue stay above the bottom control zone, and the reaction control is hidden
-while either of those overlays is open.
+overlap. A control above the chat button toggles that row at every viewport
+size and is hidden while chat is open. Opening chat also temporarily hides the
+row on narrow viewports without changing the player's chosen visibility. The
+HUD keeps the activity, round, and progress in a compact card; active-round
+guidance opens through Help. Chat and transient dialogue stay above the bottom
+control zone, and the reaction control is hidden while either overlay is open.
 
 The Cafe game surface suppresses text selection, native touch callouts, and
 dialogue-image dragging so touch controls do not open browser selection UI.

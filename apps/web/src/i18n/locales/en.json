@@ -156,6 +156,8 @@
 	"cafe.room.talkToAiko": "Talk to Aiko",
 	"cafe.room.moveCloser": "Move closer",
 	"cafe.room.copied": "Copied",
+	"cafe.room.hideHud": "Hide room status",
+	"cafe.room.showHud": "Show room status",
 	"cafe.room.members": "People in the cafe",
 	"cafe.room.controls": "Move with WASD or arrow keys. Press E near Aiko or a tea leaf. Mobile controls appear on touch-sized screens.",
 	"cafe.chat.title": "Room chat",
