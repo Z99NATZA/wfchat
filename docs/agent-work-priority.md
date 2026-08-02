@@ -14,6 +14,25 @@ Add task-specific documents here before implementation.
 
 Define the task-specific completion criteria here before implementation.
 
+## Authorization And Verification
+
+- Treat `ok impl`, `ok refine`, `ok update docs`, `ok tests`, and `ok ci` as
+  standalone authorization commands using the clearly agreed scope.
+- Commands may use `: <message>` to identify or narrow scope, such as
+  `ok impl: logging`. `ok update: <message>` is the scoped form of
+  `ok update docs`. A file path is unnecessary when context identifies it.
+- If scope is missing or ambiguous, ask for clarification. Other wording is not
+  authorization to modify the repository.
+- `ok impl`, `ok refine`, and `ok update docs` authorize scoped repository
+  changes. Implementation and refinement include focused tests and fixes for
+  failures caused by the active changes.
+- Do not run full checks by default. `ok tests` authorizes all local test suites;
+  `ok ci` authorizes all local equivalents in `.github/workflows/ci.yml`.
+- Reuse valid results. Do not weaken assertions or fix unrelated behavior.
+  Report unrelated, pre-existing, skipped, or blocked checks with their reasons.
+- These commands do not authorize commits, pushes, pull requests, releases, or
+  remote actions.
+
 ## Documentation Rules
 
 - Treat code, configuration, migrations, and tests as the source of truth.
@@ -38,8 +57,5 @@ Define the task-specific completion criteria here before implementation.
   `Active Scope`, `Required Read Order`, and `Required Outcome`.
 - Keep this file short and task-focused.
 - `docs/architecture.md` is an architecture index, not the source of detailed behavior.
-- Before completing a scoped task, run the full local equivalents of the Web
-  and API checks defined in `.github/workflows/ci.yml`. Fix failures caused by
-  the task, and report every skipped or blocked check with the reason.
 - Read `docs/lessons-learned/*` only for the subsystem being changed, when debugging
   a regression, or before reworking behavior with a known failure mode.

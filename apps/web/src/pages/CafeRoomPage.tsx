@@ -555,17 +555,20 @@ function CafeWelcomeGuide({
 					{t(guideTitleKey)}
 				</h2>
 				<div
-					className="cafe-world-muted mt-4 text-sm font-semibold leading-6"
+					className="cafe-world-muted mt-4 text-[10px] font-semibold leading-6 sm:text-sm"
 					data-testid="cafe-guide-controls"
 				>
 					<div className="hidden sm:block">
 						<p>{t("cafe.guide.moveDesktop")}</p>
+						<p>{t("cafe.guide.nearbyDesktop")}</p>
 						<p>{t("cafe.guide.actionDesktop")}</p>
 					</div>
 					<div className="sm:hidden">
 						<p>{t("cafe.guide.moveMobile")}</p>
+						<p>{t("cafe.guide.nearbyMobile")}</p>
 						<p>{t("cafe.guide.actionMobile")}</p>
 					</div>
+					<p className="mt-3">{t("cafe.guide.followPrompts")}</p>
 				</div>
 				<button
 					type="button"

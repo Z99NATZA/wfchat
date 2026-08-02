@@ -189,11 +189,19 @@ describe("CafeRoomPage", () => {
 		const guideBackdrop = screen.getByTestId("cafe-guide-backdrop");
 		expect(guideBackdrop.className).toContain("cafe-world-backdrop");
 		expect(guideBackdrop.className).not.toContain("backdrop-blur");
+		expect(screen.getByTestId("cafe-guide-controls").className).toContain("text-[10px]");
+		expect(screen.getByTestId("cafe-guide-controls").className).toContain("sm:text-sm");
 		expect(screen.getByTestId("cafe-guide-controls").textContent).toContain(
 			"cafe.guide.moveDesktop"
 		);
 		expect(screen.getByTestId("cafe-guide-controls").textContent).toContain(
+			"cafe.guide.nearbyDesktop"
+		);
+		expect(screen.getByTestId("cafe-guide-controls").textContent).toContain(
 			"cafe.guide.actionDesktop"
+		);
+		expect(screen.getByTestId("cafe-guide-controls").textContent).toContain(
+			"cafe.guide.followPrompts"
 		);
 		expect(screen.getByRole("button", { name: "cafe.guide.start" }).className).toContain(
 			"cafe-world-action"

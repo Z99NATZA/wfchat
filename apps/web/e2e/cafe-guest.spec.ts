@@ -75,6 +75,12 @@ test("mobile overlays reserve separate control and status zones", async ({ page 
 	const roomId = "00000000-0000-4000-8000-000000000007";
 	const room = cafeRoomFixture(roomId);
 	let showDialogue: () => void = () => undefined;
+	await page.addInitScript(() => {
+		if (localStorage.getItem("wfchat.locale") === null) {
+			localStorage.setItem("wfchat.locale", "en");
+		}
+		localStorage.removeItem("wfchat_cafe_guide_seen_v1");
+	});
 	room.players[0].carried_tea = 0;
 	await page.routeWebSocket(new RegExp(`/api/cafe/rooms/${roomId}/ws$`), (socket) => {
 		showDialogue = () =>
@@ -109,6 +115,19 @@ test("mobile overlays reserve separate control and status zones", async ({ page 
 	await expect(page.getByTestId("cafe-guide-backdrop")).toHaveCSS("backdrop-filter", "none");
 	await expect(guide).toHaveCSS("background-color", "rgba(120, 72, 42, 0.56)");
 	await expect(page.getByTestId("cafe-guide-controls")).toBeVisible();
+	await expect(
+		page.getByText("Move with the arrow buttons on the left", { exact: true })
+	).toBeVisible();
+	await expect(
+		page.getByText(
+			"When you approach something, the button in the bottom-right becomes available",
+			{ exact: true }
+		)
+	).toBeVisible();
+	await expect(page.getByText("Tap that button to take action", { exact: true })).toBeVisible();
+	await expect(
+		page.getByText("Follow the objectives and guidance on screen", { exact: true })
+	).toBeVisible();
 	await expect(guideStartButton).toHaveCSS("background-color", "rgba(82, 48, 29, 0.78)");
 	await page.screenshot({
 		path: "test-results/aiko-cafe-guide-game-theme-mobile.png",
@@ -231,11 +250,26 @@ test("mobile overlays reserve separate control and status zones", async ({ page 
 	});
 	await page.reload();
 	await expect(page.getByRole("heading", { name: "ช่วย Aiko เตรียมชา" })).toBeVisible();
-	await expect(page.getByText("ปุ่มเดิน: WASD หรือปุ่มลูกศร", { exact: true })).toBeVisible();
-	await expect(page.getByText("ปุ่ม E: โต้ตอบ", { exact: true })).toBeVisible();
+	await expect(page.getByText("ใช้ WASD หรือปุ่มลูกศรเพื่อเดิน", { exact: true })).toBeVisible();
+	await expect(
+		page.getByText("เมื่อเข้าใกล้บางอย่าง คำสั่งจะแสดงบนหน้าจอ", { exact: true })
+	).toBeVisible();
+	await expect(page.getByText("กด E เพื่อดำเนินการ", { exact: true })).toBeVisible();
+	await expect(page.getByText("ทำตามเป้าหมายและคำแนะนำบนหน้าจอ", { exact: true })).toBeVisible();
 	await expect(page.getByRole("button", { name: "Ok", exact: true })).toBeVisible();
 	await page.screenshot({
 		path: "test-results/aiko-cafe-guide-thai-copy.png",
+		fullPage: true
+	});
+	await page.setViewportSize({ width: 390, height: 844 });
+	await expect(page.getByText("เดินด้วยปุ่มลูกศรด้านซ้าย", { exact: true })).toBeVisible();
+	await expect(
+		page.getByText("เมื่อเข้าใกล้บางอย่าง ปุ่มด้านขวาล่างจะทำงานได้", { exact: true })
+	).toBeVisible();
+	await expect(page.getByText("แตะปุ่มนั้นเพื่อดำเนินการ", { exact: true })).toBeVisible();
+	await expect(page.getByText("ทำตามเป้าหมายและคำแนะนำบนหน้าจอ", { exact: true })).toBeVisible();
+	await page.screenshot({
+		path: "test-results/aiko-cafe-guide-thai-copy-mobile.png",
 		fullPage: true
 	});
 });
