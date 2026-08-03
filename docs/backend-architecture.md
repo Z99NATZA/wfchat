@@ -14,9 +14,9 @@ Axum router (app.rs)
   -> JSON, SSE, audio, image bytes, or WebSocket
 ```
 
-`AppState` shares typed config, PostgreSQL store, HTTP client, rate limiter,
-Cafe hub, and automatic-memory telemetry. `ChatStore::connect()` applies SQLx
-migrations before the server starts.
+`AppState` shares typed config, PostgreSQL store, timeout-bound HTTP client,
+request and generation limiters, Cafe hub, and automatic-memory telemetry.
+`ChatStore::connect()` applies SQLx migrations before the server starts.
 
 ## Domains
 
@@ -39,11 +39,15 @@ Focused domain contracts live in the linked documents from
 
 ## Authentication And Ownership
 
-The backend creates an HTTP-only `wfchat_session` cookie for guest use.
-Registered login reuses the session and associates data with an account owner.
-`X-WFChat-Session` is accepted only as a non-browser compatibility fallback.
-Frontend code must not persist session ids or secrets in browser-readable
-storage.
+The backend creates an HTTP-only `wfchat_session` cookie for guest use. Sessions
+expire server-side. Registered login migrates supported guest data, issues a
+new registered session, and revokes the old session. Logout revokes the current
+session and issues a new guest session. Unknown client-selected ids never create
+that requested session.
+
+Production cookies are always `Secure`. `X-WFChat-Session` is a configurable
+development compatibility fallback and is rejected in production. Frontend
+code must not persist session ids or secrets in browser-readable storage.
 
 Google identity data and editable profiles are separate. Profile avatar URLs
 must be HTTPS, except localhost/loopback HTTP used during development.
@@ -59,7 +63,8 @@ Supported chat providers are `mock`, `openai`, `lmstudio`, and `xai`.
 Anthropic/Claude code is scaffolded but runtime config rejects it. Image parts
 are supported only by mock and OpenAI.
 
-The same prepared context feeds streaming and non-streaming completion:
+The same prepared, bounded context feeds streaming and non-streaming
+completion:
 
 ```text
 character prompt
@@ -68,9 +73,14 @@ current chat history
 latest user message and validated image parts
 ```
 
-AI keys, model ids, provider payloads, and storage paths remain server-side.
-Admin endpoints expose read/status information only and require an admin
-session.
+Message size, JSON body size, recent context messages/characters, provider
+request tokens, guarded output characters, connect/total/idle timeouts, and
+concurrent generations are server-configured. `CHAT_OUTPUT_MAX_TOKENS` is sent
+to supporting providers; `CHAT_OUTPUT_MAX_CHARS` is the provider-neutral hard
+limit enforced before JSON persistence and before each SSE chunk is sent. AI
+keys, model ids, provider payloads, storage paths, and raw provider errors remain
+server-side. Admin endpoints expose read/status information only and require an
+admin session.
 
 ## Realtime And Background Work
 
@@ -88,20 +98,58 @@ PostgreSQL.
 
 ## Abuse Controls
 
-The in-memory fixed-window limiter uses session identity, falling back to client
-IP:
+The in-memory fixed-window limiter checks all identities for one request under
+one lock. JSON/SSE chat uses session, resolved client IP, and global identities;
+image upload, assistant speech, and transcription use session and resolved
+client IP without the global identity.
+
+The socket peer is the client IP unless `TRUST_PROXY_HEADERS=true`, the peer is
+inside `TRUSTED_PROXY_CIDRS`, and one valid `X-Forwarded-For` header contains an
+untrusted address. Trusted chains are walked right to left; malformed, multiple,
+empty, or all-trusted chains fall back to the normalized peer. Other forwarded
+headers are ignored.
 
 | Family | Limit per minute |
 | --- | ---: |
-| Chat JSON + SSE sends | 20 |
+| Chat JSON + SSE sends | 20 per session/IP, plus configurable global limit |
 | Assistant speech | 10 |
 | User transcription | 6 |
 | Image upload | 12 |
 
-Limits are per API process and reset on restart.
+Rate limits and concurrency limits are per API process and reset on restart.
+Rate-limited HTTP responses include `Retry-After: 60`.
 
 ## Configuration
 
 `apps/api/src/config.rs` parses and validates environment configuration at
-startup. Unknown providers, missing required keys/models, invalid voice formats,
-and invalid attachment limits stop startup with a configuration error.
+startup. `APP_ENV=production` additionally requires HTTPS DNS origins outside
+the closed local/reserved-name list, rejects IP literals, disables the
+compatibility session header, and enforces the documented chat safety maxima.
+Invalid CIDRs, trusted headers without a trusted CIDR, unknown providers,
+missing required keys/models, invalid voice formats, and invalid limits stop
+startup with a configuration error rather than a runtime panic.
+
+Production accepts each positive chat limit only up to these maxima;
+development keeps the same positive, relational, and no-panic validation but
+does not apply this maxima table:
+
+| Key | Default | Production maximum |
+| --- | ---: | ---: |
+| `CHAT_MESSAGE_MAX_CHARS` | 4,000 | 16,000 |
+| `CHAT_REQUEST_MAX_BYTES` | 65,536 | 262,144 |
+| `CHAT_CONTEXT_MAX_MESSAGES` | 40 | 200 |
+| `CHAT_CONTEXT_MAX_CHARS` | 32,000 | 200,000 |
+| `CHAT_OUTPUT_MAX_TOKENS` | 1,024 | 8,192 |
+| `CHAT_OUTPUT_MAX_CHARS` | 16,384 | 65,536 |
+| `CHAT_AI_CONNECT_TIMEOUT_SECONDS` | 10 | 30 |
+| `CHAT_AI_IDLE_TIMEOUT_SECONDS` | 20 | 120 |
+| `CHAT_AI_TOTAL_TIMEOUT_SECONDS` | 60 | 300 |
+| `CHAT_MAX_CONCURRENT_GENERATIONS` | 8 | 128 |
+| `CHAT_MAX_CONCURRENT_PER_SESSION` | 2 | 8 |
+| `CHAT_GLOBAL_REQUESTS_PER_MINUTE` | 120 | 6,000 |
+
+Production origins are HTTPS DNS origins with no credentials, path, query, or
+fragment. Hostnames are lowercased and stripped of trailing dots before checks.
+Single-label names, all IP literals, and exact/subdomain forms of `localhost`,
+`local`, `internal`, `lan`, `home`, `home.arpa`, `test`, `invalid`, `example`,
+and `onion` are rejected without DNS or public-suffix lookups.

@@ -25,6 +25,7 @@ type ChatComposerProps = {
 	) => boolean | void | Promise<boolean | void>;
 	isDisabled?: boolean;
 	isSending?: boolean;
+	isImageUploadEnabled?: boolean;
 	isUserSpeechInputEnabled?: boolean;
 	userSpeechInput?: UserSpeechInputState;
 	onCancelSpeechInput?: () => void;
@@ -55,6 +56,7 @@ function ChatComposer({
 	onSend,
 	isDisabled = false,
 	isSending = false,
+	isImageUploadEnabled = true,
 	isUserSpeechInputEnabled = false,
 	userSpeechInput = { status: "idle" },
 	onCancelSpeechInput,
@@ -159,7 +161,7 @@ function ChatComposer({
 	}
 
 	function handleImagePickerClick() {
-		if (isDisabled || isSending) {
+		if (!isImageUploadEnabled || isDisabled || isSending) {
 			return;
 		}
 
@@ -174,6 +176,9 @@ function ChatComposer({
 	}
 
 	function handlePaste(event: ClipboardEvent<HTMLTextAreaElement>) {
+		if (!isImageUploadEnabled) {
+			return;
+		}
 		const files = Array.from(event.clipboardData.files).filter((file) =>
 			file.type.startsWith("image/")
 		);
@@ -186,7 +191,12 @@ function ChatComposer({
 	}
 
 	function handleDragOver(event: DragEvent<HTMLDivElement>) {
-		if (isDisabled || isSending || !hasImageFiles(event.dataTransfer.files)) {
+		if (
+			!isImageUploadEnabled ||
+			isDisabled ||
+			isSending ||
+			!hasImageFiles(event.dataTransfer.files)
+		) {
 			return;
 		}
 
@@ -195,7 +205,12 @@ function ChatComposer({
 	}
 
 	function handleDrop(event: DragEvent<HTMLDivElement>) {
-		if (isDisabled || isSending || !hasImageFiles(event.dataTransfer.files)) {
+		if (
+			!isImageUploadEnabled ||
+			isDisabled ||
+			isSending ||
+			!hasImageFiles(event.dataTransfer.files)
+		) {
 			return;
 		}
 
@@ -204,7 +219,7 @@ function ChatComposer({
 	}
 
 	function addImageFiles(files: FileList | File[] | undefined | null) {
-		if (!files || isDisabled || isSending) {
+		if (!files || !isImageUploadEnabled || isDisabled || isSending) {
 			return;
 		}
 
@@ -326,14 +341,17 @@ function ChatComposer({
 					className="chat-composer-form flex flex-col gap-1 rounded-lg border border-app-border bg-app-soft/82 p-1 sm:flex-row sm:items-center sm:gap-2 sm:p-2"
 					onSubmit={handleSubmit}
 				>
-					<input
-						ref={imageInputRef}
-						className="hidden"
-						type="file"
-						accept={IMAGE_INPUT_ACCEPT}
-						multiple
-						onChange={handleImageInputChange}
-					/>
+					{isImageUploadEnabled ? (
+						<input
+							ref={imageInputRef}
+							className="hidden"
+							type="file"
+							accept={IMAGE_INPUT_ACCEPT}
+							disabled={isDisabled || isSending}
+							multiple
+							onChange={handleImageInputChange}
+						/>
+					) : null}
 					<div className="flex min-w-0 flex-1 items-center">
 						<span
 							className="hidden size-10 shrink-0 items-center justify-center text-muted sm:flex"
@@ -431,19 +449,21 @@ function ChatComposer({
 								<Mic size={18} aria-hidden="true" />
 							)}
 						</IconButton>
-						<IconButton
-							className="shrink-0"
-							aria-label={t("chat.composer.attachImage")}
-							disabled={
-								isDisabled ||
-								isSending ||
-								selectedImages.length >= MAX_IMAGE_ATTACHMENTS
-							}
-							title={t("chat.composer.attachImage")}
-							onClick={handleImagePickerClick}
-						>
-							<Image className="size-4 sm:size-[18px]" aria-hidden="true" />
-						</IconButton>
+						{isImageUploadEnabled ? (
+							<IconButton
+								className="shrink-0"
+								aria-label={t("chat.composer.attachImage")}
+								disabled={
+									isDisabled ||
+									isSending ||
+									selectedImages.length >= MAX_IMAGE_ATTACHMENTS
+								}
+								title={t("chat.composer.attachImage")}
+								onClick={handleImagePickerClick}
+							>
+								<Image className="size-4 sm:size-[18px]" aria-hidden="true" />
+							</IconButton>
+						) : null}
 						<IconButton
 							type="submit"
 							variant="action"

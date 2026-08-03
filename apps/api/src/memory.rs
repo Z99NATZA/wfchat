@@ -402,7 +402,7 @@ async fn claim_persona_follow_up(
         .ok_or_else(|| AppError::BadRequest(format!("unknown character: {persona_id}")))?;
     let session = state
         .store
-        .ensure_session(session_id_from_headers(&headers))
+        .ensure_session(session_id_from_headers(&state.config, &headers))
         .await?;
     let owner = OwnerScope::from_session(&session);
     let now = now_unix_seconds();
@@ -567,7 +567,7 @@ async fn reset_learned_context(
 ) -> AppResult<StatusCode> {
     let session = state
         .store
-        .ensure_session(session_id_from_headers(&headers))
+        .ensure_session(session_id_from_headers(&state.config, &headers))
         .await?;
     let owner = OwnerScope::from_session(&session);
     let deleted_count = state.store.reset_learned_context(owner).await?;
@@ -1595,9 +1595,11 @@ mod tests {
                 chat_attachment_max_width: 8192,
                 chat_attachment_max_height: 8192,
                 chat_attachment_max_pixels: 20_000_000,
+                security: Default::default(),
             },
             http: Client::new(),
             rate_limiter: RateLimiter::default(),
+            generation_limiter: crate::rate_limit::GenerationLimiter::new(8, 2),
             store,
             cafe: crate::cafe::CafeHub::default(),
             memory_telemetry: MemoryTelemetry::default(),

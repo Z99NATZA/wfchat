@@ -97,6 +97,7 @@ export function useChatSession({ onAvatarChatEvent }: UseChatSessionOptions = {}
 	const [errorMessage, setErrorMessage] = useState<string | null>(null);
 	const [isActiveChatReadOnly, setIsActiveChatReadOnly] = useState(false);
 	const [isAssistantSpeechEnabled, setIsAssistantSpeechEnabled] = useState(false);
+	const [isImageUploadEnabled, setIsImageUploadEnabled] = useState(false);
 	const [isUserTranscriptionEnabled, setIsUserTranscriptionEnabled] = useState(false);
 	const [refreshVersion, setRefreshVersion] = useState(0);
 	const [routeChatId, setRouteChatId] = useState<string | null>(() =>
@@ -272,6 +273,7 @@ export function useChatSession({ onAvatarChatEvent }: UseChatSessionOptions = {}
 
 				setPersonas(config.personas);
 				setIsAssistantSpeechEnabled(config.assistantSpeechEnabled);
+				setIsImageUploadEnabled(config.imageUploadEnabled);
 				setIsUserTranscriptionEnabled(config.userTranscriptionEnabled);
 				setSelectedPersonaId((currentId) =>
 					config.personas.some((persona) => persona.id === currentId)
@@ -912,6 +914,7 @@ export function useChatSession({ onAvatarChatEvent }: UseChatSessionOptions = {}
 		errorMessage,
 		isActiveChatReadOnly,
 		isAssistantSpeechEnabled,
+		isImageUploadEnabled,
 		isUserTranscriptionEnabled,
 		assistantSpeechPlayback,
 		userSpeechInput,

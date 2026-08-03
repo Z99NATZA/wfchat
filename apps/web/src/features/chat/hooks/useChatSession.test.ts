@@ -167,6 +167,7 @@ describe("useChatSession streaming sendMessage", () => {
 		mocks.getChatUiConfig.mockResolvedValue({
 			personas: [persona],
 			assistantSpeechEnabled: false,
+			imageUploadEnabled: true,
 			userTranscriptionEnabled: false
 		});
 		mocks.listPersonaChats.mockResolvedValue([]);
@@ -638,12 +639,26 @@ describe("useChatSession streaming sendMessage", () => {
 		mocks.getChatUiConfig.mockResolvedValue({
 			personas: [persona],
 			assistantSpeechEnabled: true,
+			imageUploadEnabled: true,
 			userTranscriptionEnabled: false
 		});
 
 		const { result } = renderHook(() => useChatSession());
 
 		await waitFor(() => expect(result.current.isAssistantSpeechEnabled).toBe(true));
+	});
+
+	it("exposes image upload capability from chat UI config", async () => {
+		mocks.getChatUiConfig.mockResolvedValue({
+			personas: [persona],
+			assistantSpeechEnabled: false,
+			imageUploadEnabled: false,
+			userTranscriptionEnabled: false
+		});
+
+		const { result } = renderHook(() => useChatSession());
+
+		await waitFor(() => expect(result.current.isImageUploadEnabled).toBe(false));
 	});
 
 	it("notifies avatar motion events while assistant speech loads, plays, and stops", async () => {
@@ -752,6 +767,7 @@ describe("useChatSession streaming sendMessage", () => {
 		mocks.getChatUiConfig.mockResolvedValue({
 			personas: [persona],
 			assistantSpeechEnabled: false,
+			imageUploadEnabled: true,
 			userTranscriptionEnabled: true
 		});
 

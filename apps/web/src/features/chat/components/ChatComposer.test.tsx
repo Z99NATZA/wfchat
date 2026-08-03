@@ -179,6 +179,33 @@ describe("ChatComposer", () => {
 		).toBe(true);
 	});
 
+	it("omits image attachment controls and ignores paste or drop when uploads are unavailable", () => {
+		const { createObjectUrl } = installObjectUrlMocks("blob:should-not-exist");
+		const { container } = render(
+			<ChatComposer
+				draft=""
+				font="inter"
+				companionName="Aiko"
+				isImageUploadEnabled={false}
+				onDraftChange={vi.fn()}
+				onSend={vi.fn()}
+			/>
+		);
+
+		const image = new File(["image"], "disabled.png", { type: "image/png" });
+		fireEvent.paste(screen.getByRole("textbox"), {
+			clipboardData: { files: [image] }
+		});
+		fireEvent.drop(screen.getByTestId("chat-composer-surface"), {
+			dataTransfer: { files: [image] }
+		});
+
+		expect(screen.queryByRole("button", { name: "chat.composer.attachImage" })).toBeNull();
+		expect(container.querySelector('input[type="file"]')).toBeNull();
+		expect(screen.queryByAltText("disabled.png")).toBeNull();
+		expect(createObjectUrl).not.toHaveBeenCalled();
+	});
+
 	it("starts voice input when transcription is available", () => {
 		const onToggleSpeechInput = vi.fn();
 

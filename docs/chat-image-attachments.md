@@ -70,6 +70,11 @@ linked attachments.
 
 Upload has its own 12-requests-per-minute in-memory rate-limit bucket. Ownership
 is checked for upload session resolution, preview, delete, and message linking.
+`CHAT_IMAGE_UPLOAD_ENABLED=false` omits the native file input and attach button,
+prevents paste/drop image staging, omits the upload route, and rejects
+image-message requests. When the key is omitted,
+production defaults it to disabled and development defaults it to enabled; the
+development `.env.example` explicitly enables it.
 
 ## Provider Boundary
 

@@ -1,7 +1,7 @@
 use axum::{
     body::Body,
     extract::DefaultBodyLimit,
-    extract::{Multipart, Path, State},
+    extract::{ConnectInfo, Multipart, Path, State},
     http::{header, HeaderMap, HeaderName, HeaderValue},
     response::{
         sse::{Event, KeepAlive, Sse},
@@ -12,7 +12,7 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use std::{convert::Infallible, time::Duration};
+use std::{convert::Infallible, net::SocketAddr, time::Duration};
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 use uuid::Uuid;
@@ -32,7 +32,10 @@ use crate::{
     rate_limit::{RateLimitFamily, RateLimitIdentity},
     session::session_id_from_headers,
     state::AppState,
-    store::{ChatAttachmentRecord, ChatRecord, NewChatAttachmentRecord, OwnerScope, StoredMessage},
+    store::{
+        ChatAttachmentRecord, ChatRecord, NewChatAttachmentRecord, OwnerScope, SessionRecord,
+        StoredMessage,
+    },
     voice::{SpeechAudioStreamBody, VoiceService},
 };
 
@@ -47,14 +50,9 @@ use voice::*;
 #[cfg(test)]
 pub(crate) use messages::prepare_text_context_for_memory_evaluation;
 
-pub fn router() -> Router<AppState> {
-    Router::new()
+pub fn router(config: &crate::config::Config) -> Router<AppState> {
+    let router = Router::new()
         .route("/chat-ui/config", get(get_chat_ui_config))
-        .route(
-            "/chat/attachments",
-            axum::routing::post(upload_chat_attachment)
-                .layer(DefaultBodyLimit::max(MAX_ATTACHMENT_MULTIPART_BYTES)),
-        )
         .route(
             "/chat/attachments/{attachment_id}",
             axum::routing::delete(delete_chat_attachment),
@@ -64,26 +62,61 @@ pub fn router() -> Router<AppState> {
             get(preview_chat_attachment),
         )
         .route(
-            "/chat/transcription",
-            axum::routing::post(transcribe_user_speech),
-        )
-        .route(
             "/personas/{persona_id}/chats",
             get(list_chats_for_persona).post(create_chat_for_persona),
         )
         .route("/chats/{chat_id}", get(get_chat).delete(delete_chat))
         .route(
             "/chats/{chat_id}/messages",
-            axum::routing::post(send_message).delete(clear_messages),
+            axum::routing::post(send_message)
+                .delete(clear_messages)
+                .layer(DefaultBodyLimit::max(
+                    config.security.chat.request_max_bytes,
+                )),
         )
         .route(
             "/chats/{chat_id}/messages/stream",
-            axum::routing::post(stream_message),
+            axum::routing::post(stream_message).layer(DefaultBodyLimit::max(
+                config.security.chat.request_max_bytes,
+            )),
+        );
+
+    let router = if config.security.chat.image_upload_enabled {
+        router.route(
+            "/chat/attachments",
+            axum::routing::post(upload_chat_attachment)
+                .layer(DefaultBodyLimit::max(MAX_ATTACHMENT_MULTIPART_BYTES)),
         )
-        .route(
+    } else {
+        router
+    };
+    let router = if config.security.chat.transcription_enabled {
+        router.route(
+            "/chat/transcription",
+            axum::routing::post(transcribe_user_speech).layer(DefaultBodyLimit::max(
+                MAX_TRANSCRIPTION_AUDIO_BYTES.saturating_add(64 * 1024),
+            )),
+        )
+    } else {
+        router
+    };
+    if config.security.chat.tts_enabled {
+        router.route(
             "/chats/{chat_id}/messages/{message_id}/speech",
             axum::routing::post(synthesize_message_speech),
         )
+    } else {
+        router
+    }
+}
+
+async fn require_chat_session(state: &AppState, headers: &HeaderMap) -> AppResult<SessionRecord> {
+    let session_id = session_id_from_headers(&state.config, headers).ok_or(AppError::Forbidden)?;
+    state
+        .store
+        .get_session(session_id)
+        .await?
+        .ok_or(AppError::Forbidden)
 }
 
 #[derive(Serialize)]
@@ -170,6 +203,7 @@ struct ChatCompletionContext {
 #[derive(Serialize)]
 struct ChatUiConfigResponse {
     personas: Vec<characters::CharacterUiResponse>,
+    image_upload_enabled: bool,
     voice: ChatVoiceConfigResponse,
 }
 
@@ -201,10 +235,7 @@ async fn list_chats_for_persona(
     headers: HeaderMap,
     Path(persona_id): Path<String>,
 ) -> AppResult<Json<Vec<ChatResponse>>> {
-    let session = state
-        .store
-        .ensure_session(session_id_from_headers(&headers))
-        .await?;
+    let session = require_chat_session(&state, &headers).await?;
     let owner = OwnerScope::from_session(&session);
     let chats = state
         .store
@@ -220,15 +251,18 @@ async fn list_chats_for_persona(
 async fn get_chat_ui_config(State(state): State<AppState>) -> Json<ChatUiConfigResponse> {
     Json(ChatUiConfigResponse {
         personas: characters::list_chat_ui_characters(),
+        image_upload_enabled: state.config.security.chat.image_upload_enabled,
         voice: ChatVoiceConfigResponse {
-            assistant_speech_enabled: matches!(
-                state.config.ai_voice_provider.as_str(),
-                "mock" | "openai" | "voicevox"
-            ),
-            user_transcription_enabled: matches!(
-                state.config.ai_transcription_provider.as_str(),
-                "mock" | "openai"
-            ),
+            assistant_speech_enabled: state.config.security.chat.tts_enabled
+                && matches!(
+                    state.config.ai_voice_provider.as_str(),
+                    "mock" | "openai" | "voicevox"
+                ),
+            user_transcription_enabled: state.config.security.chat.transcription_enabled
+                && matches!(
+                    state.config.ai_transcription_provider.as_str(),
+                    "mock" | "openai"
+                ),
             credits: chat_voice_credits(&state.config),
         },
     })
@@ -240,10 +274,7 @@ async fn create_chat_for_persona(
     Path(persona_id): Path<String>,
     request: Option<Json<CreateChatRequest>>,
 ) -> AppResult<Json<ChatResponse>> {
-    let session = state
-        .store
-        .ensure_session(session_id_from_headers(&headers))
-        .await?;
+    let session = require_chat_session(&state, &headers).await?;
     let owner = OwnerScope::from_session(&session);
     let character = characters::character_by_id(&persona_id)
         .ok_or_else(|| AppError::BadRequest(format!("unknown character: {persona_id}")))?;
@@ -266,10 +297,7 @@ async fn get_chat(
     headers: HeaderMap,
     Path(chat_id): Path<Uuid>,
 ) -> AppResult<Json<ChatResponse>> {
-    let session = state
-        .store
-        .ensure_session(session_id_from_headers(&headers))
-        .await?;
+    let session = require_chat_session(&state, &headers).await?;
     let owner = OwnerScope::from_session(&session);
     let chat = state
         .store
@@ -284,10 +312,7 @@ async fn clear_messages(
     headers: HeaderMap,
     Path(chat_id): Path<Uuid>,
 ) -> AppResult<Json<ChatResponse>> {
-    let session = state
-        .store
-        .ensure_session(session_id_from_headers(&headers))
-        .await?;
+    let session = require_chat_session(&state, &headers).await?;
     let owner = OwnerScope::from_session(&session);
     let chat = state
         .store
@@ -303,10 +328,7 @@ async fn delete_chat(
     headers: HeaderMap,
     Path(chat_id): Path<Uuid>,
 ) -> AppResult<Json<serde_json::Value>> {
-    let session = state
-        .store
-        .ensure_session(session_id_from_headers(&headers))
-        .await?;
+    let session = require_chat_session(&state, &headers).await?;
     let owner = OwnerScope::from_session(&session);
 
     if !state.store.delete_chat(owner, chat_id).await? {
@@ -319,11 +341,37 @@ async fn delete_chat(
 fn enforce_sensitive_rate_limit(
     state: &AppState,
     headers: &HeaderMap,
+    peer_addr: SocketAddr,
+    session_id: Uuid,
     family: RateLimitFamily,
 ) -> AppResult<()> {
-    state
-        .rate_limiter
-        .check(family, RateLimitIdentity::from_request(headers))
+    let identities = sensitive_rate_limit_identities(
+        headers,
+        peer_addr,
+        session_id,
+        family,
+        state.config.security.trust_proxy_headers,
+        &state.config.security.trusted_proxy_cidrs,
+    );
+    state.rate_limiter.check_many(family, identities)
+}
+
+fn sensitive_rate_limit_identities(
+    headers: &HeaderMap,
+    peer_addr: SocketAddr,
+    session_id: Uuid,
+    family: RateLimitFamily,
+    trust_proxy_headers: bool,
+    trusted_proxy_cidrs: &[ipnet::IpNet],
+) -> Vec<RateLimitIdentity> {
+    RateLimitIdentity::for_validated_session(
+        session_id,
+        headers,
+        peer_addr.ip(),
+        trust_proxy_headers,
+        trusted_proxy_cidrs,
+        family == RateLimitFamily::ChatMessages,
+    )
 }
 
 fn chat_response(chat: ChatRecord) -> ChatResponse {
@@ -545,12 +593,448 @@ mod tests {
             .expect("second request should run");
 
         assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
+        assert_header_contains(&response, header::RETRY_AFTER, "60");
         let body = to_bytes(response.into_body(), usize::MAX)
             .await
             .expect("body should collect");
         let payload: Value = serde_json::from_slice(&body).expect("error response should be json");
         assert_eq!(payload["error"].as_str(), Some("too many requests"));
 
+        let _ = state.store.delete_chat(owner, chat.id).await;
+    }
+
+    #[tokio::test]
+    async fn global_chat_rate_limit_applies_across_new_guest_sessions() {
+        let Some(mut state) = test_state().await else {
+            return;
+        };
+        state.rate_limiter = RateLimiter::new(
+            RateLimitPolicies::default().with_chat_global_limit(RateLimitPolicy::per_minute(1)),
+        );
+        let first_session = create_test_session(&state).await;
+        let second_session = create_test_session(&state).await;
+        let first_owner = OwnerScope::from_session(&first_session);
+        let second_owner = OwnerScope::from_session(&second_session);
+        let first_chat = create_test_chat(&state, first_owner).await;
+        let second_chat = create_test_chat(&state, second_owner).await;
+        let app = build_router(state.clone());
+
+        let first = app
+            .clone()
+            .oneshot(chat_message_request(
+                "POST",
+                &format!("/api/chats/{}/messages", first_chat.id),
+                first_session.id,
+                "first global request",
+            ))
+            .await
+            .unwrap();
+        assert_eq!(first.status(), StatusCode::OK);
+
+        let second = app
+            .oneshot(chat_message_request(
+                "POST",
+                &format!("/api/chats/{}/messages/stream", second_chat.id),
+                second_session.id,
+                "second global request",
+            ))
+            .await
+            .unwrap();
+        assert_eq!(second.status(), StatusCode::TOO_MANY_REQUESTS);
+
+        let _ = state.store.delete_chat(first_owner, first_chat.id).await;
+        let _ = state.store.delete_chat(second_owner, second_chat.id).await;
+    }
+
+    #[tokio::test]
+    async fn stream_generation_rejects_duplicate_chat_and_stops_after_disconnect() {
+        let Some(state) = test_state().await else {
+            return;
+        };
+        let session = create_test_session(&state).await;
+        let owner = OwnerScope::from_session(&session);
+        let chat = create_test_chat(&state, owner).await;
+        let app = build_router(state.clone());
+        let uri = format!("/api/chats/{}/messages/stream", chat.id);
+
+        let first_response = app
+            .clone()
+            .oneshot(chat_message_request(
+                "POST",
+                &uri,
+                session.id,
+                "keep this stream active long enough to test duplicate generation",
+            ))
+            .await
+            .expect("first stream request should run");
+        assert_eq!(first_response.status(), StatusCode::OK);
+
+        let second_response = app
+            .clone()
+            .oneshot(chat_message_request(
+                "POST",
+                &uri,
+                session.id,
+                "duplicate request",
+            ))
+            .await
+            .expect("second stream request should run");
+        assert_eq!(second_response.status(), StatusCode::TOO_MANY_REQUESTS);
+
+        drop(first_response);
+        let retry_deadline = tokio::time::Instant::now() + Duration::from_secs(2);
+        loop {
+            tokio::time::sleep(Duration::from_millis(25)).await;
+            let retry = app
+                .clone()
+                .oneshot(chat_message_request(
+                    "POST",
+                    &format!("/api/chats/{}/messages", chat.id),
+                    session.id,
+                    "retry after disconnect",
+                ))
+                .await
+                .expect("retry request should run");
+            if retry.status() == StatusCode::OK {
+                break;
+            }
+            assert_eq!(retry.status(), StatusCode::TOO_MANY_REQUESTS);
+            assert!(
+                tokio::time::Instant::now() < retry_deadline,
+                "generation permit was not released after SSE disconnect"
+            );
+        }
+
+        let persisted = state
+            .store
+            .get_chat(owner, chat.id)
+            .await
+            .expect("chat lookup should query")
+            .expect("chat should still exist");
+        assert_eq!(persisted.messages.len(), 2);
+        assert_eq!(persisted.messages[0].content, "retry after disconnect");
+
+        let _ = state.store.delete_chat(owner, chat.id).await;
+    }
+
+    #[tokio::test]
+    async fn stream_generation_times_out_without_persisting_partial_messages() {
+        let Some(mut state) = test_state().await else {
+            return;
+        };
+        state.config.security.chat.ai_total_timeout_seconds = 1;
+        let session = create_test_session(&state).await;
+        let owner = OwnerScope::from_session(&session);
+        let chat = create_test_chat(&state, owner).await;
+        let app = build_router(state.clone());
+
+        let response = app
+            .oneshot(chat_message_request(
+                "POST",
+                &format!("/api/chats/{}/messages/stream", chat.id),
+                session.id,
+                "one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen",
+            ))
+            .await
+            .expect("stream request should run");
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("body should collect");
+        let body = String::from_utf8(body.to_vec()).expect("body should be utf-8");
+        let events = parse_sse_events(&body);
+        let error_payload = events
+            .iter()
+            .find(|event| event.0 == "error")
+            .and_then(|event| serde_json::from_str::<Value>(&event.1).ok())
+            .expect("timeout should emit an error event");
+        assert_eq!(
+            error_payload["message"].as_str(),
+            Some("assistant response failed")
+        );
+        assert!(!events.iter().any(|event| event.0 == "message_done"));
+
+        let persisted = state
+            .store
+            .get_chat(owner, chat.id)
+            .await
+            .expect("chat lookup should query")
+            .expect("chat should still exist");
+        assert!(persisted.messages.is_empty());
+
+        let retry = build_router(state.clone())
+            .oneshot(chat_message_request(
+                "POST",
+                &format!("/api/chats/{}/messages", chat.id),
+                session.id,
+                "retry after timeout",
+            ))
+            .await
+            .expect("retry after timeout should run");
+        assert_eq!(retry.status(), StatusCode::OK);
+
+        let _ = state.store.delete_chat(owner, chat.id).await;
+    }
+
+    #[tokio::test]
+    async fn chat_rejects_unknown_session_without_creating_client_selected_id() {
+        let Some(state) = test_state().await else {
+            return;
+        };
+        let session_id = Uuid::new_v4();
+        let app = build_router(state.clone());
+        let request = chat_message_request(
+            "POST",
+            &format!("/api/chats/{}/messages", Uuid::new_v4()),
+            session_id,
+            "hello",
+        );
+
+        let response = app.oneshot(request).await.expect("request should run");
+
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+        assert!(state
+            .store
+            .get_session(session_id)
+            .await
+            .expect("session lookup should query")
+            .is_none());
+    }
+
+    #[tokio::test]
+    async fn chat_rejects_oversized_message_before_generation() {
+        let Some(mut state) = test_state().await else {
+            return;
+        };
+        state.config.security.chat.message_max_chars = 3;
+        let session = create_test_session(&state).await;
+        let owner = OwnerScope::from_session(&session);
+        let chat = create_test_chat(&state, owner).await;
+        let app = build_router(state.clone());
+
+        let response = app
+            .oneshot(chat_message_request(
+                "POST",
+                &format!("/api/chats/{}/messages", chat.id),
+                session.id,
+                "four",
+            ))
+            .await
+            .expect("request should run");
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        let persisted = state
+            .store
+            .get_chat(owner, chat.id)
+            .await
+            .expect("chat lookup should query")
+            .expect("chat should exist");
+        assert!(persisted.messages.is_empty());
+        let _ = state.store.delete_chat(owner, chat.id).await;
+    }
+
+    #[tokio::test]
+    async fn json_output_exact_boundary_passes_and_unicode_overflow_does_not_persist() {
+        let Some(mut state) = test_state().await else {
+            return;
+        };
+        let session = create_test_session(&state).await;
+        let owner = OwnerScope::from_session(&session);
+        let exact_chat = create_test_chat(&state, owner).await;
+        let exact_input = "ขอบเขต";
+        let exact_output = crate::ai::providers::mock::complete_chat(
+            &exact_chat.ai_profile_id,
+            &[AiMessage::user(exact_input.to_owned())],
+        )
+        .text_content();
+        state.config.security.chat.output_max_chars = exact_output.chars().count();
+        let app = build_router(state.clone());
+
+        let exact = app
+            .clone()
+            .oneshot(chat_message_request(
+                "POST",
+                &format!("/api/chats/{}/messages", exact_chat.id),
+                session.id,
+                exact_input,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(exact.status(), StatusCode::OK);
+
+        let overflow_chat = create_test_chat(&state, owner).await;
+        let overflow = app
+            .oneshot(chat_message_request(
+                "POST",
+                &format!("/api/chats/{}/messages", overflow_chat.id),
+                session.id,
+                "ข้อความภาษาไทยที่ยาวกว่าเดิม",
+            ))
+            .await
+            .unwrap();
+        assert_eq!(overflow.status(), StatusCode::BAD_GATEWAY);
+        let body = to_bytes(overflow.into_body(), usize::MAX).await.unwrap();
+        let payload: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(payload["error"], "assistant response failed");
+        assert!(state
+            .store
+            .get_chat(owner, overflow_chat.id)
+            .await
+            .unwrap()
+            .unwrap()
+            .messages
+            .is_empty());
+
+        let _ = state.store.delete_chat(owner, exact_chat.id).await;
+        let _ = state.store.delete_chat(owner, overflow_chat.id).await;
+    }
+
+    #[tokio::test]
+    async fn sse_output_limit_rejects_whole_chunk_without_done_or_persistence() {
+        let Some(mut state) = test_state().await else {
+            return;
+        };
+        state.config.security.chat.output_max_chars = "[aiko_default] ".chars().count();
+        let session = create_test_session(&state).await;
+        let owner = OwnerScope::from_session(&session);
+        let chat = create_test_chat(&state, owner).await;
+        let app = build_router(state.clone());
+
+        let response = app
+            .oneshot(chat_message_request(
+                "POST",
+                &format!("/api/chats/{}/messages/stream", chat.id),
+                session.id,
+                "stream overflow",
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body = String::from_utf8(body.to_vec()).unwrap();
+        let events = parse_sse_events(&body);
+        let token_text = events
+            .iter()
+            .filter(|event| event.0 == "token")
+            .filter_map(|event| serde_json::from_str::<Value>(&event.1).ok())
+            .filter_map(|payload| payload["text"].as_str().map(str::to_owned))
+            .collect::<String>();
+
+        assert_eq!(token_text, "[aiko_default] ");
+        assert!(events.iter().any(|event| event.0 == "error"));
+        assert!(!events.iter().any(|event| event.0 == "message_done"));
+        assert!(state
+            .store
+            .get_chat(owner, chat.id)
+            .await
+            .unwrap()
+            .unwrap()
+            .messages
+            .is_empty());
+
+        let _ = state.store.delete_chat(owner, chat.id).await;
+    }
+
+    #[tokio::test]
+    async fn sse_output_exact_boundary_emits_done_and_persists() {
+        let Some(mut state) = test_state().await else {
+            return;
+        };
+        let session = create_test_session(&state).await;
+        let owner = OwnerScope::from_session(&session);
+        let chat = create_test_chat(&state, owner).await;
+        let input = "exact stream boundary";
+        let expected = crate::ai::providers::mock::complete_chat(
+            &chat.ai_profile_id,
+            &[AiMessage::user(input.to_owned())],
+        )
+        .text_content();
+        state.config.security.chat.output_max_chars = expected.chars().count();
+        let app = build_router(state.clone());
+
+        let response = app
+            .oneshot(chat_message_request(
+                "POST",
+                &format!("/api/chats/{}/messages/stream", chat.id),
+                session.id,
+                input,
+            ))
+            .await
+            .unwrap();
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let events = parse_sse_events(std::str::from_utf8(&body).unwrap());
+
+        assert!(events.iter().any(|event| event.0 == "message_done"));
+        assert!(!events.iter().any(|event| event.0 == "error"));
+        let persisted = state.store.get_chat(owner, chat.id).await.unwrap().unwrap();
+        assert_eq!(persisted.messages[1].content, expected);
+
+        let _ = state.store.delete_chat(owner, chat.id).await;
+    }
+
+    #[tokio::test]
+    async fn chat_rejects_request_body_over_configured_limit() {
+        let Some(mut state) = test_state().await else {
+            return;
+        };
+        state.config.security.chat.request_max_bytes = 32;
+        let session = create_test_session(&state).await;
+        let owner = OwnerScope::from_session(&session);
+        let chat = create_test_chat(&state, owner).await;
+        let app = build_router(state.clone());
+
+        let response = app
+            .oneshot(chat_message_request(
+                "POST",
+                &format!("/api/chats/{}/messages", chat.id),
+                session.id,
+                "this request body is intentionally larger than thirty-two bytes",
+            ))
+            .await
+            .expect("request should run");
+
+        assert_eq!(response.status(), StatusCode::PAYLOAD_TOO_LARGE);
+        let _ = state.store.delete_chat(owner, chat.id).await;
+    }
+
+    #[tokio::test]
+    async fn chat_json_error_hides_upstream_ai_details() {
+        let Some(mut state) = test_state_with_provider("openai").await else {
+            return;
+        };
+        let session = create_test_session(&state).await;
+        let owner = OwnerScope::from_session(&session);
+        let chat = create_test_chat(&state, owner).await;
+        let app = build_router(state.clone());
+
+        let response = app
+            .oneshot(chat_message_request(
+                "POST",
+                &format!("/api/chats/{}/messages", chat.id),
+                session.id,
+                "hello",
+            ))
+            .await
+            .expect("request should run");
+
+        assert_eq!(response.status(), StatusCode::BAD_GATEWAY);
+        let body = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("body should collect");
+        let payload: Value = serde_json::from_slice(&body).expect("error should be json");
+        assert_eq!(payload["error"].as_str(), Some("assistant response failed"));
+
+        state.config.ai_provider = "mock".to_owned();
+        let retry = build_router(state.clone())
+            .oneshot(chat_message_request(
+                "POST",
+                &format!("/api/chats/{}/messages", chat.id),
+                session.id,
+                "retry after provider error",
+            ))
+            .await
+            .expect("retry after provider error should run");
+        assert_eq!(retry.status(), StatusCode::OK);
         let _ = state.store.delete_chat(owner, chat.id).await;
     }
 
@@ -1148,26 +1632,34 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn upload_chat_attachment_rate_limit_falls_back_to_ip_without_session_header() {
+    async fn upload_chat_attachment_rate_limits_shared_trusted_ip_across_sessions() {
         let Some(mut state) = test_state().await else {
             return;
         };
+        state.config.security.trust_proxy_headers = true;
+        state.config.security.trusted_proxy_cidrs =
+            vec!["127.0.0.0/8".parse().expect("test CIDR should parse")];
         state.rate_limiter = RateLimiter::new(
             RateLimitPolicies::default()
                 .with_family_limit(RateLimitFamily::ImageUpload, RateLimitPolicy::per_minute(1)),
         );
+        let first_session = create_test_session(&state).await;
+        let second_session = create_test_session(&state).await;
         let upload_dir = state.config.chat_attachment_upload_dir.clone();
         let app = build_router(state);
 
         let response = app
             .clone()
-            .oneshot(upload_png_request_with_ip("203.0.113.50"))
+            .oneshot(upload_png_request_with_ip(first_session.id, "203.0.113.50"))
             .await
             .expect("first upload request should run");
         assert_eq!(response.status(), StatusCode::OK);
 
         let response = app
-            .oneshot(upload_png_request_with_ip("203.0.113.50"))
+            .oneshot(upload_png_request_with_ip(
+                second_session.id,
+                "203.0.113.50",
+            ))
             .await
             .expect("second upload request should run");
 
@@ -1454,8 +1946,9 @@ mod tests {
             .await
             .expect("body should collect");
         let payload: Value = serde_json::from_slice(&body).expect("config should be json");
-        assert_eq!(payload.as_object().map(serde_json::Map::len), Some(2));
+        assert_eq!(payload.as_object().map(serde_json::Map::len), Some(3));
         assert!(payload.get("personas").is_some());
+        assert_eq!(payload["image_upload_enabled"], true);
         assert!(payload.get("voice").is_some());
         assert_eq!(payload["voice"]["assistant_speech_enabled"], true);
         assert_eq!(payload["voice"]["user_transcription_enabled"], true);
@@ -1463,6 +1956,69 @@ mod tests {
             payload["voice"]["credits"].as_array().map(Vec::len),
             Some(0)
         );
+    }
+
+    #[tokio::test]
+    async fn disabled_media_features_are_hidden_and_unavailable() {
+        let Some(mut state) = test_state().await else {
+            return;
+        };
+        state.config.security.chat.image_upload_enabled = false;
+        state.config.security.chat.transcription_enabled = false;
+        state.config.security.chat.tts_enabled = false;
+        let session = create_test_session(&state).await;
+        let app = build_router(state);
+
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/api/chat-ui/config")
+                    .body(Body::empty())
+                    .expect("request should build"),
+            )
+            .await
+            .expect("config request should run");
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("body should collect");
+        let payload: Value = serde_json::from_slice(&body).expect("config should be json");
+        assert_eq!(payload["image_upload_enabled"], false);
+        assert_eq!(payload["voice"]["assistant_speech_enabled"], false);
+        assert_eq!(payload["voice"]["user_transcription_enabled"], false);
+
+        let response = app
+            .clone()
+            .oneshot(upload_png_request(session.id))
+            .await
+            .expect("upload request should run");
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+
+        let response = app
+            .clone()
+            .oneshot(transcription_request("wfchat-disabled-media", session.id))
+            .await
+            .expect("transcription request should run");
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri(format!(
+                        "/api/chats/{}/messages/{}/speech",
+                        Uuid::new_v4(),
+                        Uuid::new_v4()
+                    ))
+                    .header("x-wfchat-session", session.id.to_string())
+                    .body(Body::empty())
+                    .expect("request should build"),
+            )
+            .await
+            .expect("speech request should run");
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
     }
 
     #[tokio::test]
@@ -1544,9 +2100,11 @@ mod tests {
                 chat_attachment_max_width: 8192,
                 chat_attachment_max_height: 8192,
                 chat_attachment_max_pixels: 20_000_000,
+                security: Default::default(),
             },
             http: Client::new(),
             rate_limiter: RateLimiter::default(),
+            generation_limiter: crate::rate_limit::GenerationLimiter::new(8, 2),
             store,
             cafe: crate::cafe::CafeHub::default(),
             memory_telemetry: crate::memory::MemoryTelemetry::default(),
@@ -1616,7 +2174,7 @@ mod tests {
             .expect("request should build")
     }
 
-    fn upload_png_request_with_ip(ip: &str) -> Request<Body> {
+    fn upload_png_request_with_ip(session_id: Uuid, ip: &str) -> Request<Body> {
         let boundary = "wfchat-image-upload";
         Request::builder()
             .method("POST")
@@ -1625,6 +2183,7 @@ mod tests {
                 header::CONTENT_TYPE,
                 format!("multipart/form-data; boundary={boundary}"),
             )
+            .header("x-wfchat-session", session_id.to_string())
             .header("x-forwarded-for", ip)
             .body(Body::from(multipart_file_body(boundary, &png_bytes(2, 3))))
             .expect("request should build")

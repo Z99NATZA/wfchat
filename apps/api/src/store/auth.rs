@@ -37,7 +37,7 @@ impl ChatStore {
         let row = sqlx::query(
             "update auth_sessions
              set user_id = $1, kind = 'registered'
-             where id = $2
+             where id = $2 and revoked_at is null and expires_at > now()
              returning id, user_id, kind, extract(epoch from created_at)::bigint as created_at",
         )
         .bind(user_id)
@@ -62,7 +62,7 @@ impl ChatStore {
         let row = sqlx::query(
             "update auth_sessions
              set user_id = $1, kind = 'admin'
-             where id = $2
+             where id = $2 and revoked_at is null and expires_at > now()
              returning id, user_id, kind, extract(epoch from created_at)::bigint as created_at",
         )
         .bind(user_id)
@@ -84,7 +84,16 @@ impl ChatStore {
         user_id: Uuid,
     ) -> StoreResult<()> {
         let mut tx = self.db.begin().await?;
+        Self::migrate_session_data_to_user_in_tx(&mut tx, session_id, user_id).await?;
+        tx.commit().await?;
+        Ok(())
+    }
 
+    async fn migrate_session_data_to_user_in_tx(
+        tx: &mut Transaction<'_, Postgres>,
+        session_id: Uuid,
+        user_id: Uuid,
+    ) -> StoreResult<()> {
         let duplicate_memories = sqlx::query(
             "select guest.id as guest_id, account.id as account_id
              from memory_items guest
@@ -96,7 +105,7 @@ impl ChatStore {
         )
         .bind(session_id)
         .bind(user_id)
-        .fetch_all(&mut *tx)
+        .fetch_all(&mut **tx)
         .await?;
 
         for row in duplicate_memories {
@@ -110,7 +119,7 @@ impl ChatStore {
             )
             .bind(account_id)
             .bind(guest_id)
-            .execute(&mut *tx)
+            .execute(&mut **tx)
             .await?;
 
             sqlx::query(
@@ -126,13 +135,13 @@ impl ChatStore {
             )
             .bind(guest_id)
             .bind(account_id)
-            .execute(&mut *tx)
+            .execute(&mut **tx)
             .await?;
 
             sqlx::query("update memory_sources set memory_id = $1 where memory_id = $2")
                 .bind(account_id)
                 .bind(guest_id)
-                .execute(&mut *tx)
+                .execute(&mut **tx)
                 .await?;
 
             sqlx::query(
@@ -151,15 +160,15 @@ impl ChatStore {
             )
             .bind(account_id)
             .bind(guest_id)
-            .execute(&mut *tx)
+            .execute(&mut **tx)
             .await?;
 
             sqlx::query("delete from memory_items where id = $1")
                 .bind(guest_id)
-                .execute(&mut *tx)
+                .execute(&mut **tx)
                 .await?;
 
-            recalculate_memory_evidence(&mut tx, &[account_id]).await?;
+            recalculate_memory_evidence(tx, &[account_id]).await?;
         }
 
         sqlx::query(
@@ -167,7 +176,7 @@ impl ChatStore {
         )
         .bind(user_id)
         .bind(session_id)
-        .execute(&mut *tx)
+        .execute(&mut **tx)
         .await?;
 
         sqlx::query(
@@ -175,7 +184,7 @@ impl ChatStore {
         )
         .bind(user_id)
         .bind(session_id)
-        .execute(&mut *tx)
+        .execute(&mut **tx)
         .await?;
 
         sqlx::query(
@@ -185,7 +194,7 @@ impl ChatStore {
         )
         .bind(user_id)
         .bind(session_id)
-        .execute(&mut *tx)
+        .execute(&mut **tx)
         .await?;
 
         sqlx::query(
@@ -195,7 +204,7 @@ impl ChatStore {
         )
         .bind(user_id)
         .bind(session_id)
-        .execute(&mut *tx)
+        .execute(&mut **tx)
         .await?;
 
         sqlx::query(
@@ -203,7 +212,7 @@ impl ChatStore {
         )
         .bind(user_id)
         .bind(session_id)
-        .execute(&mut *tx)
+        .execute(&mut **tx)
         .await?;
 
         sqlx::query(
@@ -212,7 +221,7 @@ impl ChatStore {
         )
         .bind(user_id)
         .bind(session_id)
-        .execute(&mut *tx)
+        .execute(&mut **tx)
         .await?;
 
         sqlx::query(
@@ -221,7 +230,7 @@ impl ChatStore {
         )
         .bind(user_id)
         .bind(session_id)
-        .execute(&mut *tx)
+        .execute(&mut **tx)
         .await?;
 
         sqlx::query(
@@ -230,11 +239,164 @@ impl ChatStore {
         )
         .bind(user_id)
         .bind(session_id)
+        .execute(&mut **tx)
+        .await?;
+
+        Ok(())
+    }
+
+    pub async fn promote_guest_session_with_google(
+        &self,
+        session_id: Uuid,
+        user_id: Uuid,
+        provider_subject: &str,
+        email: Option<String>,
+        provider_name: Option<String>,
+        provider_avatar_url: Option<String>,
+    ) -> StoreResult<Option<SessionRecord>> {
+        self.promote_guest_session_with_google_inner(
+            session_id,
+            user_id,
+            GoogleIdentityInput {
+                provider_subject,
+                email,
+                provider_name,
+                provider_avatar_url,
+            },
+            None,
+        )
+        .await
+    }
+
+    async fn promote_guest_session_with_google_inner(
+        &self,
+        session_id: Uuid,
+        user_id: Uuid,
+        identity: GoogleIdentityInput<'_>,
+        test_control: Option<GooglePromotionTestControl>,
+    ) -> StoreResult<Option<SessionRecord>> {
+        let mut tx = self.db.begin().await?;
+        let locked = sqlx::query(
+            "select kind from auth_sessions
+             where id = $1 and revoked_at is null and expires_at > now()
+             for update",
+        )
+        .bind(session_id)
+        .fetch_optional(&mut *tx)
+        .await?;
+        let Some(locked) = locked else {
+            return Ok(None);
+        };
+        if locked.get::<String, _>("kind") != "guest" {
+            return Ok(None);
+        }
+
+        if let Some(control) = &test_control {
+            control.after_lock.notify_one();
+            control.continue_after_lock.notified().await;
+        }
+
+        Self::migrate_session_data_to_user_in_tx(&mut tx, session_id, user_id).await?;
+
+        sqlx::query(
+            "insert into auth_identities (user_id, provider, provider_subject, email, provider_name, provider_avatar_url, updated_at)
+             values ($1, 'google', $2, $3, $4, $5, now())
+             on conflict (provider, provider_subject)
+             do update set
+               user_id = excluded.user_id,
+               email = excluded.email,
+               provider_name = excluded.provider_name,
+               provider_avatar_url = excluded.provider_avatar_url,
+               updated_at = now()",
+        )
+        .bind(user_id)
+        .bind(identity.provider_subject)
+        .bind(identity.email)
+        .bind(identity.provider_name.clone())
+        .bind(identity.provider_avatar_url.clone())
         .execute(&mut *tx)
         .await?;
 
+        let seed_display_name =
+            non_empty_string(identity.provider_name).unwrap_or_else(|| "Member".to_owned());
+        let seed_avatar_url = non_empty_string(identity.provider_avatar_url);
+        sqlx::query(
+            "insert into user_profiles (user_id, display_name, avatar_url, created_at, updated_at)
+             values ($1, $2, $3, now(), now())
+             on conflict (user_id) do nothing",
+        )
+        .bind(user_id)
+        .bind(seed_display_name)
+        .bind(seed_avatar_url)
+        .execute(&mut *tx)
+        .await?;
+
+        let replacement = SessionRecord {
+            id: Uuid::new_v4(),
+            user_id,
+            kind: UserKind::Registered,
+            created_at: now_unix_seconds(),
+        };
+        sqlx::query(
+            "insert into auth_sessions (id, user_id, kind, created_at)
+             values ($1, $2, 'registered', to_timestamp($3))",
+        )
+        .bind(replacement.id)
+        .bind(replacement.user_id)
+        .bind(replacement.created_at as i64)
+        .execute(&mut *tx)
+        .await?;
+
+        let revoked = sqlx::query(
+            "update auth_sessions set revoked_at = now()
+             where id = $1 and revoked_at is null and expires_at > now()",
+        )
+        .bind(session_id)
+        .execute(&mut *tx)
+        .await?;
+        if revoked.rows_affected() != 1 {
+            return Ok(None);
+        }
+
+        if test_control
+            .as_ref()
+            .is_some_and(|control| control.fail_before_commit)
+        {
+            return Err(sqlx::Error::Protocol(
+                "forced Google promotion failure".to_owned(),
+            ));
+        }
+
         tx.commit().await?;
-        Ok(())
+        Ok(Some(replacement))
+    }
+
+    #[cfg(test)]
+    pub(crate) async fn promote_guest_session_with_google_for_test(
+        &self,
+        session_id: Uuid,
+        user_id: Uuid,
+        provider_subject: &str,
+        after_lock: std::sync::Arc<tokio::sync::Notify>,
+        continue_after_lock: std::sync::Arc<tokio::sync::Notify>,
+        fail_before_commit: bool,
+    ) -> StoreResult<Option<SessionRecord>> {
+        self.promote_guest_session_with_google_inner(
+            session_id,
+            user_id,
+            GoogleIdentityInput {
+                provider_subject,
+                email: Some(format!("{provider_subject}@example.com")),
+                provider_name: Some("Google User".to_owned()),
+                provider_avatar_url: Some("https://example.com/google.png".to_owned()),
+            },
+            Some(GooglePromotionTestControl {
+                after_lock,
+                continue_after_lock,
+                fail_before_commit,
+            }),
+        )
+        .await
     }
 
     pub async fn ensure_session(&self, session_id: Option<Uuid>) -> StoreResult<SessionRecord> {
@@ -242,24 +404,6 @@ impl ChatStore {
             if let Some(session) = self.get_session(id).await? {
                 return Ok(session);
             }
-
-            let session = SessionRecord {
-                id,
-                user_id: Uuid::new_v4(),
-                kind: UserKind::Guest,
-                created_at: now_unix_seconds(),
-            };
-
-            sqlx::query(
-                "insert into auth_sessions (id, user_id, kind, created_at) values ($1, $2, $3, to_timestamp($4))",
-            )
-            .bind(session.id)
-            .bind(session.user_id)
-            .bind("guest")
-            .bind(session.created_at as i64)
-            .execute(self.db.as_ref())
-            .await?;
-            return Ok(session);
         }
 
         self.create_guest_session().await
@@ -267,7 +411,9 @@ impl ChatStore {
 
     pub async fn get_session(&self, session_id: Uuid) -> StoreResult<Option<SessionRecord>> {
         let row = sqlx::query(
-            "select id, user_id, kind, extract(epoch from created_at)::bigint as created_at from auth_sessions where id = $1",
+            "select id, user_id, kind, extract(epoch from created_at)::bigint as created_at
+             from auth_sessions
+             where id = $1 and revoked_at is null and expires_at > now()",
         )
         .bind(session_id)
         .fetch_optional(self.db.as_ref())
@@ -279,6 +425,50 @@ impl ChatStore {
             kind: parse_user_kind(row.get::<String, _>("kind").as_str()),
             created_at: row.get::<i64, _>("created_at") as u64,
         }))
+    }
+
+    pub async fn rotate_registered_session(
+        &self,
+        current_session_id: Uuid,
+        user_id: Uuid,
+    ) -> StoreResult<SessionRecord> {
+        let session = SessionRecord {
+            id: Uuid::new_v4(),
+            user_id,
+            kind: UserKind::Registered,
+            created_at: now_unix_seconds(),
+        };
+        let mut tx = self.db.begin().await?;
+        sqlx::query(
+            "insert into auth_sessions (id, user_id, kind, created_at)
+             values ($1, $2, 'registered', to_timestamp($3))",
+        )
+        .bind(session.id)
+        .bind(session.user_id)
+        .bind(session.created_at as i64)
+        .execute(&mut *tx)
+        .await?;
+        sqlx::query(
+            "update auth_sessions set revoked_at = now()
+             where id = $1 and revoked_at is null",
+        )
+        .bind(current_session_id)
+        .execute(&mut *tx)
+        .await?;
+        tx.commit().await?;
+
+        Ok(session)
+    }
+
+    pub async fn revoke_session(&self, session_id: Uuid) -> StoreResult<bool> {
+        let result = sqlx::query(
+            "update auth_sessions set revoked_at = now()
+             where id = $1 and revoked_at is null",
+        )
+        .bind(session_id)
+        .execute(self.db.as_ref())
+        .await?;
+        Ok(result.rows_affected() > 0)
     }
 
     pub async fn upsert_auth_identity(
@@ -425,8 +615,42 @@ impl ChatStore {
         Ok(())
     }
 
+    #[cfg(test)]
+    pub(crate) async fn expire_session_for_test(&self, session_id: Uuid) -> StoreResult<()> {
+        sqlx::query(
+            "update auth_sessions set expires_at = now() - interval '1 second' where id = $1",
+        )
+        .bind(session_id)
+        .execute(self.db.as_ref())
+        .await?;
+        Ok(())
+    }
+
+    #[cfg(test)]
+    pub(crate) async fn count_sessions_for_user_for_test(&self, user_id: Uuid) -> StoreResult<i64> {
+        let row =
+            sqlx::query("select count(*)::bigint as count from auth_sessions where user_id = $1")
+                .bind(user_id)
+                .fetch_one(self.db.as_ref())
+                .await?;
+        Ok(row.get("count"))
+    }
+
     async fn run_migrations(&self) -> Result<(), sqlx::Error> {
         sqlx::migrate!("./migrations").run(self.db.as_ref()).await?;
         Ok(())
     }
+}
+
+struct GooglePromotionTestControl {
+    after_lock: std::sync::Arc<tokio::sync::Notify>,
+    continue_after_lock: std::sync::Arc<tokio::sync::Notify>,
+    fail_before_commit: bool,
+}
+
+struct GoogleIdentityInput<'a> {
+    provider_subject: &'a str,
+    email: Option<String>,
+    provider_name: Option<String>,
+    provider_avatar_url: Option<String>,
 }

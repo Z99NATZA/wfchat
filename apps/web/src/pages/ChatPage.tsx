@@ -257,6 +257,7 @@ function ChatPage({
 							companionName={chat.activePersona.name}
 							isDisabled={chat.isActiveChatReadOnly}
 							isSending={chat.isSending}
+							isImageUploadEnabled={chat.isImageUploadEnabled}
 							isUserSpeechInputEnabled={isUserSpeechInputEnabled}
 							userSpeechInput={chat.userSpeechInput}
 							onDraftChange={chat.setDraft}

@@ -19,8 +19,12 @@ Provider modes:
 | `openai` | Calls the configured OpenAI speech endpoint |
 | `voicevox` | Calls server-side VOICEVOX `/audio_query` then `/synthesis` |
 
-The endpoint has a 10-requests-per-minute in-memory bucket. OpenAI responses may
-stream through the same endpoint; VOICEVOX and mock return complete audio bytes.
+The endpoint has 10-requests-per-minute session and resolved-IP buckets; it does
+not consume the chat global bucket. OpenAI responses may stream through the same
+endpoint; VOICEVOX and mock return complete audio bytes.
+`CHAT_TTS_ENABLED=false` hides the capability and omits the endpoint. When the
+key is omitted, it defaults to disabled in production and enabled in
+development; the development `.env.example` explicitly enables it.
 
 The frontend allows one playback at a time and exposes loading, playing, stop,
 and retry states. Blob playback is the default. Setting
@@ -61,10 +65,15 @@ Provider modes:
 | `mock` | Returns deterministic transcript text |
 | `openai` | Calls the configured OpenAI transcription endpoint |
 
-The route has a 6-requests-per-minute bucket and a 25 MiB body limit. It rejects
+The route has 6-requests-per-minute session and resolved-IP buckets without the
+chat global bucket, plus a 25 MiB body limit. It rejects
 missing, empty, oversized, or unsupported audio and normalizes browser MIME
 values for WebM, WAV, MPEG/MP3, MP4/M4A, Ogg, and FLAC. Audio bytes are not
 persisted or logged.
+
+`CHAT_TRANSCRIPTION_ENABLED=false` hides the capability and omits the endpoint.
+When the key is omitted, it defaults to disabled in production and enabled in
+development; the development `.env.example` explicitly enables it.
 
 Recording is explicit push-to-talk, not realtime streaming. The frontend uses
 bounded MediaRecorder chunks, requests a final flush before stopping, and

@@ -17,15 +17,22 @@ pub(super) fn chat_voice_credits(config: &crate::config::Config) -> Vec<ChatVoic
 }
 
 pub(super) async fn synthesize_message_speech(
+    ConnectInfo(peer_addr): ConnectInfo<SocketAddr>,
     State(state): State<AppState>,
     headers: HeaderMap,
     Path((chat_id, message_id)): Path<(Uuid, Uuid)>,
 ) -> AppResult<impl IntoResponse> {
-    enforce_sensitive_rate_limit(&state, &headers, RateLimitFamily::AssistantSpeech)?;
-    let session = state
-        .store
-        .ensure_session(session_id_from_headers(&headers))
-        .await?;
+    if !state.config.security.chat.tts_enabled {
+        return Err(AppError::NotFound);
+    }
+    let session = require_chat_session(&state, &headers).await?;
+    enforce_sensitive_rate_limit(
+        &state,
+        &headers,
+        peer_addr,
+        session.id,
+        RateLimitFamily::AssistantSpeech,
+    )?;
     let owner = OwnerScope::from_session(&session);
     let chat = state
         .store
@@ -76,15 +83,22 @@ struct TranscribeUserSpeechResponse {
 }
 
 pub(super) async fn transcribe_user_speech(
+    ConnectInfo(peer_addr): ConnectInfo<SocketAddr>,
     State(state): State<AppState>,
     headers: HeaderMap,
     mut multipart: Multipart,
 ) -> AppResult<impl IntoResponse> {
-    enforce_sensitive_rate_limit(&state, &headers, RateLimitFamily::UserTranscription)?;
-    let _session = state
-        .store
-        .ensure_session(session_id_from_headers(&headers))
-        .await?;
+    if !state.config.security.chat.transcription_enabled {
+        return Err(AppError::NotFound);
+    }
+    let session = require_chat_session(&state, &headers).await?;
+    enforce_sensitive_rate_limit(
+        &state,
+        &headers,
+        peer_addr,
+        session.id,
+        RateLimitFamily::UserTranscription,
+    )?;
     let mut audio_bytes = None;
     let mut content_type = None;
     let mut filename = None;

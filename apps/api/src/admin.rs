@@ -58,7 +58,7 @@ async fn provider_status(
 }
 
 async fn require_admin_session(state: &AppState, headers: &HeaderMap) -> AppResult<()> {
-    let Some(session_id) = session_id_from_headers(headers) else {
+    let Some(session_id) = session_id_from_headers(&state.config, headers) else {
         return Err(AppError::Forbidden);
     };
     let Some(session) = state.store.get_session(session_id).await? else {
@@ -87,7 +87,7 @@ mod tests {
 
     async fn test_state() -> Option<AppState> {
         let database_url = std::env::var("WFCHAT_TEST_DATABASE_URL").ok()?;
-        AppState::new(Config {
+        AppState::new_without_memory_worker_for_test(Config {
             app_host: "127.0.0.1".to_owned(),
             app_port: 0,
             frontend_origin: "http://localhost:5173".to_owned(),
@@ -126,6 +126,7 @@ mod tests {
             chat_attachment_max_width: 8192,
             chat_attachment_max_height: 8192,
             chat_attachment_max_pixels: 20_000_000,
+            security: Default::default(),
         })
         .await
         .ok()

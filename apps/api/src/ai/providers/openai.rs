@@ -2,6 +2,7 @@ use std::future::Future;
 
 use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine};
 use serde::{Deserialize, Serialize};
+use tokio::{time::timeout, time::Duration};
 use tokio_stream::StreamExt;
 
 use crate::{
@@ -62,6 +63,7 @@ pub async fn complete_chat_completions(
             model: provider.model,
             messages: build_messages(provider.ai_profile_id, messages),
             temperature: chat_completion_temperature(provider.model, 0.8),
+            max_tokens: state.config.security.chat.output_max_tokens,
             stream: false,
         })
         .send()
@@ -148,6 +150,7 @@ where
             model: provider.model,
             messages: build_messages(provider.ai_profile_id, messages),
             temperature: chat_completion_temperature(provider.model, 0.8),
+            max_tokens: state.config.security.chat.output_max_tokens,
             stream: true,
         })
         .send()
@@ -167,7 +170,16 @@ where
     let mut buffer = String::new();
     let mut guard = StreamingResponseGuard::new(provider.ai_profile_id);
 
-    while let Some(chunk) = body_stream.next().await {
+    loop {
+        let next_chunk = timeout(
+            Duration::from_secs(state.config.security.chat.ai_idle_timeout_seconds),
+            body_stream.next(),
+        )
+        .await
+        .map_err(|_| AppError::Ai("provider stream idle timeout".to_owned()))?;
+        let Some(chunk) = next_chunk else {
+            break;
+        };
         let chunk = chunk.map_err(|error| AppError::Ai(error.to_string()))?;
         buffer.push_str(&String::from_utf8_lossy(&chunk));
         buffer = buffer.replace("\r\n", "\n").replace('\r', "\n");
@@ -336,6 +348,19 @@ impl StreamingResponseGuard {
     }
 }
 
+#[cfg(test)]
+pub(crate) fn guarded_stream_chunks_for_test(ai_profile_id: &str, deltas: &[&str]) -> Vec<String> {
+    let mut guard = StreamingResponseGuard::new(ai_profile_id);
+    let mut chunks = deltas
+        .iter()
+        .filter_map(|delta| guard.push_delta(delta))
+        .collect::<Vec<_>>();
+    if let Some(tail) = guard.finish() {
+        chunks.push(tail);
+    }
+    chunks
+}
+
 fn aiko_guard_safe_split_index(content: &str) -> Option<usize> {
     if content.is_empty() {
         return None;
@@ -433,6 +458,7 @@ struct ChatCompletionRequest<'a> {
     messages: Vec<ProviderMessage<'a>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     temperature: Option<f32>,
+    max_tokens: u32,
     stream: bool,
 }
 
@@ -703,12 +729,14 @@ mod tests {
             model: "gpt-5.5",
             messages: build_messages("aiko_default", &messages),
             temperature: chat_completion_temperature("gpt-5.5", 0.8),
+            max_tokens: 1_024,
             stream: false,
         };
 
         let payload = serde_json::to_value(request).expect("request should serialize");
 
         assert_eq!(payload["model"], "gpt-5.5");
+        assert_eq!(payload["max_tokens"], 1_024);
         assert!(payload.get("temperature").is_none());
     }
 
@@ -719,12 +747,14 @@ mod tests {
             model: "gpt-4.1-mini",
             messages: build_messages("aiko_default", &messages),
             temperature: chat_completion_temperature("gpt-4.1-mini", 0.8),
+            max_tokens: 1_024,
             stream: false,
         };
 
         let payload = serde_json::to_value(request).expect("request should serialize");
 
         assert_eq!(payload["model"], "gpt-4.1-mini");
+        assert_eq!(payload["max_tokens"], 1_024);
         let temperature = payload["temperature"]
             .as_f64()
             .expect("temperature should serialize as a number");

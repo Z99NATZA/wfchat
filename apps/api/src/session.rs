@@ -6,8 +6,14 @@ use crate::config::Config;
 const SESSION_COOKIE_NAME: &str = "wfchat_session";
 const SESSION_HEADER_NAME: &str = "x-wfchat-session";
 
-pub fn session_id_from_headers(headers: &HeaderMap) -> Option<Uuid> {
-    session_id_from_cookie(headers).or_else(|| session_id_from_header(headers))
+pub fn session_id_from_headers(config: &Config, headers: &HeaderMap) -> Option<Uuid> {
+    session_id_from_cookie(headers).or_else(|| {
+        config
+            .security
+            .allow_session_header
+            .then(|| session_id_from_header(headers))
+            .flatten()
+    })
 }
 
 pub fn session_cookie(config: &Config, session_id: Uuid) -> String {
@@ -42,12 +48,13 @@ fn session_id_from_cookie(headers: &HeaderMap) -> Option<Uuid> {
 }
 
 fn should_use_secure_cookie(config: &Config) -> bool {
-    config
-        .frontend_origin
-        .split(',')
-        .map(str::trim)
-        .filter(|origin| !origin.is_empty())
-        .any(|origin| origin.starts_with("https://"))
+    config.is_production()
+        || config
+            .frontend_origin
+            .split(',')
+            .map(str::trim)
+            .filter(|origin| !origin.is_empty())
+            .any(|origin| origin.starts_with("https://"))
 }
 
 #[cfg(test)]
@@ -78,7 +85,10 @@ mod tests {
                 .expect("session id should be a valid header value"),
         );
 
-        assert_eq!(session_id_from_headers(&headers), Some(cookie_session_id));
+        assert_eq!(
+            session_id_from_headers(&test_config(), &headers),
+            Some(cookie_session_id)
+        );
     }
 
     #[test]
@@ -93,7 +103,23 @@ mod tests {
                 .expect("session id should be a valid header value"),
         );
 
-        assert_eq!(session_id_from_headers(&headers), Some(session_id));
+        assert_eq!(
+            session_id_from_headers(&test_config(), &headers),
+            Some(session_id)
+        );
+    }
+
+    #[test]
+    fn production_ignores_compatibility_session_header() {
+        let session_id = Uuid::new_v4();
+        let mut headers = HeaderMap::new();
+        headers.insert(SESSION_HEADER_NAME, session_id.to_string().parse().unwrap());
+        let mut config = test_config();
+        config.security.environment = crate::config::AppEnvironment::Production;
+        config.security.allow_session_header = false;
+        config.frontend_origin = "https://chat.example.com".to_owned();
+
+        assert_eq!(session_id_from_headers(&config, &headers), None);
     }
 
     #[test]
@@ -162,6 +188,7 @@ mod tests {
             chat_attachment_max_width: 8192,
             chat_attachment_max_height: 8192,
             chat_attachment_max_pixels: 20_000_000,
+            security: Default::default(),
         }
     }
 }

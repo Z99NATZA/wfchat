@@ -33,6 +33,13 @@ Message sends include `content`, IANA `timezone`, and attachment ids. Streaming
 and JSON sends share validation, context preparation, rate limiting, and atomic
 persistence. See [SSE streaming](chat-sse-streaming.md).
 
+Both routes require an active, unexpired server-issued session. Message content
+defaults to a 4,000-character limit and the JSON body to 64 KiB. Provider
+context keeps at most the most recent 40 messages and 32,000 message characters.
+Provider requests default to 1,024 output tokens, while the backend independently
+limits the final guarded output to 16,384 Unicode scalar values. All values are
+configurable through the `CHAT_*` environment keys.
+
 Delete and clear operations also clean automatic-memory sources. They remove a
 memory with no evidence and recalculate one that still has other sources.
 

@@ -118,6 +118,7 @@ type ApiChatUiPersona = {
 
 type ApiChatUiConfig = {
 	personas: ApiChatUiPersona[];
+	image_upload_enabled?: boolean;
 	voice?: {
 		assistant_speech_enabled?: boolean;
 		user_transcription_enabled?: boolean;
@@ -316,6 +317,7 @@ export async function deleteChat(chatId: string): Promise<void> {
 
 export async function getChatUiConfig(): Promise<{
 	assistantSpeechEnabled: boolean;
+	imageUploadEnabled: boolean;
 	userTranscriptionEnabled: boolean;
 	voiceCredits: VoiceCredit[];
 	personas: ChatPersona[];
@@ -324,6 +326,7 @@ export async function getChatUiConfig(): Promise<{
 
 	return {
 		assistantSpeechEnabled: response.data.voice?.assistant_speech_enabled === true,
+		imageUploadEnabled: response.data.image_upload_enabled === true,
 		userTranscriptionEnabled: response.data.voice?.user_transcription_enabled === true,
 		voiceCredits: (response.data.voice?.credits ?? [])
 			.map((credit) => ({ text: credit.text?.trim() ?? "" }))

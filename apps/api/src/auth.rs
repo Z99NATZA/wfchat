@@ -70,7 +70,7 @@ async fn current_user(
 ) -> AppResult<(HeaderMap, Json<SessionResponse>)> {
     let session = state
         .store
-        .ensure_session(session_id_from_headers(&headers))
+        .ensure_session(session_id_from_headers(&state.config, &headers))
         .await?;
     if !matches!(&session.kind, UserKind::Guest) {
         state
@@ -129,48 +129,42 @@ async fn promote_with_google_token_info(
     token_info: GoogleTokenInfoResponse,
 ) -> AppResult<(HeaderMap, Json<SessionResponse>)> {
     let promoted_user_id = Uuid::new_v5(&Uuid::NAMESPACE_OID, token_info.sub.as_bytes());
-    let session = state
+    let session_id = match session_id_from_headers(&state.config, &headers) {
+        Some(session_id) => session_id,
+        None => state.store.create_guest_session().await?.id,
+    };
+    let rotated = state
         .store
-        .ensure_session(session_id_from_headers(&headers))
-        .await?;
-    let promoted = state
-        .store
-        .promote_session_to_registered(session.id, promoted_user_id)
-        .await?
-        .ok_or_else(|| AppError::BadRequest("could not promote session".to_owned()))?;
-    state
-        .store
-        .migrate_session_data_to_user(promoted.id, promoted.user_id)
-        .await?;
-    state
-        .store
-        .upsert_auth_identity(
-            promoted.user_id,
-            "google",
+        .promote_guest_session_with_google(
+            session_id,
+            promoted_user_id,
             &token_info.sub,
             token_info.email,
-            token_info.name.clone(),
-            token_info.picture.clone(),
+            token_info.name,
+            token_info.picture,
         )
-        .await?;
-    state
-        .store
-        .ensure_user_profile(promoted.user_id, token_info.name, token_info.picture)
-        .await?;
+        .await?
+        .ok_or_else(|| AppError::BadRequest("could not promote session".to_owned()))?;
 
     let mut response_headers = HeaderMap::new();
-    let cookie = session_cookie(&state.config, promoted.id);
+    let cookie = session_cookie(&state.config, rotated.id);
     if let Ok(value) = HeaderValue::from_str(&cookie) {
         response_headers.insert(SET_COOKIE, value);
     }
 
     Ok((
         response_headers,
-        Json(session_response(&state, &promoted).await?),
+        Json(session_response(&state, &rotated).await?),
     ))
 }
 
-async fn logout(State(state): State<AppState>) -> AppResult<(HeaderMap, Json<SessionResponse>)> {
+async fn logout(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> AppResult<(HeaderMap, Json<SessionResponse>)> {
+    if let Some(session_id) = session_id_from_headers(&state.config, &headers) {
+        state.store.revoke_session(session_id).await?;
+    }
     let guest = state.store.create_guest_session().await?;
     let mut headers = HeaderMap::new();
     let cookie = session_cookie(&state.config, guest.id);
@@ -204,7 +198,7 @@ async fn update_profile(
 ) -> AppResult<Json<SessionResponse>> {
     let session = state
         .store
-        .ensure_session(session_id_from_headers(&headers))
+        .ensure_session(session_id_from_headers(&state.config, &headers))
         .await?;
     if matches!(&session.kind, UserKind::Guest) {
         return Err(AppError::Forbidden);
@@ -358,10 +352,12 @@ mod tests {
     };
     use axum::extract::State;
     use serde_json::json;
+    use std::sync::Arc;
+    use tokio::sync::Notify;
 
     async fn test_state(google_client_id: Option<String>) -> Option<AppState> {
         let database_url = std::env::var("WFCHAT_TEST_DATABASE_URL").ok()?;
-        AppState::new(Config {
+        AppState::new_without_memory_worker_for_test(Config {
             app_host: "127.0.0.1".to_owned(),
             app_port: 0,
             frontend_origin: "http://localhost:5173".to_owned(),
@@ -400,6 +396,7 @@ mod tests {
             chat_attachment_max_width: 8192,
             chat_attachment_max_height: 8192,
             chat_attachment_max_pixels: 20_000_000,
+            security: Default::default(),
         })
         .await
         .ok()
@@ -497,14 +494,66 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn unknown_client_selected_session_id_is_replaced() {
+        let Some(state) = test_state(None).await else {
+            return;
+        };
+        let supplied_id = Uuid::new_v4();
+
+        let session = state
+            .store
+            .ensure_session(Some(supplied_id))
+            .await
+            .expect("unknown session should be replaced");
+
+        assert_ne!(session.id, supplied_id);
+        assert!(state
+            .store
+            .get_session(supplied_id)
+            .await
+            .expect("supplied session lookup should query")
+            .is_none());
+    }
+
+    #[tokio::test]
+    async fn expired_session_is_not_resolved() {
+        let Some(state) = test_state(None).await else {
+            return;
+        };
+        let session = state
+            .store
+            .create_guest_session()
+            .await
+            .expect("session should create");
+        state
+            .store
+            .expire_session_for_test(session.id)
+            .await
+            .expect("session should expire");
+
+        assert!(state
+            .store
+            .get_session(session.id)
+            .await
+            .expect("expired session lookup should query")
+            .is_none());
+    }
+
+    #[tokio::test]
     async fn logout_rotates_to_a_guest_session_cookie() {
         let Some(state) = test_state(None).await else {
             return;
         };
-
-        let (headers, Json(response)) = logout(State(state))
+        let old_session = state
+            .store
+            .create_guest_session()
             .await
-            .expect("logout should create a replacement guest session");
+            .expect("old session should create");
+
+        let (headers, Json(response)) =
+            logout(State(state.clone()), cookie_headers(old_session.id))
+                .await
+                .expect("logout should create a replacement guest session");
 
         assert_eq!(response.kind, "guest");
         let cookie = headers
@@ -515,6 +564,12 @@ mod tests {
         assert!(cookie.contains(&format!("wfchat_session={}", response.session_id)));
         assert!(cookie.contains("HttpOnly"));
         assert!(cookie.contains("SameSite=Lax"));
+        assert!(state
+            .store
+            .get_session(old_session.id)
+            .await
+            .expect("old session lookup should query")
+            .is_none());
     }
 
     #[tokio::test]
@@ -762,6 +817,7 @@ mod tests {
         .expect("google promotion should succeed");
 
         assert_eq!(response.kind, "registered");
+        assert_ne!(response.session_id, guest.id);
         assert_eq!(
             response.email.as_deref(),
             Some(format!("{subject}@example.com").as_str())
@@ -775,6 +831,12 @@ mod tests {
             Some("Google User")
         );
         assert!(headers.get(SET_COOKIE).is_some());
+        assert!(state
+            .store
+            .get_session(guest.id)
+            .await
+            .expect("guest session lookup should query")
+            .is_none());
 
         let promoted_session = state
             .store
@@ -791,5 +853,171 @@ mod tests {
             .await
             .expect("promoted sync rows should list");
         assert!(pulled.iter().any(|item| item.item_id == item_id));
+    }
+
+    #[tokio::test]
+    async fn google_promotion_keeps_locked_old_session_visibly_guest_until_commit() {
+        let Some(state) = test_state(Some("test-client".to_owned())).await else {
+            return;
+        };
+        let guest = state.store.create_guest_session().await.unwrap();
+        let guest_id = guest.id;
+        let guest_user_id = guest.user_id;
+        let user_id = Uuid::new_v4();
+        let after_lock = Arc::new(Notify::new());
+        let continue_after_lock = Arc::new(Notify::new());
+        let store = state.store.clone();
+        let subject = format!("visibility-{}", Uuid::new_v4());
+        let task_after_lock = after_lock.clone();
+        let task_continue = continue_after_lock.clone();
+        let task = tokio::spawn(async move {
+            store
+                .promote_guest_session_with_google_for_test(
+                    guest_id,
+                    user_id,
+                    &subject,
+                    task_after_lock,
+                    task_continue,
+                    false,
+                )
+                .await
+        });
+
+        after_lock.notified().await;
+        let visible = state
+            .store
+            .get_session(guest_id)
+            .await
+            .unwrap()
+            .expect("old session should remain visible before commit");
+        assert!(matches!(visible.kind, UserKind::Guest));
+        assert_eq!(visible.user_id, guest_user_id);
+
+        continue_after_lock.notify_one();
+        let replacement = task.await.unwrap().unwrap().unwrap();
+        assert!(state.store.get_session(guest_id).await.unwrap().is_none());
+        assert!(matches!(replacement.kind, UserKind::Registered));
+
+        state
+            .store
+            .delete_session_for_test(replacement.id)
+            .await
+            .unwrap();
+        state.store.delete_session_for_test(guest_id).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn google_promotion_failure_rolls_back_migration_identity_profile_and_sessions() {
+        let Some(state) = test_state(Some("test-client".to_owned())).await else {
+            return;
+        };
+        let guest = state.store.create_guest_session().await.unwrap();
+        let guest_id = guest.id;
+        let guest_user_id = guest.user_id;
+        let owner = OwnerScope::from_session(&guest);
+        let item_id = format!("rollback-{}", Uuid::new_v4());
+        state
+            .store
+            .upsert_sync_entity(&SyncEntityRecord {
+                session_id: guest.id,
+                owner_user_id: None,
+                item_id: item_id.clone(),
+                item_type: "setting".to_owned(),
+                updated_at: 1,
+                deleted_at: None,
+                payload: json!({"value": true}),
+            })
+            .await
+            .unwrap();
+        let user_id = Uuid::new_v4();
+        let subject = format!("rollback-{}", Uuid::new_v4());
+        let after_lock = Arc::new(Notify::new());
+        let continue_after_lock = Arc::new(Notify::new());
+        let store = state.store.clone();
+        let task_after_lock = after_lock.clone();
+        let task_continue = continue_after_lock.clone();
+        let task = tokio::spawn(async move {
+            store
+                .promote_guest_session_with_google_for_test(
+                    guest_id,
+                    user_id,
+                    &subject,
+                    task_after_lock,
+                    task_continue,
+                    true,
+                )
+                .await
+        });
+
+        after_lock.notified().await;
+        continue_after_lock.notify_one();
+        assert!(task.await.unwrap().is_err());
+
+        let old = state.store.get_session(guest_id).await.unwrap().unwrap();
+        assert!(matches!(old.kind, UserKind::Guest));
+        assert_eq!(old.user_id, guest_user_id);
+        assert!(state
+            .store
+            .get_auth_identity(user_id)
+            .await
+            .unwrap()
+            .is_none());
+        assert!(state
+            .store
+            .get_user_profile(user_id)
+            .await
+            .unwrap()
+            .is_none());
+        assert_eq!(
+            state
+                .store
+                .count_sessions_for_user_for_test(user_id)
+                .await
+                .unwrap(),
+            0
+        );
+        let guest_rows = state
+            .store
+            .list_sync_entities_since(owner, 0, 50)
+            .await
+            .unwrap();
+        assert!(guest_rows.iter().any(|row| row.item_id == item_id));
+
+        state.store.delete_session_for_test(guest_id).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn concurrent_google_login_with_same_guest_session_succeeds_once() {
+        let Some(state) = test_state(Some("test-client".to_owned())).await else {
+            return;
+        };
+        let guest = state.store.create_guest_session().await.unwrap();
+        let subject = format!("concurrent-{}", Uuid::new_v4());
+        let first = promote_with_google_token_info(
+            state.clone(),
+            session_headers(guest.id),
+            token_info(&subject),
+        );
+        let second = promote_with_google_token_info(
+            state.clone(),
+            session_headers(guest.id),
+            token_info(&subject),
+        );
+
+        let (first, second) = tokio::join!(first, second);
+        assert_eq!(usize::from(first.is_ok()) + usize::from(second.is_ok()), 1);
+        assert!(state.store.get_session(guest.id).await.unwrap().is_none());
+
+        let successful_session = first
+            .ok()
+            .or_else(|| second.ok())
+            .map(|(_, Json(response))| response.session_id)
+            .unwrap();
+        state
+            .store
+            .delete_session_for_test(successful_session)
+            .await
+            .unwrap();
+        state.store.delete_session_for_test(guest.id).await.unwrap();
     }
 }

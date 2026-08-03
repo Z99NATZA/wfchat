@@ -1,5 +1,5 @@
 use axum::{
-    http::StatusCode,
+    http::{header::RETRY_AFTER, HeaderValue, StatusCode},
     response::{IntoResponse, Response},
     Json,
 };
@@ -21,6 +21,8 @@ pub enum AppError {
     Database,
     #[error("too many requests")]
     RateLimited,
+    #[error("client disconnected")]
+    ClientDisconnected,
 }
 
 #[derive(Serialize)]
@@ -51,13 +53,23 @@ impl IntoResponse for AppError {
             AppError::Ai(_) => StatusCode::BAD_GATEWAY,
             AppError::Database => StatusCode::INTERNAL_SERVER_ERROR,
             AppError::RateLimited => StatusCode::TOO_MANY_REQUESTS,
+            AppError::ClientDisconnected => StatusCode::REQUEST_TIMEOUT,
         };
 
         let body = Json(ErrorBody {
-            error: self.to_string(),
+            error: match &self {
+                AppError::Ai(_) => "assistant response failed".to_owned(),
+                AppError::ClientDisconnected => "request canceled".to_owned(),
+                _ => self.to_string(),
+            },
         });
-
-        (status, body).into_response()
+        let mut response = (status, body).into_response();
+        if matches!(self, AppError::RateLimited) {
+            response
+                .headers_mut()
+                .insert(RETRY_AFTER, HeaderValue::from_static("60"));
+        }
+        response
     }
 }
 

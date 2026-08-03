@@ -1,5 +1,102 @@
 use std::{env, net::SocketAddr};
 
+use ipnet::IpNet;
+use reqwest::Url;
+
+const PRODUCTION_MESSAGE_MAX_CHARS: usize = 16_000;
+const PRODUCTION_REQUEST_MAX_BYTES: usize = 262_144;
+const PRODUCTION_CONTEXT_MAX_MESSAGES: usize = 200;
+const PRODUCTION_CONTEXT_MAX_CHARS: usize = 200_000;
+const PRODUCTION_OUTPUT_MAX_TOKENS: u32 = 8_192;
+const PRODUCTION_OUTPUT_MAX_CHARS: usize = 65_536;
+const PRODUCTION_AI_CONNECT_TIMEOUT_SECONDS: u64 = 30;
+const PRODUCTION_AI_IDLE_TIMEOUT_SECONDS: u64 = 120;
+const PRODUCTION_AI_TOTAL_TIMEOUT_SECONDS: u64 = 300;
+const PRODUCTION_MAX_CONCURRENT_GENERATIONS: usize = 128;
+const PRODUCTION_MAX_CONCURRENT_PER_SESSION: usize = 8;
+const PRODUCTION_GLOBAL_REQUESTS_PER_MINUTE: u32 = 6_000;
+
+const RESERVED_PRODUCTION_HOSTS: [&str; 10] = [
+    "localhost",
+    "local",
+    "internal",
+    "lan",
+    "home",
+    "home.arpa",
+    "test",
+    "invalid",
+    "example",
+    "onion",
+];
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum AppEnvironment {
+    Development,
+    Production,
+}
+
+#[derive(Clone, Debug)]
+pub struct SecurityConfig {
+    pub environment: AppEnvironment,
+    pub allow_session_header: bool,
+    pub trust_proxy_headers: bool,
+    pub trusted_proxy_cidrs: Vec<IpNet>,
+    pub chat: ChatSecurityConfig,
+}
+
+#[derive(Clone, Debug)]
+pub struct ChatSecurityConfig {
+    pub message_max_chars: usize,
+    pub request_max_bytes: usize,
+    pub context_max_messages: usize,
+    pub context_max_chars: usize,
+    pub output_max_tokens: u32,
+    pub output_max_chars: usize,
+    pub ai_connect_timeout_seconds: u64,
+    pub ai_total_timeout_seconds: u64,
+    pub ai_idle_timeout_seconds: u64,
+    pub max_concurrent_generations: usize,
+    pub max_concurrent_per_session: usize,
+    pub global_requests_per_minute: u32,
+    pub image_upload_enabled: bool,
+    pub transcription_enabled: bool,
+    pub tts_enabled: bool,
+}
+
+impl Default for SecurityConfig {
+    fn default() -> Self {
+        Self {
+            environment: AppEnvironment::Development,
+            allow_session_header: true,
+            trust_proxy_headers: false,
+            trusted_proxy_cidrs: Vec::new(),
+            chat: ChatSecurityConfig::default(),
+        }
+    }
+}
+
+impl Default for ChatSecurityConfig {
+    fn default() -> Self {
+        Self {
+            message_max_chars: 4_000,
+            request_max_bytes: 64 * 1024,
+            context_max_messages: 40,
+            context_max_chars: 32_000,
+            output_max_tokens: 1_024,
+            output_max_chars: 16_384,
+            ai_connect_timeout_seconds: 10,
+            ai_total_timeout_seconds: 60,
+            ai_idle_timeout_seconds: 20,
+            max_concurrent_generations: 8,
+            max_concurrent_per_session: 2,
+            global_requests_per_minute: 120,
+            image_upload_enabled: true,
+            transcription_enabled: true,
+            tts_enabled: true,
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct Config {
     pub app_host: String,
@@ -40,10 +137,47 @@ pub struct Config {
     pub chat_attachment_max_width: u32,
     pub chat_attachment_max_height: u32,
     pub chat_attachment_max_pixels: u64,
+    pub security: SecurityConfig,
 }
 
 impl Config {
     pub fn from_env() -> Result<Self, String> {
+        let environment = parse_app_environment(&env_value("APP_ENV", "development"))?;
+        let is_production = environment == AppEnvironment::Production;
+        let trust_proxy_headers = bool_env_value("TRUST_PROXY_HEADERS", false)?;
+        let trusted_proxy_cidrs = parse_trusted_proxy_cidrs(&env_value("TRUSTED_PROXY_CIDRS", ""))?;
+        let security = SecurityConfig {
+            environment,
+            allow_session_header: bool_env_value("ALLOW_SESSION_HEADER", !is_production)?,
+            trust_proxy_headers,
+            trusted_proxy_cidrs,
+            chat: ChatSecurityConfig {
+                message_max_chars: parsed_env_value("CHAT_MESSAGE_MAX_CHARS", 4_000)?,
+                request_max_bytes: parsed_env_value("CHAT_REQUEST_MAX_BYTES", 64 * 1024)?,
+                context_max_messages: parsed_env_value("CHAT_CONTEXT_MAX_MESSAGES", 40)?,
+                context_max_chars: parsed_env_value("CHAT_CONTEXT_MAX_CHARS", 32_000)?,
+                output_max_tokens: parsed_env_value("CHAT_OUTPUT_MAX_TOKENS", 1_024)?,
+                output_max_chars: parsed_env_value("CHAT_OUTPUT_MAX_CHARS", 16_384)?,
+                ai_connect_timeout_seconds: parsed_env_value(
+                    "CHAT_AI_CONNECT_TIMEOUT_SECONDS",
+                    10,
+                )?,
+                ai_total_timeout_seconds: parsed_env_value("CHAT_AI_TOTAL_TIMEOUT_SECONDS", 60)?,
+                ai_idle_timeout_seconds: parsed_env_value("CHAT_AI_IDLE_TIMEOUT_SECONDS", 20)?,
+                max_concurrent_generations: parsed_env_value("CHAT_MAX_CONCURRENT_GENERATIONS", 8)?,
+                max_concurrent_per_session: parsed_env_value("CHAT_MAX_CONCURRENT_PER_SESSION", 2)?,
+                global_requests_per_minute: parsed_env_value(
+                    "CHAT_GLOBAL_REQUESTS_PER_MINUTE",
+                    120,
+                )?,
+                image_upload_enabled: bool_env_value("CHAT_IMAGE_UPLOAD_ENABLED", !is_production)?,
+                transcription_enabled: bool_env_value(
+                    "CHAT_TRANSCRIPTION_ENABLED",
+                    !is_production,
+                )?,
+                tts_enabled: bool_env_value("CHAT_TTS_ENABLED", !is_production)?,
+            },
+        };
         let config = Self {
             app_host: env_value("APP_HOST", "0.0.0.0"),
             app_port: env_value("APP_PORT", "8080").parse().unwrap_or(8080),
@@ -102,6 +236,7 @@ impl Config {
             chat_attachment_max_pixels: env_value("CHAT_ATTACHMENT_MAX_PIXELS", "20000000")
                 .parse()
                 .unwrap_or(20_000_000),
+            security,
         };
 
         config.validate()?;
@@ -120,6 +255,10 @@ impl Config {
             "mock" => "mock-waifu",
             _ => "unknown",
         }
+    }
+
+    pub fn is_production(&self) -> bool {
+        self.security.environment == AppEnvironment::Production
     }
 
     fn validate(&self) -> Result<(), String> {
@@ -229,7 +368,8 @@ impl Config {
                 "AI_TRANSCRIPTION_PROVIDER={other} is invalid. Allowed values: disabled, mock, openai"
             )),
         }?;
-        self.validate_chat_attachment_config()
+        self.validate_chat_attachment_config()?;
+        self.validate_security_config()
     }
 
     fn validate_chat_attachment_config(&self) -> Result<(), String> {
@@ -255,6 +395,130 @@ impl Config {
 
         Ok(())
     }
+
+    fn validate_security_config(&self) -> Result<(), String> {
+        let chat = &self.security.chat;
+        if chat.message_max_chars == 0
+            || chat.request_max_bytes == 0
+            || chat.context_max_messages == 0
+            || chat.context_max_chars == 0
+            || chat.output_max_tokens == 0
+            || chat.output_max_chars == 0
+            || chat.ai_connect_timeout_seconds == 0
+            || chat.ai_total_timeout_seconds == 0
+            || chat.ai_idle_timeout_seconds == 0
+            || chat.max_concurrent_generations == 0
+            || chat.max_concurrent_per_session == 0
+            || chat.global_requests_per_minute == 0
+        {
+            return Err("chat security limits must be greater than 0".to_owned());
+        }
+        if chat.max_concurrent_per_session > chat.max_concurrent_generations {
+            return Err(
+                "CHAT_MAX_CONCURRENT_PER_SESSION must not exceed CHAT_MAX_CONCURRENT_GENERATIONS"
+                    .to_owned(),
+            );
+        }
+        if chat.ai_connect_timeout_seconds > chat.ai_total_timeout_seconds {
+            return Err(
+                "CHAT_AI_CONNECT_TIMEOUT_SECONDS must not exceed CHAT_AI_TOTAL_TIMEOUT_SECONDS"
+                    .to_owned(),
+            );
+        }
+        if chat.ai_idle_timeout_seconds > chat.ai_total_timeout_seconds {
+            return Err(
+                "CHAT_AI_IDLE_TIMEOUT_SECONDS must not exceed CHAT_AI_TOTAL_TIMEOUT_SECONDS"
+                    .to_owned(),
+            );
+        }
+        if chat.max_concurrent_generations > tokio::sync::Semaphore::MAX_PERMITS
+            || chat.max_concurrent_per_session > tokio::sync::Semaphore::MAX_PERMITS
+        {
+            return Err(format!(
+                "chat concurrency limits must not exceed Tokio semaphore maximum ({})",
+                tokio::sync::Semaphore::MAX_PERMITS
+            ));
+        }
+        if self.security.trust_proxy_headers && self.security.trusted_proxy_cidrs.is_empty() {
+            return Err(
+                "TRUSTED_PROXY_CIDRS must not be empty when TRUST_PROXY_HEADERS=true".to_owned(),
+            );
+        }
+
+        if !self.is_production() {
+            return Ok(());
+        }
+        if self.security.allow_session_header {
+            return Err("ALLOW_SESSION_HEADER must be false in production".to_owned());
+        }
+
+        validate_production_max(
+            "CHAT_MESSAGE_MAX_CHARS",
+            chat.message_max_chars,
+            PRODUCTION_MESSAGE_MAX_CHARS,
+        )?;
+        validate_production_max(
+            "CHAT_REQUEST_MAX_BYTES",
+            chat.request_max_bytes,
+            PRODUCTION_REQUEST_MAX_BYTES,
+        )?;
+        validate_production_max(
+            "CHAT_CONTEXT_MAX_MESSAGES",
+            chat.context_max_messages,
+            PRODUCTION_CONTEXT_MAX_MESSAGES,
+        )?;
+        validate_production_max(
+            "CHAT_CONTEXT_MAX_CHARS",
+            chat.context_max_chars,
+            PRODUCTION_CONTEXT_MAX_CHARS,
+        )?;
+        validate_production_max(
+            "CHAT_OUTPUT_MAX_TOKENS",
+            chat.output_max_tokens,
+            PRODUCTION_OUTPUT_MAX_TOKENS,
+        )?;
+        validate_production_max(
+            "CHAT_OUTPUT_MAX_CHARS",
+            chat.output_max_chars,
+            PRODUCTION_OUTPUT_MAX_CHARS,
+        )?;
+        validate_production_max(
+            "CHAT_AI_CONNECT_TIMEOUT_SECONDS",
+            chat.ai_connect_timeout_seconds,
+            PRODUCTION_AI_CONNECT_TIMEOUT_SECONDS,
+        )?;
+        validate_production_max(
+            "CHAT_AI_IDLE_TIMEOUT_SECONDS",
+            chat.ai_idle_timeout_seconds,
+            PRODUCTION_AI_IDLE_TIMEOUT_SECONDS,
+        )?;
+        validate_production_max(
+            "CHAT_AI_TOTAL_TIMEOUT_SECONDS",
+            chat.ai_total_timeout_seconds,
+            PRODUCTION_AI_TOTAL_TIMEOUT_SECONDS,
+        )?;
+        validate_production_max(
+            "CHAT_MAX_CONCURRENT_GENERATIONS",
+            chat.max_concurrent_generations,
+            PRODUCTION_MAX_CONCURRENT_GENERATIONS,
+        )?;
+        validate_production_max(
+            "CHAT_MAX_CONCURRENT_PER_SESSION",
+            chat.max_concurrent_per_session,
+            PRODUCTION_MAX_CONCURRENT_PER_SESSION,
+        )?;
+        validate_production_max(
+            "CHAT_GLOBAL_REQUESTS_PER_MINUTE",
+            chat.global_requests_per_minute,
+            PRODUCTION_GLOBAL_REQUESTS_PER_MINUTE,
+        )?;
+
+        for origin in self.frontend_origin.split(',').map(str::trim) {
+            validate_production_origin(origin)?;
+        }
+
+        Ok(())
+    }
 }
 
 fn env_value(key: &str, fallback: &str) -> String {
@@ -263,6 +527,99 @@ fn env_value(key: &str, fallback: &str) -> String {
 
 fn optional_env_value(key: &str) -> Option<String> {
     env::var(key).ok().filter(|value| !value.trim().is_empty())
+}
+
+fn parsed_env_value<T>(key: &str, fallback: T) -> Result<T, String>
+where
+    T: std::str::FromStr + Copy,
+{
+    let Some(value) = optional_env_value(key) else {
+        return Ok(fallback);
+    };
+    value
+        .trim()
+        .parse::<T>()
+        .map_err(|_| format!("{key} has an invalid value"))
+}
+
+fn parse_trusted_proxy_cidrs(value: &str) -> Result<Vec<IpNet>, String> {
+    if value.trim().is_empty() {
+        return Ok(Vec::new());
+    }
+
+    value
+        .split(',')
+        .map(|cidr| {
+            let cidr = cidr.trim();
+            if cidr.is_empty() {
+                return Err("TRUSTED_PROXY_CIDRS contains an invalid CIDR".to_owned());
+            }
+            cidr.parse::<IpNet>()
+                .map_err(|_| format!("TRUSTED_PROXY_CIDRS contains an invalid CIDR: {cidr}"))
+        })
+        .collect()
+}
+
+fn validate_production_max<T>(key: &str, value: T, maximum: T) -> Result<(), String>
+where
+    T: Copy + PartialOrd + std::fmt::Display,
+{
+    if value > maximum {
+        Err(format!("{key} must not exceed {maximum} in production"))
+    } else {
+        Ok(())
+    }
+}
+
+fn bool_env_value(key: &str, fallback: bool) -> Result<bool, String> {
+    let Some(value) = optional_env_value(key) else {
+        return Ok(fallback);
+    };
+    match value.trim().to_ascii_lowercase().as_str() {
+        "true" | "1" | "yes" | "on" => Ok(true),
+        "false" | "0" | "no" | "off" => Ok(false),
+        _ => Err(format!("{key} must be true or false")),
+    }
+}
+
+fn parse_app_environment(value: &str) -> Result<AppEnvironment, String> {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "development" | "dev" => Ok(AppEnvironment::Development),
+        "production" | "prod" => Ok(AppEnvironment::Production),
+        _ => Err("APP_ENV must be development or production".to_owned()),
+    }
+}
+
+fn validate_production_origin(origin: &str) -> Result<(), String> {
+    let url = Url::parse(origin).map_err(|_| "production frontend origins must be valid URLs")?;
+    if url.scheme() != "https" {
+        return Err("production frontend origins must use https".to_owned());
+    }
+    if url.username() != ""
+        || url.password().is_some()
+        || url.path() != "/"
+        || url.query().is_some()
+        || url.fragment().is_some()
+    {
+        return Err(
+            "production frontend origins must contain only scheme, host, and port".to_owned(),
+        );
+    }
+    let host = url
+        .host_str()
+        .ok_or_else(|| "production frontend origins must include a host".to_owned())?;
+    let host = host.trim_end_matches('.').to_ascii_lowercase();
+    if host.is_empty() || host.parse::<std::net::IpAddr>().is_ok() || !host.contains('.') {
+        return Err("production frontend origins must use a public DNS hostname".to_owned());
+    }
+    if RESERVED_PRODUCTION_HOSTS
+        .iter()
+        .any(|reserved| host == *reserved || host.ends_with(&format!(".{reserved}")))
+    {
+        return Err("production frontend origins must use a public DNS hostname".to_owned());
+    }
+
+    Ok(())
 }
 
 fn optional_f32_env_value(key: &str) -> Result<Option<f32>, String> {
@@ -327,7 +684,15 @@ fn validate_finite_f32(value: Option<f32>, message: &str) -> Result<(), String> 
 
 #[cfg(test)]
 mod tests {
-    use super::Config;
+    use super::{
+        parse_trusted_proxy_cidrs, AppEnvironment, Config, SecurityConfig,
+        PRODUCTION_AI_CONNECT_TIMEOUT_SECONDS, PRODUCTION_AI_IDLE_TIMEOUT_SECONDS,
+        PRODUCTION_AI_TOTAL_TIMEOUT_SECONDS, PRODUCTION_CONTEXT_MAX_CHARS,
+        PRODUCTION_CONTEXT_MAX_MESSAGES, PRODUCTION_GLOBAL_REQUESTS_PER_MINUTE,
+        PRODUCTION_MAX_CONCURRENT_GENERATIONS, PRODUCTION_MAX_CONCURRENT_PER_SESSION,
+        PRODUCTION_MESSAGE_MAX_CHARS, PRODUCTION_OUTPUT_MAX_CHARS, PRODUCTION_OUTPUT_MAX_TOKENS,
+        PRODUCTION_REQUEST_MAX_BYTES,
+    };
 
     fn base_config() -> Config {
         Config {
@@ -369,7 +734,16 @@ mod tests {
             chat_attachment_max_width: 8192,
             chat_attachment_max_height: 8192,
             chat_attachment_max_pixels: 20_000_000,
+            security: SecurityConfig::default(),
         }
+    }
+
+    fn production_config() -> Config {
+        let mut config = base_config();
+        config.security.environment = AppEnvironment::Production;
+        config.security.allow_session_header = false;
+        config.frontend_origin = "https://chat.example.com".to_owned();
+        config
     }
 
     #[test]
@@ -616,5 +990,196 @@ mod tests {
             .expect_err("zero byte limit should be rejected");
 
         assert_eq!(error, "CHAT_ATTACHMENT_MAX_BYTES must be greater than 0");
+    }
+
+    #[test]
+    fn production_requires_https_public_origin_and_disables_session_header() {
+        let mut config = base_config();
+        config.security.environment = AppEnvironment::Production;
+
+        assert_eq!(
+            config.validate().expect_err("session header should fail"),
+            "ALLOW_SESSION_HEADER must be false in production"
+        );
+
+        config.security.allow_session_header = false;
+        assert_eq!(
+            config.validate().expect_err("http origin should fail"),
+            "production frontend origins must use https"
+        );
+
+        config.frontend_origin = "https://chat.example.com".to_owned();
+        assert!(config.validate().is_ok());
+    }
+
+    #[test]
+    fn production_rejects_private_origins() {
+        let mut config = production_config();
+
+        for reserved in super::RESERVED_PRODUCTION_HOSTS {
+            for origin in [
+                format!("https://{reserved}"),
+                format!("https://app.{reserved}"),
+            ] {
+                config.frontend_origin = origin.clone();
+                assert_eq!(
+                    config.validate().expect_err("reserved origin should fail"),
+                    "production frontend origins must use a public DNS hostname",
+                    "origin should be rejected: {origin}",
+                );
+            }
+        }
+
+        for origin in [
+            "https://localhost",
+            "https://localhost.",
+            "https://LOCALHOST",
+            "https://intranet",
+            "https://127.0.0.1",
+            "https://192.168.1.20",
+            "https://8.8.8.8",
+            "https://[::1]",
+            "https://[fe80::1]",
+            "https://[::ffff:127.0.0.1]",
+        ] {
+            config.frontend_origin = origin.to_owned();
+            assert_eq!(
+                config.validate().expect_err("private origin should fail"),
+                "production frontend origins must use a public DNS hostname",
+                "origin should be rejected: {origin}",
+            );
+        }
+    }
+
+    #[test]
+    fn production_origin_accepts_only_origin_shape() {
+        let mut config = production_config();
+        for origin in [
+            "https://user@chat.example.com",
+            "https://chat.example.com/path",
+            "https://chat.example.com?query=1",
+            "https://chat.example.com#fragment",
+        ] {
+            config.frontend_origin = origin.to_owned();
+            assert!(config.validate().is_err(), "origin should fail: {origin}");
+        }
+
+        config.frontend_origin = "https://CHAT.Example.COM.:8443".to_owned();
+        assert!(config.validate().is_ok());
+    }
+
+    #[test]
+    fn production_enforces_every_locked_chat_maximum() {
+        macro_rules! assert_max {
+            ($field:ident, $maximum:expr) => {{
+                let mut config = production_config();
+                config.security.chat.$field = $maximum;
+                assert!(config.validate().is_ok(), stringify!($field));
+                config.security.chat.$field = $maximum + 1;
+                assert!(config.validate().is_err(), stringify!($field));
+            }};
+        }
+
+        assert_max!(message_max_chars, PRODUCTION_MESSAGE_MAX_CHARS);
+        assert_max!(request_max_bytes, PRODUCTION_REQUEST_MAX_BYTES);
+        assert_max!(context_max_messages, PRODUCTION_CONTEXT_MAX_MESSAGES);
+        assert_max!(context_max_chars, PRODUCTION_CONTEXT_MAX_CHARS);
+        assert_max!(output_max_tokens, PRODUCTION_OUTPUT_MAX_TOKENS);
+        assert_max!(output_max_chars, PRODUCTION_OUTPUT_MAX_CHARS);
+        assert_max!(
+            ai_connect_timeout_seconds,
+            PRODUCTION_AI_CONNECT_TIMEOUT_SECONDS
+        );
+        assert_max!(
+            ai_total_timeout_seconds,
+            PRODUCTION_AI_TOTAL_TIMEOUT_SECONDS
+        );
+
+        let mut idle = production_config();
+        idle.security.chat.ai_total_timeout_seconds = PRODUCTION_AI_TOTAL_TIMEOUT_SECONDS;
+        idle.security.chat.ai_idle_timeout_seconds = PRODUCTION_AI_IDLE_TIMEOUT_SECONDS;
+        assert!(idle.validate().is_ok());
+        idle.security.chat.ai_idle_timeout_seconds = PRODUCTION_AI_IDLE_TIMEOUT_SECONDS + 1;
+        assert!(idle.validate().is_err());
+
+        assert_max!(
+            max_concurrent_generations,
+            PRODUCTION_MAX_CONCURRENT_GENERATIONS
+        );
+        let mut per_session = production_config();
+        per_session.security.chat.max_concurrent_generations =
+            PRODUCTION_MAX_CONCURRENT_GENERATIONS;
+        per_session.security.chat.max_concurrent_per_session =
+            PRODUCTION_MAX_CONCURRENT_PER_SESSION;
+        assert!(per_session.validate().is_ok());
+        per_session.security.chat.max_concurrent_per_session =
+            PRODUCTION_MAX_CONCURRENT_PER_SESSION + 1;
+        assert!(per_session.validate().is_err());
+
+        assert_max!(
+            global_requests_per_minute,
+            PRODUCTION_GLOBAL_REQUESTS_PER_MINUTE
+        );
+    }
+
+    #[test]
+    fn development_accepts_values_above_production_maxima() {
+        let mut config = base_config();
+        let chat = &mut config.security.chat;
+        chat.message_max_chars = PRODUCTION_MESSAGE_MAX_CHARS + 1;
+        chat.request_max_bytes = PRODUCTION_REQUEST_MAX_BYTES + 1;
+        chat.context_max_messages = PRODUCTION_CONTEXT_MAX_MESSAGES + 1;
+        chat.context_max_chars = PRODUCTION_CONTEXT_MAX_CHARS + 1;
+        chat.output_max_tokens = PRODUCTION_OUTPUT_MAX_TOKENS + 1;
+        chat.output_max_chars = PRODUCTION_OUTPUT_MAX_CHARS + 1;
+        chat.ai_connect_timeout_seconds = PRODUCTION_AI_CONNECT_TIMEOUT_SECONDS + 1;
+        chat.ai_idle_timeout_seconds = PRODUCTION_AI_IDLE_TIMEOUT_SECONDS + 1;
+        chat.ai_total_timeout_seconds = PRODUCTION_AI_TOTAL_TIMEOUT_SECONDS + 1;
+        chat.max_concurrent_generations = PRODUCTION_MAX_CONCURRENT_GENERATIONS + 1;
+        chat.max_concurrent_per_session = PRODUCTION_MAX_CONCURRENT_PER_SESSION + 1;
+        chat.global_requests_per_minute = PRODUCTION_GLOBAL_REQUESTS_PER_MINUTE + 1;
+
+        assert!(config.validate().is_ok());
+    }
+
+    #[test]
+    fn concurrency_above_tokio_maximum_is_rejected_without_constructing_semaphore() {
+        let mut config = base_config();
+        config.security.chat.max_concurrent_generations = tokio::sync::Semaphore::MAX_PERMITS + 1;
+
+        assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn trusted_proxy_configuration_is_strict_in_every_environment() {
+        assert!(parse_trusted_proxy_cidrs("10.0.0.0/8, 2001:db8::/32").is_ok());
+        assert!(parse_trusted_proxy_cidrs("10.0.0.1").is_err());
+        assert!(parse_trusted_proxy_cidrs("10.0.0.0/8,").is_err());
+
+        let mut config = base_config();
+        config.security.trust_proxy_headers = true;
+        assert_eq!(
+            config
+                .validate()
+                .expect_err("trusted CIDRs must be required"),
+            "TRUSTED_PROXY_CIDRS must not be empty when TRUST_PROXY_HEADERS=true"
+        );
+    }
+
+    #[test]
+    fn zero_and_invalid_relational_chat_limits_are_rejected() {
+        let mut zero = base_config();
+        zero.security.chat.output_max_chars = 0;
+        assert!(zero.validate().is_err());
+
+        let mut timeout = base_config();
+        timeout.security.chat.ai_idle_timeout_seconds =
+            timeout.security.chat.ai_total_timeout_seconds + 1;
+        assert!(timeout.validate().is_err());
+
+        let mut concurrency = base_config();
+        concurrency.security.chat.max_concurrent_per_session =
+            concurrency.security.chat.max_concurrent_generations + 1;
+        assert!(concurrency.validate().is_err());
     }
 }

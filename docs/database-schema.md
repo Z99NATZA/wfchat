@@ -6,10 +6,13 @@ indexes.
 
 ## Ownership Model
 
-Every browser has an `auth_sessions` row. Guest data is scoped by session.
-Google login associates that session with an account id and promotes supported
-guest data. Account-owned reads use `owner_user_id` across that account's
-sessions.
+Every browser has an expiring `auth_sessions` row. Guest data is scoped by
+session. Google login locks the active guest row, migrates supported owner data,
+upserts identity/profile defaults, creates a new registered session, and revokes
+the guest in one transaction. The guest row never becomes registered, and the
+replacement cookie is sent only after commit. Logout revokes the registered
+session before issuing a new guest session. Account-owned reads use
+`owner_user_id` across that account's active sessions.
 
 `auth_identities` stores provider identity data. `user_profiles` stores the
 editable display name and avatar URL; a later provider login does not overwrite

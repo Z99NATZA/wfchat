@@ -1717,7 +1717,7 @@ async fn ensure_cafe_session(
 ) -> AppResult<(SessionRecord, HeaderMap)> {
     let session = state
         .store
-        .ensure_session(session_id_from_headers(headers))
+        .ensure_session(session_id_from_headers(&state.config, headers))
         .await?;
     if !matches!(session.kind, UserKind::Guest) {
         state

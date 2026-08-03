@@ -1,9 +1,10 @@
 pub mod providers;
 
-use std::future::Future;
+use std::{future::Future, time::Duration};
 
 use serde::Deserialize;
 use serde::Serialize;
+use tokio::time::timeout;
 
 use crate::{
     error::{AppError, AppResult},
@@ -143,22 +144,33 @@ impl AiService {
         let provider = self.state.config.ai_provider.as_str();
         ensure_provider_supports_messages(provider, messages)?;
 
-        match provider {
-            "mock" => Ok(providers::mock::complete_chat(ai_profile_id, messages)),
-            "openai" => {
-                providers::openai::complete_chat(&self.state, ai_profile_id, messages).await
-            }
-            "lmstudio" => {
-                providers::lmstudio::complete_chat(&self.state, ai_profile_id, messages).await
-            }
-            "xai" => providers::xai::complete_chat(&self.state, ai_profile_id, messages).await,
-            "anthropic" | "claude" => {
-                providers::anthropic::complete_chat(&self.state, ai_profile_id, messages).await
-            }
-            other => Err(AppError::BadRequest(format!(
-                "unknown ai provider: {other}"
-            ))),
-        }
+        timeout(
+            Duration::from_secs(self.state.config.security.chat.ai_total_timeout_seconds),
+            async {
+                match provider {
+                    "mock" => Ok(providers::mock::complete_chat(ai_profile_id, messages)),
+                    "openai" => {
+                        providers::openai::complete_chat(&self.state, ai_profile_id, messages).await
+                    }
+                    "lmstudio" => {
+                        providers::lmstudio::complete_chat(&self.state, ai_profile_id, messages)
+                            .await
+                    }
+                    "xai" => {
+                        providers::xai::complete_chat(&self.state, ai_profile_id, messages).await
+                    }
+                    "anthropic" | "claude" => {
+                        providers::anthropic::complete_chat(&self.state, ai_profile_id, messages)
+                            .await
+                    }
+                    other => Err(AppError::BadRequest(format!(
+                        "unknown ai provider: {other}"
+                    ))),
+                }
+            },
+        )
+        .await
+        .map_err(|_| AppError::Ai("provider request timed out".to_owned()))?
     }
 
     pub async fn stream_chat<F, Fut>(
@@ -174,26 +186,45 @@ impl AiService {
         let provider = self.state.config.ai_provider.as_str();
         ensure_provider_supports_messages(provider, messages)?;
 
-        match provider {
-            "mock" => providers::mock::stream_chat(ai_profile_id, messages, on_event).await,
-            "openai" => {
-                providers::openai::stream_chat(&self.state, ai_profile_id, messages, on_event).await
-            }
-            "lmstudio" => {
-                providers::lmstudio::stream_chat(&self.state, ai_profile_id, messages, on_event)
-                    .await
-            }
-            "xai" => {
-                providers::xai::stream_chat(&self.state, ai_profile_id, messages, on_event).await
-            }
-            "anthropic" | "claude" => {
-                self.stream_chat_fallback(ai_profile_id, messages, on_event)
-                    .await
-            }
-            other => Err(AppError::BadRequest(format!(
-                "unknown ai provider: {other}"
-            ))),
-        }
+        timeout(
+            Duration::from_secs(self.state.config.security.chat.ai_total_timeout_seconds),
+            async {
+                match provider {
+                    "mock" => providers::mock::stream_chat(ai_profile_id, messages, on_event).await,
+                    "openai" => {
+                        providers::openai::stream_chat(
+                            &self.state,
+                            ai_profile_id,
+                            messages,
+                            on_event,
+                        )
+                        .await
+                    }
+                    "lmstudio" => {
+                        providers::lmstudio::stream_chat(
+                            &self.state,
+                            ai_profile_id,
+                            messages,
+                            on_event,
+                        )
+                        .await
+                    }
+                    "xai" => {
+                        providers::xai::stream_chat(&self.state, ai_profile_id, messages, on_event)
+                            .await
+                    }
+                    "anthropic" | "claude" => {
+                        self.stream_chat_fallback(ai_profile_id, messages, on_event)
+                            .await
+                    }
+                    other => Err(AppError::BadRequest(format!(
+                        "unknown ai provider: {other}"
+                    ))),
+                }
+            },
+        )
+        .await
+        .map_err(|_| AppError::Ai("provider stream timed out".to_owned()))?
     }
 
     async fn stream_chat_fallback<F, Fut>(

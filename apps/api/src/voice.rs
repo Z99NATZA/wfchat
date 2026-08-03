@@ -795,6 +795,7 @@ mod tests {
             chat_attachment_max_width: 8192,
             chat_attachment_max_height: 8192,
             chat_attachment_max_pixels: 20_000_000,
+            security: Default::default(),
         }
     }
 

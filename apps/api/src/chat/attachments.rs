@@ -1,15 +1,22 @@
 use super::*;
 
 pub(super) async fn upload_chat_attachment(
+    ConnectInfo(peer_addr): ConnectInfo<SocketAddr>,
     State(state): State<AppState>,
     headers: HeaderMap,
     mut multipart: Multipart,
 ) -> AppResult<Json<ChatAttachmentResponse>> {
-    enforce_sensitive_rate_limit(&state, &headers, RateLimitFamily::ImageUpload)?;
-    let session = state
-        .store
-        .ensure_session(session_id_from_headers(&headers))
-        .await?;
+    if !state.config.security.chat.image_upload_enabled {
+        return Err(AppError::NotFound);
+    }
+    let session = require_chat_session(&state, &headers).await?;
+    enforce_sensitive_rate_limit(
+        &state,
+        &headers,
+        peer_addr,
+        session.id,
+        RateLimitFamily::ImageUpload,
+    )?;
     let owner = OwnerScope::from_session(&session);
     let mut file_bytes = None;
 
@@ -87,10 +94,7 @@ pub(super) async fn preview_chat_attachment(
     headers: HeaderMap,
     Path(attachment_id): Path<Uuid>,
 ) -> AppResult<impl IntoResponse> {
-    let session = state
-        .store
-        .ensure_session(session_id_from_headers(&headers))
-        .await?;
+    let session = require_chat_session(&state, &headers).await?;
     let owner = OwnerScope::from_session(&session);
     let attachment = state
         .store
@@ -119,10 +123,7 @@ pub(super) async fn delete_chat_attachment(
     headers: HeaderMap,
     Path(attachment_id): Path<Uuid>,
 ) -> AppResult<Json<serde_json::Value>> {
-    let session = state
-        .store
-        .ensure_session(session_id_from_headers(&headers))
-        .await?;
+    let session = require_chat_session(&state, &headers).await?;
     let owner = OwnerScope::from_session(&session);
     let attachment = state
         .store

@@ -44,8 +44,22 @@ If the streaming request fails before `message_start`, `useChatSession` retries
 through `POST /api/chats/:chat_id/messages`. It does not retry after a stream
 has started because the provider may already have generated output.
 
-Both message routes share the same 20-requests-per-minute in-memory rate-limit
-bucket.
+Both message routes share the same per-session/IP and global in-memory rate
+limits. Only one generation may run for a chat at a time; process-wide and
+per-session concurrency limits also apply. Rejection returns HTTP 429 with
+`Retry-After: 60` before streaming begins.
+
+Provider work has configured connect, total, and stream-idle timeouts. Dropping
+the SSE response cancels generation as soon as the backend detects the closed
+client channel. Timeout, disconnect, and provider failure do not persist partial
+messages, and provider details are replaced by a generic public error.
+
+`CHAT_OUTPUT_MAX_CHARS` counts guarded Unicode scalar values. Each complete
+guarded chunk, including the response guard's buffered tail, is checked before
+send. A chunk that would cross the limit is omitted in full, provider work is
+canceled, the stream emits the generic `error`, and neither `message_done` nor
+the turn is persisted. Non-streaming output uses the same hard limit on final
+guarded content.
 
 ## Provider Behavior
 
@@ -62,9 +76,9 @@ Provider/model selection remains backend-owned.
 
 Streaming and non-streaming use
 `prepare_chat_completion_context()`. Request validation, attachment loading,
-timezone normalization, chat history, and automatic-memory retrieval therefore
-do not vary by transport. Memory failure is fail-open and does not alter SSE
-events. See [Automatic memory](automatic-memory.md).
+timezone normalization, bounded recent chat history, and automatic-memory
+retrieval therefore do not vary by transport. Memory failure is fail-open and
+does not alter SSE events. See [Automatic memory](automatic-memory.md).
 
 ## Avatar Integration
 
