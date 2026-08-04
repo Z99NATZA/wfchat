@@ -27,17 +27,17 @@ requests.
 
 ## Code Ownership
 
-| Path | Role |
-| --- | --- |
-| `app/` | Application providers and cross-route orchestration |
-| `pages/` | Route composition |
-| `layouts/` | Shared page shells |
-| `features/` | Chat, avatar, and Cafe behavior |
-| `components/` | Reusable app UI, dialogs, auth, settings, navigation |
-| `services/` | API/session/storage/sync infrastructure |
-| `stores/` | Browser persistence helpers and small shared stores |
-| `hooks/` | Cross-feature React adapters |
-| `types/`, `utils/`, `i18n/` | Shared contracts and utilities |
+| Path                        | Role                                                 |
+| --------------------------- | ---------------------------------------------------- |
+| `app/`                      | Application providers and cross-route orchestration  |
+| `pages/`                    | Route composition                                    |
+| `layouts/`                  | Shared page shells                                   |
+| `features/`                 | Chat, avatar, and Cafe behavior                      |
+| `components/`               | Reusable app UI, dialogs, auth, settings, navigation |
+| `services/`                 | API/session/storage/sync infrastructure              |
+| `stores/`                   | Browser persistence helpers and small shared stores  |
+| `hooks/`                    | Cross-feature React adapters                         |
+| `types/`, `utils/`, `i18n/` | Shared contracts and utilities                       |
 
 Import downward:
 
@@ -51,7 +51,8 @@ Shared layers must not import page- or feature-specific behavior.
 
 - Chat lifecycle stays in `useChatSession`; rendering components receive state
   and callbacks. Streaming is attempted first, with JSON fallback only before
-  the SSE stream starts.
+  the SSE stream starts. Persona lists consume bounded summary rows, and send
+  completion merges the newly committed pair without requiring full history.
 - App settings and auth/sync orchestration live above routes. Feature pages do
   not own persisted global settings.
 - Avatar runtime stores semantic expression/motion state. Chat emits semantic

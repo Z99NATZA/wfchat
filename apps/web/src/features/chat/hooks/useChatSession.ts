@@ -684,12 +684,23 @@ export function useChatSession({ onAvatarChatEvent }: UseChatSessionOptions = {}
 			return assistantMessageId;
 		};
 
-		const applyServerMessages = (
+		const applyCommittedMessages = (
 			chatId: string,
-			nextMessages: ChatMessage[],
+			committedMessages: ChatMessage[],
 			assistantText: string
 		) => {
-			setMessages(nextMessages);
+			setMessages((currentMessages) => {
+				const committedIds = new Set(committedMessages.map((message) => message.id));
+				return [
+					...currentMessages.filter(
+						(message) =>
+							message.id !== optimisticMessage.id &&
+							message.id !== assistantMessageId &&
+							!committedIds.has(message.id)
+					),
+					...committedMessages
+				];
+			});
 			onAvatarChatEvent?.({
 				type: "assistant_replied",
 				chatId,
@@ -701,7 +712,7 @@ export function useChatSession({ onAvatarChatEvent }: UseChatSessionOptions = {}
 					currentSessions,
 					chatId,
 					selectedPersonaId,
-					nextMessages.at(-1)?.text ?? trimmedDraft
+					committedMessages.at(-1)?.text ?? trimmedDraft
 				)
 			);
 		};
@@ -753,7 +764,11 @@ export function useChatSession({ onAvatarChatEvent }: UseChatSessionOptions = {}
 					},
 					onDone: (event) => {
 						streamCompleted = true;
-						applyServerMessages(chatId, event.messages, event.assistantMessage.text);
+						applyCommittedMessages(
+							chatId,
+							[event.userMessage, event.assistantMessage],
+							event.assistantMessage.text
+						);
 					}
 				});
 
@@ -771,7 +786,7 @@ export function useChatSession({ onAvatarChatEvent }: UseChatSessionOptions = {}
 						trimmedDraft,
 						sendAttachments
 					);
-					applyServerMessages(
+					applyCommittedMessages(
 						chatId,
 						nextMessages,
 						nextMessages.filter((message) => message.author === "companion").at(-1)

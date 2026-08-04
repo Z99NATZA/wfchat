@@ -836,7 +836,11 @@ async fn memory_expiration_account_reset_removes_memory_and_all_queued_job_state
 
 async fn evaluation_store() -> Option<ChatStore> {
     let database_url = std::env::var("WFCHAT_TEST_DATABASE_URL").ok()?;
-    ChatStore::connect(&database_url).await.ok()
+    Some(
+        ChatStore::connect(&database_url)
+            .await
+            .expect("WFCHAT_TEST_DATABASE_URL should identify a reachable test database"),
+    )
 }
 
 fn evaluation_state(store: ChatStore) -> AppState {

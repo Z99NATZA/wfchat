@@ -22,7 +22,7 @@ use crate::{
     characters,
     config::Config,
     error::{AppError, AppResult},
-    session::session_id_from_headers,
+    session::require_session,
     state::AppState,
     store::{
         CapturedMemoryRecord, ChatStore, MemoryExtractionJobRecord, MemoryFollowUpClaim,
@@ -363,9 +363,13 @@ struct TopicSignals {
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/learned-context", delete(reset_learned_context))
-        .route(
-            "/personas/{persona_id}/follow-up",
-            post(claim_persona_follow_up),
+        .merge(
+            Router::new()
+                .route(
+                    "/personas/{persona_id}/follow-up",
+                    post(claim_persona_follow_up),
+                )
+                .layer(axum::middleware::from_fn(crate::chat::private_no_store)),
         )
 }
 
@@ -400,10 +404,7 @@ async fn claim_persona_follow_up(
 ) -> AppResult<Json<FollowUpClaimResponse>> {
     characters::character_by_id(&persona_id)
         .ok_or_else(|| AppError::BadRequest(format!("unknown character: {persona_id}")))?;
-    let session = state
-        .store
-        .ensure_session(session_id_from_headers(&state.config, &headers))
-        .await?;
+    let session = require_session(&state, &headers).await?;
     let owner = OwnerScope::from_session(&session);
     let now = now_unix_seconds();
     state.memory_telemetry.follow_up_attempted();
@@ -565,10 +566,7 @@ async fn reset_learned_context(
     State(state): State<AppState>,
     headers: HeaderMap,
 ) -> AppResult<StatusCode> {
-    let session = state
-        .store
-        .ensure_session(session_id_from_headers(&state.config, &headers))
-        .await?;
+    let session = require_session(&state, &headers).await?;
     let owner = OwnerScope::from_session(&session);
     let deleted_count = state.store.reset_learned_context(owner).await?;
     tracing::info!(deleted_count, "reset automatic learned context");
@@ -1554,7 +1552,9 @@ mod tests {
 
     async fn test_state() -> Option<AppState> {
         let database_url = std::env::var("WFCHAT_TEST_DATABASE_URL").ok()?;
-        let store = ChatStore::connect(&database_url).await.ok()?;
+        let store = ChatStore::connect(&database_url)
+            .await
+            .expect("WFCHAT_TEST_DATABASE_URL should identify a reachable test database");
         Some(AppState {
             config: Config {
                 app_host: "127.0.0.1".to_owned(),
@@ -1666,6 +1666,70 @@ mod tests {
             create_follow_up_prompt("พรุ่งนี้มีสัมภาษณ์งาน", "th"),
             "ก่อนหน้านี้คุณเล่าว่า “พรุ่งนี้มีสัมภาษณ์งาน” ตอนนี้เรื่องนี้เป็นอย่างไรบ้าง?"
         );
+    }
+
+    #[tokio::test]
+    async fn follow_up_route_is_private_no_store_on_success_and_error() {
+        let Some(state) = test_state().await else {
+            return;
+        };
+        let session = state
+            .store
+            .create_guest_session()
+            .await
+            .expect("guest session should create");
+        let request_body = || {
+            Body::from(format!(
+                r#"{{"claim_key":"{}","locale":"en"}}"#,
+                uuid::Uuid::new_v4()
+            ))
+        };
+
+        let success = build_router(state.clone())
+            .oneshot(
+                Request::post("/api/personas/aiko/follow-up")
+                    .header(axum::http::header::CONTENT_TYPE, "application/json")
+                    .header(
+                        axum::http::header::COOKIE,
+                        format!("wfchat_session={}", session.id),
+                    )
+                    .body(request_body())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(success.status(), StatusCode::OK);
+        assert_eq!(
+            success
+                .headers()
+                .get(axum::http::header::CACHE_CONTROL)
+                .unwrap(),
+            "private, no-store"
+        );
+
+        let error = build_router(state.clone())
+            .oneshot(
+                Request::post("/api/personas/aiko/follow-up")
+                    .header(axum::http::header::CONTENT_TYPE, "application/json")
+                    .body(request_body())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(error.status(), StatusCode::FORBIDDEN);
+        assert_eq!(
+            error
+                .headers()
+                .get(axum::http::header::CACHE_CONTROL)
+                .unwrap(),
+            "private, no-store"
+        );
+
+        state
+            .store
+            .delete_session_for_test(session.id)
+            .await
+            .unwrap();
     }
 
     fn candidate(content: &str, evidence: &str) -> ExtractorCandidate {

@@ -37,6 +37,14 @@ type ApiChat = {
 	updated_at: number;
 };
 
+type ApiChatSummary = {
+	id: string;
+	character_id: string;
+	last_message: string;
+	created_at: number;
+	updated_at: number;
+};
+
 type ApiChatFollowUp = {
 	id: string;
 	content: string;
@@ -48,7 +56,8 @@ type ApiChatFollowUpResponse = {
 };
 
 type ApiSendMessageResponse = {
-	messages: ApiMessage[];
+	user_message: ApiMessage;
+	assistant_message: ApiMessage;
 };
 
 type ApiStreamMessageStartEvent = {
@@ -64,7 +73,6 @@ type ApiStreamMessageDoneEvent = {
 	chat_id: string;
 	user_message: ApiMessage;
 	assistant_message: ApiMessage;
-	messages: ApiMessage[];
 };
 
 type ApiStreamMessageErrorEvent = {
@@ -80,7 +88,7 @@ export type StreamMessageDoneEvent = {
 	chatId: string;
 	userMessage: ChatMessage;
 	assistantMessage: ChatMessage;
-	messages: ChatMessage[];
+	messages?: ChatMessage[];
 };
 
 export type StreamChatMessageHandlers = {
@@ -150,7 +158,7 @@ export type VoiceCredit = {
 
 export async function listPersonaChats(characterId: string): Promise<ChatSessionSummary[]> {
 	await ensureCookieSession();
-	const response = await apiClient.get<ApiChat[]>(`/api/personas/${characterId}/chats`);
+	const response = await apiClient.get<ApiChatSummary[]>(`/api/personas/${characterId}/chats`);
 	return response.data.map(toSessionSummary);
 }
 
@@ -212,7 +220,10 @@ export async function sendChatMessage(
 		messageRequestBody(content, attachments)
 	);
 
-	return response.data.messages.map(toChatMessage);
+	return [
+		toChatMessage(response.data.user_message),
+		toChatMessage(response.data.assistant_message)
+	];
 }
 
 export async function streamChatMessage(
@@ -451,13 +462,13 @@ function resolvedUserTimezone(): string {
 	}
 }
 
-function toSessionSummary(chat: ApiChat): ChatSessionSummary {
+function toSessionSummary(chat: ApiChatSummary): ChatSessionSummary {
 	return {
 		id: chat.id,
 		characterId: chat.character_id,
 		createdAt: chat.created_at,
 		updatedAt: chat.updated_at,
-		lastMessage: chat.messages.at(-1)?.content ?? ""
+		lastMessage: chat.last_message
 	};
 }
 
@@ -556,8 +567,7 @@ function dispatchStreamEvent(event: ParsedSseEvent, handlers: StreamChatMessageH
 			handlers.onDone?.({
 				chatId: payload.chat_id,
 				userMessage: toChatMessage(payload.user_message),
-				assistantMessage: toChatMessage(payload.assistant_message),
-				messages: payload.messages.map(toChatMessage)
+				assistantMessage: toChatMessage(payload.assistant_message)
 			});
 			return;
 		}

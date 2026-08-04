@@ -9,7 +9,7 @@ use serde_json::Value;
 
 use crate::{
     error::{AppError, AppResult},
-    session::session_id_from_headers,
+    session::require_session,
     state::AppState,
     store::{OwnerScope, SyncEntityRecord},
 };
@@ -79,10 +79,7 @@ async fn sync_changes(
     headers: HeaderMap,
     Query(query): Query<SyncChangesQuery>,
 ) -> AppResult<Json<SyncChangesResponse>> {
-    let session = state
-        .store
-        .ensure_session(session_id_from_headers(&state.config, &headers))
-        .await?;
+    let session = require_session(&state, &headers).await?;
     let owner = OwnerScope::from_session(&session);
     let cursor = query.cursor.unwrap_or(0);
     let limit = query.limit.unwrap_or(100).clamp(1, 500);
@@ -113,10 +110,7 @@ async fn sync_preview(
     headers: HeaderMap,
     Json(payload): Json<SyncPreviewRequest>,
 ) -> AppResult<Json<SyncPreviewResponse>> {
-    let session = state
-        .store
-        .ensure_session(session_id_from_headers(&state.config, &headers))
-        .await?;
+    let session = require_session(&state, &headers).await?;
     let owner = OwnerScope::from_session(&session);
     let mut to_create = 0_u32;
     let mut to_update = 0_u32;
@@ -158,10 +152,7 @@ async fn sync_commit(
         return Err(AppError::BadRequest("operation_id is required".to_owned()));
     }
 
-    let session = state
-        .store
-        .ensure_session(session_id_from_headers(&state.config, &headers))
-        .await?;
+    let session = require_session(&state, &headers).await?;
     let owner = OwnerScope::from_session(&session);
     let mut merged_count = 0_u32;
     for item in &payload.items {
@@ -259,7 +250,7 @@ mod tests {
 
     async fn test_state() -> Option<AppState> {
         let database_url = std::env::var("WFCHAT_TEST_DATABASE_URL").ok()?;
-        AppState::new_without_memory_worker_for_test(Config {
+        let state = AppState::new_without_memory_worker_for_test(Config {
             app_host: "127.0.0.1".to_owned(),
             app_port: 0,
             frontend_origin: "http://localhost:5173".to_owned(),
@@ -301,7 +292,8 @@ mod tests {
             security: Default::default(),
         })
         .await
-        .ok()
+        .expect("WFCHAT_TEST_DATABASE_URL should identify a reachable test database");
+        Some(state)
     }
 
     fn session_headers(session_id: Uuid) -> HeaderMap {

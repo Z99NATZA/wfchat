@@ -1,3 +1,5 @@
+#[cfg(test)]
+use std::sync::atomic::AtomicUsize;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -21,6 +23,8 @@ pub type StoreResult<T> = Result<T, sqlx::Error>;
 #[derive(Clone)]
 pub struct ChatStore {
     db: Arc<PgPool>,
+    #[cfg(test)]
+    auth_sessions_created: Arc<AtomicUsize>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -83,6 +87,50 @@ pub struct ChatRecord {
     pub messages: Vec<StoredMessage>,
     pub created_at: u64,
     pub updated_at: u64,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct ChatSummaryRecord {
+    pub id: Uuid,
+    pub character_id: String,
+    pub last_message: String,
+    pub created_at: u64,
+    pub updated_at: u64,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct ChatStorageLimits {
+    pub max_chats_per_owner: usize,
+    pub max_messages_per_chat: usize,
+    pub max_stored_chars_per_chat: usize,
+}
+
+impl Default for ChatStorageLimits {
+    fn default() -> Self {
+        Self {
+            max_chats_per_owner: 50,
+            max_messages_per_chat: 100,
+            max_stored_chars_per_chat: 500_000,
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub enum CreateChatOutcome {
+    Created(ChatRecord),
+    FollowUpUnavailable,
+    ChatLimitReached,
+    MessageLimitReached,
+}
+
+#[derive(Clone, Debug)]
+pub enum AppendChatMessagesOutcome {
+    Appended {
+        user_message: StoredMessage,
+        assistant_message: StoredMessage,
+    },
+    Unavailable,
+    LimitReached,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -317,9 +365,16 @@ mod integration_tests {
     use super::*;
     use serde_json::json;
 
+    static INACTIVE_GUEST_CLEANUP_TEST_LOCK: tokio::sync::Mutex<()> =
+        tokio::sync::Mutex::const_new(());
+
     async fn test_store() -> Option<ChatStore> {
         let database_url = std::env::var("WFCHAT_TEST_DATABASE_URL").ok()?;
-        ChatStore::connect(&database_url).await.ok()
+        Some(
+            ChatStore::connect(&database_url)
+                .await
+                .expect("WFCHAT_TEST_DATABASE_URL should identify a reachable test database"),
+        )
     }
 
     async fn create_test_session(store: &ChatStore) -> SessionRecord {
@@ -438,6 +493,88 @@ mod integration_tests {
         cleanup_sessions(&store, &[session.id]).await;
     }
 
+    #[tokio::test]
+    async fn follow_up_chat_limits_are_distinct_and_leave_no_chat_or_claim_link() {
+        let Some(store) = test_store().await else {
+            return;
+        };
+        let session = create_test_session(&store).await;
+        let owner = OwnerScope::from_session(&session);
+        let memory = store
+            .upsert_memory_item(
+                owner,
+                follow_up_memory("career.follow-up.limit", "Plans to apply tomorrow"),
+            )
+            .await
+            .unwrap();
+        let follow_up = store
+            .claim_memory_follow_up(
+                owner,
+                MemoryFollowUpClaim {
+                    claim_key: Uuid::new_v4(),
+                    memory_id: memory.id,
+                    character_id: "aiko",
+                    expected_updated_at: memory.updated_at,
+                    prompt: "Did you apply?",
+                    shown_at: now_unix_seconds(),
+                },
+            )
+            .await
+            .unwrap()
+            .expect("follow-up should claim");
+
+        let message_limited = store
+            .create_chat_with_follow_up_limited(
+                owner,
+                "aiko".to_owned(),
+                "aiko_default".to_owned(),
+                Some(follow_up.id),
+                ChatStorageLimits {
+                    max_chats_per_owner: 1,
+                    max_messages_per_chat: 0,
+                    max_stored_chars_per_chat: 500_000,
+                },
+            )
+            .await
+            .unwrap();
+        assert!(matches!(
+            message_limited,
+            CreateChatOutcome::MessageLimitReached
+        ));
+
+        let chat_limited = store
+            .create_chat_with_follow_up_limited(
+                owner,
+                "aiko".to_owned(),
+                "aiko_default".to_owned(),
+                Some(follow_up.id),
+                ChatStorageLimits {
+                    max_chats_per_owner: 0,
+                    ..ChatStorageLimits::default()
+                },
+            )
+            .await
+            .unwrap();
+        assert!(matches!(chat_limited, CreateChatOutcome::ChatLimitReached));
+
+        let chat_count: i64 =
+            sqlx::query_scalar("select count(*)::bigint from chats where owner_session_id = $1")
+                .bind(session.id)
+                .fetch_one(store.db.as_ref())
+                .await
+                .unwrap();
+        let linked_chat_id: Option<Uuid> =
+            sqlx::query_scalar("select chat_id from memory_follow_up_deliveries where id = $1")
+                .bind(follow_up.id)
+                .fetch_one(store.db.as_ref())
+                .await
+                .unwrap();
+        assert_eq!(chat_count, 0);
+        assert_eq!(linked_chat_id, None);
+
+        cleanup_sessions(&store, &[session.id]).await;
+    }
+
     async fn append_test_turn(
         store: &ChatStore,
         owner: OwnerScope,
@@ -464,6 +601,16 @@ mod integration_tests {
             .expect("turn append should query")
             .expect("chat should exist");
         (user, assistant)
+    }
+
+    fn stored_message(role: AiRole, content: &str) -> StoredMessage {
+        StoredMessage {
+            id: Uuid::new_v4(),
+            role,
+            content: content.to_owned(),
+            attachments: Vec::new(),
+            created_at: now_unix_seconds(),
+        }
     }
 
     fn captured_memory(content: &str, replaces_existing: bool) -> CapturedMemoryRecord {
@@ -531,6 +678,823 @@ mod integration_tests {
                 .execute(store.db.as_ref())
                 .await;
         }
+    }
+
+    #[tokio::test]
+    async fn inactive_guest_cleanup_cascades_guest_data_but_keeps_registered_rows() {
+        let _cleanup_guard = INACTIVE_GUEST_CLEANUP_TEST_LOCK.lock().await;
+        let Some(store) = test_store().await else {
+            return;
+        };
+        let guest = create_test_session(&store).await;
+        let guest_chat = create_test_chat(&store, OwnerScope::from_session(&guest)).await;
+        let guest_sync_item_id = format!("cleanup-guest-sync-{}", Uuid::new_v4());
+        store
+            .upsert_sync_entity(&SyncEntityRecord {
+                session_id: guest.id,
+                owner_user_id: None,
+                item_id: guest_sync_item_id.clone(),
+                item_type: "setting".to_owned(),
+                updated_at: now_unix_seconds(),
+                deleted_at: None,
+                payload: json!({"guest": true}),
+            })
+            .await
+            .unwrap();
+        let guest_sync_operation_id = format!("cleanup-guest-op-{}", Uuid::new_v4());
+        store
+            .save_sync_commit(guest.id, guest.user_id, &guest_sync_operation_id, 1, 0)
+            .await
+            .unwrap();
+        let registered_seed = create_test_session(&store).await;
+        let registered = promote_test_session(
+            &store,
+            registered_seed.id,
+            Uuid::new_v4(),
+            "registered cleanup control",
+        )
+        .await;
+        let registered_chat = create_test_chat(&store, OwnerScope::from_session(&registered)).await;
+        let promoted_guest = create_test_session(&store).await;
+        let promoted_chat =
+            create_test_chat(&store, OwnerScope::from_session(&promoted_guest)).await;
+        let promoted_user_id = Uuid::new_v4();
+        let promoted = store
+            .promote_guest_session_with_google(
+                promoted_guest.id,
+                promoted_user_id,
+                &format!("cleanup-promotion-{}", Uuid::new_v4()),
+                Some("cleanup@example.com".to_owned()),
+                Some("Cleanup User".to_owned()),
+                None,
+            )
+            .await
+            .unwrap()
+            .expect("guest promotion should create a replacement session");
+        let legacy_promoted_guest = create_test_session(&store).await;
+        let legacy_promoted_chat =
+            create_test_chat(&store, OwnerScope::from_session(&legacy_promoted_guest)).await;
+        sqlx::query("update chats set owner_user_id = $1 where id = $2")
+            .bind(Uuid::new_v4())
+            .bind(legacy_promoted_chat.id)
+            .execute(store.db.as_ref())
+            .await
+            .unwrap();
+        store.revoke_session(guest.id).await.unwrap();
+        store.revoke_session(registered.id).await.unwrap();
+        store
+            .revoke_session(legacy_promoted_guest.id)
+            .await
+            .unwrap();
+
+        let cleaned = store.cleanup_inactive_guest_sessions().await.unwrap();
+        assert!(cleaned >= 1);
+
+        let guest_session_exists: bool =
+            sqlx::query_scalar("select exists(select 1 from auth_sessions where id = $1)")
+                .bind(guest.id)
+                .fetch_one(store.db.as_ref())
+                .await
+                .unwrap();
+        let guest_chat_exists: bool =
+            sqlx::query_scalar("select exists(select 1 from chats where id = $1)")
+                .bind(guest_chat.id)
+                .fetch_one(store.db.as_ref())
+                .await
+                .unwrap();
+        let registered_session_exists: bool =
+            sqlx::query_scalar("select exists(select 1 from auth_sessions where id = $1)")
+                .bind(registered.id)
+                .fetch_one(store.db.as_ref())
+                .await
+                .unwrap();
+        let registered_chat_exists: bool =
+            sqlx::query_scalar("select exists(select 1 from chats where id = $1)")
+                .bind(registered_chat.id)
+                .fetch_one(store.db.as_ref())
+                .await
+                .unwrap();
+        let promoted_guest_exists: bool =
+            sqlx::query_scalar("select exists(select 1 from auth_sessions where id = $1)")
+                .bind(promoted_guest.id)
+                .fetch_one(store.db.as_ref())
+                .await
+                .unwrap();
+        let legacy_promoted_guest_exists: bool =
+            sqlx::query_scalar("select exists(select 1 from auth_sessions where id = $1)")
+                .bind(legacy_promoted_guest.id)
+                .fetch_one(store.db.as_ref())
+                .await
+                .unwrap();
+        assert!(!guest_session_exists);
+        assert!(!guest_chat_exists);
+        assert!(!sqlx::query_scalar::<_, bool>(
+            "select exists(select 1 from sync_entities where item_id = $1)",
+        )
+        .bind(&guest_sync_item_id)
+        .fetch_one(store.db.as_ref())
+        .await
+        .unwrap());
+        assert!(!sqlx::query_scalar::<_, bool>(
+            "select exists(select 1 from sync_commits where operation_id = $1)",
+        )
+        .bind(&guest_sync_operation_id)
+        .fetch_one(store.db.as_ref())
+        .await
+        .unwrap());
+        assert!(registered_session_exists);
+        assert!(registered_chat_exists);
+        assert!(!promoted_guest_exists);
+        assert!(legacy_promoted_guest_exists);
+        assert!(
+            sqlx::query_scalar::<_, bool>("select exists(select 1 from chats where id = $1)")
+                .bind(legacy_promoted_chat.id)
+                .fetch_one(store.db.as_ref())
+                .await
+                .unwrap()
+        );
+        assert!(store
+            .get_chat(OwnerScope::from_session(&promoted), promoted_chat.id)
+            .await
+            .unwrap()
+            .is_some());
+
+        cleanup_sessions(
+            &store,
+            &[registered.id, promoted.id, legacy_promoted_guest.id],
+        )
+        .await;
+        cleanup_users(&store, &[promoted_user_id]).await;
+    }
+
+    #[tokio::test]
+    async fn legacy_promoted_guest_cleanup_reparents_all_account_data_and_is_bounded() {
+        let _cleanup_guard = INACTIVE_GUEST_CLEANUP_TEST_LOCK.lock().await;
+        let Some(store) = test_store().await else {
+            return;
+        };
+        let account_user_id = Uuid::new_v4();
+        let registered_seed = create_test_session(&store).await;
+        let registered = promote_test_session(
+            &store,
+            registered_seed.id,
+            account_user_id,
+            "legacy cleanup target",
+        )
+        .await;
+        let registered_owner = OwnerScope::from_session(&registered);
+        let legacy = create_test_session(&store).await;
+        let legacy_owner = OwnerScope {
+            session_id: legacy.id,
+            user_id: Some(account_user_id),
+        };
+        let chat = create_test_chat(&store, legacy_owner).await;
+        let user_message = stored_message(AiRole::User, "legacy user message");
+        let assistant_message = stored_message(AiRole::Assistant, "legacy assistant message");
+        store
+            .append_chat_messages_with_attachments_and_timezone(
+                legacy_owner,
+                chat.id,
+                user_message.clone(),
+                assistant_message,
+                &[],
+                "Asia/Bangkok",
+            )
+            .await
+            .unwrap()
+            .expect("legacy chat turn should append");
+        let attachment_id = Uuid::new_v4();
+        sqlx::query(
+            "insert into chat_attachments (
+                id, owner_session_id, owner_user_id, chat_id, message_id, kind,
+                mime_type, byte_size, sha256, storage_key
+             ) values ($1, $2, $3, $4, $5, 'image', 'image/png', 4, 'legacy', $6)",
+        )
+        .bind(attachment_id)
+        .bind(legacy.id)
+        .bind(account_user_id)
+        .bind(chat.id)
+        .bind(user_message.id)
+        .bind(format!("legacy/{}.png", attachment_id))
+        .execute(store.db.as_ref())
+        .await
+        .unwrap();
+        let memory = store
+            .upsert_memory_item(
+                legacy_owner,
+                follow_up_memory("legacy.account.plan", "Plans to visit Bangkok"),
+            )
+            .await
+            .unwrap();
+        let follow_up = store
+            .claim_memory_follow_up(
+                legacy_owner,
+                MemoryFollowUpClaim {
+                    claim_key: Uuid::new_v4(),
+                    memory_id: memory.id,
+                    character_id: "aiko",
+                    expected_updated_at: memory.updated_at,
+                    prompt: "How was Bangkok?",
+                    shown_at: now_unix_seconds(),
+                },
+            )
+            .await
+            .unwrap()
+            .expect("legacy follow-up should claim");
+        store.add_cafe_stars(legacy_owner, 2).await.unwrap();
+        assert!(store.equip_cafe_cosmetic(legacy_owner, None).await.unwrap());
+        let room_id = Uuid::new_v4();
+        store
+            .award_cafe_round_completion(room_id, 1, &[legacy_owner])
+            .await
+            .unwrap();
+        let sync_item_id = format!("legacy.sync.{}", Uuid::new_v4());
+        store
+            .upsert_sync_entity(&SyncEntityRecord {
+                session_id: legacy.id,
+                owner_user_id: Some(account_user_id),
+                item_id: sync_item_id.clone(),
+                item_type: "setting".to_owned(),
+                updated_at: now_unix_seconds(),
+                deleted_at: None,
+                payload: json!({"enabled": true}),
+            })
+            .await
+            .unwrap();
+        let operation_id = format!("legacy-op-{}", Uuid::new_v4());
+        store
+            .save_sync_commit(legacy.id, legacy.user_id, &operation_id, 1, 0)
+            .await
+            .unwrap();
+        store.revoke_session(legacy.id).await.unwrap();
+
+        let cleaned = store.cleanup_inactive_guest_sessions().await.unwrap();
+        assert!(cleaned <= 1_000);
+        assert!(!sqlx::query_scalar::<_, bool>(
+            "select exists(select 1 from auth_sessions where id = $1)",
+        )
+        .bind(legacy.id)
+        .fetch_one(store.db.as_ref())
+        .await
+        .unwrap());
+        assert!(store
+            .get_chat(registered_owner, chat.id)
+            .await
+            .unwrap()
+            .is_some());
+        assert!(store
+            .list_memory_items(registered_owner, "aiko")
+            .await
+            .unwrap()
+            .iter()
+            .any(|item| item.id == memory.id));
+        assert_eq!(
+            store
+                .get_cafe_progress(registered_owner)
+                .await
+                .unwrap()
+                .cafe_stars,
+            3
+        );
+        assert!(store
+            .list_sync_entities_since(registered_owner, 0, 500)
+            .await
+            .unwrap()
+            .iter()
+            .any(|item| item.item_id == sync_item_id));
+
+        for (table, column, key_column, key) in [
+            ("chat_attachments", "owner_session_id", "id", attachment_id),
+            ("memory_items", "owner_session_id", "id", memory.id),
+            (
+                "memory_follow_up_deliveries",
+                "owner_session_id",
+                "id",
+                follow_up.id,
+            ),
+        ] {
+            let query = format!("select {column} from {table} where {key_column} = $1");
+            let owner_session_id: Uuid = sqlx::query_scalar(&query)
+                .bind(key)
+                .fetch_one(store.db.as_ref())
+                .await
+                .unwrap();
+            assert_eq!(owner_session_id, registered.id, "{table}");
+        }
+        let extraction_owner: Uuid = sqlx::query_scalar(
+            "select owner_session_id from memory_extraction_jobs where chat_id = $1",
+        )
+        .bind(chat.id)
+        .fetch_one(store.db.as_ref())
+        .await
+        .unwrap();
+        let reward_owner: Uuid = sqlx::query_scalar(
+            "select owner_session_id from cafe_room_rewards where room_id = $1 and round_number = 1",
+        )
+        .bind(room_id)
+        .fetch_one(store.db.as_ref())
+        .await
+        .unwrap();
+        let sync_commit_owner: Uuid =
+            sqlx::query_scalar("select session_id from sync_commits where operation_id = $1")
+                .bind(&operation_id)
+                .fetch_one(store.db.as_ref())
+                .await
+                .unwrap();
+        assert_eq!(extraction_owner, registered.id);
+        assert_eq!(reward_owner, registered.id);
+        assert_eq!(sync_commit_owner, registered.id);
+        let sync_commit_user: Uuid =
+            sqlx::query_scalar("select user_id from sync_commits where operation_id = $1")
+                .bind(&operation_id)
+                .fetch_one(store.db.as_ref())
+                .await
+                .unwrap();
+        assert_eq!(sync_commit_user, account_user_id);
+        assert!(sqlx::query_scalar::<_, bool>(
+            "select exists(select 1 from cafe_cosmetic_loadouts where owner_session_id = $1)",
+        )
+        .bind(registered.id)
+        .fetch_one(store.db.as_ref())
+        .await
+        .unwrap());
+
+        let batch_ids = (0..1_001).map(|_| Uuid::new_v4()).collect::<Vec<_>>();
+        let batch_user_ids = (0..1_001).map(|_| Uuid::new_v4()).collect::<Vec<_>>();
+        sqlx::query(
+            "insert into auth_sessions (id, user_id, kind, created_at, expires_at, revoked_at)
+             select id, user_id, 'guest', timestamp '1969-01-01', timestamp '1969-01-02', timestamp '1969-01-02'
+             from unnest($1::uuid[], $2::uuid[]) as batch(id, user_id)",
+        )
+        .bind(&batch_ids)
+        .bind(&batch_user_ids)
+        .execute(store.db.as_ref())
+        .await
+        .unwrap();
+        let batch_cleaned = store.cleanup_inactive_guest_sessions().await.unwrap();
+        assert!(batch_cleaned <= 1_000);
+        let remaining: i64 =
+            sqlx::query_scalar("select count(*)::bigint from auth_sessions where id = any($1)")
+                .bind(&batch_ids)
+                .fetch_one(store.db.as_ref())
+                .await
+                .unwrap();
+        assert!(remaining >= 1);
+
+        cleanup_sessions(&store, &batch_ids).await;
+        cleanup_sessions(&store, &[registered.id]).await;
+    }
+
+    #[tokio::test]
+    async fn legacy_sync_commit_cleanup_reparent_keeps_newer_existing_target_conflict() {
+        let _cleanup_guard = INACTIVE_GUEST_CLEANUP_TEST_LOCK.lock().await;
+        let Some(store) = test_store().await else {
+            return;
+        };
+        let account_user_id = Uuid::new_v4();
+        let registered_seed = create_test_session(&store).await;
+        let registered = promote_test_session(
+            &store,
+            registered_seed.id,
+            account_user_id,
+            "legacy sync conflict target",
+        )
+        .await;
+        let legacy = create_test_session(&store).await;
+        let item_id = format!("legacy-conflict-item-{}", Uuid::new_v4());
+        store
+            .upsert_sync_entity(&SyncEntityRecord {
+                session_id: legacy.id,
+                owner_user_id: Some(account_user_id),
+                item_id: item_id.clone(),
+                item_type: "setting".to_owned(),
+                updated_at: now_unix_seconds(),
+                deleted_at: None,
+                payload: json!({"source": "legacy"}),
+            })
+            .await
+            .unwrap();
+        let operation_id = format!("legacy-conflict-op-{}", Uuid::new_v4());
+        store
+            .save_sync_commit(registered.id, account_user_id, &operation_id, 7, 3)
+            .await
+            .unwrap();
+        store
+            .save_sync_commit(legacy.id, legacy.user_id, &operation_id, 1, 0)
+            .await
+            .unwrap();
+        sqlx::query(
+            "update sync_commits
+             set committed_at = case
+                 when session_id = $1 then timestamp '2001-01-01'
+                 else timestamp '2000-01-01'
+             end
+             where operation_id = $2 and session_id in ($1, $3)",
+        )
+        .bind(registered.id)
+        .bind(&operation_id)
+        .bind(legacy.id)
+        .execute(store.db.as_ref())
+        .await
+        .unwrap();
+        store.revoke_session(legacy.id).await.unwrap();
+
+        store.cleanup_inactive_guest_sessions().await.unwrap();
+
+        assert!(!sqlx::query_scalar::<_, bool>(
+            "select exists(select 1 from auth_sessions where id = $1)",
+        )
+        .bind(legacy.id)
+        .fetch_one(store.db.as_ref())
+        .await
+        .unwrap());
+        let entity_session_id: Uuid = sqlx::query_scalar(
+            "select session_id from sync_entities where item_id = $1 and session_id = $2",
+        )
+        .bind(&item_id)
+        .bind(registered.id)
+        .fetch_one(store.db.as_ref())
+        .await
+        .unwrap();
+        assert_eq!(entity_session_id, registered.id);
+        let commit = store
+            .get_sync_commit(registered.id, &operation_id)
+            .await
+            .unwrap()
+            .expect("target conflict commit should survive cleanup");
+        assert_eq!(commit.user_id, account_user_id);
+        assert_eq!(commit.merged_count, 7);
+        assert_eq!(commit.conflict_count, 3);
+        let commit_count: i64 =
+            sqlx::query_scalar("select count(*)::bigint from sync_commits where operation_id = $1")
+                .bind(&operation_id)
+                .fetch_one(store.db.as_ref())
+                .await
+                .unwrap();
+        assert_eq!(commit_count, 1);
+
+        cleanup_sessions(&store, &[registered.id]).await;
+    }
+
+    #[tokio::test]
+    async fn legacy_sync_commit_cleanup_preserves_older_existing_target_conflict() {
+        let _cleanup_guard = INACTIVE_GUEST_CLEANUP_TEST_LOCK.lock().await;
+        let Some(store) = test_store().await else {
+            return;
+        };
+        let account_user_id = Uuid::new_v4();
+        let registered_seed = create_test_session(&store).await;
+        let registered = promote_test_session(
+            &store,
+            registered_seed.id,
+            account_user_id,
+            "older legacy sync conflict target",
+        )
+        .await;
+        let legacy = create_test_session(&store).await;
+        let item_id = format!("legacy-older-conflict-item-{}", Uuid::new_v4());
+        store
+            .upsert_sync_entity(&SyncEntityRecord {
+                session_id: legacy.id,
+                owner_user_id: Some(account_user_id),
+                item_id: item_id.clone(),
+                item_type: "setting".to_owned(),
+                updated_at: now_unix_seconds(),
+                deleted_at: None,
+                payload: json!({"source": "newer-legacy"}),
+            })
+            .await
+            .unwrap();
+        let operation_id = format!("legacy-older-conflict-op-{}", Uuid::new_v4());
+        store
+            .save_sync_commit(registered.id, account_user_id, &operation_id, 9, 4)
+            .await
+            .unwrap();
+        store
+            .save_sync_commit(legacy.id, legacy.user_id, &operation_id, 1, 0)
+            .await
+            .unwrap();
+        sqlx::query(
+            "update sync_commits
+             set committed_at = case
+                 when session_id = $1 then timestamp '2000-01-01'
+                 else timestamp '2001-01-01'
+             end
+             where operation_id = $2 and session_id in ($1, $3)",
+        )
+        .bind(registered.id)
+        .bind(&operation_id)
+        .bind(legacy.id)
+        .execute(store.db.as_ref())
+        .await
+        .unwrap();
+        let target_before = store
+            .get_sync_commit(registered.id, &operation_id)
+            .await
+            .unwrap()
+            .expect("older target commit should exist before cleanup");
+        store.revoke_session(legacy.id).await.unwrap();
+
+        store.cleanup_inactive_guest_sessions().await.unwrap();
+
+        assert!(!sqlx::query_scalar::<_, bool>(
+            "select exists(select 1 from auth_sessions where id = $1)",
+        )
+        .bind(legacy.id)
+        .fetch_one(store.db.as_ref())
+        .await
+        .unwrap());
+        let entity_session_id: Uuid = sqlx::query_scalar(
+            "select session_id from sync_entities where item_id = $1 and session_id = $2",
+        )
+        .bind(&item_id)
+        .bind(registered.id)
+        .fetch_one(store.db.as_ref())
+        .await
+        .unwrap();
+        assert_eq!(entity_session_id, registered.id);
+        let target_after = store
+            .get_sync_commit(registered.id, &operation_id)
+            .await
+            .unwrap()
+            .expect("older target commit should survive cleanup unchanged");
+        assert_eq!(target_after.user_id, target_before.user_id);
+        assert_eq!(target_after.merged_count, target_before.merged_count);
+        assert_eq!(target_after.conflict_count, target_before.conflict_count);
+        assert_eq!(target_after.committed_at, target_before.committed_at);
+        assert_eq!(target_after.user_id, account_user_id);
+        assert_eq!(target_after.merged_count, 9);
+        assert_eq!(target_after.conflict_count, 4);
+        let commit_count: i64 =
+            sqlx::query_scalar("select count(*)::bigint from sync_commits where operation_id = $1")
+                .bind(&operation_id)
+                .fetch_one(store.db.as_ref())
+                .await
+                .unwrap();
+        assert_eq!(commit_count, 1);
+
+        cleanup_sessions(&store, &[registered.id]).await;
+    }
+
+    #[tokio::test]
+    async fn legacy_sync_commit_cleanup_without_safe_account_target_is_retained() {
+        let _cleanup_guard = INACTIVE_GUEST_CLEANUP_TEST_LOCK.lock().await;
+        let Some(store) = test_store().await else {
+            return;
+        };
+        let legacy = create_test_session(&store).await;
+        let first_account_user_id = Uuid::new_v4();
+        let second_account_user_id = Uuid::new_v4();
+        let first_registered_seed = create_test_session(&store).await;
+        let first_registered = promote_test_session(
+            &store,
+            first_registered_seed.id,
+            first_account_user_id,
+            "ambiguous legacy target one",
+        )
+        .await;
+        let second_registered_seed = create_test_session(&store).await;
+        let second_registered = promote_test_session(
+            &store,
+            second_registered_seed.id,
+            second_account_user_id,
+            "ambiguous legacy target two",
+        )
+        .await;
+        let item_ids = [
+            format!("legacy-retained-item-one-{}", Uuid::new_v4()),
+            format!("legacy-retained-item-two-{}", Uuid::new_v4()),
+        ];
+        for (item_id, owner_user_id) in item_ids
+            .iter()
+            .zip([first_account_user_id, second_account_user_id])
+        {
+            store
+                .upsert_sync_entity(&SyncEntityRecord {
+                    session_id: legacy.id,
+                    owner_user_id: Some(owner_user_id),
+                    item_id: item_id.clone(),
+                    item_type: "setting".to_owned(),
+                    updated_at: now_unix_seconds(),
+                    deleted_at: None,
+                    payload: json!({"retained": true}),
+                })
+                .await
+                .unwrap();
+        }
+        let operation_id = format!("legacy-retained-op-{}", Uuid::new_v4());
+        store
+            .save_sync_commit(legacy.id, legacy.user_id, &operation_id, 1, 0)
+            .await
+            .unwrap();
+        store.revoke_session(legacy.id).await.unwrap();
+
+        store.cleanup_inactive_guest_sessions().await.unwrap();
+
+        assert!(sqlx::query_scalar::<_, bool>(
+            "select exists(select 1 from auth_sessions where id = $1)",
+        )
+        .bind(legacy.id)
+        .fetch_one(store.db.as_ref())
+        .await
+        .unwrap());
+        for item_id in &item_ids {
+            let entity_session_id: Uuid =
+                sqlx::query_scalar("select session_id from sync_entities where item_id = $1")
+                    .bind(item_id)
+                    .fetch_one(store.db.as_ref())
+                    .await
+                    .unwrap();
+            assert_eq!(entity_session_id, legacy.id);
+        }
+        let commit = store
+            .get_sync_commit(legacy.id, &operation_id)
+            .await
+            .unwrap()
+            .expect("unsafe legacy commit should remain on the guest session");
+        assert_eq!(commit.user_id, legacy.user_id);
+
+        cleanup_sessions(
+            &store,
+            &[legacy.id, first_registered.id, second_registered.id],
+        )
+        .await;
+    }
+
+    #[tokio::test]
+    async fn chat_and_message_caps_are_enforced_inside_write_transactions() {
+        let Some(store) = test_store().await else {
+            return;
+        };
+        let session = create_test_session(&store).await;
+        let owner = OwnerScope::from_session(&session);
+        let limits = ChatStorageLimits {
+            max_chats_per_owner: 1,
+            max_messages_per_chat: 2,
+            max_stored_chars_per_chat: 10,
+        };
+        let chat = match store
+            .create_chat_with_follow_up_limited(
+                owner,
+                "aiko".to_owned(),
+                "aiko_default".to_owned(),
+                None,
+                limits,
+            )
+            .await
+            .unwrap()
+        {
+            CreateChatOutcome::Created(chat) => chat,
+            outcome => panic!("unexpected first chat outcome: {outcome:?}"),
+        };
+        assert!(matches!(
+            store
+                .create_chat_with_follow_up_limited(
+                    owner,
+                    "aiko".to_owned(),
+                    "aiko_default".to_owned(),
+                    None,
+                    limits,
+                )
+                .await
+                .unwrap(),
+            CreateChatOutcome::ChatLimitReached
+        ));
+
+        assert!(matches!(
+            store
+                .append_chat_messages_limited(
+                    owner,
+                    chat.id,
+                    stored_message(AiRole::User, "hey"),
+                    stored_message(AiRole::Assistant, "hello"),
+                    &[],
+                    "UTC",
+                    limits,
+                )
+                .await
+                .unwrap(),
+            AppendChatMessagesOutcome::Appended { .. }
+        ));
+        assert!(matches!(
+            store
+                .append_chat_messages_limited(
+                    owner,
+                    chat.id,
+                    stored_message(AiRole::User, "x"),
+                    stored_message(AiRole::Assistant, "y"),
+                    &[],
+                    "UTC",
+                    limits,
+                )
+                .await
+                .unwrap(),
+            AppendChatMessagesOutcome::LimitReached
+        ));
+        let full = store.get_chat(owner, chat.id).await.unwrap().unwrap();
+        assert_eq!(full.messages.len(), 2);
+
+        let cleared = store
+            .clear_chat_messages(owner, chat.id)
+            .await
+            .unwrap()
+            .expect("full chat should remain clearable");
+        assert!(cleared.messages.is_empty());
+        let char_limits = ChatStorageLimits {
+            max_messages_per_chat: 100,
+            max_stored_chars_per_chat: 5,
+            ..limits
+        };
+        assert!(matches!(
+            store
+                .append_chat_messages_limited(
+                    owner,
+                    chat.id,
+                    stored_message(AiRole::User, "abc"),
+                    stored_message(AiRole::Assistant, "def"),
+                    &[],
+                    "UTC",
+                    char_limits,
+                )
+                .await
+                .unwrap(),
+            AppendChatMessagesOutcome::LimitReached
+        ));
+        assert!(store
+            .get_chat(owner, chat.id)
+            .await
+            .unwrap()
+            .unwrap()
+            .messages
+            .is_empty());
+        assert!(store.delete_chat(owner, chat.id).await.unwrap());
+        cleanup_sessions(&store, &[session.id]).await;
+    }
+
+    #[tokio::test]
+    async fn persona_summaries_are_limited_and_preview_unicode_scalars_are_truncated() {
+        let Some(store) = test_store().await else {
+            return;
+        };
+        let session = create_test_session(&store).await;
+        let owner = OwnerScope::from_session(&session);
+        let limits = ChatStorageLimits {
+            max_chats_per_owner: 51,
+            ..ChatStorageLimits::default()
+        };
+        for _ in 0..50 {
+            assert!(matches!(
+                store
+                    .create_chat_with_follow_up_limited(
+                        owner,
+                        "aiko".to_owned(),
+                        "aiko_default".to_owned(),
+                        None,
+                        limits,
+                    )
+                    .await
+                    .unwrap(),
+                CreateChatOutcome::Created(_)
+            ));
+        }
+        let preview_chat = match store
+            .create_chat_with_follow_up_limited(
+                owner,
+                "aiko".to_owned(),
+                "aiko_default".to_owned(),
+                None,
+                limits,
+            )
+            .await
+            .unwrap()
+        {
+            CreateChatOutcome::Created(chat) => chat,
+            outcome => panic!("unexpected preview chat outcome: {outcome:?}"),
+        };
+        let long_preview = "🙂".repeat(300);
+        store
+            .append_chat_messages_limited(
+                owner,
+                preview_chat.id,
+                stored_message(AiRole::User, "preview"),
+                stored_message(AiRole::Assistant, &long_preview),
+                &[],
+                "UTC",
+                limits,
+            )
+            .await
+            .unwrap();
+
+        let summaries = store.list_chat_summaries(owner, "aiko").await.unwrap();
+        assert_eq!(summaries.len(), 50);
+        let preview = summaries
+            .iter()
+            .find(|summary| summary.id == preview_chat.id)
+            .expect("most recently updated chat should be returned");
+        assert_eq!(preview.last_message.chars().count(), 256);
+        assert_eq!(preview.last_message, "🙂".repeat(256));
+
+        cleanup_sessions(&store, &[session.id]).await;
     }
 
     #[tokio::test]

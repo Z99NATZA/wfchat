@@ -91,8 +91,10 @@ confidence `>= 0.8`, importance `>= 0.65`, age no greater than 30 days, and a
 future expiration when one exists.
 
 The claim key makes retries idempotent. One owner and character receives at most
-one follow-up in a rolling 24-hour window. Replying creates a chat with the exact
-stored prompt as its first assistant message.
+one follow-up in a rolling 24-hour window. The route requires an existing active
+session and all success/error responses use `Cache-Control: private, no-store`.
+Replying creates a chat with the exact stored prompt as its first assistant
+message.
 
 ## Lifecycle And Privacy
 

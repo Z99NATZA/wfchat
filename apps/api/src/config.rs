@@ -14,7 +14,13 @@ const PRODUCTION_AI_IDLE_TIMEOUT_SECONDS: u64 = 120;
 const PRODUCTION_AI_TOTAL_TIMEOUT_SECONDS: u64 = 300;
 const PRODUCTION_MAX_CONCURRENT_GENERATIONS: usize = 128;
 const PRODUCTION_MAX_CONCURRENT_PER_SESSION: usize = 8;
-const PRODUCTION_GLOBAL_REQUESTS_PER_MINUTE: u32 = 6_000;
+const PRODUCTION_AUTH_GUEST_REQUESTS_PER_MINUTE: u32 = 10;
+const PRODUCTION_AUTH_GUEST_GLOBAL_REQUESTS_PER_MINUTE: u32 = 60;
+const PRODUCTION_CHAT_REQUESTS_PER_MINUTE: u32 = 20;
+const PRODUCTION_CHAT_GLOBAL_REQUESTS_PER_MINUTE: u32 = 120;
+const PRODUCTION_CHAT_MAX_CHATS_PER_OWNER: usize = 50;
+const PRODUCTION_CHAT_MAX_MESSAGES_PER_CHAT: usize = 100;
+const PRODUCTION_CHAT_MAX_STORED_CHARS_PER_CHAT: usize = 500_000;
 
 const RESERVED_PRODUCTION_HOSTS: [&str; 10] = [
     "localhost",
@@ -41,6 +47,8 @@ pub struct SecurityConfig {
     pub allow_session_header: bool,
     pub trust_proxy_headers: bool,
     pub trusted_proxy_cidrs: Vec<IpNet>,
+    pub guest_requests_per_minute: u32,
+    pub guest_global_requests_per_minute: u32,
     pub chat: ChatSecurityConfig,
 }
 
@@ -57,7 +65,11 @@ pub struct ChatSecurityConfig {
     pub ai_idle_timeout_seconds: u64,
     pub max_concurrent_generations: usize,
     pub max_concurrent_per_session: usize,
+    pub requests_per_minute: u32,
     pub global_requests_per_minute: u32,
+    pub max_chats_per_owner: usize,
+    pub max_messages_per_chat: usize,
+    pub max_stored_chars_per_chat: usize,
     pub image_upload_enabled: bool,
     pub transcription_enabled: bool,
     pub tts_enabled: bool,
@@ -70,6 +82,8 @@ impl Default for SecurityConfig {
             allow_session_header: true,
             trust_proxy_headers: false,
             trusted_proxy_cidrs: Vec::new(),
+            guest_requests_per_minute: 10,
+            guest_global_requests_per_minute: 60,
             chat: ChatSecurityConfig::default(),
         }
     }
@@ -89,7 +103,11 @@ impl Default for ChatSecurityConfig {
             ai_idle_timeout_seconds: 20,
             max_concurrent_generations: 8,
             max_concurrent_per_session: 2,
+            requests_per_minute: 20,
             global_requests_per_minute: 120,
+            max_chats_per_owner: 50,
+            max_messages_per_chat: 100,
+            max_stored_chars_per_chat: 500_000,
             image_upload_enabled: true,
             transcription_enabled: true,
             tts_enabled: true,
@@ -151,6 +169,11 @@ impl Config {
             allow_session_header: bool_env_value("ALLOW_SESSION_HEADER", !is_production)?,
             trust_proxy_headers,
             trusted_proxy_cidrs,
+            guest_requests_per_minute: parsed_env_value("AUTH_GUEST_REQUESTS_PER_MINUTE", 10)?,
+            guest_global_requests_per_minute: parsed_env_value(
+                "AUTH_GUEST_GLOBAL_REQUESTS_PER_MINUTE",
+                60,
+            )?,
             chat: ChatSecurityConfig {
                 message_max_chars: parsed_env_value("CHAT_MESSAGE_MAX_CHARS", 4_000)?,
                 request_max_bytes: parsed_env_value("CHAT_REQUEST_MAX_BYTES", 64 * 1024)?,
@@ -166,9 +189,16 @@ impl Config {
                 ai_idle_timeout_seconds: parsed_env_value("CHAT_AI_IDLE_TIMEOUT_SECONDS", 20)?,
                 max_concurrent_generations: parsed_env_value("CHAT_MAX_CONCURRENT_GENERATIONS", 8)?,
                 max_concurrent_per_session: parsed_env_value("CHAT_MAX_CONCURRENT_PER_SESSION", 2)?,
+                requests_per_minute: parsed_env_value("CHAT_REQUESTS_PER_MINUTE", 20)?,
                 global_requests_per_minute: parsed_env_value(
                     "CHAT_GLOBAL_REQUESTS_PER_MINUTE",
                     120,
+                )?,
+                max_chats_per_owner: parsed_env_value("CHAT_MAX_CHATS_PER_OWNER", 50)?,
+                max_messages_per_chat: parsed_env_value("CHAT_MAX_MESSAGES_PER_CHAT", 100)?,
+                max_stored_chars_per_chat: parsed_env_value(
+                    "CHAT_MAX_STORED_CHARS_PER_CHAT",
+                    500_000,
                 )?,
                 image_upload_enabled: bool_env_value("CHAT_IMAGE_UPLOAD_ENABLED", !is_production)?,
                 transcription_enabled: bool_env_value(
@@ -409,7 +439,13 @@ impl Config {
             || chat.ai_idle_timeout_seconds == 0
             || chat.max_concurrent_generations == 0
             || chat.max_concurrent_per_session == 0
+            || self.security.guest_requests_per_minute == 0
+            || self.security.guest_global_requests_per_minute == 0
+            || chat.requests_per_minute == 0
             || chat.global_requests_per_minute == 0
+            || chat.max_chats_per_owner == 0
+            || chat.max_messages_per_chat == 0
+            || chat.max_stored_chars_per_chat == 0
         {
             return Err("chat security limits must be greater than 0".to_owned());
         }
@@ -508,9 +544,39 @@ impl Config {
             PRODUCTION_MAX_CONCURRENT_PER_SESSION,
         )?;
         validate_production_max(
+            "AUTH_GUEST_REQUESTS_PER_MINUTE",
+            self.security.guest_requests_per_minute,
+            PRODUCTION_AUTH_GUEST_REQUESTS_PER_MINUTE,
+        )?;
+        validate_production_max(
+            "AUTH_GUEST_GLOBAL_REQUESTS_PER_MINUTE",
+            self.security.guest_global_requests_per_minute,
+            PRODUCTION_AUTH_GUEST_GLOBAL_REQUESTS_PER_MINUTE,
+        )?;
+        validate_production_max(
+            "CHAT_REQUESTS_PER_MINUTE",
+            chat.requests_per_minute,
+            PRODUCTION_CHAT_REQUESTS_PER_MINUTE,
+        )?;
+        validate_production_max(
             "CHAT_GLOBAL_REQUESTS_PER_MINUTE",
             chat.global_requests_per_minute,
-            PRODUCTION_GLOBAL_REQUESTS_PER_MINUTE,
+            PRODUCTION_CHAT_GLOBAL_REQUESTS_PER_MINUTE,
+        )?;
+        validate_production_max(
+            "CHAT_MAX_CHATS_PER_OWNER",
+            chat.max_chats_per_owner,
+            PRODUCTION_CHAT_MAX_CHATS_PER_OWNER,
+        )?;
+        validate_production_max(
+            "CHAT_MAX_MESSAGES_PER_CHAT",
+            chat.max_messages_per_chat,
+            PRODUCTION_CHAT_MAX_MESSAGES_PER_CHAT,
+        )?;
+        validate_production_max(
+            "CHAT_MAX_STORED_CHARS_PER_CHAT",
+            chat.max_stored_chars_per_chat,
+            PRODUCTION_CHAT_MAX_STORED_CHARS_PER_CHAT,
         )?;
 
         for origin in self.frontend_origin.split(',').map(str::trim) {
@@ -687,8 +753,11 @@ mod tests {
     use super::{
         parse_trusted_proxy_cidrs, AppEnvironment, Config, SecurityConfig,
         PRODUCTION_AI_CONNECT_TIMEOUT_SECONDS, PRODUCTION_AI_IDLE_TIMEOUT_SECONDS,
-        PRODUCTION_AI_TOTAL_TIMEOUT_SECONDS, PRODUCTION_CONTEXT_MAX_CHARS,
-        PRODUCTION_CONTEXT_MAX_MESSAGES, PRODUCTION_GLOBAL_REQUESTS_PER_MINUTE,
+        PRODUCTION_AI_TOTAL_TIMEOUT_SECONDS, PRODUCTION_AUTH_GUEST_GLOBAL_REQUESTS_PER_MINUTE,
+        PRODUCTION_AUTH_GUEST_REQUESTS_PER_MINUTE, PRODUCTION_CHAT_GLOBAL_REQUESTS_PER_MINUTE,
+        PRODUCTION_CHAT_MAX_CHATS_PER_OWNER, PRODUCTION_CHAT_MAX_MESSAGES_PER_CHAT,
+        PRODUCTION_CHAT_MAX_STORED_CHARS_PER_CHAT, PRODUCTION_CHAT_REQUESTS_PER_MINUTE,
+        PRODUCTION_CONTEXT_MAX_CHARS, PRODUCTION_CONTEXT_MAX_MESSAGES,
         PRODUCTION_MAX_CONCURRENT_GENERATIONS, PRODUCTION_MAX_CONCURRENT_PER_SESSION,
         PRODUCTION_MESSAGE_MAX_CHARS, PRODUCTION_OUTPUT_MAX_CHARS, PRODUCTION_OUTPUT_MAX_TOKENS,
         PRODUCTION_REQUEST_MAX_BYTES,
@@ -1118,13 +1187,35 @@ mod tests {
 
         assert_max!(
             global_requests_per_minute,
-            PRODUCTION_GLOBAL_REQUESTS_PER_MINUTE
+            PRODUCTION_CHAT_GLOBAL_REQUESTS_PER_MINUTE
         );
+        assert_max!(requests_per_minute, PRODUCTION_CHAT_REQUESTS_PER_MINUTE);
+        assert_max!(max_chats_per_owner, PRODUCTION_CHAT_MAX_CHATS_PER_OWNER);
+        assert_max!(max_messages_per_chat, PRODUCTION_CHAT_MAX_MESSAGES_PER_CHAT);
+        assert_max!(
+            max_stored_chars_per_chat,
+            PRODUCTION_CHAT_MAX_STORED_CHARS_PER_CHAT
+        );
+
+        let mut guest = production_config();
+        guest.security.guest_requests_per_minute = PRODUCTION_AUTH_GUEST_REQUESTS_PER_MINUTE;
+        guest.security.guest_global_requests_per_minute =
+            PRODUCTION_AUTH_GUEST_GLOBAL_REQUESTS_PER_MINUTE;
+        assert!(guest.validate().is_ok());
+        guest.security.guest_requests_per_minute = PRODUCTION_AUTH_GUEST_REQUESTS_PER_MINUTE + 1;
+        assert!(guest.validate().is_err());
+        guest.security.guest_requests_per_minute = PRODUCTION_AUTH_GUEST_REQUESTS_PER_MINUTE;
+        guest.security.guest_global_requests_per_minute =
+            PRODUCTION_AUTH_GUEST_GLOBAL_REQUESTS_PER_MINUTE + 1;
+        assert!(guest.validate().is_err());
     }
 
     #[test]
     fn development_accepts_values_above_production_maxima() {
         let mut config = base_config();
+        config.security.guest_requests_per_minute = PRODUCTION_AUTH_GUEST_REQUESTS_PER_MINUTE + 1;
+        config.security.guest_global_requests_per_minute =
+            PRODUCTION_AUTH_GUEST_GLOBAL_REQUESTS_PER_MINUTE + 1;
         let chat = &mut config.security.chat;
         chat.message_max_chars = PRODUCTION_MESSAGE_MAX_CHARS + 1;
         chat.request_max_bytes = PRODUCTION_REQUEST_MAX_BYTES + 1;
@@ -1137,7 +1228,11 @@ mod tests {
         chat.ai_total_timeout_seconds = PRODUCTION_AI_TOTAL_TIMEOUT_SECONDS + 1;
         chat.max_concurrent_generations = PRODUCTION_MAX_CONCURRENT_GENERATIONS + 1;
         chat.max_concurrent_per_session = PRODUCTION_MAX_CONCURRENT_PER_SESSION + 1;
-        chat.global_requests_per_minute = PRODUCTION_GLOBAL_REQUESTS_PER_MINUTE + 1;
+        chat.requests_per_minute = PRODUCTION_CHAT_REQUESTS_PER_MINUTE + 1;
+        chat.global_requests_per_minute = PRODUCTION_CHAT_GLOBAL_REQUESTS_PER_MINUTE + 1;
+        chat.max_chats_per_owner = PRODUCTION_CHAT_MAX_CHATS_PER_OWNER + 1;
+        chat.max_messages_per_chat = PRODUCTION_CHAT_MAX_MESSAGES_PER_CHAT + 1;
+        chat.max_stored_chars_per_chat = PRODUCTION_CHAT_MAX_STORED_CHARS_PER_CHAT + 1;
 
         assert!(config.validate().is_ok());
     }

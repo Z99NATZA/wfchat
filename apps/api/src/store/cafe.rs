@@ -176,7 +176,11 @@ mod tests {
 
     async fn test_store() -> Option<ChatStore> {
         let database_url = std::env::var("WFCHAT_TEST_DATABASE_URL").ok()?;
-        ChatStore::connect(&database_url).await.ok()
+        Some(
+            ChatStore::connect(&database_url)
+                .await
+                .expect("WFCHAT_TEST_DATABASE_URL should identify a reachable test database"),
+        )
     }
 
     #[tokio::test]

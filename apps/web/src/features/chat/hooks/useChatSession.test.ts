@@ -268,6 +268,44 @@ describe("useChatSession streaming sendMessage", () => {
 		]);
 	});
 
+	it("preserves existing history when the backend returns only the committed pair", async () => {
+		const chatId = "11111111-1111-4111-8111-111111111111";
+		const existing = message("existing-ai", "companion", "Earlier reply");
+		const committedUser = message("server-user", "user", "next question");
+		const committedAssistant = message("server-ai", "companion", "next answer");
+		mocks.location.pathname = `/chat/${chatId}`;
+		mocks.listPersonaChats.mockResolvedValue([
+			{
+				id: chatId,
+				characterId: "aiko",
+				createdAt: 1,
+				updatedAt: 1,
+				lastMessage: existing.text
+			}
+		]);
+		mocks.getChat.mockResolvedValue({ chatId, messages: [existing] });
+		mocks.streamChatMessage.mockImplementation((_chatId, _content, _attachments, handlers) => {
+			handlers.onStart?.({ chatId, personaId: "aiko" });
+			handlers.onDone?.({
+				chatId,
+				userMessage: committedUser,
+				assistantMessage: committedAssistant
+			});
+			return Promise.resolve();
+		});
+		const { result } = renderHook(() => useChatSession());
+		await waitFor(() => expect(result.current.messages).toEqual([existing]));
+
+		await act(async () => {
+			result.current.setDraft("next question");
+		});
+		await act(async () => {
+			await result.current.sendMessage();
+		});
+
+		expect(result.current.messages).toEqual([existing, committedUser, committedAssistant]);
+	});
+
 	it("keeps the first optimistic user message when the newly created chat route loads", async () => {
 		const chatId = "11111111-1111-4111-8111-111111111111";
 		const serverMessages = [
@@ -805,13 +843,14 @@ describe("useChatSession streaming sendMessage", () => {
 	it("stops assistant playback and cancels speech input when sending a message", async () => {
 		installAssistantPlaybackMocks();
 		installMicrophoneMocks();
+		const existingMessage = message("assistant-1", "companion", "hello");
 		const serverMessages = [
 			message("server-user", "user", "next"),
 			message("server-ai", "companion", "reply")
 		];
 		mocks.getChat.mockResolvedValue({
 			chatId: "chat-1",
-			messages: [message("assistant-1", "companion", "hello")]
+			messages: [existingMessage]
 		});
 		mocks.streamChatMessage.mockImplementation(
 			async (_chatId, _content, _attachments, handlers) => {
@@ -847,7 +886,7 @@ describe("useChatSession streaming sendMessage", () => {
 
 		expect(audioInstances[0].pause).toHaveBeenCalled();
 		expect(result.current.userSpeechInput.status).toBe("idle");
-		expect(result.current.messages).toEqual(serverMessages);
+		expect(result.current.messages).toEqual([existingMessage, ...serverMessages]);
 	});
 
 	it("stops assistant playback and cancels speech input when clearing chat", async () => {

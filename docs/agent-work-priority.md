@@ -4,33 +4,31 @@ Use this file as the first document to read before starting a new scoped agent t
 
 ## Active Scope
 
-No active scoped task.
+No active scoped agent task.
 
 ## Required Read Order
 
-Add task-specific documents here before implementation.
+No task-specific read order.
 
 ## Required Outcome
 
-Define the task-specific completion criteria here before implementation.
+No task-specific outcome.
 
 ## Authorization And Verification
 
-- Treat `ok impl`, `ok refine`, `ok update docs`, `ok tests`, and `ok ci` as
-  standalone authorization commands using the clearly agreed scope.
-- Commands may use `: <message>` to identify or narrow scope, such as
-  `ok impl: logging`. `ok update: <message>` is the scoped form of
-  `ok update docs`. A file path is unnecessary when context identifies it.
-- If scope is missing or ambiguous, ask for clarification. Other wording is not
-  authorization to modify the repository.
-- `ok impl`, `ok refine`, and `ok update docs` authorize scoped repository
-  changes. Implementation and refinement include focused tests and fixes for
-  failures caused by the active changes.
-- Do not run full checks by default. `ok tests` authorizes all local test suites;
-  `ok ci` authorizes all local equivalents in `.github/workflows/ci.yml`.
+- Repository changes require the applicable standalone authorization command:
+  `ok impl`, `ok refine`, `ok fix`, or `ok update`. Use the clearly agreed scope;
+  if it is missing or ambiguous, ask for clarification. Without the applicable
+  command, repository work is read-only, and other wording does not grant
+  authorization.
+- `ok impl`, `ok refine`, and `ok fix` include focused tests and fixes for
+  failures caused by the authorized changes.
+- Do not run full checks by default. `ok tests` permits, but does not require,
+  running any local test suites. `ok ci` likewise permits any local equivalents
+  in `.github/workflows/ci.yml`. Neither command authorizes repository changes.
 - Reuse valid results. Do not weaken assertions or fix unrelated behavior.
   Report unrelated, pre-existing, skipped, or blocked checks with their reasons.
-- These commands do not authorize commits, pushes, pull requests, releases, or
+- No authorization command permits commits, pushes, pull requests, releases, or
   remote actions.
 
 ## Documentation Rules

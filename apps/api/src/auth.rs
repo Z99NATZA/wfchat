@@ -1,16 +1,18 @@
 use axum::{
-    extract::State,
+    extract::{ConnectInfo, State},
     http::{header::SET_COOKIE, HeaderMap, HeaderValue},
     routing::{get, patch, post},
     Json, Router,
 };
 use reqwest::Url;
 use serde::{Deserialize, Serialize};
+use std::net::SocketAddr;
 use uuid::Uuid;
 
 use crate::{
     error::{AppError, AppResult},
-    session::{session_cookie, session_id_from_headers},
+    rate_limit::{RateLimitFamily, RateLimitIdentity},
+    session::{require_session, session_cookie, session_id_from_headers},
     state::AppState,
     store::UserKind,
 };
@@ -24,7 +26,7 @@ pub fn router() -> Router<AppState> {
         .route("/auth/profile", patch(update_profile))
 }
 
-#[derive(Serialize)]
+#[derive(Deserialize, Serialize)]
 struct SessionResponse {
     user_id: Uuid,
     session_id: Uuid,
@@ -34,15 +36,18 @@ struct SessionResponse {
     profile: Option<UserProfileResponse>,
 }
 
-#[derive(Serialize)]
+#[derive(Deserialize, Serialize)]
 struct UserProfileResponse {
     display_name: String,
     avatar_url: Option<String>,
 }
 
 async fn create_guest_session(
+    ConnectInfo(peer_addr): ConnectInfo<SocketAddr>,
     State(state): State<AppState>,
+    headers: HeaderMap,
 ) -> AppResult<(HeaderMap, Json<SessionResponse>)> {
+    enforce_guest_rate_limit(&state, &headers, peer_addr)?;
     let session = state.store.create_guest_session().await?;
     let mut headers = HeaderMap::new();
     let cookie = session_cookie(&state.config, session.id);
@@ -65,13 +70,21 @@ async fn create_guest_session(
 }
 
 async fn current_user(
+    ConnectInfo(peer_addr): ConnectInfo<SocketAddr>,
     State(state): State<AppState>,
     headers: HeaderMap,
 ) -> AppResult<(HeaderMap, Json<SessionResponse>)> {
-    let session = state
-        .store
-        .ensure_session(session_id_from_headers(&state.config, &headers))
-        .await?;
+    let session = match session_id_from_headers(&state.config, &headers) {
+        Some(session_id) => state.store.get_session(session_id).await?,
+        None => None,
+    };
+    let session = match session {
+        Some(session) => session,
+        None => {
+            enforce_guest_rate_limit(&state, &headers, peer_addr)?;
+            state.store.create_guest_session().await?
+        }
+    };
     if !matches!(&session.kind, UserKind::Guest) {
         state
             .store
@@ -89,6 +102,23 @@ async fn current_user(
         response_headers,
         Json(session_response(&state, &session).await?),
     ))
+}
+
+fn enforce_guest_rate_limit(
+    state: &AppState,
+    headers: &HeaderMap,
+    peer_addr: SocketAddr,
+) -> AppResult<()> {
+    let identities = RateLimitIdentity::for_resolved_ip(
+        headers,
+        peer_addr.ip(),
+        state.config.security.trust_proxy_headers,
+        &state.config.security.trusted_proxy_cidrs,
+        true,
+    );
+    state
+        .rate_limiter
+        .check_many(RateLimitFamily::GuestSessions, identities)
 }
 
 #[derive(Deserialize)]
@@ -118,6 +148,10 @@ async fn login_with_google(
         .google_client_id
         .as_deref()
         .ok_or_else(|| AppError::BadRequest("GOOGLE_CLIENT_ID is not configured".to_owned()))?;
+    let session = require_session(&state, &headers).await?;
+    if !matches!(session.kind, UserKind::Guest) {
+        return Err(AppError::Forbidden);
+    }
 
     let token_info = verify_google_id_token(&state, &payload.id_token, client_id).await?;
     promote_with_google_token_info(state, headers, token_info).await
@@ -129,10 +163,7 @@ async fn promote_with_google_token_info(
     token_info: GoogleTokenInfoResponse,
 ) -> AppResult<(HeaderMap, Json<SessionResponse>)> {
     let promoted_user_id = Uuid::new_v5(&Uuid::NAMESPACE_OID, token_info.sub.as_bytes());
-    let session_id = match session_id_from_headers(&state.config, &headers) {
-        Some(session_id) => session_id,
-        None => state.store.create_guest_session().await?.id,
-    };
+    let session_id = session_id_from_headers(&state.config, &headers).ok_or(AppError::Forbidden)?;
     let rotated = state
         .store
         .promote_guest_session_with_google(
@@ -162,10 +193,12 @@ async fn logout(
     State(state): State<AppState>,
     headers: HeaderMap,
 ) -> AppResult<(HeaderMap, Json<SessionResponse>)> {
-    if let Some(session_id) = session_id_from_headers(&state.config, &headers) {
-        state.store.revoke_session(session_id).await?;
-    }
-    let guest = state.store.create_guest_session().await?;
+    let session_id = session_id_from_headers(&state.config, &headers).ok_or(AppError::Forbidden)?;
+    let guest = state
+        .store
+        .logout_registered_session_to_guest(session_id)
+        .await?
+        .ok_or(AppError::Forbidden)?;
     let mut headers = HeaderMap::new();
     let cookie = session_cookie(&state.config, guest.id);
     if let Ok(value) = HeaderValue::from_str(&cookie) {
@@ -196,10 +229,7 @@ async fn update_profile(
     headers: HeaderMap,
     Json(payload): Json<UpdateProfileRequest>,
 ) -> AppResult<Json<SessionResponse>> {
-    let session = state
-        .store
-        .ensure_session(session_id_from_headers(&state.config, &headers))
-        .await?;
+    let session = require_session(&state, &headers).await?;
     if matches!(&session.kind, UserKind::Guest) {
         return Err(AppError::Forbidden);
     }
@@ -347,17 +377,24 @@ async fn session_response(
 mod tests {
     use super::*;
     use crate::{
+        app::build_router,
         config::Config,
+        rate_limit::{RateLimitPolicies, RateLimitPolicy, RateLimiter},
         store::{OwnerScope, SyncEntityRecord},
     };
-    use axum::extract::State;
+    use axum::{
+        body::{to_bytes, Body},
+        extract::State,
+        http::{header, Request, StatusCode},
+    };
     use serde_json::json;
     use std::sync::Arc;
     use tokio::sync::Notify;
+    use tower::ServiceExt;
 
     async fn test_state(google_client_id: Option<String>) -> Option<AppState> {
         let database_url = std::env::var("WFCHAT_TEST_DATABASE_URL").ok()?;
-        AppState::new_without_memory_worker_for_test(Config {
+        let state = AppState::new_without_memory_worker_for_test(Config {
             app_host: "127.0.0.1".to_owned(),
             app_port: 0,
             frontend_origin: "http://localhost:5173".to_owned(),
@@ -399,7 +436,8 @@ mod tests {
             security: Default::default(),
         })
         .await
-        .ok()
+        .expect("WFCHAT_TEST_DATABASE_URL should identify a reachable test database");
+        Some(state)
     }
 
     fn session_headers(session_id: Uuid) -> HeaderMap {
@@ -425,6 +463,10 @@ mod tests {
         headers
     }
 
+    fn test_peer() -> ConnectInfo<SocketAddr> {
+        ConnectInfo("127.0.0.1:3000".parse().expect("test peer should parse"))
+    }
+
     fn token_info(subject: &str) -> GoogleTokenInfoResponse {
         GoogleTokenInfoResponse {
             aud: "test-client".to_owned(),
@@ -446,9 +488,10 @@ mod tests {
             .await
             .expect("guest session should create");
 
-        let (headers, Json(response)) = current_user(State(state), cookie_headers(session.id))
-            .await
-            .expect("cookie session should resolve");
+        let (headers, Json(response)) =
+            current_user(test_peer(), State(state), cookie_headers(session.id))
+                .await
+                .expect("cookie session should resolve");
 
         assert_eq!(response.session_id, session.id);
         let cookie = headers
@@ -486,7 +529,7 @@ mod tests {
                 .expect("session id should be a valid header value"),
         );
 
-        let (_, Json(response)) = current_user(State(state), headers)
+        let (_, Json(response)) = current_user(test_peer(), State(state), headers)
             .await
             .expect("cookie session should resolve first");
 
@@ -494,25 +537,180 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn unknown_client_selected_session_id_is_replaced() {
+    async fn current_user_consumes_guest_buckets_only_when_it_creates_a_session() {
+        let Some(mut state) = test_state(None).await else {
+            return;
+        };
+        state.rate_limiter = RateLimiter::new(RateLimitPolicies::default().with_family_limit(
+            RateLimitFamily::GuestSessions,
+            RateLimitPolicy::per_minute(1),
+        ));
+        let existing = state
+            .store
+            .create_guest_session()
+            .await
+            .expect("existing guest should create");
+
+        for _ in 0..2 {
+            let _ = current_user(
+                test_peer(),
+                State(state.clone()),
+                cookie_headers(existing.id),
+            )
+            .await
+            .expect("resolving an existing session must not consume guest admission");
+        }
+
+        let (_, Json(created)) = current_user(test_peer(), State(state.clone()), HeaderMap::new())
+            .await
+            .expect("first missing session should be admitted");
+        let error = match current_user(test_peer(), State(state.clone()), HeaderMap::new()).await {
+            Ok(_) => panic!("second missing session should be rate limited"),
+            Err(error) => error,
+        };
+        assert!(matches!(error, AppError::RateLimited));
+
+        state
+            .store
+            .delete_session_for_test(existing.id)
+            .await
+            .unwrap();
+        state
+            .store
+            .delete_session_for_test(created.session_id)
+            .await
+            .unwrap();
+    }
+
+    #[tokio::test]
+    async fn guest_admission_global_bucket_is_shared_across_resolved_ips() {
+        let Some(mut state) = test_state(None).await else {
+            return;
+        };
+        state.config.security.trust_proxy_headers = true;
+        state.config.security.trusted_proxy_cidrs = vec!["127.0.0.0/8".parse().unwrap()];
+        state.rate_limiter = RateLimiter::new(
+            RateLimitPolicies::default()
+                .with_family_limit(
+                    RateLimitFamily::GuestSessions,
+                    RateLimitPolicy::per_minute(10),
+                )
+                .with_guest_global_limit(RateLimitPolicy::per_minute(1)),
+        );
+        let mut first_headers = HeaderMap::new();
+        first_headers.insert("x-forwarded-for", "198.51.100.10".parse().unwrap());
+        let mut second_headers = HeaderMap::new();
+        second_headers.insert("x-forwarded-for", "203.0.113.20".parse().unwrap());
+
+        let (_, Json(created)) =
+            create_guest_session(test_peer(), State(state.clone()), first_headers)
+                .await
+                .expect("first resolved IP should be admitted");
+        let error =
+            match create_guest_session(test_peer(), State(state.clone()), second_headers).await {
+                Ok(_) => panic!("global admission bucket should reject the second IP"),
+                Err(error) => error,
+            };
+        assert!(matches!(error, AppError::RateLimited));
+
+        state
+            .store
+            .delete_session_for_test(created.session_id)
+            .await
+            .unwrap();
+    }
+
+    #[tokio::test]
+    async fn anonymous_guest_creation_returns_the_rate_limit_contract() {
+        let Some(mut state) = test_state(None).await else {
+            return;
+        };
+        state.rate_limiter = RateLimiter::new(RateLimitPolicies::default().with_family_limit(
+            RateLimitFamily::GuestSessions,
+            RateLimitPolicy::per_minute(1),
+        ));
+        let app = build_router(state.clone());
+
+        let admitted = app
+            .clone()
+            .oneshot(
+                Request::post("/api/auth/guest")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(admitted.status(), StatusCode::OK);
+        let rejected = app
+            .oneshot(Request::get("/api/auth/me").body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(rejected.status(), StatusCode::TOO_MANY_REQUESTS);
+        assert_eq!(rejected.headers().get(header::RETRY_AFTER).unwrap(), "60");
+        let body = to_bytes(rejected.into_body(), usize::MAX).await.unwrap();
+        assert_eq!(body.as_ref(), br#"{"error":"too many requests"}"#);
+
+        let admitted_body = to_bytes(admitted.into_body(), usize::MAX).await.unwrap();
+        let admitted: SessionResponse = serde_json::from_slice(&admitted_body).unwrap();
+        state
+            .store
+            .delete_session_for_test(admitted.session_id)
+            .await
+            .unwrap();
+    }
+
+    #[tokio::test]
+    async fn authenticated_feature_routes_do_not_create_missing_sessions() {
         let Some(state) = test_state(None).await else {
             return;
         };
-        let supplied_id = Uuid::new_v4();
+        let before = state.store.auth_session_creation_count_for_test();
+        let requests = [
+            ("PATCH", "/api/auth/profile", r#"{}"#),
+            (
+                "POST",
+                "/api/personas/aiko/follow-up",
+                r#"{"claim_key":"00000000-0000-0000-0000-000000000001"}"#,
+            ),
+            ("DELETE", "/api/learned-context", ""),
+            ("GET", "/api/sync/changes", ""),
+            ("POST", "/api/sync/preview", r#"{"items":[]}"#),
+            (
+                "POST",
+                "/api/sync/commit",
+                r#"{"operation_id":"missing-session","items":[]}"#,
+            ),
+            ("GET", "/api/cafe/rooms", ""),
+            ("POST", "/api/cafe/rooms", r#"{"is_private":false}"#),
+            ("POST", "/api/cafe/rooms/quick-join", ""),
+            (
+                "POST",
+                "/api/cafe/rooms/join",
+                r#"{"invite_code":"ABC123"}"#,
+            ),
+            ("GET", "/api/cafe/progress", ""),
+            (
+                "POST",
+                "/api/cafe/cosmetics/equipped",
+                r#"{"cosmetic_id":null}"#,
+            ),
+        ];
 
-        let session = state
-            .store
-            .ensure_session(Some(supplied_id))
-            .await
-            .expect("unknown session should be replaced");
-
-        assert_ne!(session.id, supplied_id);
-        assert!(state
-            .store
-            .get_session(supplied_id)
-            .await
-            .expect("supplied session lookup should query")
-            .is_none());
+        for (method, uri, body) in requests {
+            let response = build_router(state.clone())
+                .oneshot(
+                    Request::builder()
+                        .method(method)
+                        .uri(uri)
+                        .header(header::CONTENT_TYPE, "application/json")
+                        .body(Body::from(body))
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::FORBIDDEN, "{method} {uri}");
+        }
+        assert_eq!(state.store.auth_session_creation_count_for_test(), before);
     }
 
     #[tokio::test]
@@ -540,7 +738,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn logout_rotates_to_a_guest_session_cookie() {
+    async fn registered_logout_rotates_once_to_a_guest_session_cookie() {
         let Some(state) = test_state(None).await else {
             return;
         };
@@ -549,6 +747,13 @@ mod tests {
             .create_guest_session()
             .await
             .expect("old session should create");
+        let old_session = state
+            .store
+            .promote_session_to_registered(old_session.id, Uuid::new_v4())
+            .await
+            .expect("old session should promote")
+            .expect("old session should remain active");
+        let before = state.store.auth_session_creation_count_for_test();
 
         let (headers, Json(response)) =
             logout(State(state.clone()), cookie_headers(old_session.id))
@@ -570,6 +775,32 @@ mod tests {
             .await
             .expect("old session lookup should query")
             .is_none());
+        assert_eq!(
+            state.store.auth_session_creation_count_for_test(),
+            before + 1
+        );
+
+        let repeated = logout(State(state.clone()), cookie_headers(old_session.id)).await;
+        assert!(matches!(repeated, Err(AppError::Forbidden)));
+        assert_eq!(
+            state.store.auth_session_creation_count_for_test(),
+            before + 1
+        );
+
+        let guest_logout = logout(State(state.clone()), cookie_headers(response.session_id)).await;
+        assert!(matches!(guest_logout, Err(AppError::Forbidden)));
+        let missing_logout = logout(State(state.clone()), HeaderMap::new()).await;
+        assert!(matches!(missing_logout, Err(AppError::Forbidden)));
+        state
+            .store
+            .delete_session_for_test(response.session_id)
+            .await
+            .unwrap();
+        state
+            .store
+            .delete_session_for_test(old_session.id)
+            .await
+            .unwrap();
     }
 
     #[tokio::test]
@@ -592,6 +823,44 @@ mod tests {
         };
 
         assert_eq!(error.to_string(), "bad request: id_token is required");
+    }
+
+    #[tokio::test]
+    async fn google_promotion_requires_an_existing_active_session() {
+        let Some(state) = test_state(Some("test-client".to_owned())).await else {
+            return;
+        };
+        let before = state.store.auth_session_creation_count_for_test();
+
+        let result = promote_with_google_token_info(
+            state.clone(),
+            HeaderMap::new(),
+            token_info(&format!("missing-session-{}", Uuid::new_v4())),
+        )
+        .await;
+
+        assert!(matches!(result, Err(AppError::Forbidden)));
+        assert_eq!(state.store.auth_session_creation_count_for_test(), before);
+    }
+
+    #[tokio::test]
+    async fn google_login_rejects_missing_session_before_provider_verification() {
+        let Some(state) = test_state(Some("test-client".to_owned())).await else {
+            return;
+        };
+        let before = state.store.auth_session_creation_count_for_test();
+
+        let result = login_with_google(
+            State(state.clone()),
+            HeaderMap::new(),
+            Json(GoogleLoginRequest {
+                id_token: "unverified-token".to_owned(),
+            }),
+        )
+        .await;
+
+        assert!(matches!(result, Err(AppError::Forbidden)));
+        assert_eq!(state.store.auth_session_creation_count_for_test(), before);
     }
 
     #[tokio::test]

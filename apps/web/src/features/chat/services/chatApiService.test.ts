@@ -6,6 +6,7 @@ import {
 	claimPersonaFollowUp,
 	createPersonaChat,
 	createSseEventParser,
+	listPersonaChats,
 	normalizeSpeechAudioForUpload,
 	sendChatMessage,
 	streamChatMessage,
@@ -68,6 +69,66 @@ describe("chat follow-up API boundary", () => {
 		expect(postSpy).toHaveBeenCalledWith("/api/personas/aiko/chats", {
 			follow_up_id: "follow-up-1"
 		});
+	});
+});
+
+describe("bounded chat response contracts", () => {
+	beforeEach(() => {
+		installLocalStorageMock();
+		window.sessionStorage.clear();
+		window.sessionStorage.setItem(sessionCookieReadyKey, "true");
+	});
+
+	afterEach(() => {
+		window.sessionStorage.clear();
+		vi.restoreAllMocks();
+	});
+
+	it("maps persona summary rows without requiring message histories", async () => {
+		vi.spyOn(apiClient, "get").mockResolvedValue({
+			data: [
+				{
+					id: "chat-1",
+					character_id: "aiko",
+					last_message: "bounded preview",
+					created_at: 10,
+					updated_at: 20
+				}
+			]
+		});
+
+		await expect(listPersonaChats("aiko")).resolves.toEqual([
+			{
+				id: "chat-1",
+				characterId: "aiko",
+				lastMessage: "bounded preview",
+				createdAt: 10,
+				updatedAt: 20
+			}
+		]);
+	});
+
+	it("maps JSON send responses from only the newly committed pair", async () => {
+		vi.spyOn(apiClient, "post").mockResolvedValue({
+			data: {
+				user_message: {
+					id: "user-1",
+					role: "user",
+					content: "hello",
+					created_at: 10
+				},
+				assistant_message: {
+					id: "assistant-1",
+					role: "assistant",
+					content: "hello back",
+					created_at: 11
+				}
+			}
+		});
+
+		const messages = await sendChatMessage("chat-1", "hello");
+
+		expect(messages.map((message) => message.id)).toEqual(["user-1", "assistant-1"]);
 	});
 });
 
@@ -218,7 +279,22 @@ describe("chat image attachment send boundary", () => {
 	});
 
 	it("sends text plus image fallback messages with only backend-issued attachment ids", async () => {
-		const postSpy = vi.spyOn(apiClient, "post").mockResolvedValue({ data: { messages: [] } });
+		const postSpy = vi.spyOn(apiClient, "post").mockResolvedValue({
+			data: {
+				user_message: {
+					id: "user-1",
+					role: "user",
+					content: "please describe this",
+					created_at: 1
+				},
+				assistant_message: {
+					id: "assistant-1",
+					role: "assistant",
+					content: "ok",
+					created_at: 2
+				}
+			}
+		});
 
 		await sendChatMessage("chat-1", "please describe this", [
 			unsafeAttachmentInput({

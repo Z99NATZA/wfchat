@@ -82,6 +82,8 @@ impl RateLimiter {
 
 #[derive(Clone, Copy, Debug)]
 pub struct RateLimitPolicies {
+    guest_sessions: RateLimitPolicy,
+    guest_global: RateLimitPolicy,
     chat_messages: RateLimitPolicy,
     assistant_speech: RateLimitPolicy,
     user_transcription: RateLimitPolicy,
@@ -92,6 +94,8 @@ pub struct RateLimitPolicies {
 impl Default for RateLimitPolicies {
     fn default() -> Self {
         Self {
+            guest_sessions: RateLimitPolicy::per_minute(10),
+            guest_global: RateLimitPolicy::per_minute(60),
             chat_messages: RateLimitPolicy::per_minute(20),
             assistant_speech: RateLimitPolicy::per_minute(10),
             user_transcription: RateLimitPolicy::per_minute(6),
@@ -104,6 +108,11 @@ impl Default for RateLimitPolicies {
 impl RateLimitPolicies {
     pub fn from_config(config: &Config) -> Self {
         Self {
+            guest_sessions: RateLimitPolicy::per_minute(config.security.guest_requests_per_minute),
+            guest_global: RateLimitPolicy::per_minute(
+                config.security.guest_global_requests_per_minute,
+            ),
+            chat_messages: RateLimitPolicy::per_minute(config.security.chat.requests_per_minute),
             chat_global: RateLimitPolicy::per_minute(
                 config.security.chat.global_requests_per_minute,
             ),
@@ -113,6 +122,7 @@ impl RateLimitPolicies {
 
     pub fn with_family_limit(mut self, family: RateLimitFamily, policy: RateLimitPolicy) -> Self {
         match family {
+            RateLimitFamily::GuestSessions => self.guest_sessions = policy,
             RateLimitFamily::ChatMessages => self.chat_messages = policy,
             RateLimitFamily::AssistantSpeech => self.assistant_speech = policy,
             RateLimitFamily::UserTranscription => self.user_transcription = policy,
@@ -127,12 +137,29 @@ impl RateLimitPolicies {
         self
     }
 
+    #[cfg(test)]
+    pub fn with_guest_global_limit(mut self, policy: RateLimitPolicy) -> Self {
+        self.guest_global = policy;
+        self
+    }
+
     fn policy_for(&self, key: &RateLimitKey) -> RateLimitPolicy {
-        if key.family == RateLimitFamily::ChatMessages && key.identity == RateLimitIdentity::Global
-        {
-            return self.chat_global;
+        if key.identity == RateLimitIdentity::Global {
+            return match key.family {
+                RateLimitFamily::GuestSessions => self.guest_global,
+                RateLimitFamily::ChatMessages => self.chat_global,
+                _ => match key.family {
+                    RateLimitFamily::AssistantSpeech => self.assistant_speech,
+                    RateLimitFamily::UserTranscription => self.user_transcription,
+                    RateLimitFamily::ImageUpload => self.image_upload,
+                    RateLimitFamily::GuestSessions | RateLimitFamily::ChatMessages => {
+                        unreachable!()
+                    }
+                },
+            };
         }
         match key.family {
+            RateLimitFamily::GuestSessions => self.guest_sessions,
             RateLimitFamily::ChatMessages => self.chat_messages,
             RateLimitFamily::AssistantSpeech => self.assistant_speech,
             RateLimitFamily::UserTranscription => self.user_transcription,
@@ -158,6 +185,7 @@ impl RateLimitPolicy {
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum RateLimitFamily {
+    GuestSessions,
     ChatMessages,
     AssistantSpeech,
     UserTranscription,
@@ -172,8 +200,7 @@ pub enum RateLimitIdentity {
 }
 
 impl RateLimitIdentity {
-    pub fn for_validated_session(
-        session_id: Uuid,
+    pub fn for_resolved_ip(
         headers: &HeaderMap,
         peer_ip: IpAddr,
         trust_proxy_headers: bool,
@@ -182,13 +209,29 @@ impl RateLimitIdentity {
     ) -> Vec<RateLimitIdentity> {
         let resolved_ip =
             client_ip_from_request(headers, peer_ip, trust_proxy_headers, trusted_proxy_cidrs);
-        let mut identities = vec![
-            RateLimitIdentity::Session(session_id),
-            RateLimitIdentity::Ip(resolved_ip.to_string()),
-        ];
+        let mut identities = vec![RateLimitIdentity::Ip(resolved_ip.to_string())];
         if include_global {
             identities.push(RateLimitIdentity::Global);
         }
+        identities
+    }
+
+    pub fn for_validated_session(
+        session_id: Uuid,
+        headers: &HeaderMap,
+        peer_ip: IpAddr,
+        trust_proxy_headers: bool,
+        trusted_proxy_cidrs: &[IpNet],
+        include_global: bool,
+    ) -> Vec<RateLimitIdentity> {
+        let mut identities = vec![RateLimitIdentity::Session(session_id)];
+        identities.extend(Self::for_resolved_ip(
+            headers,
+            peer_ip,
+            trust_proxy_headers,
+            trusted_proxy_cidrs,
+            include_global,
+        ));
         identities
     }
 }
@@ -294,9 +337,9 @@ struct ActiveGenerations {
 
 pub struct GenerationPermit {
     limiter: GenerationLimiter,
-    session_id: Uuid,
+    session_id: Option<Uuid>,
     chat_id: Uuid,
-    _global: OwnedSemaphorePermit,
+    _global: Option<OwnedSemaphorePermit>,
 }
 
 impl GenerationLimiter {
@@ -338,9 +381,28 @@ impl GenerationLimiter {
 
         Ok(GenerationPermit {
             limiter: self.clone(),
-            session_id,
+            session_id: Some(session_id),
             chat_id,
-            _global: global,
+            _global: Some(global),
+        })
+    }
+
+    pub fn try_acquire_clear(&self, chat_id: Uuid) -> AppResult<GenerationPermit> {
+        let mut active = self
+            .inner
+            .active
+            .lock()
+            .map_err(|_| AppError::Conflict("chat generation in progress".to_owned()))?;
+        if !active.chats.insert(chat_id) {
+            return Err(AppError::Conflict("chat generation in progress".to_owned()));
+        }
+        drop(active);
+
+        Ok(GenerationPermit {
+            limiter: self.clone(),
+            session_id: None,
+            chat_id,
+            _global: None,
         })
     }
 }
@@ -349,10 +411,12 @@ impl Drop for GenerationPermit {
     fn drop(&mut self) {
         if let Ok(mut active) = self.limiter.inner.active.lock() {
             active.chats.remove(&self.chat_id);
-            if let Some(count) = active.sessions.get_mut(&self.session_id) {
-                *count = count.saturating_sub(1);
-                if *count == 0 {
-                    active.sessions.remove(&self.session_id);
+            if let Some(session_id) = self.session_id {
+                if let Some(count) = active.sessions.get_mut(&session_id) {
+                    *count = count.saturating_sub(1);
+                    if *count == 0 {
+                        active.sessions.remove(&session_id);
+                    }
                 }
             }
         }
@@ -597,6 +661,30 @@ mod tests {
         ));
         drop(permit);
         assert!(limiter.try_acquire(session_id, chat_id).is_ok());
+    }
+
+    #[test]
+    fn clear_uses_the_same_exclusive_chat_permit_without_consuming_generation_capacity() {
+        let limiter = GenerationLimiter::new(1, 1);
+        let chat_id = Uuid::new_v4();
+        let generation = limiter
+            .try_acquire(Uuid::new_v4(), chat_id)
+            .expect("generation should acquire");
+
+        let error = match limiter.try_acquire_clear(chat_id) {
+            Ok(_) => panic!("clear should reject while generation owns the chat"),
+            Err(error) => error,
+        };
+        assert_eq!(error.to_string(), "conflict: chat generation in progress");
+
+        drop(generation);
+        let clear = limiter
+            .try_acquire_clear(chat_id)
+            .expect("clear should acquire after generation finishes");
+        let other_generation = limiter
+            .try_acquire(Uuid::new_v4(), Uuid::new_v4())
+            .expect("clear should not consume the global generation permit");
+        drop((clear, other_generation));
     }
 
     fn forwarded_headers(values: &[&str]) -> HeaderMap {

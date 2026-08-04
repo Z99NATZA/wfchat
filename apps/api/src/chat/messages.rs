@@ -28,12 +28,6 @@ pub(super) async fn send_message(
         chat_id,
         user_message: message_response(completed.user_message),
         assistant_message: message_response(completed.assistant_message),
-        messages: completed
-            .updated_chat
-            .messages
-            .into_iter()
-            .map(message_response)
-            .collect(),
     }))
 }
 
@@ -83,12 +77,6 @@ pub(super) async fn stream_message(
                         chat_id,
                         user_message: message_response(completed.user_message),
                         assistant_message: message_response(completed.assistant_message),
-                        messages: completed
-                            .updated_chat
-                            .messages
-                            .into_iter()
-                            .map(message_response)
-                            .collect(),
                     },
                 )
                 .await;
@@ -124,7 +112,6 @@ pub(super) async fn stream_message(
 struct CompletedChatMessage {
     user_message: StoredMessage,
     assistant_message: StoredMessage,
-    updated_chat: ChatRecord,
 }
 
 pub(super) async fn prepare_chat_completion_context(
@@ -153,6 +140,7 @@ pub(super) async fn prepare_chat_completion_context(
         .get_chat(owner, chat_id)
         .await?
         .ok_or(AppError::NotFound)?;
+    ensure_chat_has_turn_capacity(&chat, content, chat_storage_limits(state))?;
     let attachments =
         validate_message_attachment_requests(state, owner, &payload.attachments).await?;
     let attachment_ids = attachments
@@ -327,25 +315,23 @@ async fn complete_and_append_chat_message(
 
     let user_message = StoredMessage::from_ai_message(context.user_ai_message);
     let assistant_message = StoredMessage::from_ai_message(assistant_ai_message);
-    let updated_chat = state
+    let outcome = state
         .store
-        .append_chat_messages_with_attachments_and_timezone(
+        .append_chat_messages_limited(
             owner,
             chat_id,
-            user_message.clone(),
-            assistant_message.clone(),
+            user_message,
+            assistant_message,
             &context.attachment_ids,
             &context.user_timezone,
+            chat_storage_limits(&state),
         )
-        .await?
-        .ok_or(AppError::NotFound)?;
-    let user_message = message_from_updated_chat(&updated_chat, user_message);
-    let assistant_message = message_from_updated_chat(&updated_chat, assistant_message);
+        .await?;
+    let (user_message, assistant_message) = completed_messages(outcome)?;
 
     Ok(CompletedChatMessage {
         user_message,
         assistant_message,
-        updated_chat,
     })
 }
 
@@ -386,25 +372,23 @@ async fn stream_and_append_chat_message(
 
     let user_message = StoredMessage::from_ai_message(context.user_ai_message);
     let assistant_message = StoredMessage::from_ai_message(assistant_ai_message);
-    let updated_chat = state
+    let outcome = state
         .store
-        .append_chat_messages_with_attachments_and_timezone(
+        .append_chat_messages_limited(
             owner,
             chat_id,
-            user_message.clone(),
-            assistant_message.clone(),
+            user_message,
+            assistant_message,
             &context.attachment_ids,
             &context.user_timezone,
+            chat_storage_limits(&state),
         )
-        .await?
-        .ok_or(AppError::NotFound)?;
-    let user_message = message_from_updated_chat(&updated_chat, user_message);
-    let assistant_message = message_from_updated_chat(&updated_chat, assistant_message);
+        .await?;
+    let (user_message, assistant_message) = completed_messages(outcome)?;
 
     Ok(CompletedChatMessage {
         user_message,
         assistant_message,
-        updated_chat,
     })
 }
 
@@ -432,12 +416,42 @@ fn output_limit_error() -> AppError {
     AppError::Ai("assistant response exceeded configured output limit".to_owned())
 }
 
-fn message_from_updated_chat(chat: &ChatRecord, fallback: StoredMessage) -> StoredMessage {
-    chat.messages
-        .iter()
-        .find(|message| message.id == fallback.id)
-        .cloned()
-        .unwrap_or(fallback)
+fn completed_messages(
+    outcome: AppendChatMessagesOutcome,
+) -> AppResult<(StoredMessage, StoredMessage)> {
+    match outcome {
+        AppendChatMessagesOutcome::Appended {
+            user_message,
+            assistant_message,
+        } => Ok((user_message, assistant_message)),
+        AppendChatMessagesOutcome::Unavailable => Err(AppError::NotFound),
+        AppendChatMessagesOutcome::LimitReached => {
+            Err(AppError::Conflict("chat message limit reached".to_owned()))
+        }
+    }
+}
+
+fn ensure_chat_has_turn_capacity(
+    chat: &ChatRecord,
+    user_content: &str,
+    limits: ChatStorageLimits,
+) -> AppResult<()> {
+    let message_count_fits = chat
+        .messages
+        .len()
+        .checked_add(2)
+        .is_some_and(|count| count <= limits.max_messages_per_chat);
+    let stored_chars = chat.messages.iter().try_fold(0usize, |total, message| {
+        total.checked_add(message.content.chars().count())
+    });
+    let stored_chars_fit = stored_chars
+        .and_then(|total| total.checked_add(user_content.chars().count()))
+        .is_some_and(|count| count <= limits.max_stored_chars_per_chat);
+    if !message_count_fits || !stored_chars_fit {
+        return Err(AppError::Conflict("chat message limit reached".to_owned()));
+    }
+
+    Ok(())
 }
 
 async fn send_sse_event<T: Serialize>(

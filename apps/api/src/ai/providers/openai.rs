@@ -59,13 +59,12 @@ pub async fn complete_chat_completions(
     }
 
     let response = request
-        .json(&ChatCompletionRequest {
-            model: provider.model,
-            messages: build_messages(provider.ai_profile_id, messages),
-            temperature: chat_completion_temperature(provider.model, 0.8),
-            max_tokens: state.config.security.chat.output_max_tokens,
-            stream: false,
-        })
+        .json(&ChatCompletionRequest::new(
+            provider.model,
+            build_messages(provider.ai_profile_id, messages),
+            state.config.security.chat.output_max_tokens,
+            false,
+        ))
         .send()
         .await
         .map_err(|error| AppError::Ai(error.to_string()))?;
@@ -146,13 +145,12 @@ where
     }
 
     let response = request
-        .json(&ChatCompletionRequest {
-            model: provider.model,
-            messages: build_messages(provider.ai_profile_id, messages),
-            temperature: chat_completion_temperature(provider.model, 0.8),
-            max_tokens: state.config.security.chat.output_max_tokens,
-            stream: true,
-        })
+        .json(&ChatCompletionRequest::new(
+            provider.model,
+            build_messages(provider.ai_profile_id, messages),
+            state.config.security.chat.output_max_tokens,
+            true,
+        ))
         .send()
         .await
         .map_err(|error| AppError::Ai(error.to_string()))?;
@@ -444,8 +442,12 @@ fn role_name(role: &AiRole) -> &'static str {
     }
 }
 
+fn is_gpt_55_model(model: &str) -> bool {
+    model == "gpt-5.5" || model.starts_with("gpt-5.5-")
+}
+
 pub(crate) fn chat_completion_temperature(model: &str, temperature: f32) -> Option<f32> {
-    if model == "gpt-5.5" || model.starts_with("gpt-5.5-") {
+    if is_gpt_55_model(model) {
         None
     } else {
         Some(temperature)
@@ -458,8 +460,30 @@ struct ChatCompletionRequest<'a> {
     messages: Vec<ProviderMessage<'a>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     temperature: Option<f32>,
-    max_tokens: u32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    max_tokens: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    max_completion_tokens: Option<u32>,
     stream: bool,
+}
+
+impl<'a> ChatCompletionRequest<'a> {
+    fn new(
+        model: &'a str,
+        messages: Vec<ProviderMessage<'a>>,
+        output_max_tokens: u32,
+        stream: bool,
+    ) -> Self {
+        let uses_max_completion_tokens = is_gpt_55_model(model);
+        Self {
+            model,
+            messages,
+            temperature: chat_completion_temperature(model, 0.8),
+            max_tokens: (!uses_max_completion_tokens).then_some(output_max_tokens),
+            max_completion_tokens: uses_max_completion_tokens.then_some(output_max_tokens),
+            stream,
+        }
+    }
 }
 
 #[derive(Serialize)]
@@ -723,38 +747,38 @@ mod tests {
     }
 
     #[test]
-    fn gpt_55_requests_omit_custom_temperature() {
+    fn gpt_55_requests_use_supported_parameters() {
         let messages = vec![AiMessage::user("hello".to_owned())];
-        let request = ChatCompletionRequest {
-            model: "gpt-5.5",
-            messages: build_messages("aiko_default", &messages),
-            temperature: chat_completion_temperature("gpt-5.5", 0.8),
-            max_tokens: 1_024,
-            stream: false,
-        };
+        let request = ChatCompletionRequest::new(
+            "gpt-5.5",
+            build_messages("aiko_default", &messages),
+            1_024,
+            false,
+        );
 
         let payload = serde_json::to_value(request).expect("request should serialize");
 
         assert_eq!(payload["model"], "gpt-5.5");
-        assert_eq!(payload["max_tokens"], 1_024);
+        assert_eq!(payload["max_completion_tokens"], 1_024);
+        assert!(payload.get("max_tokens").is_none());
         assert!(payload.get("temperature").is_none());
     }
 
     #[test]
-    fn non_gpt_55_requests_keep_existing_temperature() {
+    fn non_gpt_55_requests_keep_existing_parameters() {
         let messages = vec![AiMessage::user("hello".to_owned())];
-        let request = ChatCompletionRequest {
-            model: "gpt-4.1-mini",
-            messages: build_messages("aiko_default", &messages),
-            temperature: chat_completion_temperature("gpt-4.1-mini", 0.8),
-            max_tokens: 1_024,
-            stream: false,
-        };
+        let request = ChatCompletionRequest::new(
+            "gpt-4.1-mini",
+            build_messages("aiko_default", &messages),
+            1_024,
+            false,
+        );
 
         let payload = serde_json::to_value(request).expect("request should serialize");
 
         assert_eq!(payload["model"], "gpt-4.1-mini");
         assert_eq!(payload["max_tokens"], 1_024);
+        assert!(payload.get("max_completion_tokens").is_none());
         let temperature = payload["temperature"]
             .as_f64()
             .expect("temperature should serialize as a number");

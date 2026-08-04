@@ -3,7 +3,11 @@ use super::*;
 impl ChatStore {
     pub async fn connect(database_url: &str) -> Result<Self, sqlx::Error> {
         let db = PgPool::connect(database_url).await?;
-        let store = Self { db: Arc::new(db) };
+        let store = Self {
+            db: Arc::new(db),
+            #[cfg(test)]
+            auth_sessions_created: Arc::new(std::sync::atomic::AtomicUsize::new(0)),
+        };
         store.run_migrations().await?;
         Ok(store)
     }
@@ -26,7 +30,131 @@ impl ChatStore {
         .execute(self.db.as_ref())
         .await?;
 
+        #[cfg(test)]
+        self.auth_sessions_created
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+
         Ok(session)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn auth_session_creation_count_for_test(&self) -> usize {
+        self.auth_sessions_created
+            .load(std::sync::atomic::Ordering::Relaxed)
+    }
+
+    pub async fn logout_registered_session_to_guest(
+        &self,
+        session_id: Uuid,
+    ) -> StoreResult<Option<SessionRecord>> {
+        let mut tx = self.db.begin().await?;
+        let session_kind = sqlx::query_scalar::<_, String>(
+            "select kind
+             from auth_sessions
+             where id = $1 and revoked_at is null and expires_at > now()
+             for update",
+        )
+        .bind(session_id)
+        .fetch_optional(&mut *tx)
+        .await?;
+        if !session_kind
+            .as_deref()
+            .is_some_and(|kind| matches!(kind, "registered" | "admin"))
+        {
+            tx.rollback().await?;
+            return Ok(None);
+        }
+
+        sqlx::query("update auth_sessions set revoked_at = now() where id = $1")
+            .bind(session_id)
+            .execute(&mut *tx)
+            .await?;
+
+        let guest = SessionRecord {
+            id: Uuid::new_v4(),
+            user_id: Uuid::new_v4(),
+            kind: UserKind::Guest,
+            created_at: now_unix_seconds(),
+        };
+        sqlx::query(
+            "insert into auth_sessions (id, user_id, kind, created_at)
+             values ($1, $2, 'guest', to_timestamp($3))",
+        )
+        .bind(guest.id)
+        .bind(guest.user_id)
+        .bind(guest.created_at as i64)
+        .execute(&mut *tx)
+        .await?;
+
+        #[cfg(test)]
+        self.auth_sessions_created
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+
+        tx.commit().await?;
+        Ok(Some(guest))
+    }
+
+    pub async fn cleanup_inactive_guest_sessions(&self) -> StoreResult<u64> {
+        let mut tx = self.db.begin().await?;
+        sqlx::query("select wfchat_reparent_legacy_promoted_guests(1000)")
+            .execute(&mut *tx)
+            .await?;
+        let result = sqlx::query(
+            "delete from auth_sessions
+             where id in (
+               select id
+               from auth_sessions
+               where kind = 'guest'
+                 and (revoked_at is not null or expires_at <= now())
+                 and not exists (
+                   select 1 from chats
+                   where owner_session_id = auth_sessions.id and owner_user_id is not null
+                 )
+                 and not exists (
+                   select 1 from chat_attachments
+                   where owner_session_id = auth_sessions.id and owner_user_id is not null
+                 )
+                 and not exists (
+                   select 1 from memory_items
+                   where owner_session_id = auth_sessions.id and owner_user_id is not null
+                 )
+                 and not exists (
+                   select 1 from memory_extraction_jobs
+                   where owner_session_id = auth_sessions.id and owner_user_id is not null
+                 )
+                 and not exists (
+                   select 1 from memory_follow_up_deliveries
+                   where owner_session_id = auth_sessions.id and owner_user_id is not null
+                 )
+                 and not exists (
+                   select 1 from sync_entities
+                   where session_id = auth_sessions.id and owner_user_id is not null
+                 )
+                 and not exists (
+                   select 1 from sync_commits
+                   where session_id = auth_sessions.id and user_id <> auth_sessions.user_id
+                 )
+                 and not exists (
+                   select 1 from cafe_progress
+                   where owner_session_id = auth_sessions.id and owner_user_id is not null
+                 )
+                 and not exists (
+                   select 1 from cafe_cosmetic_loadouts
+                   where owner_session_id = auth_sessions.id and owner_user_id is not null
+                 )
+                 and not exists (
+                   select 1 from cafe_room_rewards
+                   where owner_session_id = auth_sessions.id and owner_user_id is not null
+                 )
+               order by coalesce(revoked_at, expires_at), id
+               limit 1000
+             )",
+        )
+        .execute(&mut *tx)
+        .await?;
+
+        tx.commit().await?;
+        Ok(result.rows_affected())
     }
 
     pub async fn promote_session_to_registered(
@@ -180,6 +308,16 @@ impl ChatStore {
         .await?;
 
         sqlx::query(
+            "update chat_attachments
+             set owner_user_id = $1
+             where owner_session_id = $2 and owner_user_id is null",
+        )
+        .bind(user_id)
+        .bind(session_id)
+        .execute(&mut **tx)
+        .await?;
+
+        sqlx::query(
             "update memory_items set owner_user_id = $1 where owner_session_id = $2 and owner_user_id is null",
         )
         .bind(user_id)
@@ -241,6 +379,41 @@ impl ChatStore {
         .bind(session_id)
         .execute(&mut **tx)
         .await?;
+
+        Ok(())
+    }
+
+    async fn reparent_promoted_session_data_in_tx(
+        tx: &mut Transaction<'_, Postgres>,
+        old_session_id: Uuid,
+        replacement_session_id: Uuid,
+    ) -> StoreResult<()> {
+        for table in [
+            "chats",
+            "chat_attachments",
+            "memory_items",
+            "memory_extraction_jobs",
+            "memory_follow_up_deliveries",
+            "cafe_progress",
+            "cafe_cosmetic_loadouts",
+            "cafe_room_rewards",
+        ] {
+            let query =
+                format!("update {table} set owner_session_id = $1 where owner_session_id = $2");
+            sqlx::query(&query)
+                .bind(replacement_session_id)
+                .bind(old_session_id)
+                .execute(&mut **tx)
+                .await?;
+        }
+        for table in ["sync_entities", "sync_commits"] {
+            let query = format!("update {table} set session_id = $1 where session_id = $2");
+            sqlx::query(&query)
+                .bind(replacement_session_id)
+                .bind(old_session_id)
+                .execute(&mut **tx)
+                .await?;
+        }
 
         Ok(())
     }
@@ -347,6 +520,8 @@ impl ChatStore {
         .execute(&mut *tx)
         .await?;
 
+        Self::reparent_promoted_session_data_in_tx(&mut tx, session_id, replacement.id).await?;
+
         let revoked = sqlx::query(
             "update auth_sessions set revoked_at = now()
              where id = $1 and revoked_at is null and expires_at > now()",
@@ -397,16 +572,6 @@ impl ChatStore {
             }),
         )
         .await
-    }
-
-    pub async fn ensure_session(&self, session_id: Option<Uuid>) -> StoreResult<SessionRecord> {
-        if let Some(id) = session_id {
-            if let Some(session) = self.get_session(id).await? {
-                return Ok(session);
-            }
-        }
-
-        self.create_guest_session().await
     }
 
     pub async fn get_session(&self, session_id: Uuid) -> StoreResult<Option<SessionRecord>> {

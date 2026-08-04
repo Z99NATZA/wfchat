@@ -29,15 +29,69 @@ impl ChatStore {
         Ok(chats)
     }
 
+    pub async fn list_chat_summaries(
+        &self,
+        owner: OwnerScope,
+        character_id: &str,
+    ) -> StoreResult<Vec<ChatSummaryRecord>> {
+        let rows = sqlx::query(
+            "select chat.id, chat.character_id,
+                    coalesce((
+                      select left(message.content, 256)
+                      from chat_messages message
+                      where message.chat_id = chat.id
+                      order by message.sort_order desc
+                      limit 1
+                    ), '') as last_message,
+                    extract(epoch from chat.created_at)::bigint as created_at,
+                    extract(epoch from chat.updated_at)::bigint as updated_at
+             from chats chat
+             where (($3::uuid is not null and chat.owner_user_id = $3)
+                    or ($3::uuid is null and chat.owner_session_id = $1))
+               and chat.character_id = $2
+             order by chat.updated_at desc
+             limit 50",
+        )
+        .bind(owner.session_id)
+        .bind(character_id)
+        .bind(owner.user_id)
+        .fetch_all(self.db.as_ref())
+        .await?;
+
+        Ok(rows
+            .into_iter()
+            .map(|row| ChatSummaryRecord {
+                id: row.get("id"),
+                character_id: row.get("character_id"),
+                last_message: row.get("last_message"),
+                created_at: row.get::<i64, _>("created_at") as u64,
+                updated_at: row.get::<i64, _>("updated_at") as u64,
+            })
+            .collect())
+    }
+
     pub async fn create_chat(
         &self,
         owner: OwnerScope,
         character_id: String,
         ai_profile_id: String,
     ) -> StoreResult<ChatRecord> {
-        self.create_chat_with_follow_up(owner, character_id, ai_profile_id, None)
+        match self
+            .create_chat_with_follow_up_limited(
+                owner,
+                character_id,
+                ai_profile_id,
+                None,
+                ChatStorageLimits::default(),
+            )
             .await?
-            .ok_or(sqlx::Error::RowNotFound)
+        {
+            CreateChatOutcome::Created(chat) => Ok(chat),
+            CreateChatOutcome::FollowUpUnavailable => Err(sqlx::Error::RowNotFound),
+            CreateChatOutcome::ChatLimitReached | CreateChatOutcome::MessageLimitReached => Err(
+                sqlx::Error::Protocol("chat storage limit reached".to_owned()),
+            ),
+        }
     }
 
     pub async fn create_chat_with_follow_up(
@@ -47,7 +101,57 @@ impl ChatStore {
         ai_profile_id: String,
         follow_up_id: Option<Uuid>,
     ) -> StoreResult<Option<ChatRecord>> {
+        match self
+            .create_chat_with_follow_up_limited(
+                owner,
+                character_id,
+                ai_profile_id,
+                follow_up_id,
+                ChatStorageLimits::default(),
+            )
+            .await?
+        {
+            CreateChatOutcome::Created(chat) => Ok(Some(chat)),
+            CreateChatOutcome::FollowUpUnavailable
+            | CreateChatOutcome::ChatLimitReached
+            | CreateChatOutcome::MessageLimitReached => Ok(None),
+        }
+    }
+
+    pub async fn create_chat_with_follow_up_limited(
+        &self,
+        owner: OwnerScope,
+        character_id: String,
+        ai_profile_id: String,
+        follow_up_id: Option<Uuid>,
+        limits: ChatStorageLimits,
+    ) -> StoreResult<CreateChatOutcome> {
         let mut tx = self.db.begin().await?;
+        let owner_lock_key = owner
+            .user_id
+            .map(|user_id| format!("user:{user_id}"))
+            .unwrap_or_else(|| format!("session:{}", owner.session_id));
+        sqlx::query("select pg_advisory_xact_lock(hashtextextended($1, 0))")
+            .bind(owner_lock_key)
+            .execute(&mut *tx)
+            .await?;
+        let chat_count: i64 = sqlx::query_scalar(
+            "select count(*)::bigint
+             from chats
+             where (($2::uuid is not null and owner_user_id = $2)
+                    or ($2::uuid is null and owner_session_id = $1))",
+        )
+        .bind(owner.session_id)
+        .bind(owner.user_id)
+        .fetch_one(&mut *tx)
+        .await?;
+        if usize::try_from(chat_count)
+            .ok()
+            .is_none_or(|count| count >= limits.max_chats_per_owner)
+        {
+            tx.rollback().await?;
+            return Ok(CreateChatOutcome::ChatLimitReached);
+        }
         let id = Uuid::new_v4();
         let now = now_unix_seconds() as i64;
         sqlx::query(
@@ -81,9 +185,15 @@ impl ChatStore {
             .await?;
             let Some(row) = row else {
                 tx.rollback().await?;
-                return Ok(None);
+                return Ok(CreateChatOutcome::FollowUpUnavailable);
             };
             let prompt: String = row.get("prompt");
+            if limits.max_messages_per_chat < 1
+                || prompt.chars().count() > limits.max_stored_chars_per_chat
+            {
+                tx.rollback().await?;
+                return Ok(CreateChatOutcome::MessageLimitReached);
+            }
             let shown_at: i64 = row.get("shown_at");
             sqlx::query(
                 "insert into chat_messages (id, chat_id, role, content, created_at)
@@ -103,7 +213,10 @@ impl ChatStore {
         }
 
         tx.commit().await?;
-        self.get_chat(owner, id).await
+        self.get_chat(owner, id)
+            .await?
+            .map(CreateChatOutcome::Created)
+            .ok_or(sqlx::Error::RowNotFound)
     }
 
     pub async fn get_chat(
@@ -182,6 +295,37 @@ impl ChatStore {
         attachment_ids: &[Uuid],
         user_timezone: &str,
     ) -> StoreResult<Option<ChatRecord>> {
+        match self
+            .append_chat_messages_limited(
+                owner,
+                chat_id,
+                user_message,
+                assistant_message,
+                attachment_ids,
+                user_timezone,
+                ChatStorageLimits::default(),
+            )
+            .await?
+        {
+            AppendChatMessagesOutcome::Appended { .. } => self.get_chat(owner, chat_id).await,
+            AppendChatMessagesOutcome::Unavailable => Ok(None),
+            AppendChatMessagesOutcome::LimitReached => Err(sqlx::Error::Protocol(
+                "chat message storage limit reached".to_owned(),
+            )),
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub async fn append_chat_messages_limited(
+        &self,
+        owner: OwnerScope,
+        chat_id: Uuid,
+        mut user_message: StoredMessage,
+        assistant_message: StoredMessage,
+        attachment_ids: &[Uuid],
+        user_timezone: &str,
+        limits: ChatStorageLimits,
+    ) -> StoreResult<AppendChatMessagesOutcome> {
         let mut tx = self.db.begin().await?;
         let owner_exists = sqlx::query(
             "select id from chats where id = $1 and (($3::uuid is not null and owner_user_id = $3) or ($3::uuid is null and owner_session_id = $2)) for update",
@@ -193,7 +337,36 @@ impl ChatStore {
             .await?
             .is_some();
         if !owner_exists {
-            return Ok(None);
+            return Ok(AppendChatMessagesOutcome::Unavailable);
+        }
+
+        let row = sqlx::query(
+            "select count(*)::bigint as message_count,
+                    coalesce(sum(char_length(content)), 0)::bigint as stored_chars
+             from chat_messages
+             where chat_id = $1",
+        )
+        .bind(chat_id)
+        .fetch_one(&mut *tx)
+        .await?;
+        let message_count: i64 = row.get("message_count");
+        let stored_chars: i64 = row.get("stored_chars");
+        let incoming_chars = user_message
+            .content
+            .chars()
+            .count()
+            .checked_add(assistant_message.content.chars().count());
+        let message_limit_reached = usize::try_from(message_count)
+            .ok()
+            .and_then(|count| count.checked_add(2))
+            .is_none_or(|next| next > limits.max_messages_per_chat);
+        let char_limit_reached = usize::try_from(stored_chars)
+            .ok()
+            .and_then(|stored| incoming_chars.and_then(|incoming| stored.checked_add(incoming)))
+            .is_none_or(|next| next > limits.max_stored_chars_per_chat);
+        if message_limit_reached || char_limit_reached {
+            tx.rollback().await?;
+            return Ok(AppendChatMessagesOutcome::LimitReached);
         }
 
         sqlx::query(
@@ -250,7 +423,7 @@ impl ChatStore {
             let updated_count = result.rows_affected();
             if updated_count != attachment_ids.len() as u64 {
                 let _ = tx.rollback().await;
-                return Ok(None);
+                return Ok(AppendChatMessagesOutcome::Unavailable);
             }
         }
 
@@ -260,8 +433,12 @@ impl ChatStore {
             .await?;
 
         tx.commit().await?;
+        user_message.attachments = self.attachments_for_message(user_message.id).await?;
 
-        self.get_chat(owner, chat_id).await
+        Ok(AppendChatMessagesOutcome::Appended {
+            user_message,
+            assistant_message,
+        })
     }
 
     pub async fn clear_chat_messages(

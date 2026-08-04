@@ -5,12 +5,12 @@ nginx-served web app. The checked-in Compose configuration is the private
 development/LAN workflow and uses `APP_ENV=development`; running containers
 does not by itself make the deployment production-ready.
 
-| Service | Host port | Persistent data |
-| --- | ---: | --- |
-| `postgres` | 5432 | `pgdata` |
-| `api` | 8080 | `api_uploads` |
-| `voicevox` | 50021 | none |
-| `web` | 5173 | none |
+| Service    | Host port | Persistent data |
+| ---------- | --------: | --------------- |
+| `postgres` |      5432 | `pgdata`        |
+| `api`      |      8080 | `api_uploads`   |
+| `voicevox` |     50021 | none            |
+| `web`      |      5173 | none            |
 
 ## Setup And Run
 
@@ -61,6 +61,11 @@ reverse proxy is used, set `TRUST_PROXY_HEADERS=true` only with explicit
 `TRUSTED_PROXY_CIDRS`; the API then evaluates a single `X-Forwarded-For` chain.
 This repository does not configure that production proxy.
 
+The nginx web server sends a CSP compatible with same-origin API/WebSocket use,
+Google Sign-In, hosted fonts, and HTTPS user images. It denies frame embedding
+and sends `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, and
+`Referrer-Policy: strict-origin-when-cross-origin`.
+
 ## Provider Configuration
 
 Chat provider modes:
@@ -85,6 +90,12 @@ media capability gates use `CHAT_*` keys. When omitted, image upload,
 transcription, and TTS default off in production and can be enabled
 independently after their provider and host boundaries are ready. The generated
 development `.env` explicitly enables all three.
+
+Production fixes guest admission at 10 requests per resolved IP and 60 globally
+per minute. Chat creation and sends are fixed at 20 requests per session/IP and
+120 globally per minute. Production also caps each owner at 50 chats and each
+chat at 100 messages and 500,000 stored Unicode scalar values. The exact keys
+and development defaults are in `apps/api/.env.example`.
 
 The compose build enables Markdown QA at `/chat?qa=markdown`. Other web builds
 default `VITE_ENABLE_MARKDOWN_QA` to false.

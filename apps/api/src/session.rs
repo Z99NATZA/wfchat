@@ -1,7 +1,12 @@
 use axum::http::{header::COOKIE, HeaderMap};
 use uuid::Uuid;
 
-use crate::config::Config;
+use crate::{
+    config::Config,
+    error::{AppError, AppResult},
+    state::AppState,
+    store::SessionRecord,
+};
 
 const SESSION_COOKIE_NAME: &str = "wfchat_session";
 const SESSION_HEADER_NAME: &str = "x-wfchat-session";
@@ -14,6 +19,15 @@ pub fn session_id_from_headers(config: &Config, headers: &HeaderMap) -> Option<U
             .then(|| session_id_from_header(headers))
             .flatten()
     })
+}
+
+pub async fn require_session(state: &AppState, headers: &HeaderMap) -> AppResult<SessionRecord> {
+    let session_id = session_id_from_headers(&state.config, headers).ok_or(AppError::Forbidden)?;
+    state
+        .store
+        .get_session(session_id)
+        .await?
+        .ok_or(AppError::Forbidden)
 }
 
 pub fn session_cookie(config: &Config, session_id: Uuid) -> String {

@@ -15,14 +15,14 @@ Cookie: wfchat_session=<session>
 The JSON body matches the normal message endpoint:
 `{ content, timezone, attachments }`.
 
-| Event | Payload | Meaning |
-| --- | --- | --- |
-| `message_start` | `{ chat_id, persona_id }` | Validation passed and generation is starting |
-| `token` | `{ text }` | Append a provider-dependent text chunk |
-| `message_done` | `{ chat_id, user_message, assistant_message, messages }` | Both messages committed; replace optimistic state |
-| `error` | `{ message }` | Stream failed before persistence |
+| Event           | Payload                                        | Meaning                                                  |
+| --------------- | ---------------------------------------------- | -------------------------------------------------------- |
+| `message_start` | `{ chat_id, persona_id }`                      | Validation passed and generation is starting             |
+| `token`         | `{ text }`                                     | Append a provider-dependent text chunk                   |
+| `message_done`  | `{ chat_id, user_message, assistant_message }` | Both new messages committed; replace the optimistic pair |
+| `error`         | `{ message }`                                  | Stream failed before persistence                         |
 
-The response sets `Cache-Control: no-cache`, `X-Accel-Buffering: no`, and a
+The response sets `Cache-Control: private, no-store`, `X-Accel-Buffering: no`, and a
 15-second SSE keepalive. The browser uses `fetch` rather than `EventSource`
 because the request needs a body and credentials.
 
@@ -33,7 +33,8 @@ frame without a trailing blank line. Empty token text is ignored.
 
 The frontend creates an optimistic user message and one
 `local-assistant-*` placeholder. Tokens append to that placeholder. On
-`message_done`, the full server message list replaces optimistic state.
+`message_done`, the committed pair replaces its optimistic pair while existing
+history remains in place.
 
 The backend persists the user message, assistant message, image links, chat
 timestamp, and automatic-memory extraction job only after generation succeeds.
@@ -44,10 +45,16 @@ If the streaming request fails before `message_start`, `useChatSession` retries
 through `POST /api/chats/:chat_id/messages`. It does not retry after a stream
 has started because the provider may already have generated output.
 
-Both message routes share the same per-session/IP and global in-memory rate
-limits. Only one generation may run for a chat at a time; process-wide and
+Chat creation and both message routes share the same per-session/IP and global
+in-memory rate limits. Only one generation may run for a chat at a time; process-wide and
 per-session concurrency limits also apply. Rejection returns HTTP 429 with
 `Retry-After: 60` before streaming begins.
+
+Clear uses the same exclusive per-chat permit without waiting. It returns HTTP
+409 with `{"error":"conflict: chat generation in progress"}` while generation
+owns the permit. Generation acquires before context preparation and retains the
+permit through the append transaction commit; provider waits hold no database
+transaction or row lock.
 
 Provider work has configured connect, total, and stream-idle timeouts. Dropping
 the SSE response cancels generation as soon as the backend detects the closed

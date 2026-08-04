@@ -30,10 +30,11 @@ use crate::{
     error::{AppError, AppResult},
     memory::retrieve_memory_context_observed,
     rate_limit::{RateLimitFamily, RateLimitIdentity},
-    session::session_id_from_headers,
+    session::require_session,
     state::AppState,
     store::{
-        ChatAttachmentRecord, ChatRecord, NewChatAttachmentRecord, OwnerScope, SessionRecord,
+        AppendChatMessagesOutcome, ChatAttachmentRecord, ChatRecord, ChatStorageLimits,
+        ChatSummaryRecord, CreateChatOutcome, NewChatAttachmentRecord, OwnerScope, SessionRecord,
         StoredMessage,
     },
     voice::{SpeechAudioStreamBody, VoiceService},
@@ -100,23 +101,32 @@ pub fn router(config: &crate::config::Config) -> Router<AppState> {
     } else {
         router
     };
-    if config.security.chat.tts_enabled {
+    let router = if config.security.chat.tts_enabled {
         router.route(
             "/chats/{chat_id}/messages/{message_id}/speech",
             axum::routing::post(synthesize_message_speech),
         )
     } else {
         router
-    }
+    };
+
+    router.layer(axum::middleware::from_fn(private_no_store))
+}
+
+pub(crate) async fn private_no_store(
+    request: axum::extract::Request,
+    next: axum::middleware::Next,
+) -> axum::response::Response {
+    let mut response = next.run(request).await;
+    response.headers_mut().insert(
+        header::CACHE_CONTROL,
+        HeaderValue::from_static("private, no-store"),
+    );
+    response
 }
 
 async fn require_chat_session(state: &AppState, headers: &HeaderMap) -> AppResult<SessionRecord> {
-    let session_id = session_id_from_headers(&state.config, headers).ok_or(AppError::Forbidden)?;
-    state
-        .store
-        .get_session(session_id)
-        .await?
-        .ok_or(AppError::Forbidden)
+    require_session(state, headers).await
 }
 
 #[derive(Serialize)]
@@ -125,6 +135,15 @@ struct ChatResponse {
     character_id: String,
     ai_profile_id: String,
     messages: Vec<MessageResponse>,
+    updated_at: u64,
+    created_at: u64,
+}
+
+#[derive(Serialize)]
+struct ChatSummaryResponse {
+    id: Uuid,
+    character_id: String,
+    last_message: String,
     updated_at: u64,
     created_at: u64,
 }
@@ -165,7 +184,6 @@ struct SendMessageResponse {
     chat_id: Uuid,
     user_message: MessageResponse,
     assistant_message: MessageResponse,
-    messages: Vec<MessageResponse>,
 }
 
 #[derive(Serialize)]
@@ -184,7 +202,6 @@ struct StreamMessageDoneEvent {
     chat_id: Uuid,
     user_message: MessageResponse,
     assistant_message: MessageResponse,
-    messages: Vec<MessageResponse>,
 }
 
 #[derive(Serialize)]
@@ -234,18 +251,12 @@ async fn list_chats_for_persona(
     State(state): State<AppState>,
     headers: HeaderMap,
     Path(persona_id): Path<String>,
-) -> AppResult<Json<Vec<ChatResponse>>> {
+) -> AppResult<Json<Vec<ChatSummaryResponse>>> {
     let session = require_chat_session(&state, &headers).await?;
     let owner = OwnerScope::from_session(&session);
-    let chats = state
-        .store
-        .list_chats(owner)
-        .await?
-        .into_iter()
-        .filter(|chat| chat.character_id == persona_id)
-        .collect::<Vec<_>>();
+    let chats = state.store.list_chat_summaries(owner, &persona_id).await?;
 
-    Ok(Json(chats.into_iter().map(chat_response).collect()))
+    Ok(Json(chats.into_iter().map(chat_summary_response).collect()))
 }
 
 async fn get_chat_ui_config(State(state): State<AppState>) -> Json<ChatUiConfigResponse> {
@@ -269,25 +280,45 @@ async fn get_chat_ui_config(State(state): State<AppState>) -> Json<ChatUiConfigR
 }
 
 async fn create_chat_for_persona(
+    ConnectInfo(peer_addr): ConnectInfo<SocketAddr>,
     State(state): State<AppState>,
     headers: HeaderMap,
     Path(persona_id): Path<String>,
     request: Option<Json<CreateChatRequest>>,
 ) -> AppResult<Json<ChatResponse>> {
     let session = require_chat_session(&state, &headers).await?;
+    enforce_sensitive_rate_limit(
+        &state,
+        &headers,
+        peer_addr,
+        session.id,
+        RateLimitFamily::ChatMessages,
+    )?;
     let owner = OwnerScope::from_session(&session);
     let character = characters::character_by_id(&persona_id)
         .ok_or_else(|| AppError::BadRequest(format!("unknown character: {persona_id}")))?;
-    let chat = state
+    let outcome = state
         .store
-        .create_chat_with_follow_up(
+        .create_chat_with_follow_up_limited(
             owner,
             character.id.to_owned(),
             character.ai_profile_id.to_owned(),
             request.and_then(|Json(request)| request.follow_up_id),
+            chat_storage_limits(&state),
         )
-        .await?
-        .ok_or_else(|| AppError::BadRequest("follow-up is unavailable".to_owned()))?;
+        .await?;
+    let chat = match outcome {
+        CreateChatOutcome::Created(chat) => chat,
+        CreateChatOutcome::FollowUpUnavailable => {
+            return Err(AppError::BadRequest("follow-up is unavailable".to_owned()));
+        }
+        CreateChatOutcome::ChatLimitReached => {
+            return Err(AppError::Conflict("chat limit reached".to_owned()));
+        }
+        CreateChatOutcome::MessageLimitReached => {
+            return Err(AppError::Conflict("chat message limit reached".to_owned()));
+        }
+    };
 
     Ok(Json(chat_response(chat)))
 }
@@ -313,6 +344,7 @@ async fn clear_messages(
     Path(chat_id): Path<Uuid>,
 ) -> AppResult<Json<ChatResponse>> {
     let session = require_chat_session(&state, &headers).await?;
+    let _clear_permit = state.generation_limiter.try_acquire_clear(chat_id)?;
     let owner = OwnerScope::from_session(&session);
     let chat = state
         .store
@@ -385,6 +417,24 @@ fn chat_response(chat: ChatRecord) -> ChatResponse {
     }
 }
 
+fn chat_summary_response(chat: ChatSummaryRecord) -> ChatSummaryResponse {
+    ChatSummaryResponse {
+        id: chat.id,
+        character_id: chat.character_id,
+        last_message: chat.last_message,
+        updated_at: chat.updated_at,
+        created_at: chat.created_at,
+    }
+}
+
+fn chat_storage_limits(state: &AppState) -> ChatStorageLimits {
+    ChatStorageLimits {
+        max_chats_per_owner: state.config.security.chat.max_chats_per_owner,
+        max_messages_per_chat: state.config.security.chat.max_messages_per_chat,
+        max_stored_chars_per_chat: state.config.security.chat.max_stored_chars_per_chat,
+    }
+}
+
 fn message_response(message: StoredMessage) -> MessageResponse {
     MessageResponse {
         id: message.id,
@@ -432,7 +482,7 @@ mod tests {
         attachments::cleanup_stale_pending_chat_attachments,
         config::Config,
         rate_limit::{RateLimitPolicies, RateLimitPolicy, RateLimiter},
-        store::{ChatStore, NewMemoryItemRecord, SessionRecord},
+        store::{ChatStore, MemoryFollowUpClaim, NewMemoryItemRecord, SessionRecord},
     };
 
     async fn create_test_session(state: &AppState) -> SessionRecord {
@@ -492,7 +542,7 @@ mod tests {
 
         assert_eq!(response.status(), StatusCode::OK);
         assert_header_contains(&response, header::CONTENT_TYPE, "text/event-stream");
-        assert_header_contains(&response, header::CACHE_CONTROL, "no-cache");
+        assert_header_contains(&response, header::CACHE_CONTROL, "private, no-store");
         assert_header_contains(
             &response,
             HeaderName::from_static("x-accel-buffering"),
@@ -530,10 +580,9 @@ mod tests {
             assistant_content,
             "[aiko_default] mock reply: I received \"hello stream\"."
         );
-        assert_eq!(
-            done_payload["messages"].as_array().map(Vec::len),
-            Some(2),
-            "message_done should return persisted full message list"
+        assert!(
+            done_payload.get("messages").is_none(),
+            "message_done should return only the committed pair"
         );
 
         let persisted = state
@@ -601,6 +650,220 @@ mod tests {
         assert_eq!(payload["error"].as_str(), Some("too many requests"));
 
         let _ = state.store.delete_chat(owner, chat.id).await;
+    }
+
+    #[tokio::test]
+    async fn chat_creation_and_message_sends_share_session_ip_and_global_buckets() {
+        let Some(mut state) = test_state().await else {
+            return;
+        };
+        state.rate_limiter = RateLimiter::new(RateLimitPolicies::default().with_family_limit(
+            RateLimitFamily::ChatMessages,
+            RateLimitPolicy::per_minute(1),
+        ));
+        let session = create_test_session(&state).await;
+        let owner = OwnerScope::from_session(&session);
+        let existing_chat = create_test_chat(&state, owner).await;
+        let app = build_router(state.clone());
+
+        let created = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/personas/aiko/chats")
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .header("x-wfchat-session", session.id.to_string())
+                    .body(Body::from("{}"))
+                    .expect("chat creation request should build"),
+            )
+            .await
+            .expect("chat creation should run");
+        assert_eq!(created.status(), StatusCode::OK);
+
+        let rejected = app
+            .oneshot(chat_message_request(
+                "POST",
+                &format!("/api/chats/{}/messages", existing_chat.id),
+                session.id,
+                "shared bucket",
+            ))
+            .await
+            .expect("message request should run");
+        assert_eq!(rejected.status(), StatusCode::TOO_MANY_REQUESTS);
+        assert_header_contains(&rejected, header::RETRY_AFTER, "60");
+        let body = to_bytes(rejected.into_body(), usize::MAX)
+            .await
+            .expect("rate response should collect");
+        let payload: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(payload["error"].as_str(), Some("too many requests"));
+
+        state
+            .store
+            .delete_session_for_test(session.id)
+            .await
+            .unwrap();
+    }
+
+    #[tokio::test]
+    async fn chat_storage_limit_conflicts_use_stable_http_contracts() {
+        let Some(mut state) = test_state().await else {
+            return;
+        };
+        let session = create_test_session(&state).await;
+        let owner = OwnerScope::from_session(&session);
+        let chat = create_test_chat(&state, owner).await;
+        state.config.security.chat.max_chats_per_owner = 1;
+        let app = build_router(state.clone());
+
+        let chat_cap = app
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/personas/aiko/chats")
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .header("x-wfchat-session", session.id.to_string())
+                    .body(Body::from("{}"))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(chat_cap.status(), StatusCode::CONFLICT);
+        assert_header_contains(&chat_cap, header::CACHE_CONTROL, "private, no-store");
+        let body = to_bytes(chat_cap.into_body(), usize::MAX).await.unwrap();
+        let payload: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(
+            payload["error"].as_str(),
+            Some("conflict: chat limit reached")
+        );
+
+        state.config.security.chat.max_messages_per_chat = 1;
+        let message_cap = build_router(state.clone())
+            .oneshot(chat_message_request(
+                "POST",
+                &format!("/api/chats/{}/messages", chat.id),
+                session.id,
+                "blocked by count",
+            ))
+            .await
+            .unwrap();
+        assert_eq!(message_cap.status(), StatusCode::CONFLICT);
+        let body = to_bytes(message_cap.into_body(), usize::MAX).await.unwrap();
+        let payload: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(
+            payload["error"].as_str(),
+            Some("conflict: chat message limit reached")
+        );
+
+        state.config.security.chat.max_messages_per_chat = 100;
+        state.config.security.chat.max_stored_chars_per_chat = 1;
+        let char_cap = build_router(state.clone())
+            .oneshot(chat_message_request(
+                "POST",
+                &format!("/api/chats/{}/messages/stream", chat.id),
+                session.id,
+                "xx",
+            ))
+            .await
+            .unwrap();
+        assert_eq!(char_cap.status(), StatusCode::CONFLICT);
+        let body = to_bytes(char_cap.into_body(), usize::MAX).await.unwrap();
+        let payload: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(
+            payload["error"].as_str(),
+            Some("conflict: chat message limit reached")
+        );
+
+        state
+            .store
+            .delete_session_for_test(session.id)
+            .await
+            .unwrap();
+    }
+
+    #[tokio::test]
+    async fn follow_up_message_limit_uses_message_conflict_and_rolls_back_claim_link() {
+        let Some(mut state) = test_state().await else {
+            return;
+        };
+        let session = create_test_session(&state).await;
+        let owner = OwnerScope::from_session(&session);
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        let memory = state
+            .store
+            .upsert_memory_item(
+                owner,
+                NewMemoryItemRecord {
+                    character_id: "aiko".to_owned(),
+                    memory_key: format!("follow-up.route-limit.{}", Uuid::new_v4()),
+                    kind: "plan".to_owned(),
+                    content: "Plans to send an application".to_owned(),
+                    tags: vec!["career".to_owned()],
+                    confidence: 0.9,
+                    importance: 0.8,
+                    last_reinforced_at: now,
+                    expires_at: None,
+                },
+            )
+            .await
+            .unwrap();
+        let claim_key = Uuid::new_v4();
+        let follow_up = state
+            .store
+            .claim_memory_follow_up(
+                owner,
+                MemoryFollowUpClaim {
+                    claim_key,
+                    memory_id: memory.id,
+                    character_id: "aiko",
+                    expected_updated_at: memory.updated_at,
+                    prompt: "Did you apply?",
+                    shown_at: now,
+                },
+            )
+            .await
+            .unwrap()
+            .expect("follow-up should claim");
+        state.config.security.chat.max_messages_per_chat = 0;
+
+        let response = build_router(state.clone())
+            .oneshot(
+                Request::post("/api/personas/aiko/chats")
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .header("x-wfchat-session", session.id.to_string())
+                    .body(Body::from(format!(
+                        r#"{{"follow_up_id":"{}"}}"#,
+                        follow_up.id
+                    )))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::CONFLICT);
+        assert_header_contains(&response, header::CACHE_CONTROL, "private, no-store");
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let payload: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(
+            payload["error"].as_str(),
+            Some("conflict: chat message limit reached")
+        );
+        assert!(state
+            .store
+            .get_memory_follow_up_by_claim(owner, "aiko", claim_key)
+            .await
+            .unwrap()
+            .is_some());
+        assert!(state.store.list_chats(owner).await.unwrap().is_empty());
+
+        state
+            .store
+            .delete_session_for_test(session.id)
+            .await
+            .unwrap();
     }
 
     #[tokio::test]
@@ -680,6 +943,29 @@ mod tests {
             .await
             .expect("second stream request should run");
         assert_eq!(second_response.status(), StatusCode::TOO_MANY_REQUESTS);
+
+        let clear_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("DELETE")
+                    .uri(format!("/api/chats/{}/messages", chat.id))
+                    .header("x-wfchat-session", session.id.to_string())
+                    .body(Body::empty())
+                    .expect("clear request should build"),
+            )
+            .await
+            .expect("clear request should run");
+        assert_eq!(clear_response.status(), StatusCode::CONFLICT);
+        let clear_body = to_bytes(clear_response.into_body(), usize::MAX)
+            .await
+            .expect("clear response should collect");
+        let clear_payload: Value =
+            serde_json::from_slice(&clear_body).expect("clear conflict should be json");
+        assert_eq!(
+            clear_payload["error"].as_str(),
+            Some("conflict: chat generation in progress")
+        );
 
         drop(first_response);
         let retry_deadline = tokio::time::Instant::now() + Duration::from_secs(2);
@@ -1141,7 +1427,7 @@ mod tests {
             Some(attachment_id)
         );
         assert_eq!(
-            done_payload["messages"][0]["attachments"][0]["preview_url"].as_str(),
+            done_payload["user_message"]["attachments"][0]["preview_url"].as_str(),
             Some(format!("/api/chat/attachments/{attachment_id}/preview").as_str())
         );
         assert_eq!(
@@ -2059,7 +2345,9 @@ mod tests {
 
     async fn test_state_with_provider(ai_provider: &str) -> Option<AppState> {
         let database_url = std::env::var("WFCHAT_TEST_DATABASE_URL").ok()?;
-        let store = ChatStore::connect(&database_url).await.ok()?;
+        let store = ChatStore::connect(&database_url)
+            .await
+            .expect("WFCHAT_TEST_DATABASE_URL should identify a reachable test database");
         Some(AppState {
             config: Config {
                 app_host: "127.0.0.1".to_owned(),

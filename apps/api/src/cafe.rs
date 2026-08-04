@@ -30,7 +30,7 @@ use uuid::Uuid;
 use crate::{
     cafe_cosmetics::{cafe_cosmetic, CafeCosmeticDefinition, CAFE_COSMETICS},
     error::{AppError, AppResult},
-    session::{session_cookie, session_id_from_headers},
+    session::{require_session, session_cookie},
     state::AppState,
     store::{OwnerScope, SessionRecord, UserKind},
 };
@@ -1715,10 +1715,7 @@ async fn ensure_cafe_session(
     state: &AppState,
     headers: &HeaderMap,
 ) -> AppResult<(SessionRecord, HeaderMap)> {
-    let session = state
-        .store
-        .ensure_session(session_id_from_headers(&state.config, headers))
-        .await?;
+    let session = require_session(state, headers).await?;
     if !matches!(session.kind, UserKind::Guest) {
         state
             .store

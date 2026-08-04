@@ -20,19 +20,19 @@ request and generation limiters, Cafe hub, and automatic-memory telemetry.
 
 ## Domains
 
-| Module | Responsibility |
-| --- | --- |
-| `auth.rs` | Guest cookie sessions, Google login, logout, current user, profile updates |
-| `characters.rs` | Static character registry, UI metadata, and prompts |
-| `chat/` | Chat CRUD, message preparation, JSON/SSE sends, attachments, speech |
-| `memory.rs` | Background extraction, structured retrieval, follow-ups, reset |
-| `cafe.rs` | Lobby API, authoritative in-process rooms, WebSocket protocol |
-| `sync.rs` | Generic delta/cache preview, commit, and pull |
-| `admin.rs` | Admin-only AI profile/provider status reads |
-| `store/` | PostgreSQL operations grouped by domain |
-| `ai/` | Provider-neutral messages and provider adapters |
-| `voice.rs` | TTS, transcription, VOICEVOX, and speech-text policy |
-| `attachments.rs` | Image validation, local storage, and orphan cleanup |
+| Module           | Responsibility                                                             |
+| ---------------- | -------------------------------------------------------------------------- |
+| `auth.rs`        | Guest cookie sessions, Google login, logout, current user, profile updates |
+| `characters.rs`  | Static character registry, UI metadata, and prompts                        |
+| `chat/`          | Chat CRUD, message preparation, JSON/SSE sends, attachments, speech        |
+| `memory.rs`      | Background extraction, structured retrieval, follow-ups, reset             |
+| `cafe.rs`        | Lobby API, authoritative in-process rooms, WebSocket protocol              |
+| `sync.rs`        | Generic delta/cache preview, commit, and pull                              |
+| `admin.rs`       | Admin-only AI profile/provider status reads                                |
+| `store/`         | PostgreSQL operations grouped by domain                                    |
+| `ai/`            | Provider-neutral messages and provider adapters                            |
+| `voice.rs`       | TTS, transcription, VOICEVOX, and speech-text policy                       |
+| `attachments.rs` | Image validation, local storage, and orphan cleanup                        |
 
 Focused domain contracts live in the linked documents from
 [Architecture](architecture.md).
@@ -40,10 +40,20 @@ Focused domain contracts live in the linked documents from
 ## Authentication And Ownership
 
 The backend creates an HTTP-only `wfchat_session` cookie for guest use. Sessions
-expire server-side. Registered login migrates supported guest data, issues a
-new registered session, and revokes the old session. Logout revokes the current
-session and issues a new guest session. Unknown client-selected ids never create
-that requested session.
+expire server-side. Google login requires an active guest session, migrates its
+supported data, issues a new registered session, and revokes the old session.
+Logout rotates an active registered/admin session to one replacement guest in a
+transaction; missing, invalid, already-revoked, and guest sessions cannot mint a
+replacement. Unknown client-selected ids never create that requested session.
+
+Guest admission is process-local. `/api/auth/guest` and the session-creation
+path of `/api/auth/me` share resolved-IP and global fixed-window limits. Every
+other profile, follow-up, learned-context, sync, and Cafe handler requires an
+existing active session. Every 10 minutes the API reparents legacy promoted
+account rows to a matching registered session, then deletes at most 1,000
+expired or revoked guest sessions. Rows without a matching registered target
+are retained; registered sessions and their account-owned data are not cleanup
+targets.
 
 Production cookies are always `Secure`. `X-WFChat-Session` is a configurable
 development compatibility fallback and is rejected in production. Frontend
@@ -99,7 +109,7 @@ PostgreSQL.
 ## Abuse Controls
 
 The in-memory fixed-window limiter checks all identities for one request under
-one lock. JSON/SSE chat uses session, resolved client IP, and global identities;
+one lock. Chat creation and JSON/SSE sends use session, resolved client IP, and global identities;
 image upload, assistant speech, and transcription use session and resolved
 client IP without the global identity.
 
@@ -109,12 +119,13 @@ untrusted address. Trusted chains are walked right to left; malformed, multiple,
 empty, or all-trusted chains fall back to the normalized peer. Other forwarded
 headers are ignored.
 
-| Family | Limit per minute |
-| --- | ---: |
-| Chat JSON + SSE sends | 20 per session/IP, plus configurable global limit |
-| Assistant speech | 10 |
-| User transcription | 6 |
-| Image upload | 12 |
+| Family                         |                Limit per minute |
+| ------------------------------ | ------------------------------: |
+| Guest session admission        | 10 per resolved IP, 60 globally |
+| Chat creation + JSON/SSE sends | 20 per session/IP, 120 globally |
+| Assistant speech               |                              10 |
+| User transcription             |                               6 |
+| Image upload                   |                              12 |
 
 Rate limits and concurrency limits are per API process and reset on restart.
 Rate-limited HTTP responses include `Retry-After: 60`.
@@ -129,24 +140,30 @@ Invalid CIDRs, trusted headers without a trusted CIDR, unknown providers,
 missing required keys/models, invalid voice formats, and invalid limits stop
 startup with a configuration error rather than a runtime panic.
 
-Production accepts each positive chat limit only up to these maxima;
+Production accepts each positive request, generation, and storage limit only up to these maxima;
 development keeps the same positive, relational, and no-panic validation but
 does not apply this maxima table:
 
-| Key | Default | Production maximum |
-| --- | ---: | ---: |
-| `CHAT_MESSAGE_MAX_CHARS` | 4,000 | 16,000 |
-| `CHAT_REQUEST_MAX_BYTES` | 65,536 | 262,144 |
-| `CHAT_CONTEXT_MAX_MESSAGES` | 40 | 200 |
-| `CHAT_CONTEXT_MAX_CHARS` | 32,000 | 200,000 |
-| `CHAT_OUTPUT_MAX_TOKENS` | 1,024 | 8,192 |
-| `CHAT_OUTPUT_MAX_CHARS` | 16,384 | 65,536 |
-| `CHAT_AI_CONNECT_TIMEOUT_SECONDS` | 10 | 30 |
-| `CHAT_AI_IDLE_TIMEOUT_SECONDS` | 20 | 120 |
-| `CHAT_AI_TOTAL_TIMEOUT_SECONDS` | 60 | 300 |
-| `CHAT_MAX_CONCURRENT_GENERATIONS` | 8 | 128 |
-| `CHAT_MAX_CONCURRENT_PER_SESSION` | 2 | 8 |
-| `CHAT_GLOBAL_REQUESTS_PER_MINUTE` | 120 | 6,000 |
+| Key                                     | Default | Production maximum |
+| --------------------------------------- | ------: | -----------------: |
+| `CHAT_MESSAGE_MAX_CHARS`                |   4,000 |             16,000 |
+| `CHAT_REQUEST_MAX_BYTES`                |  65,536 |            262,144 |
+| `CHAT_CONTEXT_MAX_MESSAGES`             |      40 |                200 |
+| `CHAT_CONTEXT_MAX_CHARS`                |  32,000 |            200,000 |
+| `CHAT_OUTPUT_MAX_TOKENS`                |   1,024 |              8,192 |
+| `CHAT_OUTPUT_MAX_CHARS`                 |  16,384 |             65,536 |
+| `CHAT_AI_CONNECT_TIMEOUT_SECONDS`       |      10 |                 30 |
+| `CHAT_AI_IDLE_TIMEOUT_SECONDS`          |      20 |                120 |
+| `CHAT_AI_TOTAL_TIMEOUT_SECONDS`         |      60 |                300 |
+| `CHAT_MAX_CONCURRENT_GENERATIONS`       |       8 |                128 |
+| `CHAT_MAX_CONCURRENT_PER_SESSION`       |       2 |                  8 |
+| `AUTH_GUEST_REQUESTS_PER_MINUTE`        |      10 |                 10 |
+| `AUTH_GUEST_GLOBAL_REQUESTS_PER_MINUTE` |      60 |                 60 |
+| `CHAT_REQUESTS_PER_MINUTE`              |      20 |                 20 |
+| `CHAT_GLOBAL_REQUESTS_PER_MINUTE`       |     120 |                120 |
+| `CHAT_MAX_CHATS_PER_OWNER`              |      50 |                 50 |
+| `CHAT_MAX_MESSAGES_PER_CHAT`            |     100 |                100 |
+| `CHAT_MAX_STORED_CHARS_PER_CHAT`        | 500,000 |            500,000 |
 
 Production origins are HTTPS DNS origins with no credentials, path, query, or
 fragment. Hostnames are lowercased and stripped of trailing dots before checks.
