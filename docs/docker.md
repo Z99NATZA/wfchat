@@ -19,8 +19,8 @@ npm run init
 docker compose up -d --build
 ```
 
-`npm run init` creates missing `apps/api/.env` and `apps/web/.env` from
-their examples and adds missing keys without overwriting existing values.
+`npm run init` creates missing `.env`, `apps/api/.env`, and `apps/web/.env`
+from their examples and adds missing keys without overwriting existing values.
 Backend secrets belong only in `apps/api/.env`.
 
 The API waits for PostgreSQL health, applies embedded SQLx migrations, then
@@ -49,12 +49,13 @@ http://<host-lan-ip>:5173
 Only port 5173 is required by the browser. `FRONTEND_ORIGINS` controls direct
 cross-origin API access.
 
-For a public host, set `APP_ENV=production` and explicit public HTTPS
-`FRONTEND_ORIGIN(S)`. Startup then rejects IP/local/reserved origins, the
+For a separately managed public deployment, set `APP_ENV=production` and
+explicit public HTTPS `FRONTEND_ORIGIN(S)`. The checked-in Compose configuration
+overrides those origins with HTTP development/LAN values and is not the public
+deployment template. Production startup rejects IP/local/reserved origins, the
 compatibility session header, and invalid chat safety limits. TLS termination,
 public reverse-proxy configuration, firewall rules, and backup remain host
-deployment responsibilities rather than properties of this development
-Compose file.
+deployment responsibilities.
 
 Direct requests are keyed by the socket peer IP. When a separately managed
 reverse proxy is used, set `TRUST_PROXY_HEADERS=true` only with explicit
