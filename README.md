@@ -7,9 +7,11 @@ Project created: 2026-05-27
 
 ## Stack
 
-- Frontend: ReactJS + TypeScript
-- Backend: Rust + Axum
-- Database: PostgreSQL
+```text
+Frontend: ReactJS + TypeScript
+Backend: Rust + Axum
+Database: PostgreSQL
+```
 
 ## Development And LAN Quickstart
 
@@ -54,24 +56,25 @@ reach port `5173`.
 
 ## Production Boundaries
 
-The checked-in Compose configuration cannot become a public production
-deployment through example environment changes alone. A separate production
-deployment requires:
+The checked-in Compose stack is for private development and LAN use, not public
+production. A separately managed production deployment starts with:
 
-- `APP_ENV=production` with explicit public HTTPS `FRONTEND_ORIGINS` values,
-  falling back to `FRONTEND_ORIGIN` only when the plural key is unset.
-- `ALLOW_SESSION_HEADER=false`.
-- `TRUST_PROXY_HEADERS=false` unless traffic arrives through a managed reverse
-  proxy. When enabled, `TRUSTED_PROXY_CIDRS` must list its trusted CIDRs.
-- `CHAT_IMAGE_UPLOAD_ENABLED`, `CHAT_TRANSCRIPTION_ENABLED`, and
-  `CHAT_TTS_ENABLED` kept disabled until their provider, storage, and public-host
-  boundaries are ready.
+```text
+APP_ENV=production
+FRONTEND_ORIGINS=https://chat.example.com
+ALLOW_SESSION_HEADER=false
+TRUST_PROXY_HEADERS=false
+TRUSTED_PROXY_CIDRS=
+CHAT_IMAGE_UPLOAD_ENABLED=false
+CHAT_TRANSCRIPTION_ENABLED=false
+CHAT_TTS_ENABLED=false
+```
 
-Production guest admission, chat rates, storage, concurrency, request, context,
-output, and timeout limits are enforced by the API. Exact environment keys and
-defaults live in [apps/api/.env.example](apps/api/.env.example). See
-[Docker deployment boundaries](docs/docker.md) for networking, proxy, provider,
-persistence, and caching details.
+`FRONTEND_ORIGINS` falls back to `FRONTEND_ORIGIN` when unset. Enable trusted
+proxy headers only with explicit `TRUSTED_PROXY_CIDRS`, and keep media
+capabilities disabled until their deployment boundaries are ready. See
+[the API environment example](apps/api/.env.example) and
+[Docker deployment boundaries](docs/docker.md) for exact limits and requirements.
 
 ## License
 
