@@ -24,7 +24,7 @@ use crate::{
     attachments::{
         image_storage_key, is_supported_chat_image_mime_type, read_attachment_bytes,
         remove_attachment_file, validate_image_attachment, write_attachment_bytes,
-        CHAT_ATTACHMENT_KIND_IMAGE, MAX_ATTACHMENT_MULTIPART_BYTES,
+        ATTACHMENT_MULTIPART_OVERHEAD_BYTES, CHAT_ATTACHMENT_KIND_IMAGE,
     },
     characters,
     error::{AppError, AppResult},
@@ -83,10 +83,13 @@ pub fn router(config: &crate::config::Config) -> Router<AppState> {
         );
 
     let router = if config.security.chat.image_upload_enabled {
+        let multipart_max_bytes = config
+            .chat_attachment_max_bytes
+            .saturating_add(ATTACHMENT_MULTIPART_OVERHEAD_BYTES);
         router.route(
             "/chat/attachments",
             axum::routing::post(upload_chat_attachment)
-                .layer(DefaultBodyLimit::max(MAX_ATTACHMENT_MULTIPART_BYTES)),
+                .layer(DefaultBodyLimit::max(multipart_max_bytes)),
         )
     } else {
         router
@@ -1458,6 +1461,62 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn message_rejects_total_attachment_bytes_from_metadata_before_file_reads() {
+        let Some(mut state) = test_state().await else {
+            return;
+        };
+        let session = create_test_session(&state).await;
+        let owner = OwnerScope::from_session(&session);
+        let chat = create_test_chat(&state, owner).await;
+        let upload_dir = state.config.chat_attachment_upload_dir.clone();
+        let upload_app = build_router(state.clone());
+        let first_id =
+            uploaded_attachment_id(upload_png_attachment(upload_app.clone(), session.id).await);
+        let second_id = uploaded_attachment_id(upload_png_attachment(upload_app, session.id).await);
+        let first = state
+            .store
+            .get_chat_attachment(owner, first_id)
+            .await
+            .unwrap()
+            .unwrap();
+        let second = state
+            .store
+            .get_chat_attachment(owner, second_id)
+            .await
+            .unwrap()
+            .unwrap();
+        state.config.chat_attachment_max_total_bytes_per_message =
+            usize::try_from(first.byte_size + second.byte_size).unwrap() - 1;
+        remove_attachment_file(&upload_dir, &first.storage_key).await;
+        remove_attachment_file(&upload_dir, &second.storage_key).await;
+        let app = build_router(state.clone());
+        let request = Request::builder()
+            .method("POST")
+            .uri(format!("/api/chats/{}/messages", chat.id))
+            .header(header::CONTENT_TYPE, "application/json")
+            .header("x-wfchat-session", session.id.to_string())
+            .body(Body::from(format!(
+                r#"{{"content":"inspect","attachments":[{{"id":"{first_id}","kind":"image"}},{{"id":"{second_id}","kind":"image"}}]}}"#
+            )))
+            .unwrap();
+
+        let response = app.oneshot(request).await.unwrap();
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let payload: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(
+            payload["error"].as_str(),
+            Some("bad request: image attachments exceed total byte limit")
+        );
+        let persisted = state.store.get_chat(owner, chat.id).await.unwrap().unwrap();
+        assert!(persisted.messages.is_empty());
+
+        let _ = state.store.delete_chat(owner, chat.id).await;
+        let _ = tokio::fs::remove_dir_all(upload_dir).await;
+    }
+
+    #[tokio::test]
     async fn stream_message_endpoint_rejects_legacy_pending_gif_attachment() {
         let Some(state) = test_state().await else {
             return;
@@ -1528,6 +1587,70 @@ mod tests {
             .mark_pending_chat_attachment_deleted(owner, attachment_id)
             .await;
         let _ = state.store.delete_chat(owner, chat.id).await;
+    }
+
+    #[tokio::test]
+    async fn preview_keeps_successfully_linked_historical_format_available() {
+        let Some(state) = test_state().await else {
+            return;
+        };
+        let session = create_test_session(&state).await;
+        let owner = OwnerScope::from_session(&session);
+        let chat = create_test_chat(&state, owner).await;
+        let attachment_id = Uuid::new_v4();
+        let storage_key = format!("chat-images/{attachment_id}.gif");
+        let gif_bytes = b"GIF89a\x01\x00\x01\x00\x80\x00\x00\x00\x00\x00\xff\xff\xff!\xf9\x04\x01\x00\x00\x00\x00,\x00\x00\x00\x00\x01\x00\x01\x00\x00\x02\x02D\x01\x00;";
+        write_attachment_bytes(
+            &state.config.chat_attachment_upload_dir,
+            &storage_key,
+            gif_bytes,
+        )
+        .await
+        .unwrap();
+        state
+            .store
+            .create_chat_attachment(
+                owner,
+                NewChatAttachmentRecord {
+                    id: attachment_id,
+                    kind: CHAT_ATTACHMENT_KIND_IMAGE.to_owned(),
+                    mime_type: "image/gif".to_owned(),
+                    byte_size: gif_bytes.len() as i64,
+                    width: Some(1),
+                    height: Some(1),
+                    sha256: "historical-gif-fixture".to_owned(),
+                    storage_key,
+                },
+            )
+            .await
+            .unwrap();
+        state
+            .store
+            .append_chat_messages_with_attachments(
+                owner,
+                chat.id,
+                StoredMessage::from_ai_message(AiMessage::user("historical".to_owned())),
+                StoredMessage::from_ai_message(AiMessage::assistant("kept".to_owned())),
+                &[attachment_id],
+            )
+            .await
+            .unwrap();
+        let request = Request::builder()
+            .method("GET")
+            .uri(format!("/api/chat/attachments/{attachment_id}/preview"))
+            .header("x-wfchat-session", session.id.to_string())
+            .body(Body::empty())
+            .unwrap();
+
+        let response = build_router(state.clone()).oneshot(request).await.unwrap();
+
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_header_contains(&response, header::CONTENT_TYPE, "image/gif");
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        assert_eq!(body.as_ref(), gif_bytes);
+
+        let _ = state.store.delete_chat(owner, chat.id).await;
+        let _ = tokio::fs::remove_dir_all(state.config.chat_attachment_upload_dir).await;
     }
 
     #[tokio::test]
@@ -1865,6 +1988,33 @@ mod tests {
             .expect("second transcription request should run");
 
         assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
+    }
+
+    #[tokio::test]
+    async fn upload_chat_attachment_rejects_body_above_configured_limit_plus_overhead() {
+        let Some(mut state) = test_state().await else {
+            return;
+        };
+        state.config.chat_attachment_max_bytes = 64;
+        let session = create_test_session(&state).await;
+        let app = build_router(state.clone());
+        let boundary = "wfchat-image-upload";
+        let oversized_file = vec![0u8; 64 * 1024 + 1];
+        let request = Request::builder()
+            .method("POST")
+            .uri("/api/chat/attachments")
+            .header(
+                header::CONTENT_TYPE,
+                format!("multipart/form-data; boundary={boundary}"),
+            )
+            .header("x-wfchat-session", session.id.to_string())
+            .body(Body::from(multipart_file_body(boundary, &oversized_file)))
+            .expect("request should build");
+
+        let response = app.oneshot(request).await.expect("request should run");
+
+        assert_eq!(response.status(), StatusCode::PAYLOAD_TOO_LARGE);
+        let _ = tokio::fs::remove_dir_all(state.config.chat_attachment_upload_dir).await;
     }
 
     #[tokio::test]
@@ -2460,11 +2610,15 @@ mod tests {
                 chat_attachment_max_width: 8192,
                 chat_attachment_max_height: 8192,
                 chat_attachment_max_pixels: 20_000_000,
+                chat_attachment_decoder_max_alloc_bytes: 128 * 1024 * 1024,
+                chat_attachment_max_concurrent_decodes: 2,
+                chat_attachment_max_total_bytes_per_message: 20 * 1024 * 1024,
                 security: Default::default(),
             },
             http: Client::new(),
             rate_limiter: RateLimiter::default(),
             generation_limiter: crate::rate_limit::GenerationLimiter::new(8, 2),
+            image_decode_limiter: crate::attachments::ImageDecodeLimiter::new(2),
             store,
             cafe: crate::cafe::CafeHub::default(),
             memory_telemetry: crate::memory::MemoryTelemetry::default(),

@@ -6,7 +6,8 @@ const GUEST_SESSION_CLEANUP_INTERVAL_SECONDS: u64 = 10 * 60;
 
 use crate::{
     attachments::{
-        cleanup_stale_pending_chat_attachments, PENDING_ATTACHMENT_CLEANUP_INTERVAL_SECONDS,
+        cleanup_stale_pending_chat_attachments, ImageDecodeLimiter,
+        PENDING_ATTACHMENT_CLEANUP_INTERVAL_SECONDS,
     },
     cafe::CafeHub,
     config::Config,
@@ -21,6 +22,7 @@ pub struct AppState {
     pub http: Client,
     pub rate_limiter: RateLimiter,
     pub generation_limiter: GenerationLimiter,
+    pub image_decode_limiter: ImageDecodeLimiter,
     pub store: ChatStore,
     pub cafe: CafeHub,
     pub memory_telemetry: MemoryTelemetry,
@@ -60,12 +62,15 @@ impl AppState {
             config.security.chat.max_concurrent_generations,
             config.security.chat.max_concurrent_per_session,
         );
+        let image_decode_limiter =
+            ImageDecodeLimiter::new(config.chat_attachment_max_concurrent_decodes);
 
         Ok(Self {
             config,
             http,
             rate_limiter,
             generation_limiter,
+            image_decode_limiter,
             store,
             cafe: CafeHub::default(),
             memory_telemetry: MemoryTelemetry::default(),

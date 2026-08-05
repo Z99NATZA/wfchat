@@ -27,7 +27,7 @@ message lifecycle.
 | --- | --- | --- |
 | `POST` | `/api/chat/attachments` | Upload one multipart field named `file` |
 | `DELETE` | `/api/chat/attachments/:attachment_id` | Delete an owned pending attachment |
-| `GET` | `/api/chat/attachments/:attachment_id/preview` | Return owned validated image bytes |
+| `GET` | `/api/chat/attachments/:attachment_id/preview` | Return owned stored image bytes |
 | `POST` | `/api/chats/:chat_id/messages` | Non-streaming send with attachment ids |
 | `POST` | `/api/chats/:chat_id/messages/stream` | Streaming send with attachment ids |
 
@@ -45,6 +45,8 @@ Message body:
 be unique, pending, image-kind, use a currently supported PNG, JPEG, or WebP
 MIME type, and be owned by the same session/account as the chat. This prevents
 legacy pending attachments in a removed format from reaching the provider.
+The backend sums owned attachment `byte_size` metadata before reading any files
+or calling the provider and rejects a message above 20 MiB of raw image bytes.
 
 Upload and preview responses expose metadata and a backend preview URL, never a
 storage path. Preview requests require the owner's session cookie and use
@@ -52,15 +54,34 @@ private/no-store caching.
 
 ## Validation And Storage
 
-The backend ignores the claimed extension and browser MIME type. It checks magic
-bytes, decodes the image, derives the MIME type, and enforces:
+The backend ignores the claimed extension and browser MIME type. It detects the
+format from magic bytes, reads and validates dimensions and pixel count before
+full decoding, then fully decodes the image as an integrity check. GIF remains
+unsupported for new uploads.
 
-- at most 4 images per message
-- at most 10 MiB per image
-- width and height at most 8192
-- at most 20 million pixels
+The upload route admits at most the configured per-image byte limit plus 64 KiB
+of fixed multipart overhead. Requests above that body limit receive `413`
+before `field.bytes()` can buffer the multipart file. Admitted decodes run on
+the blocking thread pool behind a fail-fast per-process semaphore; when both
+default decode slots are occupied, upload receives `429` instead of waiting.
+The permit remains owned by the blocking task until decoding finishes, including
+after request cancellation.
 
-These defaults are configured by `CHAT_ATTACHMENT_MAX_*`. Files are stored
+Default and production limits are:
+
+| Limit | Default | Production maximum |
+| --- | ---: | ---: |
+| Raw bytes per image | 10 MiB | 10 MiB |
+| Images per message | 4 | 4 |
+| Width | 8,192 | 8,192 |
+| Height | 8,192 | 8,192 |
+| Pixels | 20,000,000 | 20,000,000 |
+| Decoder allocation budget per image | 128 MiB | 128 MiB |
+| Concurrent decodes per API process | 2 | 4 |
+| Total raw image bytes per message | 20 MiB | 20 MiB |
+
+These limits are configured by `CHAT_ATTACHMENT_*`. Decoder width, height, and
+allocation limits are passed explicitly to the image decoder. Files are stored
 outside the web root under server-generated keys rooted at
 `CHAT_ATTACHMENT_UPLOAD_DIR`. The current implementation stores the validated
 original bytes; it does not re-encode images or strip metadata.
@@ -76,6 +97,11 @@ prevents paste/drop image staging, omits the upload route, and rejects
 image-message requests. When the key is omitted,
 production defaults it to disabled and development defaults it to enabled; the
 development `.env.example` explicitly enables it.
+
+The current format allowlist applies to uploads and pending attachments being
+linked. Successfully linked historical attachments remain available through
+the owned preview route even if their stored MIME type is no longer accepted
+for new messages.
 
 ## Provider Boundary
 

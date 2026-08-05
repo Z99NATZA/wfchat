@@ -237,6 +237,7 @@ async fn validate_message_attachment_requests(
 
     let mut attachment_ids = Vec::with_capacity(attachments.len());
     let mut records = Vec::with_capacity(attachments.len());
+    let mut total_attachment_bytes = 0usize;
     for attachment in attachments {
         if attachment.kind != CHAT_ATTACHMENT_KIND_IMAGE {
             return Err(AppError::BadRequest(
@@ -267,11 +268,31 @@ async fn validate_message_attachment_requests(
                 "image attachment type is not supported".to_owned(),
             ));
         }
+        add_attachment_byte_size(
+            &mut total_attachment_bytes,
+            record.byte_size,
+            state.config.chat_attachment_max_total_bytes_per_message,
+        )?;
         attachment_ids.push(attachment.id);
         records.push(record);
     }
 
     Ok(records)
+}
+
+fn add_attachment_byte_size(total: &mut usize, byte_size: i64, maximum: usize) -> AppResult<()> {
+    let byte_size = usize::try_from(byte_size)
+        .map_err(|_| AppError::BadRequest("image attachment metadata is invalid".to_owned()))?;
+    let next_total = total.checked_add(byte_size).ok_or_else(|| {
+        AppError::BadRequest("image attachments exceed total byte limit".to_owned())
+    })?;
+    if next_total > maximum {
+        return Err(AppError::BadRequest(
+            "image attachments exceed total byte limit".to_owned(),
+        ));
+    }
+    *total = next_total;
+    Ok(())
 }
 
 async fn build_ai_user_message(
@@ -558,6 +579,20 @@ mod unit_tests {
             .expect("guarded prefix should fit exactly");
         assert!(reserve_output_chunk(&counter, &chunks[1], max_chars).is_err());
         assert_eq!(counter.load(Ordering::Relaxed), max_chars);
+    }
+
+    #[test]
+    fn total_attachment_bytes_are_checked_incrementally_from_metadata() {
+        let mut total = 0;
+        add_attachment_byte_size(&mut total, 6, 10).expect("first attachment should fit");
+        let error = add_attachment_byte_size(&mut total, 5, 10)
+            .expect_err("combined attachment metadata should exceed the limit");
+
+        assert_eq!(total, 6);
+        assert_eq!(
+            error.to_string(),
+            "bad request: image attachments exceed total byte limit"
+        );
     }
 
     #[test]

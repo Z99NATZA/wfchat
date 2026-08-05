@@ -21,6 +21,14 @@ const PRODUCTION_CHAT_GLOBAL_REQUESTS_PER_MINUTE: u32 = 120;
 const PRODUCTION_CHAT_MAX_CHATS_PER_OWNER: usize = 50;
 const PRODUCTION_CHAT_MAX_MESSAGES_PER_CHAT: usize = 100;
 const PRODUCTION_CHAT_MAX_STORED_CHARS_PER_CHAT: usize = 500_000;
+const PRODUCTION_CHAT_ATTACHMENT_MAX_BYTES: usize = 10 * 1024 * 1024;
+const PRODUCTION_CHAT_ATTACHMENT_MAX_IMAGES_PER_MESSAGE: usize = 4;
+const PRODUCTION_CHAT_ATTACHMENT_MAX_WIDTH: u32 = 8_192;
+const PRODUCTION_CHAT_ATTACHMENT_MAX_HEIGHT: u32 = 8_192;
+const PRODUCTION_CHAT_ATTACHMENT_MAX_PIXELS: u64 = 20_000_000;
+const PRODUCTION_CHAT_ATTACHMENT_DECODER_MAX_ALLOC_BYTES: u64 = 128 * 1024 * 1024;
+const PRODUCTION_CHAT_ATTACHMENT_MAX_CONCURRENT_DECODES: usize = 4;
+const PRODUCTION_CHAT_ATTACHMENT_MAX_TOTAL_BYTES_PER_MESSAGE: usize = 20 * 1024 * 1024;
 
 const RESERVED_PRODUCTION_HOSTS: [&str; 10] = [
     "localhost",
@@ -155,6 +163,9 @@ pub struct Config {
     pub chat_attachment_max_width: u32,
     pub chat_attachment_max_height: u32,
     pub chat_attachment_max_pixels: u64,
+    pub chat_attachment_decoder_max_alloc_bytes: u64,
+    pub chat_attachment_max_concurrent_decodes: usize,
+    pub chat_attachment_max_total_bytes_per_message: usize,
     pub security: SecurityConfig,
 }
 
@@ -248,24 +259,29 @@ impl Config {
             voicevox_post_phoneme_length: optional_f32_env_value("VOICEVOX_POST_PHONEME_LENGTH")?,
             google_client_id: optional_env_value("GOOGLE_CLIENT_ID"),
             chat_attachment_upload_dir: env_value("CHAT_ATTACHMENT_UPLOAD_DIR", "data/uploads"),
-            chat_attachment_max_bytes: env_value("CHAT_ATTACHMENT_MAX_BYTES", "10485760")
-                .parse()
-                .unwrap_or(10 * 1024 * 1024),
-            chat_attachment_max_images_per_message: env_value(
+            chat_attachment_max_bytes: parsed_env_value(
+                "CHAT_ATTACHMENT_MAX_BYTES",
+                10 * 1024 * 1024,
+            )?,
+            chat_attachment_max_images_per_message: parsed_env_value(
                 "CHAT_ATTACHMENT_MAX_IMAGES_PER_MESSAGE",
-                "4",
-            )
-            .parse()
-            .unwrap_or(4),
-            chat_attachment_max_width: env_value("CHAT_ATTACHMENT_MAX_WIDTH", "8192")
-                .parse()
-                .unwrap_or(8192),
-            chat_attachment_max_height: env_value("CHAT_ATTACHMENT_MAX_HEIGHT", "8192")
-                .parse()
-                .unwrap_or(8192),
-            chat_attachment_max_pixels: env_value("CHAT_ATTACHMENT_MAX_PIXELS", "20000000")
-                .parse()
-                .unwrap_or(20_000_000),
+                4,
+            )?,
+            chat_attachment_max_width: parsed_env_value("CHAT_ATTACHMENT_MAX_WIDTH", 8_192)?,
+            chat_attachment_max_height: parsed_env_value("CHAT_ATTACHMENT_MAX_HEIGHT", 8_192)?,
+            chat_attachment_max_pixels: parsed_env_value("CHAT_ATTACHMENT_MAX_PIXELS", 20_000_000)?,
+            chat_attachment_decoder_max_alloc_bytes: parsed_env_value(
+                "CHAT_ATTACHMENT_DECODER_MAX_ALLOC_BYTES",
+                128 * 1024 * 1024,
+            )?,
+            chat_attachment_max_concurrent_decodes: parsed_env_value(
+                "CHAT_ATTACHMENT_MAX_CONCURRENT_DECODES",
+                2,
+            )?,
+            chat_attachment_max_total_bytes_per_message: parsed_env_value(
+                "CHAT_ATTACHMENT_MAX_TOTAL_BYTES_PER_MESSAGE",
+                20 * 1024 * 1024,
+            )?,
             security,
         };
 
@@ -421,6 +437,81 @@ impl Config {
         }
         if self.chat_attachment_max_pixels == 0 {
             return Err("CHAT_ATTACHMENT_MAX_PIXELS must be greater than 0".to_owned());
+        }
+        if self.chat_attachment_decoder_max_alloc_bytes == 0 {
+            return Err(
+                "CHAT_ATTACHMENT_DECODER_MAX_ALLOC_BYTES must be greater than 0".to_owned(),
+            );
+        }
+        if self.chat_attachment_max_concurrent_decodes == 0 {
+            return Err("CHAT_ATTACHMENT_MAX_CONCURRENT_DECODES must be greater than 0".to_owned());
+        }
+        if self.chat_attachment_max_total_bytes_per_message == 0 {
+            return Err(
+                "CHAT_ATTACHMENT_MAX_TOTAL_BYTES_PER_MESSAGE must be greater than 0".to_owned(),
+            );
+        }
+        if self.chat_attachment_max_total_bytes_per_message < self.chat_attachment_max_bytes {
+            return Err(
+                "CHAT_ATTACHMENT_MAX_TOTAL_BYTES_PER_MESSAGE must not be less than CHAT_ATTACHMENT_MAX_BYTES"
+                    .to_owned(),
+            );
+        }
+        if self
+            .chat_attachment_max_bytes
+            .checked_add(64 * 1024)
+            .is_none()
+        {
+            return Err("CHAT_ATTACHMENT_MAX_BYTES is too large".to_owned());
+        }
+        if self.chat_attachment_max_concurrent_decodes > tokio::sync::Semaphore::MAX_PERMITS {
+            return Err(format!(
+                "CHAT_ATTACHMENT_MAX_CONCURRENT_DECODES must not exceed Tokio semaphore maximum ({})",
+                tokio::sync::Semaphore::MAX_PERMITS
+            ));
+        }
+
+        if self.is_production() {
+            validate_production_max(
+                "CHAT_ATTACHMENT_MAX_BYTES",
+                self.chat_attachment_max_bytes,
+                PRODUCTION_CHAT_ATTACHMENT_MAX_BYTES,
+            )?;
+            validate_production_max(
+                "CHAT_ATTACHMENT_MAX_IMAGES_PER_MESSAGE",
+                self.chat_attachment_max_images_per_message,
+                PRODUCTION_CHAT_ATTACHMENT_MAX_IMAGES_PER_MESSAGE,
+            )?;
+            validate_production_max(
+                "CHAT_ATTACHMENT_MAX_WIDTH",
+                self.chat_attachment_max_width,
+                PRODUCTION_CHAT_ATTACHMENT_MAX_WIDTH,
+            )?;
+            validate_production_max(
+                "CHAT_ATTACHMENT_MAX_HEIGHT",
+                self.chat_attachment_max_height,
+                PRODUCTION_CHAT_ATTACHMENT_MAX_HEIGHT,
+            )?;
+            validate_production_max(
+                "CHAT_ATTACHMENT_MAX_PIXELS",
+                self.chat_attachment_max_pixels,
+                PRODUCTION_CHAT_ATTACHMENT_MAX_PIXELS,
+            )?;
+            validate_production_max(
+                "CHAT_ATTACHMENT_DECODER_MAX_ALLOC_BYTES",
+                self.chat_attachment_decoder_max_alloc_bytes,
+                PRODUCTION_CHAT_ATTACHMENT_DECODER_MAX_ALLOC_BYTES,
+            )?;
+            validate_production_max(
+                "CHAT_ATTACHMENT_MAX_CONCURRENT_DECODES",
+                self.chat_attachment_max_concurrent_decodes,
+                PRODUCTION_CHAT_ATTACHMENT_MAX_CONCURRENT_DECODES,
+            )?;
+            validate_production_max(
+                "CHAT_ATTACHMENT_MAX_TOTAL_BYTES_PER_MESSAGE",
+                self.chat_attachment_max_total_bytes_per_message,
+                PRODUCTION_CHAT_ATTACHMENT_MAX_TOTAL_BYTES_PER_MESSAGE,
+            )?;
         }
 
         Ok(())
@@ -754,7 +845,12 @@ mod tests {
         parse_trusted_proxy_cidrs, AppEnvironment, Config, SecurityConfig,
         PRODUCTION_AI_CONNECT_TIMEOUT_SECONDS, PRODUCTION_AI_IDLE_TIMEOUT_SECONDS,
         PRODUCTION_AI_TOTAL_TIMEOUT_SECONDS, PRODUCTION_AUTH_GUEST_GLOBAL_REQUESTS_PER_MINUTE,
-        PRODUCTION_AUTH_GUEST_REQUESTS_PER_MINUTE, PRODUCTION_CHAT_GLOBAL_REQUESTS_PER_MINUTE,
+        PRODUCTION_AUTH_GUEST_REQUESTS_PER_MINUTE,
+        PRODUCTION_CHAT_ATTACHMENT_DECODER_MAX_ALLOC_BYTES, PRODUCTION_CHAT_ATTACHMENT_MAX_BYTES,
+        PRODUCTION_CHAT_ATTACHMENT_MAX_CONCURRENT_DECODES, PRODUCTION_CHAT_ATTACHMENT_MAX_HEIGHT,
+        PRODUCTION_CHAT_ATTACHMENT_MAX_IMAGES_PER_MESSAGE, PRODUCTION_CHAT_ATTACHMENT_MAX_PIXELS,
+        PRODUCTION_CHAT_ATTACHMENT_MAX_TOTAL_BYTES_PER_MESSAGE,
+        PRODUCTION_CHAT_ATTACHMENT_MAX_WIDTH, PRODUCTION_CHAT_GLOBAL_REQUESTS_PER_MINUTE,
         PRODUCTION_CHAT_MAX_CHATS_PER_OWNER, PRODUCTION_CHAT_MAX_MESSAGES_PER_CHAT,
         PRODUCTION_CHAT_MAX_STORED_CHARS_PER_CHAT, PRODUCTION_CHAT_REQUESTS_PER_MINUTE,
         PRODUCTION_CONTEXT_MAX_CHARS, PRODUCTION_CONTEXT_MAX_MESSAGES,
@@ -803,6 +899,9 @@ mod tests {
             chat_attachment_max_width: 8192,
             chat_attachment_max_height: 8192,
             chat_attachment_max_pixels: 20_000_000,
+            chat_attachment_decoder_max_alloc_bytes: 128 * 1024 * 1024,
+            chat_attachment_max_concurrent_decodes: 2,
+            chat_attachment_max_total_bytes_per_message: 20 * 1024 * 1024,
             security: SecurityConfig::default(),
         }
     }
@@ -1059,6 +1158,63 @@ mod tests {
             .expect_err("zero byte limit should be rejected");
 
         assert_eq!(error, "CHAT_ATTACHMENT_MAX_BYTES must be greater than 0");
+    }
+
+    #[test]
+    fn attachment_total_byte_limit_must_cover_one_allowed_image() {
+        let mut config = base_config();
+        config.chat_attachment_max_total_bytes_per_message = config.chat_attachment_max_bytes - 1;
+
+        assert_eq!(
+            config.validate().expect_err("relational limit should fail"),
+            "CHAT_ATTACHMENT_MAX_TOTAL_BYTES_PER_MESSAGE must not be less than CHAT_ATTACHMENT_MAX_BYTES"
+        );
+    }
+
+    #[test]
+    fn production_enforces_every_attachment_maximum() {
+        macro_rules! assert_attachment_max {
+            ($field:ident, $maximum:expr) => {{
+                let mut config = production_config();
+                config.$field = $maximum;
+                assert!(config.validate().is_ok(), stringify!($field));
+                config.$field = $maximum + 1;
+                assert!(config.validate().is_err(), stringify!($field));
+            }};
+        }
+
+        assert_attachment_max!(
+            chat_attachment_max_bytes,
+            PRODUCTION_CHAT_ATTACHMENT_MAX_BYTES
+        );
+        assert_attachment_max!(
+            chat_attachment_max_images_per_message,
+            PRODUCTION_CHAT_ATTACHMENT_MAX_IMAGES_PER_MESSAGE
+        );
+        assert_attachment_max!(
+            chat_attachment_max_width,
+            PRODUCTION_CHAT_ATTACHMENT_MAX_WIDTH
+        );
+        assert_attachment_max!(
+            chat_attachment_max_height,
+            PRODUCTION_CHAT_ATTACHMENT_MAX_HEIGHT
+        );
+        assert_attachment_max!(
+            chat_attachment_max_pixels,
+            PRODUCTION_CHAT_ATTACHMENT_MAX_PIXELS
+        );
+        assert_attachment_max!(
+            chat_attachment_decoder_max_alloc_bytes,
+            PRODUCTION_CHAT_ATTACHMENT_DECODER_MAX_ALLOC_BYTES
+        );
+        assert_attachment_max!(
+            chat_attachment_max_concurrent_decodes,
+            PRODUCTION_CHAT_ATTACHMENT_MAX_CONCURRENT_DECODES
+        );
+        assert_attachment_max!(
+            chat_attachment_max_total_bytes_per_message,
+            PRODUCTION_CHAT_ATTACHMENT_MAX_TOTAL_BYTES_PER_MESSAGE
+        );
     }
 
     #[test]

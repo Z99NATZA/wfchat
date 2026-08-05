@@ -362,6 +362,7 @@ describe("ChatComposer", () => {
 		expect(previewImage.src).toBe("blob:image-preview");
 		expect(previewImage.parentElement?.className).toContain("border-primary");
 		expect(previewImage.parentElement?.className).toContain("dark:border-action-border");
+		expect(previewImage.parentElement?.className).not.toContain("bg-black");
 		expect(previewImage.parentElement?.className).not.toContain("p-2");
 	});
 

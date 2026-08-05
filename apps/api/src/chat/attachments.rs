@@ -23,7 +23,7 @@ pub(super) async fn upload_chat_attachment(
     while let Some(field) = multipart
         .next_field()
         .await
-        .map_err(|_| AppError::BadRequest("invalid attachment upload".to_owned()))?
+        .map_err(attachment_multipart_error)?
     {
         let Some(name) = field.name().map(str::to_owned) else {
             continue;
@@ -39,17 +39,15 @@ pub(super) async fn upload_chat_attachment(
             ));
         }
 
-        let bytes = field
-            .bytes()
-            .await
-            .map_err(|_| AppError::BadRequest("invalid attachment upload".to_owned()))?;
+        let bytes = field.bytes().await.map_err(attachment_multipart_error)?;
         file_bytes = Some(bytes.to_vec());
     }
 
     let file_bytes = file_bytes.ok_or_else(|| {
         AppError::BadRequest("image attachment upload requires a file".to_owned())
     })?;
-    let validated = validate_image_attachment(&state.config, &file_bytes)?;
+    let (validated, file_bytes) =
+        validate_image_attachment(&state.config, &state.image_decode_limiter, file_bytes).await?;
     let attachment_id = Uuid::new_v4();
     let storage_key = image_storage_key(attachment_id, validated.extension);
 
@@ -87,6 +85,14 @@ pub(super) async fn upload_chat_attachment(
     };
 
     Ok(Json(chat_attachment_response(attachment)))
+}
+
+fn attachment_multipart_error(error: axum::extract::multipart::MultipartError) -> AppError {
+    if error.status() == axum::http::StatusCode::PAYLOAD_TOO_LARGE {
+        AppError::PayloadTooLarge
+    } else {
+        AppError::BadRequest("invalid attachment upload".to_owned())
+    }
 }
 
 pub(super) async fn preview_chat_attachment(

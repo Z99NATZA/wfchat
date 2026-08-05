@@ -15,7 +15,7 @@ Axum router (app.rs)
 ```
 
 `AppState` shares typed config, PostgreSQL store, timeout-bound HTTP client,
-request and generation limiters, Cafe hub, and automatic-memory telemetry.
+request, generation, and image-decode limiters, Cafe hub, and automatic-memory telemetry.
 `ChatStore::connect()` applies SQLx migrations before the server starts.
 
 ## Domains
@@ -128,7 +128,9 @@ headers are ignored.
 | Image upload                   |                              12 |
 
 Rate limits and concurrency limits are per API process and reset on restart.
-Rate-limited HTTP responses include `Retry-After: 60`.
+Image decode capacity is fail-fast and defaults to two blocking decodes; a full
+decode semaphore returns `429`. Rate-limited HTTP responses include
+`Retry-After: 60`.
 
 ## Configuration
 
@@ -140,9 +142,9 @@ Invalid CIDRs, trusted headers without a trusted CIDR, unknown providers,
 missing required keys/models, invalid voice formats, and invalid limits stop
 startup with a configuration error rather than a runtime panic.
 
-Production accepts each positive request, generation, and storage limit only up to these maxima;
-development keeps the same positive, relational, and no-panic validation but
-does not apply this maxima table:
+Production accepts each positive request, generation, attachment, and storage
+limit only up to these maxima. Development keeps the same positive, relational,
+and no-panic validation but does not apply this maxima table:
 
 | Key                                     | Default | Production maximum |
 | --------------------------------------- | ------: | -----------------: |
@@ -164,6 +166,14 @@ does not apply this maxima table:
 | `CHAT_MAX_CHATS_PER_OWNER`              |      50 |                 50 |
 | `CHAT_MAX_MESSAGES_PER_CHAT`            |     100 |                100 |
 | `CHAT_MAX_STORED_CHARS_PER_CHAT`        | 500,000 |            500,000 |
+| `CHAT_ATTACHMENT_MAX_BYTES`                  | 10 MiB |             10 MiB |
+| `CHAT_ATTACHMENT_MAX_IMAGES_PER_MESSAGE`     |      4 |                  4 |
+| `CHAT_ATTACHMENT_MAX_WIDTH`                  |  8,192 |              8,192 |
+| `CHAT_ATTACHMENT_MAX_HEIGHT`                 |  8,192 |              8,192 |
+| `CHAT_ATTACHMENT_MAX_PIXELS`                 | 20,000,000 |      20,000,000 |
+| `CHAT_ATTACHMENT_DECODER_MAX_ALLOC_BYTES`    | 128 MiB |           128 MiB |
+| `CHAT_ATTACHMENT_MAX_CONCURRENT_DECODES`     |      2 |                  4 |
+| `CHAT_ATTACHMENT_MAX_TOTAL_BYTES_PER_MESSAGE` | 20 MiB |            20 MiB |
 
 Production origins are HTTPS DNS origins with no credentials, path, query, or
 fragment. Hostnames are lowercased and stripped of trailing dots before checks.

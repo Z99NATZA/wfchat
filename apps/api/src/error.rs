@@ -13,6 +13,8 @@ pub enum AppError {
     Forbidden,
     #[error("bad request: {0}")]
     BadRequest(String),
+    #[error("payload too large")]
+    PayloadTooLarge,
     #[error("conflict: {0}")]
     Conflict(String),
     #[error("upstream ai error: {0}")]
@@ -49,6 +51,7 @@ impl IntoResponse for AppError {
             AppError::NotFound => StatusCode::NOT_FOUND,
             AppError::Forbidden => StatusCode::FORBIDDEN,
             AppError::BadRequest(_) => StatusCode::BAD_REQUEST,
+            AppError::PayloadTooLarge => StatusCode::PAYLOAD_TOO_LARGE,
             AppError::Conflict(_) => StatusCode::CONFLICT,
             AppError::Ai(_) => StatusCode::BAD_GATEWAY,
             AppError::Database => StatusCode::INTERNAL_SERVER_ERROR,

@@ -1062,7 +1062,7 @@ function ChatMessageAttachmentPreview({
 			showCancelAction: false,
 			size: "wide",
 			render: () => (
-				<div className="flex max-h-[72vh] items-center justify-center overflow-auto rounded-md border border-primary bg-black/90 dark:border-action-border">
+				<div className="flex max-h-[72vh] items-center justify-center overflow-auto rounded-md border border-primary dark:border-action-border">
 					<img
 						className="max-h-[70vh] max-w-full object-contain"
 						src={imageUrl}

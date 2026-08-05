@@ -126,6 +126,9 @@ mod tests {
             chat_attachment_max_width: 8192,
             chat_attachment_max_height: 8192,
             chat_attachment_max_pixels: 20_000_000,
+            chat_attachment_decoder_max_alloc_bytes: 128 * 1024 * 1024,
+            chat_attachment_max_concurrent_decodes: 2,
+            chat_attachment_max_total_bytes_per_message: 20 * 1024 * 1024,
             security: Default::default(),
         })
         .await

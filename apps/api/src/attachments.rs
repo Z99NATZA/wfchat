@@ -1,8 +1,12 @@
-use std::path::{Component, Path, PathBuf};
+use std::{
+    io::Cursor,
+    path::{Component, Path, PathBuf},
+    sync::Arc,
+};
 
-use image::GenericImageView;
+use image::{error::LimitErrorKind, ImageError, ImageReader, Limits};
 use sha2::{Digest, Sha256};
-use tokio::fs;
+use tokio::{fs, sync::Semaphore};
 use uuid::Uuid;
 
 use crate::{
@@ -12,7 +16,7 @@ use crate::{
 };
 
 pub const CHAT_ATTACHMENT_KIND_IMAGE: &str = "image";
-pub const MAX_ATTACHMENT_MULTIPART_BYTES: usize = 64 * 1024 * 1024;
+pub const ATTACHMENT_MULTIPART_OVERHEAD_BYTES: usize = 64 * 1024;
 pub const PENDING_ATTACHMENT_CLEANUP_AFTER_SECONDS: u64 = 24 * 60 * 60;
 pub const PENDING_ATTACHMENT_CLEANUP_INTERVAL_SECONDS: u64 = 60 * 60;
 const PENDING_ATTACHMENT_CLEANUP_BATCH_SIZE: i64 = 100;
@@ -36,6 +40,47 @@ enum SupportedImageFormat {
     Png,
     Jpeg,
     Webp,
+}
+
+#[derive(Clone, Debug)]
+pub struct ImageDecodeLimiter {
+    semaphore: Arc<Semaphore>,
+}
+
+impl ImageDecodeLimiter {
+    pub fn new(max_concurrent_decodes: usize) -> Self {
+        Self {
+            semaphore: Arc::new(Semaphore::new(max_concurrent_decodes)),
+        }
+    }
+
+    fn try_acquire(&self) -> AppResult<tokio::sync::OwnedSemaphorePermit> {
+        self.semaphore
+            .clone()
+            .try_acquire_owned()
+            .map_err(|_| AppError::RateLimited)
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+struct ImageValidationLimits {
+    max_bytes: usize,
+    max_width: u32,
+    max_height: u32,
+    max_pixels: u64,
+    decoder_max_alloc_bytes: u64,
+}
+
+impl From<&Config> for ImageValidationLimits {
+    fn from(config: &Config) -> Self {
+        Self {
+            max_bytes: config.chat_attachment_max_bytes,
+            max_width: config.chat_attachment_max_width,
+            max_height: config.chat_attachment_max_height,
+            max_pixels: config.chat_attachment_max_pixels,
+            decoder_max_alloc_bytes: config.chat_attachment_decoder_max_alloc_bytes,
+        }
+    }
 }
 
 impl SupportedImageFormat {
@@ -64,14 +109,33 @@ impl SupportedImageFormat {
     }
 }
 
-pub fn validate_image_attachment(
+pub async fn validate_image_attachment(
     config: &Config,
+    decode_limiter: &ImageDecodeLimiter,
+    bytes: Vec<u8>,
+) -> AppResult<(ValidatedImageAttachment, Vec<u8>)> {
+    let limits = ImageValidationLimits::from(config);
+    let permit = decode_limiter.try_acquire()?;
+    tokio::task::spawn_blocking(move || {
+        let _permit = permit;
+        let validated = validate_image_attachment_bytes(limits, &bytes)?;
+        Ok((validated, bytes))
+    })
+    .await
+    .map_err(|error| {
+        tracing::error!(%error, "image attachment validation task failed");
+        AppError::BadRequest("image attachment is not a valid image".to_owned())
+    })?
+}
+
+fn validate_image_attachment_bytes(
+    limits: ImageValidationLimits,
     bytes: &[u8],
 ) -> AppResult<ValidatedImageAttachment> {
     if bytes.is_empty() {
         return Err(AppError::BadRequest("image attachment is empty".to_owned()));
     }
-    if bytes.len() > config.chat_attachment_max_bytes {
+    if bytes.len() > limits.max_bytes {
         return Err(AppError::BadRequest(
             "image attachment is too large".to_owned(),
         ));
@@ -79,9 +143,15 @@ pub fn validate_image_attachment(
 
     let format = detect_supported_image_format(bytes)
         .ok_or_else(|| AppError::BadRequest("image attachment type is not supported".to_owned()))?;
-    let image = image::load_from_memory_with_format(bytes, format.image_format())
-        .map_err(|_| AppError::BadRequest("image attachment is not a valid image".to_owned()))?;
-    let (width, height) = image.dimensions();
+    let mut dimensions_reader = ImageReader::with_format(Cursor::new(bytes), format.image_format());
+    let mut dimension_limits = Limits::default();
+    dimension_limits.max_image_width = None;
+    dimension_limits.max_image_height = None;
+    dimension_limits.max_alloc = Some(limits.decoder_max_alloc_bytes);
+    dimensions_reader.limits(dimension_limits);
+    let (width, height) = dimensions_reader
+        .into_dimensions()
+        .map_err(image_validation_error)?;
     let pixel_count = u64::from(width) * u64::from(height);
 
     if width == 0 || height == 0 {
@@ -89,21 +159,29 @@ pub fn validate_image_attachment(
             "image attachment dimensions are invalid".to_owned(),
         ));
     }
-    if width > config.chat_attachment_max_width {
+    if width > limits.max_width {
         return Err(AppError::BadRequest(
             "image attachment width is too large".to_owned(),
         ));
     }
-    if height > config.chat_attachment_max_height {
+    if height > limits.max_height {
         return Err(AppError::BadRequest(
             "image attachment height is too large".to_owned(),
         ));
     }
-    if pixel_count > config.chat_attachment_max_pixels {
+    if pixel_count > limits.max_pixels {
         return Err(AppError::BadRequest(
             "image attachment has too many pixels".to_owned(),
         ));
     }
+
+    let mut decode_reader = ImageReader::with_format(Cursor::new(bytes), format.image_format());
+    let mut decode_limits = Limits::default();
+    decode_limits.max_image_width = Some(limits.max_width);
+    decode_limits.max_image_height = Some(limits.max_height);
+    decode_limits.max_alloc = Some(limits.decoder_max_alloc_bytes);
+    decode_reader.limits(decode_limits);
+    decode_reader.decode().map_err(image_validation_error)?;
 
     Ok(ValidatedImageAttachment {
         mime_type: format.mime_type(),
@@ -217,6 +295,15 @@ fn now_unix_seconds() -> u64 {
         .unwrap_or_default()
 }
 
+fn image_validation_error(error: ImageError) -> AppError {
+    match error {
+        ImageError::Limits(error) if error.kind() == LimitErrorKind::InsufficientMemory => {
+            AppError::BadRequest("image attachment exceeds decoder allocation limit".to_owned())
+        }
+        _ => AppError::BadRequest("image attachment is not a valid image".to_owned()),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::io::Cursor;
@@ -265,8 +352,15 @@ mod tests {
             chat_attachment_max_width: 8192,
             chat_attachment_max_height: 8192,
             chat_attachment_max_pixels: 20_000_000,
+            chat_attachment_decoder_max_alloc_bytes: 128 * 1024 * 1024,
+            chat_attachment_max_concurrent_decodes: 2,
+            chat_attachment_max_total_bytes_per_message: 20 * 1024 * 1024,
             security: Default::default(),
         }
+    }
+
+    fn validate(config: &Config, bytes: &[u8]) -> AppResult<ValidatedImageAttachment> {
+        validate_image_attachment_bytes(ImageValidationLimits::from(config), bytes)
     }
 
     fn image_bytes(width: u32, height: u32, format: ImageFormat) -> Vec<u8> {
@@ -278,12 +372,20 @@ mod tests {
         bytes.into_inner()
     }
 
+    fn corrupt_png_image_data(bytes: &mut [u8]) {
+        let idat = bytes
+            .windows(4)
+            .position(|window| window == b"IDAT")
+            .expect("encoded PNG should contain IDAT");
+        bytes[idat + 4] ^= 0xff;
+    }
+
     #[test]
     fn validate_image_attachment_accepts_png_bytes() {
         let config = test_config();
         let bytes = image_bytes(2, 3, ImageFormat::Png);
 
-        let image = validate_image_attachment(&config, &bytes).expect("png should validate");
+        let image = validate(&config, &bytes).expect("png should validate");
 
         assert_eq!(image.mime_type, "image/png");
         assert_eq!(image.extension, "png");
@@ -298,7 +400,7 @@ mod tests {
         let config = test_config();
         let bytes = image_bytes(2, 3, ImageFormat::Jpeg);
 
-        let image = validate_image_attachment(&config, &bytes).expect("jpeg should validate");
+        let image = validate(&config, &bytes).expect("jpeg should validate");
 
         assert_eq!(image.mime_type, "image/jpeg");
         assert_eq!(image.extension, "jpg");
@@ -311,7 +413,7 @@ mod tests {
         let config = test_config();
         let bytes = image_bytes(2, 3, ImageFormat::WebP);
 
-        let image = validate_image_attachment(&config, &bytes).expect("webp should validate");
+        let image = validate(&config, &bytes).expect("webp should validate");
 
         assert_eq!(image.mime_type, "image/webp");
         assert_eq!(image.extension, "webp");
@@ -324,7 +426,7 @@ mod tests {
         let config = test_config();
         let bytes = b"GIF89a\x01\x00\x01\x00\x80\x00\x00\x00\x00\x00\xff\xff\xff!\xf9\x04\x01\x00\x00\x00\x00,\x00\x00\x00\x00\x01\x00\x01\x00\x00\x02\x02D\x01\x00;";
 
-        let error = validate_image_attachment(&config, bytes).expect_err("gif should be rejected");
+        let error = validate(&config, bytes).expect_err("gif should be rejected");
 
         assert_eq!(
             error.to_string(),
@@ -337,7 +439,7 @@ mod tests {
         let config = test_config();
         let bytes = br#"<svg xmlns="http://www.w3.org/2000/svg"></svg>"#;
 
-        let error = validate_image_attachment(&config, bytes).expect_err("svg should be rejected");
+        let error = validate(&config, bytes).expect_err("svg should be rejected");
 
         assert_eq!(
             error.to_string(),
@@ -350,8 +452,7 @@ mod tests {
         let config = test_config();
         let bytes = b"not actually a png";
 
-        let error =
-            validate_image_attachment(&config, bytes).expect_err("bad magic should be rejected");
+        let error = validate(&config, bytes).expect_err("bad magic should be rejected");
 
         assert_eq!(
             error.to_string(),
@@ -365,8 +466,7 @@ mod tests {
         config.chat_attachment_max_width = 1;
         let bytes = image_bytes(2, 1, ImageFormat::Png);
 
-        let error =
-            validate_image_attachment(&config, &bytes).expect_err("wide image should be rejected");
+        let error = validate(&config, &bytes).expect_err("wide image should be rejected");
 
         assert_eq!(
             error.to_string(),
@@ -383,5 +483,81 @@ mod tests {
             error.to_string(),
             "bad request: attachment storage key is invalid"
         );
+    }
+
+    #[test]
+    fn validate_image_attachment_rejects_dimensions_before_full_decode() {
+        let mut config = test_config();
+        config.chat_attachment_max_width = 1;
+        let mut bytes = image_bytes(2, 1, ImageFormat::Png);
+        corrupt_png_image_data(&mut bytes);
+
+        let error = validate(&config, &bytes)
+            .expect_err("oversized header should be rejected before truncated data is decoded");
+
+        assert_eq!(
+            error.to_string(),
+            "bad request: image attachment width is too large"
+        );
+    }
+
+    #[test]
+    fn validate_image_attachment_rejects_pixel_count_before_full_decode() {
+        let mut config = test_config();
+        config.chat_attachment_max_pixels = 1;
+        let mut bytes = image_bytes(2, 1, ImageFormat::Png);
+        corrupt_png_image_data(&mut bytes);
+
+        let error = validate(&config, &bytes)
+            .expect_err("oversized header should be rejected before truncated data is decoded");
+
+        assert_eq!(
+            error.to_string(),
+            "bad request: image attachment has too many pixels"
+        );
+    }
+
+    #[test]
+    fn validate_image_attachment_rejects_decoder_allocation_over_limit() {
+        let mut config = test_config();
+        config.chat_attachment_decoder_max_alloc_bytes = 1;
+        let bytes = image_bytes(2, 2, ImageFormat::Png);
+
+        let error = validate(&config, &bytes).expect_err("allocation limit should reject decode");
+
+        assert_eq!(
+            error.to_string(),
+            "bad request: image attachment exceeds decoder allocation limit"
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn decode_limiter_fails_fast_and_blocking_task_keeps_permit_after_abort() {
+        let limiter = ImageDecodeLimiter::new(1);
+        let permit = limiter.try_acquire().expect("first decode should acquire");
+        let (started_tx, started_rx) = std::sync::mpsc::channel();
+        let (release_tx, release_rx) = std::sync::mpsc::channel();
+        let task = tokio::task::spawn_blocking(move || {
+            let _permit = permit;
+            started_tx.send(()).unwrap();
+            release_rx.recv().unwrap();
+        });
+        started_rx.recv().unwrap();
+
+        let error = validate_image_attachment(
+            &test_config(),
+            &limiter,
+            image_bytes(1, 1, ImageFormat::Png),
+        )
+        .await
+        .expect_err("decode should fail fast while capacity is full");
+        assert!(matches!(error, AppError::RateLimited));
+        task.abort();
+        assert!(matches!(limiter.try_acquire(), Err(AppError::RateLimited)));
+
+        release_tx.send(()).unwrap();
+        let _ = task.await;
+        tokio::task::yield_now().await;
+        assert!(limiter.try_acquire().is_ok());
     }
 }
