@@ -99,6 +99,9 @@ impl ChatStore {
         sqlx::query("select wfchat_reparent_legacy_promoted_guests(1000)")
             .execute(&mut *tx)
             .await?;
+        sqlx::query("select wfchat_reparent_legacy_attachment_deletions(1000)")
+            .execute(&mut *tx)
+            .await?;
         let result = sqlx::query(
             "delete from auth_sessions
              where id in (
@@ -318,6 +321,16 @@ impl ChatStore {
         .await?;
 
         sqlx::query(
+            "update chat_attachment_file_deletions
+             set owner_user_id = $1
+             where owner_session_id = $2 and owner_user_id is null",
+        )
+        .bind(user_id)
+        .bind(session_id)
+        .execute(&mut **tx)
+        .await?;
+
+        sqlx::query(
             "update memory_items set owner_user_id = $1 where owner_session_id = $2 and owner_user_id is null",
         )
         .bind(user_id)
@@ -391,6 +404,7 @@ impl ChatStore {
         for table in [
             "chats",
             "chat_attachments",
+            "chat_attachment_file_deletions",
             "memory_items",
             "memory_extraction_jobs",
             "memory_follow_up_deliveries",

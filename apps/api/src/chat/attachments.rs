@@ -51,40 +51,58 @@ pub(super) async fn upload_chat_attachment(
     let attachment_id = Uuid::new_v4();
     let storage_key = image_storage_key(attachment_id, validated.extension);
 
-    write_attachment_bytes(
+    let attachment = create_chat_attachment_metadata_then_file(
+        &state.store,
         &state.config.chat_attachment_upload_dir,
-        &storage_key,
+        owner,
+        NewChatAttachmentRecord {
+            id: attachment_id,
+            kind: CHAT_ATTACHMENT_KIND_IMAGE.to_owned(),
+            mime_type: validated.mime_type.to_owned(),
+            byte_size: validated.byte_size as i64,
+            width: Some(validated.width as i32),
+            height: Some(validated.height as i32),
+            sha256: validated.sha256,
+            storage_key,
+        },
         &file_bytes,
     )
     .await?;
 
-    let attachment = state
-        .store
-        .create_chat_attachment(
-            owner,
-            NewChatAttachmentRecord {
-                id: attachment_id,
-                kind: CHAT_ATTACHMENT_KIND_IMAGE.to_owned(),
-                mime_type: validated.mime_type.to_owned(),
-                byte_size: validated.byte_size as i64,
-                width: Some(validated.width as i32),
-                height: Some(validated.height as i32),
-                sha256: validated.sha256.clone(),
-                storage_key: storage_key.clone(),
-            },
-        )
-        .await
-        .map_err(|error| AppError::database("save chat attachment metadata", error));
-
-    let attachment = match attachment {
-        Ok(attachment) => attachment,
-        Err(error) => {
-            remove_attachment_file(&state.config.chat_attachment_upload_dir, &storage_key).await;
-            return Err(error);
-        }
-    };
-
     Ok(Json(chat_attachment_response(attachment)))
+}
+
+async fn create_chat_attachment_metadata_then_file(
+    store: &ChatStore,
+    upload_dir: &str,
+    owner: OwnerScope,
+    attachment: NewChatAttachmentRecord,
+    file_bytes: &[u8],
+) -> AppResult<ChatAttachmentRecord> {
+    let attachment_id = attachment.id;
+    let storage_key = attachment.storage_key.clone();
+    let attachment = store
+        .create_chat_attachment(owner, attachment)
+        .await
+        .map_err(|error| AppError::database("save chat attachment metadata", error))?;
+
+    if let Err(write_error) = write_attachment_bytes(upload_dir, &storage_key, file_bytes).await {
+        let deleted = store
+            .delete_pending_chat_attachment(owner, attachment_id)
+            .await
+            .map_err(|error| AppError::database("delete failed chat attachment metadata", error))?;
+        if !deleted {
+            tracing::error!(
+                %attachment_id,
+                %storage_key,
+                "failed attachment write left pending metadata unexpectedly unavailable for deletion"
+            );
+            return Err(AppError::Database);
+        }
+        return Err(write_error);
+    }
+
+    Ok(attachment)
 }
 
 fn attachment_multipart_error(error: axum::extract::multipart::MultipartError) -> AppError {
@@ -145,14 +163,11 @@ pub(super) async fn delete_chat_attachment(
 
     let deleted = state
         .store
-        .mark_pending_chat_attachment_deleted(owner, attachment_id)
-        .await?
-        .ok_or(AppError::NotFound)?;
-    remove_attachment_file(
-        &state.config.chat_attachment_upload_dir,
-        &deleted.storage_key,
-    )
-    .await;
+        .delete_pending_chat_attachment(owner, attachment_id)
+        .await?;
+    if !deleted {
+        return Err(AppError::NotFound);
+    }
 
     Ok(Json(json!({ "ok": true })))
 }

@@ -11,15 +11,18 @@ not accepted by the backend.
 browser selects image
   -> local blob URL for pending preview only
   -> POST /api/chat/attachments with multipart bytes
-  -> backend validates and stores a pending attachment
+  -> backend validates and commits pending attachment metadata
+  -> backend writes the validated bytes to the final storage key
   -> message request sends only { id, kind: "image" }
   -> provider completes successfully
   -> user message, assistant message, and attachment links commit atomically
 ```
 
-On provider or persistence failure, the attachment stays pending. The frontend
-can delete a pending attachment before send. Sent attachments follow their chat
-message lifecycle.
+On provider or message-persistence failure, the attachment stays pending. The
+frontend can delete a pending attachment before send. Sent attachments follow
+their chat message lifecycle. If the final-path write fails during upload, the
+backend hard-deletes the pending metadata and the durable deletion worker treats
+the partial or missing file idempotently.
 
 ## API
 
@@ -86,9 +89,32 @@ outside the web root under server-generated keys rooted at
 `CHAT_ATTACHMENT_UPLOAD_DIR`. The current implementation stores the validated
 original bytes; it does not re-encode images or strip metadata.
 
-Pending attachments older than 24 hours are soft-deleted and their files
-removed. Cleanup runs at API startup and hourly, in batches, and never targets
-linked attachments.
+Hard deletion from `chat_attachments` is the only attachment-removal lifecycle.
+A database trigger records the storage key, byte size, and owner snapshots in a
+durable deletion queue in the same transaction, including for foreign-key
+cascades caused by clearing messages, deleting chats, or deleting guest
+sessions. Pending attachments older than 24 hours are hard-deleted in batches;
+linked attachments are not targeted by pending cleanup.
+
+At API startup and hourly, each replica claims at most 100 deletion records with
+a 15-minute PostgreSQL lease before filesystem I/O. Successful deletion and an
+already-missing file both remove the record. Other filesystem failures retain
+the record for one retry no earlier than one hour later. Claim tokens prevent a
+replica from completing work after its lease has been replaced.
+
+Each maintenance run inspects at most 100 entries from the `chat-images`
+directory. Scan position continues across hourly rounds within one API process;
+reaching the directory end starts a new pass on a later round, while an API
+restart begins again at the directory start. Only regular files with strict
+`chat-images/<uuid>.(png|jpg|webp)` keys older than the 24-hour pending grace
+period are eligible. A file with neither live metadata nor an existing deletion
+record is enqueued with its byte size and no owner snapshot; reconciliation
+never deletes files directly.
+
+All API replicas that enable image upload must mount the same persistent
+`CHAT_ATTACHMENT_UPLOAD_DIR`. Replica-local upload directories are unsupported:
+preview and idempotent deletion require every replica to share one filesystem
+view.
 
 Upload has its own 12-requests-per-minute in-memory rate-limit bucket. Ownership
 is checked for upload session resolution, preview, delete, and message linking.

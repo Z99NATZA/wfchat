@@ -2,6 +2,7 @@ use std::{
     io::Cursor,
     path::{Component, Path, PathBuf},
     sync::Arc,
+    time::{Duration, SystemTime},
 };
 
 use image::{error::LimitErrorKind, ImageError, ImageReader, Limits};
@@ -20,6 +21,20 @@ pub const ATTACHMENT_MULTIPART_OVERHEAD_BYTES: usize = 64 * 1024;
 pub const PENDING_ATTACHMENT_CLEANUP_AFTER_SECONDS: u64 = 24 * 60 * 60;
 pub const PENDING_ATTACHMENT_CLEANUP_INTERVAL_SECONDS: u64 = 60 * 60;
 const PENDING_ATTACHMENT_CLEANUP_BATCH_SIZE: i64 = 100;
+const ATTACHMENT_FILE_DELETION_BATCH_SIZE: i64 = 100;
+const ATTACHMENT_FILE_RECONCILIATION_BATCH_SIZE: usize = 100;
+
+#[derive(Default)]
+pub(crate) struct AttachmentOrphanScan {
+    entries: Option<fs::ReadDir>,
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub(crate) struct AttachmentOrphanScanResult {
+    pub inspected_entries: usize,
+    pub enqueued_files: usize,
+    pub reached_end: bool,
+}
 
 pub fn is_supported_chat_image_mime_type(mime_type: &str) -> bool {
     matches!(mime_type, "image/png" | "image/jpeg" | "image/webp")
@@ -219,35 +234,232 @@ pub async fn read_attachment_bytes(upload_dir: &str, storage_key: &str) -> AppRe
     fs::read(path).await.map_err(|_| AppError::NotFound)
 }
 
-pub async fn remove_attachment_file(upload_dir: &str, storage_key: &str) {
-    if let Ok(path) = attachment_storage_path(upload_dir, storage_key) {
-        let _ = fs::remove_file(path).await;
-    }
-}
-
-pub async fn cleanup_stale_pending_chat_attachments(config: &Config, store: &ChatStore) -> usize {
+pub async fn cleanup_stale_pending_chat_attachments(store: &ChatStore) -> usize {
     let stale_before = now_unix_seconds().saturating_sub(PENDING_ATTACHMENT_CLEANUP_AFTER_SECONDS);
-    let attachments = store
-        .mark_stale_pending_chat_attachments_deleted(
+    match store
+        .delete_stale_pending_chat_attachments(
             CHAT_ATTACHMENT_KIND_IMAGE,
             stale_before,
             PENDING_ATTACHMENT_CLEANUP_BATCH_SIZE,
         )
-        .await;
-    let attachments = match attachments {
-        Ok(attachments) => attachments,
+        .await
+    {
+        Ok(count) => count as usize,
         Err(error) => {
-            tracing::error!(error = %error, "failed to mark stale pending chat attachments deleted");
+            tracing::error!(%error, "failed to delete stale pending chat attachments");
+            0
+        }
+    }
+}
+
+pub async fn process_chat_attachment_file_deletions(config: &Config, store: &ChatStore) -> usize {
+    process_chat_attachment_file_deletions_batch(config, store, ATTACHMENT_FILE_DELETION_BATCH_SIZE)
+        .await
+}
+
+async fn process_chat_attachment_file_deletions_batch(
+    config: &Config,
+    store: &ChatStore,
+    limit: i64,
+) -> usize {
+    let deletions = match store.claim_chat_attachment_file_deletions(limit).await {
+        Ok(deletions) => deletions,
+        Err(error) => {
+            tracing::error!(%error, "failed to claim chat attachment file deletions");
             return 0;
         }
     };
-    let count = attachments.len();
+    let mut completed = 0;
 
-    for attachment in attachments {
-        remove_attachment_file(&config.chat_attachment_upload_dir, &attachment.storage_key).await;
+    for deletion in deletions {
+        match delete_attachment_file(&config.chat_attachment_upload_dir, &deletion.storage_key)
+            .await
+        {
+            Ok(()) => match store
+                .complete_chat_attachment_file_deletion(&deletion.storage_key, deletion.claim_token)
+                .await
+            {
+                Ok(true) => completed += 1,
+                Ok(false) => {
+                    tracing::warn!(
+                        storage_key = %deletion.storage_key,
+                        "attachment file deletion claim changed before completion"
+                    );
+                }
+                Err(error) => {
+                    tracing::error!(
+                        %error,
+                        storage_key = %deletion.storage_key,
+                        "failed to complete chat attachment file deletion"
+                    );
+                }
+            },
+            Err(error) => {
+                tracing::warn!(
+                    %error,
+                    storage_key = %deletion.storage_key,
+                    attempt_count = deletion.attempt_count,
+                    byte_size = deletion.byte_size,
+                    owner_session_id = ?deletion.owner_session_id,
+                    owner_user_id = ?deletion.owner_user_id,
+                    "failed to delete chat attachment file"
+                );
+                if let Err(retry_error) = store
+                    .retry_chat_attachment_file_deletion(
+                        &deletion.storage_key,
+                        deletion.claim_token,
+                    )
+                    .await
+                {
+                    tracing::error!(
+                        error = %retry_error,
+                        storage_key = %deletion.storage_key,
+                        "failed to retain chat attachment file deletion for retry"
+                    );
+                }
+            }
+        }
     }
 
-    count
+    completed
+}
+
+impl AttachmentOrphanScan {
+    pub(crate) async fn run(
+        &mut self,
+        config: &Config,
+        store: &ChatStore,
+    ) -> AttachmentOrphanScanResult {
+        let stale_before = SystemTime::now()
+            .checked_sub(Duration::from_secs(
+                PENDING_ATTACHMENT_CLEANUP_AFTER_SECONDS,
+            ))
+            .unwrap_or(SystemTime::UNIX_EPOCH);
+        self.run_before(config, store, stale_before).await
+    }
+
+    async fn run_before(
+        &mut self,
+        config: &Config,
+        store: &ChatStore,
+        stale_before: SystemTime,
+    ) -> AttachmentOrphanScanResult {
+        let chat_images_dir = Path::new(&config.chat_attachment_upload_dir).join("chat-images");
+        if self.entries.is_none() {
+            self.entries = match fs::read_dir(&chat_images_dir).await {
+                Ok(entries) => Some(entries),
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                    return AttachmentOrphanScanResult {
+                        reached_end: true,
+                        ..Default::default()
+                    };
+                }
+                Err(error) => {
+                    tracing::error!(%error, path = %chat_images_dir.display(), "failed to scan chat image storage");
+                    return AttachmentOrphanScanResult::default();
+                }
+            };
+        }
+
+        let mut result = AttachmentOrphanScanResult::default();
+        while result.inspected_entries < ATTACHMENT_FILE_RECONCILIATION_BATCH_SIZE {
+            let next_entry = self
+                .entries
+                .as_mut()
+                .expect("attachment scan iterator should be open")
+                .next_entry()
+                .await;
+            let entry = match next_entry {
+                Ok(Some(entry)) => entry,
+                Ok(None) => {
+                    self.entries = None;
+                    result.reached_end = true;
+                    break;
+                }
+                Err(error) => {
+                    tracing::warn!(%error, path = %chat_images_dir.display(), "failed to read chat image storage entry");
+                    self.entries = None;
+                    break;
+                }
+            };
+            result.inspected_entries += 1;
+
+            let Some(file_name) = entry.file_name().to_str().map(str::to_owned) else {
+                continue;
+            };
+            if !is_strict_chat_image_file_name(&file_name) {
+                continue;
+            }
+            match entry.file_type().await {
+                Ok(file_type) if file_type.is_file() => {}
+                Ok(_) => continue,
+                Err(error) => {
+                    tracing::warn!(%error, path = %entry.path().display(), "failed to inspect chat image storage entry type");
+                    continue;
+                }
+            }
+            let metadata = match entry.metadata().await {
+                Ok(metadata) => metadata,
+                Err(error) => {
+                    tracing::warn!(%error, path = %entry.path().display(), "failed to inspect chat image storage entry");
+                    continue;
+                }
+            };
+            let Ok(modified_at) = metadata.modified() else {
+                continue;
+            };
+            if modified_at >= stale_before {
+                continue;
+            }
+
+            let Ok(byte_size) = i64::try_from(metadata.len()) else {
+                tracing::warn!(path = %entry.path().display(), "chat image file size exceeds accounting range");
+                continue;
+            };
+            let storage_key = format!("chat-images/{file_name}");
+            match store
+                .enqueue_reconciled_chat_attachment_file_deletion(&storage_key, byte_size)
+                .await
+            {
+                Ok(true) => result.enqueued_files += 1,
+                Ok(false) => {}
+                Err(error) => {
+                    tracing::error!(%error, %storage_key, "failed to enqueue orphaned chat image file");
+                }
+            }
+        }
+
+        result
+    }
+}
+
+async fn delete_attachment_file(upload_dir: &str, storage_key: &str) -> std::io::Result<()> {
+    let path = attachment_storage_path(upload_dir, storage_key).map_err(|error| {
+        std::io::Error::new(std::io::ErrorKind::InvalidInput, error.to_string())
+    })?;
+    match fs::remove_file(path).await {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error),
+    }
+}
+
+#[cfg(test)]
+pub async fn remove_attachment_file(upload_dir: &str, storage_key: &str) {
+    let _ = delete_attachment_file(upload_dir, storage_key).await;
+}
+
+fn is_strict_chat_image_file_name(file_name: &str) -> bool {
+    let Some((id, extension)) = file_name.rsplit_once('.') else {
+        return false;
+    };
+    if !matches!(extension, "png" | "jpg" | "webp") {
+        return false;
+    }
+
+    Uuid::parse_str(id)
+        .map(|parsed| parsed.hyphenated().to_string() == id)
+        .unwrap_or(false)
 }
 
 fn attachment_storage_path(upload_dir: &str, storage_key: &str) -> AppResult<PathBuf> {
@@ -311,6 +523,22 @@ mod tests {
     use image::{DynamicImage, ImageBuffer, ImageFormat, Rgb};
 
     use super::*;
+
+    async fn test_store() -> Option<ChatStore> {
+        let database_url = std::env::var("WFCHAT_TEST_DATABASE_URL").ok()?;
+        Some(
+            ChatStore::connect(&database_url)
+                .await
+                .expect("WFCHAT_TEST_DATABASE_URL should identify a reachable test database"),
+        )
+    }
+
+    fn temp_upload_dir() -> String {
+        std::env::temp_dir()
+            .join(format!("wfchat-attachment-maintenance-{}", Uuid::new_v4()))
+            .to_string_lossy()
+            .to_string()
+    }
 
     fn test_config() -> Config {
         Config {
@@ -559,5 +787,337 @@ mod tests {
         let _ = task.await;
         tokio::task::yield_now().await;
         assert!(limiter.try_acquire().is_ok());
+    }
+
+    #[tokio::test]
+    async fn deletion_worker_treats_missing_as_success_retains_failures_and_limits_batches() {
+        let Some(store) = test_store().await else {
+            return;
+        };
+        let mut config = test_config();
+        config.chat_attachment_upload_dir = temp_upload_dir();
+
+        let missing_key = format!("chat-images/{}.png", Uuid::new_v4());
+        store
+            .enqueue_reconciled_chat_attachment_file_deletion(&missing_key, 41)
+            .await
+            .unwrap();
+        store
+            .set_attachment_file_deletions_ready_for_test(std::slice::from_ref(&missing_key))
+            .await
+            .unwrap();
+        assert_eq!(
+            process_chat_attachment_file_deletions_batch(&config, &store, 1).await,
+            1
+        );
+        assert_eq!(
+            store
+                .count_attachment_file_deletions_for_test(std::slice::from_ref(&missing_key))
+                .await
+                .unwrap(),
+            0
+        );
+
+        let retry_key = format!("chat-images/{}.png", Uuid::new_v4());
+        let retry_path = Path::new(&config.chat_attachment_upload_dir).join(&retry_key);
+        fs::create_dir_all(&retry_path).await.unwrap();
+        store
+            .enqueue_reconciled_chat_attachment_file_deletion(&retry_key, 42)
+            .await
+            .unwrap();
+        store
+            .set_attachment_file_deletions_ready_for_test(std::slice::from_ref(&retry_key))
+            .await
+            .unwrap();
+        process_chat_attachment_file_deletions_batch(&config, &store, 1).await;
+        assert_eq!(
+            store
+                .count_attachment_file_deletions_for_test(std::slice::from_ref(&retry_key))
+                .await
+                .unwrap(),
+            1,
+            "filesystem failures must retain the durable record"
+        );
+        assert!(store
+            .claim_chat_attachment_file_deletions(1)
+            .await
+            .unwrap()
+            .iter()
+            .all(|record| record.storage_key != retry_key));
+        fs::remove_dir(&retry_path).await.unwrap();
+        store
+            .set_attachment_file_deletions_ready_for_test(std::slice::from_ref(&retry_key))
+            .await
+            .unwrap();
+        process_chat_attachment_file_deletions_batch(&config, &store, 1).await;
+        assert_eq!(
+            store
+                .count_attachment_file_deletions_for_test(std::slice::from_ref(&retry_key))
+                .await
+                .unwrap(),
+            0
+        );
+
+        let bounded_keys = (0..101)
+            .map(|_| format!("chat-images/{}.webp", Uuid::new_v4()))
+            .collect::<Vec<_>>();
+        for key in &bounded_keys {
+            store
+                .enqueue_reconciled_chat_attachment_file_deletion(key, 1)
+                .await
+                .unwrap();
+        }
+        store
+            .set_attachment_file_deletions_ready_for_test(&bounded_keys)
+            .await
+            .unwrap();
+        process_chat_attachment_file_deletions_batch(&config, &store, 100).await;
+        assert_eq!(
+            store
+                .count_attachment_file_deletions_for_test(&bounded_keys)
+                .await
+                .unwrap(),
+            1,
+            "one maintenance run must process at most 100 deletion records"
+        );
+        store
+            .delete_attachment_file_deletions_for_test(&bounded_keys)
+            .await
+            .unwrap();
+        let _ = fs::remove_dir_all(&config.chat_attachment_upload_dir).await;
+    }
+
+    #[tokio::test]
+    async fn reconciliation_requires_strict_old_unreferenced_files_and_is_bounded() {
+        let Some(store) = test_store().await else {
+            return;
+        };
+        let mut config = test_config();
+        config.chat_attachment_upload_dir = temp_upload_dir();
+        let chat_images_dir = Path::new(&config.chat_attachment_upload_dir).join("chat-images");
+        fs::create_dir_all(&chat_images_dir).await.unwrap();
+
+        let orphan_key = format!("chat-images/{}.jpg", Uuid::new_v4());
+        fs::write(
+            Path::new(&config.chat_attachment_upload_dir).join(&orphan_key),
+            b"orphan",
+        )
+        .await
+        .unwrap();
+        fs::write(chat_images_dir.join("not-a-storage-key.png"), b"invalid")
+            .await
+            .unwrap();
+        fs::create_dir(chat_images_dir.join(format!("{}.png", Uuid::new_v4())))
+            .await
+            .unwrap();
+
+        let queued_key = format!("chat-images/{}.webp", Uuid::new_v4());
+        fs::write(
+            Path::new(&config.chat_attachment_upload_dir).join(&queued_key),
+            b"queued",
+        )
+        .await
+        .unwrap();
+        store
+            .enqueue_reconciled_chat_attachment_file_deletion(&queued_key, 6)
+            .await
+            .unwrap();
+
+        let session = store.create_guest_session().await.unwrap();
+        let owner = crate::store::OwnerScope::from_session(&session);
+        let live_id = Uuid::new_v4();
+        let live_key = image_storage_key(live_id, "png");
+        fs::write(
+            Path::new(&config.chat_attachment_upload_dir).join(&live_key),
+            b"live",
+        )
+        .await
+        .unwrap();
+        store
+            .create_chat_attachment(
+                owner,
+                crate::store::NewChatAttachmentRecord {
+                    id: live_id,
+                    kind: CHAT_ATTACHMENT_KIND_IMAGE.to_owned(),
+                    mime_type: "image/png".to_owned(),
+                    byte_size: 4,
+                    width: Some(1),
+                    height: Some(1),
+                    sha256: "live".to_owned(),
+                    storage_key: live_key.clone(),
+                },
+            )
+            .await
+            .unwrap();
+
+        let mut scan = AttachmentOrphanScan::default();
+        let fresh_result = scan
+            .run_before(&config, &store, SystemTime::UNIX_EPOCH)
+            .await;
+        assert_eq!(fresh_result.inspected_entries, 5);
+        assert_eq!(fresh_result.enqueued_files, 0);
+        assert!(fresh_result.reached_end);
+
+        let old_result = scan
+            .run_before(&config, &store, SystemTime::now() + Duration::from_secs(1))
+            .await;
+        assert_eq!(old_result.inspected_entries, 5);
+        assert_eq!(old_result.enqueued_files, 1);
+        assert!(old_result.reached_end);
+        assert_eq!(
+            store
+                .count_attachment_file_deletions_for_test(std::slice::from_ref(&orphan_key))
+                .await
+                .unwrap(),
+            1
+        );
+        assert_eq!(
+            store
+                .count_attachment_file_deletions_for_test(std::slice::from_ref(&live_key))
+                .await
+                .unwrap(),
+            0,
+            "live attachment metadata excludes a file from reconciliation"
+        );
+
+        store
+            .delete_attachment_file_deletions_for_test(&[orphan_key.clone(), queued_key])
+            .await
+            .unwrap();
+        store
+            .delete_pending_chat_attachment(owner, live_id)
+            .await
+            .unwrap();
+        store.delete_session_for_test(session.id).await.unwrap();
+        store
+            .delete_attachment_file_deletions_for_test(std::slice::from_ref(&live_key))
+            .await
+            .unwrap();
+        let _ = fs::remove_dir_all(&config.chat_attachment_upload_dir).await;
+
+        let mut bounded_config = test_config();
+        bounded_config.chat_attachment_upload_dir = temp_upload_dir();
+        let bounded_dir = Path::new(&bounded_config.chat_attachment_upload_dir).join("chat-images");
+        fs::create_dir_all(&bounded_dir).await.unwrap();
+        let bounded_keys = (0..101)
+            .map(|_| format!("chat-images/{}.png", Uuid::new_v4()))
+            .collect::<Vec<_>>();
+        for key in &bounded_keys {
+            fs::write(
+                Path::new(&bounded_config.chat_attachment_upload_dir).join(key),
+                b"x",
+            )
+            .await
+            .unwrap();
+        }
+        let mut bounded_scan = AttachmentOrphanScan::default();
+        let first_batch = bounded_scan
+            .run_before(
+                &bounded_config,
+                &store,
+                SystemTime::now() + Duration::from_secs(1),
+            )
+            .await;
+        assert_eq!(first_batch.inspected_entries, 100);
+        assert_eq!(first_batch.enqueued_files, 100);
+        assert!(!first_batch.reached_end);
+        let second_batch = bounded_scan
+            .run_before(
+                &bounded_config,
+                &store,
+                SystemTime::now() + Duration::from_secs(1),
+            )
+            .await;
+        assert_eq!(second_batch.inspected_entries, 1);
+        assert_eq!(second_batch.enqueued_files, 1);
+        assert!(second_batch.reached_end);
+        assert_eq!(
+            store
+                .count_attachment_file_deletions_for_test(&bounded_keys)
+                .await
+                .unwrap(),
+            101
+        );
+        store
+            .delete_attachment_file_deletions_for_test(&bounded_keys)
+            .await
+            .unwrap();
+        let _ = fs::remove_dir_all(&bounded_config.chat_attachment_upload_dir).await;
+    }
+
+    #[tokio::test]
+    async fn reconciliation_scan_advances_past_blockers_and_resets_after_end() {
+        let Some(store) = test_store().await else {
+            return;
+        };
+        let mut config = test_config();
+        config.chat_attachment_upload_dir = temp_upload_dir();
+        let chat_images_dir = Path::new(&config.chat_attachment_upload_dir).join("chat-images");
+        fs::create_dir_all(&chat_images_dir).await.unwrap();
+
+        for index in 0..125 {
+            fs::write(
+                chat_images_dir.join(format!("blocker-{index:03}.txt")),
+                b"x",
+            )
+            .await
+            .unwrap();
+        }
+        let orphan_key = format!("chat-images/{}.png", Uuid::new_v4());
+        fs::write(
+            Path::new(&config.chat_attachment_upload_dir).join(&orphan_key),
+            b"orphan",
+        )
+        .await
+        .unwrap();
+
+        let mut scan = AttachmentOrphanScan::default();
+        let mut inspected_entries = 0;
+        let mut enqueued_files = 0;
+        let mut reached_end = false;
+        for _ in 0..3 {
+            let result = scan
+                .run_before(&config, &store, SystemTime::now() + Duration::from_secs(1))
+                .await;
+            assert!(result.inspected_entries <= 100);
+            inspected_entries += result.inspected_entries;
+            enqueued_files += result.enqueued_files;
+            if result.reached_end {
+                reached_end = true;
+                break;
+            }
+        }
+        assert!(reached_end);
+        assert_eq!(inspected_entries, 126);
+        assert_eq!(enqueued_files, 1);
+        assert_eq!(
+            store
+                .count_attachment_file_deletions_for_test(std::slice::from_ref(&orphan_key))
+                .await
+                .unwrap(),
+            1
+        );
+
+        fs::remove_dir_all(&chat_images_dir).await.unwrap();
+        fs::create_dir_all(&chat_images_dir).await.unwrap();
+        let next_orphan_key = format!("chat-images/{}.jpg", Uuid::new_v4());
+        fs::write(
+            Path::new(&config.chat_attachment_upload_dir).join(&next_orphan_key),
+            b"next",
+        )
+        .await
+        .unwrap();
+        let next_pass = scan
+            .run_before(&config, &store, SystemTime::now() + Duration::from_secs(1))
+            .await;
+        assert_eq!(next_pass.inspected_entries, 1);
+        assert_eq!(next_pass.enqueued_files, 1);
+        assert!(next_pass.reached_end);
+
+        store
+            .delete_attachment_file_deletions_for_test(&[orphan_key, next_orphan_key])
+            .await
+            .unwrap();
+        let _ = fs::remove_dir_all(&config.chat_attachment_upload_dir).await;
     }
 }

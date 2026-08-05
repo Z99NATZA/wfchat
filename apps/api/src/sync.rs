@@ -250,7 +250,7 @@ mod tests {
 
     async fn test_state() -> Option<AppState> {
         let database_url = std::env::var("WFCHAT_TEST_DATABASE_URL").ok()?;
-        let state = AppState::new_without_memory_worker_for_test(Config {
+        let state = AppState::new_without_background_workers_for_test(Config {
             app_host: "127.0.0.1".to_owned(),
             app_port: 0,
             frontend_origin: "http://localhost:5173".to_owned(),

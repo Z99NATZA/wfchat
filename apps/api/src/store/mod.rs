@@ -172,6 +172,16 @@ pub struct NewChatAttachmentRecord {
     pub storage_key: String,
 }
 
+#[derive(Clone, Debug)]
+pub struct ChatAttachmentFileDeletionRecord {
+    pub storage_key: String,
+    pub byte_size: i64,
+    pub owner_session_id: Option<Uuid>,
+    pub owner_user_id: Option<Uuid>,
+    pub attempt_count: i32,
+    pub claim_token: Uuid,
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct MemoryItemRecord {
     pub id: Uuid,
@@ -688,6 +698,24 @@ mod integration_tests {
         };
         let guest = create_test_session(&store).await;
         let guest_chat = create_test_chat(&store, OwnerScope::from_session(&guest)).await;
+        let guest_attachment_id = Uuid::new_v4();
+        let guest_attachment_key = format!("chat-images/{guest_attachment_id}.png");
+        store
+            .create_chat_attachment(
+                OwnerScope::from_session(&guest),
+                NewChatAttachmentRecord {
+                    id: guest_attachment_id,
+                    kind: "image".to_owned(),
+                    mime_type: "image/png".to_owned(),
+                    byte_size: 73,
+                    width: Some(1),
+                    height: Some(1),
+                    sha256: "guest-cleanup".to_owned(),
+                    storage_key: guest_attachment_key.clone(),
+                },
+            )
+            .await
+            .unwrap();
         let guest_sync_item_id = format!("cleanup-guest-sync-{}", Uuid::new_v4());
         store
             .upsert_sync_entity(&SyncEntityRecord {
@@ -788,6 +816,15 @@ mod integration_tests {
                 .unwrap();
         assert!(!guest_session_exists);
         assert!(!guest_chat_exists);
+        let deletion_snapshot: (i64, Option<Uuid>, Option<Uuid>) = sqlx::query_as(
+            "select byte_size, owner_session_id, owner_user_id
+             from chat_attachment_file_deletions where storage_key = $1",
+        )
+        .bind(&guest_attachment_key)
+        .fetch_one(store.db.as_ref())
+        .await
+        .unwrap();
+        assert_eq!(deletion_snapshot, (73, Some(guest.id), None));
         assert!(!sqlx::query_scalar::<_, bool>(
             "select exists(select 1 from sync_entities where item_id = $1)",
         )
@@ -825,6 +862,11 @@ mod integration_tests {
         )
         .await;
         cleanup_users(&store, &[promoted_user_id]).await;
+        sqlx::query("delete from chat_attachment_file_deletions where storage_key = $1")
+            .bind(&guest_attachment_key)
+            .execute(store.db.as_ref())
+            .await
+            .unwrap();
     }
 
     #[tokio::test]
@@ -876,6 +918,18 @@ mod integration_tests {
         .bind(chat.id)
         .bind(user_message.id)
         .bind(format!("legacy/{}.png", attachment_id))
+        .execute(store.db.as_ref())
+        .await
+        .unwrap();
+        let legacy_deletion_key = format!("chat-images/{}.png", Uuid::new_v4());
+        sqlx::query(
+            "insert into chat_attachment_file_deletions (
+                storage_key, byte_size, owner_session_id, owner_user_id
+             ) values ($1, 5, $2, $3)",
+        )
+        .bind(&legacy_deletion_key)
+        .bind(legacy.id)
+        .bind(account_user_id)
         .execute(store.db.as_ref())
         .await
         .unwrap();
@@ -1011,6 +1065,15 @@ mod integration_tests {
                 .await
                 .unwrap();
         assert_eq!(sync_commit_user, account_user_id);
+        let deletion_owner: (Option<Uuid>, Option<Uuid>) = sqlx::query_as(
+            "select owner_session_id, owner_user_id
+             from chat_attachment_file_deletions where storage_key = $1",
+        )
+        .bind(&legacy_deletion_key)
+        .fetch_one(store.db.as_ref())
+        .await
+        .unwrap();
+        assert_eq!(deletion_owner, (Some(registered.id), Some(account_user_id)));
         assert!(sqlx::query_scalar::<_, bool>(
             "select exists(select 1 from cafe_cosmetic_loadouts where owner_session_id = $1)",
         )
@@ -1043,6 +1106,11 @@ mod integration_tests {
 
         cleanup_sessions(&store, &batch_ids).await;
         cleanup_sessions(&store, &[registered.id]).await;
+        sqlx::query("delete from chat_attachment_file_deletions where storage_key = $1")
+            .bind(&legacy_deletion_key)
+            .execute(store.db.as_ref())
+            .await
+            .unwrap();
     }
 
     #[tokio::test]

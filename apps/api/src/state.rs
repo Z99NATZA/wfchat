@@ -6,8 +6,8 @@ const GUEST_SESSION_CLEANUP_INTERVAL_SECONDS: u64 = 10 * 60;
 
 use crate::{
     attachments::{
-        cleanup_stale_pending_chat_attachments, ImageDecodeLimiter,
-        PENDING_ATTACHMENT_CLEANUP_INTERVAL_SECONDS,
+        cleanup_stale_pending_chat_attachments, process_chat_attachment_file_deletions,
+        AttachmentOrphanScan, ImageDecodeLimiter, PENDING_ATTACHMENT_CLEANUP_INTERVAL_SECONDS,
     },
     cafe::CafeHub,
     config::Config,
@@ -30,24 +30,21 @@ pub struct AppState {
 
 impl AppState {
     pub async fn new(config: Config) -> Result<Self, sqlx::Error> {
-        let state = Self::build(config, true).await?;
-        spawn_memory_capture_worker(state.clone());
-        Ok(state)
+        Self::build(config, BackgroundWorkerOptions::PRODUCTION).await
     }
 
     #[cfg(test)]
-    pub(crate) async fn new_without_memory_worker_for_test(
+    pub(crate) async fn new_without_background_workers_for_test(
         config: Config,
     ) -> Result<Self, sqlx::Error> {
-        Self::build(config, false).await
+        Self::build(config, BackgroundWorkerOptions::NONE).await
     }
 
-    async fn build(config: Config, spawn_guest_cleanup: bool) -> Result<Self, sqlx::Error> {
+    async fn build(
+        config: Config,
+        background_workers: BackgroundWorkerOptions,
+    ) -> Result<Self, sqlx::Error> {
         let store = ChatStore::connect(&config.database_url).await?;
-        spawn_pending_attachment_cleanup(config.clone(), store.clone());
-        if spawn_guest_cleanup {
-            spawn_guest_session_cleanup(store.clone());
-        }
         let http = Client::builder()
             .connect_timeout(StdDuration::from_secs(
                 config.security.chat.ai_connect_timeout_seconds,
@@ -65,7 +62,7 @@ impl AppState {
         let image_decode_limiter =
             ImageDecodeLimiter::new(config.chat_attachment_max_concurrent_decodes);
 
-        Ok(Self {
+        let state = Self {
             config,
             http,
             rate_limiter,
@@ -74,8 +71,41 @@ impl AppState {
             store,
             cafe: CafeHub::default(),
             memory_telemetry: MemoryTelemetry::default(),
-        })
+        };
+
+        if background_workers.attachment_maintenance {
+            spawn_attachment_maintenance(state.config.clone(), state.store.clone());
+        }
+        if background_workers.guest_cleanup {
+            spawn_guest_session_cleanup(state.store.clone());
+        }
+        if background_workers.memory_capture {
+            spawn_memory_capture_worker(state.clone());
+        }
+
+        Ok(state)
     }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct BackgroundWorkerOptions {
+    memory_capture: bool,
+    guest_cleanup: bool,
+    attachment_maintenance: bool,
+}
+
+impl BackgroundWorkerOptions {
+    const PRODUCTION: Self = Self {
+        memory_capture: true,
+        guest_cleanup: true,
+        attachment_maintenance: true,
+    };
+    #[cfg(test)]
+    const NONE: Self = Self {
+        memory_capture: false,
+        guest_cleanup: false,
+        attachment_maintenance: false,
+    };
 }
 
 fn spawn_guest_session_cleanup(store: ChatStore) {
@@ -96,15 +126,29 @@ fn spawn_guest_session_cleanup(store: ChatStore) {
     });
 }
 
-fn spawn_pending_attachment_cleanup(config: Config, store: ChatStore) {
+fn spawn_attachment_maintenance(config: Config, store: ChatStore) {
     tokio::spawn(async move {
+        let mut orphan_scan = AttachmentOrphanScan::default();
         loop {
-            let cleaned_count = cleanup_stale_pending_chat_attachments(&config, &store).await;
+            let cleaned_count = cleanup_stale_pending_chat_attachments(&store).await;
             if cleaned_count > 0 {
                 tracing::info!(
                     cleaned_count,
                     "cleaned stale pending chat image attachments"
                 );
+            }
+            let reconciliation = orphan_scan.run(&config, &store).await;
+            if reconciliation.enqueued_files > 0 {
+                tracing::info!(
+                    reconciled_count = reconciliation.enqueued_files,
+                    inspected_entries = reconciliation.inspected_entries,
+                    reached_end = reconciliation.reached_end,
+                    "enqueued orphaned chat image files for deletion"
+                );
+            }
+            let deleted_count = process_chat_attachment_file_deletions(&config, &store).await;
+            if deleted_count > 0 {
+                tracing::info!(deleted_count, "deleted chat attachment files");
             }
 
             sleep(Duration::from_secs(
@@ -113,4 +157,29 @@ fn spawn_pending_attachment_cleanup(config: Config, store: ChatStore) {
             .await;
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::BackgroundWorkerOptions;
+
+    #[test]
+    fn constructors_select_all_production_workers_and_no_test_workers() {
+        assert_eq!(
+            BackgroundWorkerOptions::PRODUCTION,
+            BackgroundWorkerOptions {
+                memory_capture: true,
+                guest_cleanup: true,
+                attachment_maintenance: true,
+            }
+        );
+        assert_eq!(
+            BackgroundWorkerOptions::NONE,
+            BackgroundWorkerOptions {
+                memory_capture: false,
+                guest_cleanup: false,
+                attachment_maintenance: false,
+            }
+        );
+    }
 }

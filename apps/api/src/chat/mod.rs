@@ -23,8 +23,8 @@ use crate::{
     ai::{AiChatStreamEvent, AiImagePart, AiMessage, AiMessagePart, AiRole, AiService},
     attachments::{
         image_storage_key, is_supported_chat_image_mime_type, read_attachment_bytes,
-        remove_attachment_file, validate_image_attachment, write_attachment_bytes,
-        ATTACHMENT_MULTIPART_OVERHEAD_BYTES, CHAT_ATTACHMENT_KIND_IMAGE,
+        validate_image_attachment, write_attachment_bytes, ATTACHMENT_MULTIPART_OVERHEAD_BYTES,
+        CHAT_ATTACHMENT_KIND_IMAGE,
     },
     characters,
     error::{AppError, AppResult},
@@ -33,7 +33,7 @@ use crate::{
     session::require_session,
     state::AppState,
     store::{
-        AppendChatMessagesOutcome, ChatAttachmentRecord, ChatRecord, ChatStorageLimits,
+        AppendChatMessagesOutcome, ChatAttachmentRecord, ChatRecord, ChatStorageLimits, ChatStore,
         ChatSummaryRecord, CreateChatOutcome, NewChatAttachmentRecord, OwnerScope, SessionRecord,
         StoredMessage,
     },
@@ -47,6 +47,9 @@ mod voice;
 use attachments::*;
 use messages::*;
 use voice::*;
+
+#[cfg(test)]
+use crate::attachments::remove_attachment_file;
 
 #[cfg(test)]
 pub(crate) use messages::prepare_text_context_for_memory_evaluation;
@@ -1584,7 +1587,7 @@ mod tests {
 
         let _ = state
             .store
-            .mark_pending_chat_attachment_deleted(owner, attachment_id)
+            .delete_pending_chat_attachment(owner, attachment_id)
             .await;
         let _ = state.store.delete_chat(owner, chat.id).await;
     }
@@ -2111,6 +2114,53 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn upload_file_write_failure_hard_deletes_pending_metadata_into_durable_queue() {
+        let Some(state) = test_state().await else {
+            return;
+        };
+        let session = create_test_session(&state).await;
+        let upload_dir = state.config.chat_attachment_upload_dir.clone();
+        tokio::fs::write(&upload_dir, b"blocks directory creation")
+            .await
+            .expect("test upload path should be a file");
+        let app = build_router(state.clone());
+
+        let response = app
+            .oneshot(upload_png_request(session.id))
+            .await
+            .expect("request should run");
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let payload: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(
+            payload["error"].as_str(),
+            Some("bad request: failed to prepare attachment storage")
+        );
+        assert_eq!(
+            state
+                .store
+                .count_attachment_file_deletions_for_owner_for_test(session.id)
+                .await
+                .unwrap(),
+            1,
+            "metadata must exist before the write and hard deletion must enqueue its file key"
+        );
+
+        state
+            .store
+            .delete_session_for_test(session.id)
+            .await
+            .unwrap();
+        state
+            .store
+            .delete_attachment_file_deletions_for_owner_for_test(session.id)
+            .await
+            .unwrap();
+        tokio::fs::remove_file(upload_dir).await.unwrap();
+    }
+
+    #[tokio::test]
     async fn upload_chat_attachment_endpoint_rate_limits_by_session() {
         let Some(mut state) = test_state().await else {
             return;
@@ -2283,8 +2333,7 @@ mod tests {
             .expect("attachment lookup should query")
             .expect("current pending attachment should exist");
 
-        let cleaned_count =
-            cleanup_stale_pending_chat_attachments(&state.config, &state.store).await;
+        let cleaned_count = cleanup_stale_pending_chat_attachments(&state.store).await;
 
         assert_eq!(cleaned_count, 1);
         assert!(
@@ -2299,8 +2348,8 @@ mod tests {
         assert!(
             read_attachment_bytes(&upload_dir, &stale_pending.storage_key)
                 .await
-                .is_err(),
-            "stale pending attachment file should be removed"
+                .is_ok(),
+            "hard deletion should leave file removal to the durable worker"
         );
         assert!(
             state
