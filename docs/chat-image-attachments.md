@@ -1,6 +1,6 @@
 # Chat Image Attachments
 
-Chat accepts local PNG, JPEG, WebP, and GIF images. Users can select, paste, or
+Chat accepts local PNG, JPEG/JPG, and WebP images. Users can select, paste, or
 drag images into the composer and send text-plus-image or image-only messages.
 SVG, arbitrary files, user URLs, `file://` paths, and browser `blob:` URLs are
 not accepted by the backend.
@@ -42,8 +42,9 @@ Message body:
 ```
 
 `content` may be empty only when at least one attachment exists. Every id must
-be unique, pending, image-kind, and owned by the same session/account as the
-chat.
+be unique, pending, image-kind, use a currently supported PNG, JPEG, or WebP
+MIME type, and be owned by the same session/account as the chat. This prevents
+legacy pending attachments in a removed format from reaching the provider.
 
 Upload and preview responses expose metadata and a backend preview URL, never a
 storage path. Preview requests require the owner's session cookie and use

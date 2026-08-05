@@ -22,9 +22,9 @@ const MAX_TRANSCRIPTION_AUDIO_BYTES: usize = 25 * 1024 * 1024;
 use crate::{
     ai::{AiChatStreamEvent, AiImagePart, AiMessage, AiMessagePart, AiRole, AiService},
     attachments::{
-        image_storage_key, read_attachment_bytes, remove_attachment_file,
-        validate_image_attachment, write_attachment_bytes, CHAT_ATTACHMENT_KIND_IMAGE,
-        MAX_ATTACHMENT_MULTIPART_BYTES,
+        image_storage_key, is_supported_chat_image_mime_type, read_attachment_bytes,
+        remove_attachment_file, validate_image_attachment, write_attachment_bytes,
+        CHAT_ATTACHMENT_KIND_IMAGE, MAX_ATTACHMENT_MULTIPART_BYTES,
     },
     characters,
     error::{AppError, AppResult},
@@ -1458,6 +1458,79 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn stream_message_endpoint_rejects_legacy_pending_gif_attachment() {
+        let Some(state) = test_state().await else {
+            return;
+        };
+        let session = create_test_session(&state).await;
+        let owner = OwnerScope::from_session(&session);
+        let chat = create_test_chat(&state, owner).await;
+        let attachment_id = Uuid::new_v4();
+        state
+            .store
+            .create_chat_attachment(
+                owner,
+                NewChatAttachmentRecord {
+                    id: attachment_id,
+                    kind: CHAT_ATTACHMENT_KIND_IMAGE.to_owned(),
+                    mime_type: "image/gif".to_owned(),
+                    byte_size: 43,
+                    width: Some(1),
+                    height: Some(1),
+                    sha256: "legacy-gif-fixture".to_owned(),
+                    storage_key: format!("chat-images/{attachment_id}.gif"),
+                },
+            )
+            .await
+            .expect("legacy pending gif metadata should create");
+        let app = build_router(state.clone());
+        let request = Request::builder()
+            .method("POST")
+            .uri(format!("/api/chats/{}/messages/stream", chat.id))
+            .header(header::CONTENT_TYPE, "application/json")
+            .header(header::ACCEPT, "text/event-stream")
+            .header("x-wfchat-session", session.id.to_string())
+            .body(Body::from(format!(
+                r#"{{"content":"look","attachments":[{{"id":"{attachment_id}","kind":"image"}}]}}"#
+            )))
+            .expect("request should build");
+
+        let response = app.oneshot(request).await.expect("request should run");
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        let body = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("body should collect");
+        let payload: Value = serde_json::from_slice(&body).expect("error should be json");
+        assert_eq!(
+            payload["error"].as_str(),
+            Some("bad request: image attachment type is not supported")
+        );
+
+        let attachment = state
+            .store
+            .get_chat_attachment(owner, attachment_id)
+            .await
+            .expect("attachment lookup should query")
+            .expect("rejected legacy attachment should remain pending");
+        assert_eq!(attachment.chat_id, None);
+        assert_eq!(attachment.message_id, None);
+        let persisted = state
+            .store
+            .get_chat(owner, chat.id)
+            .await
+            .expect("chat lookup should query")
+            .expect("chat should still exist");
+        assert!(persisted.messages.is_empty());
+
+        let _ = state
+            .store
+            .mark_pending_chat_attachment_deleted(owner, attachment_id)
+            .await;
+        let _ = state.store.delete_chat(owner, chat.id).await;
+    }
+
+    #[tokio::test]
     async fn stream_message_endpoint_rejects_image_for_unsupported_provider_without_persisting() {
         let Some(state) = test_state_with_provider("lmstudio").await else {
             return;
@@ -1955,7 +2028,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn upload_chat_attachment_accepts_jpeg_webp_and_gif() {
+    async fn upload_chat_attachment_accepts_jpeg_and_webp() {
         let Some(state) = test_state().await else {
             return;
         };
@@ -1966,7 +2039,6 @@ mod tests {
         for (format, expected_mime) in [
             (ImageFormat::Jpeg, "image/jpeg"),
             (ImageFormat::WebP, "image/webp"),
-            (ImageFormat::Gif, "image/gif"),
         ] {
             let boundary = "wfchat-image-upload";
             let request = Request::builder()

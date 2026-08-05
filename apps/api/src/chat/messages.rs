@@ -262,6 +262,11 @@ async fn validate_message_attachment_requests(
                 "image attachment is not pending".to_owned(),
             ));
         }
+        if !is_supported_chat_image_mime_type(&record.mime_type) {
+            return Err(AppError::BadRequest(
+                "image attachment type is not supported".to_owned(),
+            ));
+        }
         attachment_ids.push(attachment.id);
         records.push(record);
     }

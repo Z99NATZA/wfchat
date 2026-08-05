@@ -17,6 +17,10 @@ pub const PENDING_ATTACHMENT_CLEANUP_AFTER_SECONDS: u64 = 24 * 60 * 60;
 pub const PENDING_ATTACHMENT_CLEANUP_INTERVAL_SECONDS: u64 = 60 * 60;
 const PENDING_ATTACHMENT_CLEANUP_BATCH_SIZE: i64 = 100;
 
+pub fn is_supported_chat_image_mime_type(mime_type: &str) -> bool {
+    matches!(mime_type, "image/png" | "image/jpeg" | "image/webp")
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ValidatedImageAttachment {
     pub mime_type: &'static str,
@@ -32,7 +36,6 @@ enum SupportedImageFormat {
     Png,
     Jpeg,
     Webp,
-    Gif,
 }
 
 impl SupportedImageFormat {
@@ -41,7 +44,6 @@ impl SupportedImageFormat {
             Self::Png => "image/png",
             Self::Jpeg => "image/jpeg",
             Self::Webp => "image/webp",
-            Self::Gif => "image/gif",
         }
     }
 
@@ -50,7 +52,6 @@ impl SupportedImageFormat {
             Self::Png => "png",
             Self::Jpeg => "jpg",
             Self::Webp => "webp",
-            Self::Gif => "gif",
         }
     }
 
@@ -59,7 +60,6 @@ impl SupportedImageFormat {
             Self::Png => image::ImageFormat::Png,
             Self::Jpeg => image::ImageFormat::Jpeg,
             Self::Webp => image::ImageFormat::WebP,
-            Self::Gif => image::ImageFormat::Gif,
         }
     }
 }
@@ -194,9 +194,6 @@ fn detect_supported_image_format(bytes: &[u8]) -> Option<SupportedImageFormat> {
     if bytes.len() >= 3 && bytes[0] == 0xff && bytes[1] == 0xd8 && bytes[2] == 0xff {
         return Some(SupportedImageFormat::Jpeg);
     }
-    if bytes.starts_with(b"GIF87a") || bytes.starts_with(b"GIF89a") {
-        return Some(SupportedImageFormat::Gif);
-    }
     if bytes.len() >= 12 && bytes.starts_with(b"RIFF") && &bytes[8..12] == b"WEBP" {
         return Some(SupportedImageFormat::Webp);
     }
@@ -323,16 +320,16 @@ mod tests {
     }
 
     #[test]
-    fn validate_image_attachment_accepts_gif_bytes() {
+    fn validate_image_attachment_rejects_gif_bytes() {
         let config = test_config();
-        let bytes = image_bytes(2, 3, ImageFormat::Gif);
+        let bytes = b"GIF89a\x01\x00\x01\x00\x80\x00\x00\x00\x00\x00\xff\xff\xff!\xf9\x04\x01\x00\x00\x00\x00,\x00\x00\x00\x00\x01\x00\x01\x00\x00\x02\x02D\x01\x00;";
 
-        let image = validate_image_attachment(&config, &bytes).expect("gif should validate");
+        let error = validate_image_attachment(&config, bytes).expect_err("gif should be rejected");
 
-        assert_eq!(image.mime_type, "image/gif");
-        assert_eq!(image.extension, "gif");
-        assert_eq!(image.width, 2);
-        assert_eq!(image.height, 3);
+        assert_eq!(
+            error.to_string(),
+            "bad request: image attachment type is not supported"
+        );
     }
 
     #[test]

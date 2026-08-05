@@ -338,6 +338,12 @@ describe("ChatMessageList streaming state", () => {
 			})
 		);
 		expect(dialogMocks.openCustom.mock.calls[0][0].render).toEqual(expect.any(Function));
+		const renderPreview = dialogMocks.openCustom.mock.calls[0][0].render;
+		const preview = render(renderPreview());
+		const previewImage = preview.container.querySelector('img[alt="Image 1"]');
+		expect(previewImage?.parentElement?.className).toContain("border-primary");
+		expect(previewImage?.parentElement?.className).toContain("dark:border-action-border");
+		expect(previewImage?.parentElement?.className).not.toContain("p-2");
 	});
 
 	it("shows a compact placeholder when a sent image preview cannot be fetched", async () => {

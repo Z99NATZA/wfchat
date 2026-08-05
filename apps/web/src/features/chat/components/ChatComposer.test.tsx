@@ -360,6 +360,9 @@ describe("ChatComposer", () => {
 			'img[alt="local.png"]'
 		) as HTMLImageElement;
 		expect(previewImage.src).toBe("blob:image-preview");
+		expect(previewImage.parentElement?.className).toContain("border-primary");
+		expect(previewImage.parentElement?.className).toContain("dark:border-action-border");
+		expect(previewImage.parentElement?.className).not.toContain("p-2");
 	});
 
 	it("sends image-only messages and clears previews after success", async () => {
@@ -406,6 +409,26 @@ describe("ChatComposer", () => {
 		);
 		const input = container.querySelector('input[type="file"]') as HTMLInputElement;
 		const file = new File(["<svg />"], "local.svg", { type: "image/svg+xml" });
+
+		fireEvent.change(input, { target: { files: [file] } });
+
+		expect(screen.getByRole("alert").textContent).toBe("chat.composer.imageUnsupported");
+		expect(onSend).not.toHaveBeenCalled();
+	});
+
+	it("rejects GIF images before sending", () => {
+		const onSend = vi.fn();
+		const { container } = render(
+			<ChatComposer
+				draft=""
+				font="inter"
+				companionName="Aiko"
+				onDraftChange={vi.fn()}
+				onSend={onSend}
+			/>
+		);
+		const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+		const file = new File(["GIF89a"], "local.gif", { type: "image/gif" });
 
 		fireEvent.change(input, { target: { files: [file] } });
 

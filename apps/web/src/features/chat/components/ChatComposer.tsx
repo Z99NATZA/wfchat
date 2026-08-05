@@ -33,8 +33,8 @@ type ChatComposerProps = {
 };
 
 const MAX_IMAGE_ATTACHMENTS = 4;
-const SUPPORTED_IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
-const IMAGE_INPUT_ACCEPT = "image/png,image/jpeg,image/webp,image/gif";
+const SUPPORTED_IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/webp"]);
+const IMAGE_INPUT_ACCEPT = "image/png,image/jpeg,image/webp";
 
 function shouldSkipAutomaticComposerFocus() {
 	if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
@@ -269,7 +269,7 @@ function ChatComposer({
 			showCancelAction: false,
 			size: "wide",
 			render: () => (
-				<div className="flex max-h-[72vh] items-center justify-center overflow-auto rounded-md bg-black/90 p-2">
+				<div className="flex max-h-[72vh] items-center justify-center overflow-auto rounded-md border border-primary bg-black/90 dark:border-action-border">
 					<img
 						className="max-h-[70vh] max-w-full object-contain"
 						src={image.previewUrl}
