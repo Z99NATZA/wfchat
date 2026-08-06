@@ -155,7 +155,6 @@ and never supplied as provider payloads by the browser.
 - `openai` maps validated bytes to backend-generated data URLs in Chat
   Completions content parts.
 - LM Studio and xAI reject image messages before chat messages are persisted.
-- Anthropic/Claude is unavailable in runtime configuration.
 
 ## Frontend Rendering And Sync
 

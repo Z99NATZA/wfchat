@@ -1,6 +1,7 @@
 [package]
 name = "wfchat-api"
 version = "0.3.3"
+default-run = "wfchat-api"
 edition = "2021"
 license = "MIT"
 

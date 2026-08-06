@@ -340,10 +340,6 @@ impl Config {
                 Some(self.lmstudio_model.as_str()),
                 "LMSTUDIO_MODEL is required when AI_PROVIDER=lmstudio",
             ),
-            "anthropic" | "claude" => Err(
-                "AI_PROVIDER=anthropic is configured but not implemented yet in this project"
-                    .to_owned(),
-            ),
             other => Err(format!(
                 "AI_PROVIDER={other} is invalid. Allowed values: mock, openai, xai, lmstudio"
             )),

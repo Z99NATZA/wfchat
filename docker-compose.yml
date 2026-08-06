@@ -28,7 +28,7 @@ services:
       FRONTEND_ORIGIN: http://${WFCHAT_PUBLIC_HOST:-localhost}:5173
       FRONTEND_ORIGINS: http://localhost:5173,http://${WFCHAT_PUBLIC_HOST:-localhost}:5173
       DATABASE_URL: postgres://postgres:postgres@postgres:5432/wfchat
-      VOICEVOX_BASE_URL: ${VOICEVOX_BASE_URL:-http://voicevox:50021}
+      VOICEVOX_BASE_URL: ${WFCHAT_COMPOSE_VOICEVOX_BASE_URL:-http://voicevox:50021}
       VOICEVOX_SPEAKER_ID: ${VOICEVOX_SPEAKER_ID:-1}
       VOICEVOX_CREDIT: ${VOICEVOX_CREDIT:-VOICEVOX speaker 1}
       VOICEVOX_SPEED_SCALE: ${VOICEVOX_SPEED_SCALE:-}
@@ -71,6 +71,7 @@ services:
         VITE_API_BASE_URL: ""
         VITE_GOOGLE_CLIENT_ID: ${VITE_GOOGLE_CLIENT_ID}
         VITE_ENABLE_MARKDOWN_QA: "true"
+        VITE_ENABLE_STREAMING_SPEECH_PLAYBACK: ${VITE_ENABLE_STREAMING_SPEECH_PLAYBACK:-false}
     ports:
       - "5173:80"
     depends_on:

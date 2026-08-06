@@ -70,8 +70,7 @@ ids. Character lookup resolves an `ai_profile_id`; backend environment config
 then selects the active provider and model.
 
 Supported chat providers are `mock`, `openai`, `lmstudio`, and `xai`.
-Anthropic/Claude code is scaffolded but runtime config rejects it. Image parts
-are supported only by mock and OpenAI.
+Image parts are supported only by mock and OpenAI.
 
 The same prepared, bounded context feeds streaming and non-streaming
 completion:

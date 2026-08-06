@@ -9,6 +9,7 @@
   ],
   "scripts": {
     "init": "node scripts/init-env.mjs",
+    "test:init": "node --test scripts/init-env.test.mjs",
     "dev:web": "npm --prefix apps/web run dev",
     "dev:api": "cargo run --manifest-path apps/api/Cargo.toml",
     "lint:web": "npm --prefix apps/web run lint",
@@ -19,4 +20,3 @@
     "preview:web": "npm --prefix apps/web run preview"
   }
 }
-

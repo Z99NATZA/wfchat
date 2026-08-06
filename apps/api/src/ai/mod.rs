@@ -159,10 +159,6 @@ impl AiService {
                     "xai" => {
                         providers::xai::complete_chat(&self.state, ai_profile_id, messages).await
                     }
-                    "anthropic" | "claude" => {
-                        providers::anthropic::complete_chat(&self.state, ai_profile_id, messages)
-                            .await
-                    }
                     other => Err(AppError::BadRequest(format!(
                         "unknown ai provider: {other}"
                     ))),
@@ -213,10 +209,6 @@ impl AiService {
                         providers::xai::stream_chat(&self.state, ai_profile_id, messages, on_event)
                             .await
                     }
-                    "anthropic" | "claude" => {
-                        self.stream_chat_fallback(ai_profile_id, messages, on_event)
-                            .await
-                    }
                     other => Err(AppError::BadRequest(format!(
                         "unknown ai provider: {other}"
                     ))),
@@ -225,21 +217,6 @@ impl AiService {
         )
         .await
         .map_err(|_| AppError::Ai("provider stream timed out".to_owned()))?
-    }
-
-    async fn stream_chat_fallback<F, Fut>(
-        &self,
-        ai_profile_id: &str,
-        messages: &[AiMessage],
-        mut on_event: F,
-    ) -> AppResult<AiMessage>
-    where
-        F: FnMut(AiChatStreamEvent) -> Fut,
-        Fut: Future<Output = AppResult<()>>,
-    {
-        let assistant = self.complete_chat(ai_profile_id, messages).await?;
-        on_event(AiChatStreamEvent::Token(assistant.text_content())).await?;
-        Ok(assistant)
     }
 }
 

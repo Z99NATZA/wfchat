@@ -32,6 +32,10 @@ and retry states. Blob playback is the default. Setting
 the browser and response type support it. Only completed successful audio is
 cached, and only for the current browser session.
 
+For Compose builds, set this flag in root `.env`; standalone web development
+uses `apps/web/.env`. `npm run init` keeps both files on their respective
+example catalogs.
+
 Playback is user-initiated unless the user enables latest-message auto-play. It
 stops on another playback, microphone start, send, clear, chat/persona change,
 navigation, or unmount.

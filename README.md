@@ -23,20 +23,22 @@ use. It uses HTTP and is not a production-ready deployment.
 git clone https://github.com/Z99NATZA/wfchat.git
 cd wfchat
 
-# Create or update local env files from the example files.
+# Synchronize local env files with the supported example catalogs.
 npm run init
 
 # root .env values used by Docker Compose
 # VITE_GOOGLE_CLIENT_ID=        # optional Google sign-in client ID for the web build
+# VITE_ENABLE_STREAMING_SPEECH_PLAYBACK=false
 # WFCHAT_PUBLIC_HOST=localhost  # set to this machine's LAN IP for phone/LAN testing
+# WFCHAT_COMPOSE_VOICEVOX_BASE_URL=http://voicevox:50021
 # VOICEVOX_SPEAKER_ID=23        # VOICEVOX speaker/style id used by the API container
 
 # apps/api/.env values used by the API
-# OPENAI_API_KEY=               # required when AI_PROVIDER=openai or AI_TRANSCRIPTION_PROVIDER=openai
+# OPENAI_API_KEY=               # required after selecting an OpenAI-backed capability
 # GOOGLE_CLIENT_ID=             # use the same client ID as VITE_GOOGLE_CLIENT_ID
-# AI_PROVIDER=openai
+# AI_PROVIDER=mock
 # AI_VOICE_PROVIDER=voicevox
-# AI_TRANSCRIPTION_PROVIDER=openai
+# AI_TRANSCRIPTION_PROVIDER=mock
 # CHAT_ATTACHMENT_UPLOAD_DIR=data/uploads
 
 # start

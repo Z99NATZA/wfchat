@@ -19,9 +19,14 @@ npm run init
 docker compose up -d --build
 ```
 
-`npm run init` creates missing `.env`, `apps/api/.env`, and `apps/web/.env`
-from their examples and adds missing keys without overwriting existing values.
-Backend secrets belong only in `apps/api/.env`.
+`npm run init` rebuilds `.env`, `apps/api/.env`, and `apps/web/.env` in their
+example order. It preserves supported raw values, fills missing keys from the
+examples, moves uniquely owned misplaced values, and removes unsupported keys.
+All three files pass preflight before any target changes. Changed existing
+targets receive a sibling `.backup-*` file before replacement; a partial
+replacement is rolled back on a best-effort basis. Conflicts, malformed or
+unterminated values, and concurrent target changes stop the run. Backend
+secrets belong only in `apps/api/.env`.
 
 The API waits for PostgreSQL health, applies embedded SQLx migrations, then
 starts background memory and attachment-cleanup work. Web waits for API health.
@@ -48,6 +53,10 @@ http://<host-lan-ip>:5173
 
 Only port 5173 is required by the browser. `FRONTEND_ORIGINS` controls direct
 cross-origin API access.
+
+Root `WFCHAT_COMPOSE_VOICEVOX_BASE_URL` controls the URL mapped to the API
+container's `VOICEVOX_BASE_URL`. This keeps the Compose-facing value distinct
+from the API-local value in `apps/api/.env`.
 
 For a separately managed public deployment, set `APP_ENV=production` and
 explicit public HTTPS `FRONTEND_ORIGIN(S)`. The checked-in Compose configuration
@@ -76,7 +85,7 @@ Chat provider modes:
 - `xai` with `XAI_API_KEY` and `XAI_MODEL`
 - `lmstudio` with `LMSTUDIO_MODEL`
 
-`anthropic`/`claude` and unknown values fail startup validation.
+Unknown values fail startup validation.
 
 Voice modes are `disabled|mock|openai|voicevox`. Transcription modes are
 `disabled|mock|openai`. See [Chat voice](chat-voice.md) for capability-specific
@@ -99,7 +108,9 @@ chat at 100 messages and 500,000 stored Unicode scalar values. The exact keys
 and development defaults are in `apps/api/.env.example`.
 
 The compose build enables Markdown QA at `/chat?qa=markdown`. Other web builds
-default `VITE_ENABLE_MARKDOWN_QA` to false.
+default `VITE_ENABLE_MARKDOWN_QA` to false. Root
+`VITE_ENABLE_STREAMING_SPEECH_PLAYBACK` is passed through the Compose web build
+and defaults to false.
 
 ## Persistence And Caching
 

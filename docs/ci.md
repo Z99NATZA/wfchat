@@ -1,9 +1,15 @@
 # Continuous Integration
 
 `.github/workflows/ci.yml` runs on every pull request and pushes to `main`.
-It has independent Web, API, and Playwright E2E smoke jobs.
+It has independent init, Web, API, and Playwright E2E smoke jobs.
 
 ## Checks
+
+Environment initialization:
+
+```powershell
+npm run test:init
+```
 
 Web:
 
@@ -19,6 +25,7 @@ API:
 
 ```powershell
 cargo test --manifest-path apps/api/Cargo.toml
+cargo run --manifest-path apps/api/Cargo.toml --quiet --bin validate-config -- apps/api/.env.example
 cargo fmt --manifest-path apps/api/Cargo.toml -- --check
 cargo clippy --manifest-path apps/api/Cargo.toml -- -D warnings
 ```
@@ -32,9 +39,13 @@ $env:WFCHAT_E2E_DATABASE_URL='postgres://postgres:postgres@localhost:5432/wfchat
 npm --prefix apps/web run test:e2e:smoke
 ```
 
-The API job starts PostgreSQL 16, sets `WFCHAT_TEST_DATABASE_URL`, and therefore
-tests migrations and database-backed flows. ESLint allows no warnings; Clippy
-treats warnings as errors.
+The init job exercises synchronization, migration, preflight, transaction,
+rollback, multiline, and idempotency behavior with temporary fixtures. The API
+job starts PostgreSQL 16, sets `WFCHAT_TEST_DATABASE_URL`, and therefore tests
+migrations and database-backed flows. It also launches a dedicated validator
+that clears its inherited environment, loads `apps/api/.env.example`, and runs
+the real Rust `Config` validation path. ESLint allows no warnings; Clippy treats
+warnings as errors.
 
 The E2E job uses a separate PostgreSQL 16 database and installs Chromium with
 its Linux runtime dependencies. Playwright starts the API with mock AI and
@@ -44,7 +55,8 @@ test results for seven days.
 
 ## Local Verification
 
-Run the same commands before push. API tests that need PostgreSQL require a
+Run the same commands before push. The init tests do not read or write the
+repository's local env files. API tests that need PostgreSQL require a
 disposable database:
 
 ```powershell
