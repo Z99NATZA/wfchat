@@ -1,53 +1,65 @@
 use super::*;
 
 impl ChatStore {
+    pub async fn create_chat_attachment_with_storage_quota(
+        &self,
+        owner: OwnerScope,
+        attachment: NewChatAttachmentRecord,
+        max_storage_bytes: i64,
+    ) -> StoreResult<CreateChatAttachmentOutcome> {
+        let mut tx = self.db.begin().await?;
+        let lock_key = match owner.user_id {
+            Some(user_id) => format!("user:{user_id}"),
+            None => format!("session:{}", owner.session_id),
+        };
+        sqlx::query("select pg_advisory_xact_lock(hashtextextended($1, 0))")
+            .bind(lock_key)
+            .execute(&mut *tx)
+            .await?;
+
+        let fits_quota: bool = sqlx::query_scalar(
+            "select
+                coalesce((
+                    select sum(byte_size::numeric)
+                    from chat_attachments
+                    where deleted_at is null
+                      and (($3::uuid is not null and owner_user_id = $3)
+                           or ($3::uuid is null and owner_session_id = $2))
+                ), 0::numeric)
+                + coalesce((
+                    select sum(byte_size::numeric)
+                    from chat_attachment_file_deletions
+                    where ($3::uuid is not null and owner_user_id = $3)
+                       or ($3::uuid is null and owner_session_id = $2)
+                ), 0::numeric)
+                + $1::numeric <= $4::numeric",
+        )
+        .bind(attachment.byte_size)
+        .bind(owner.session_id)
+        .bind(owner.user_id)
+        .bind(max_storage_bytes)
+        .fetch_one(&mut *tx)
+        .await?;
+        if !fits_quota {
+            tx.rollback().await?;
+            return Ok(CreateChatAttachmentOutcome::StorageQuotaExceeded);
+        }
+
+        let row = insert_chat_attachment(&mut tx, owner, attachment).await?;
+        tx.commit().await?;
+        Ok(CreateChatAttachmentOutcome::Created(Box::new(
+            chat_attachment_from_row(row),
+        )))
+    }
+
     pub async fn create_chat_attachment(
         &self,
         owner: OwnerScope,
         attachment: NewChatAttachmentRecord,
     ) -> StoreResult<ChatAttachmentRecord> {
-        let row = sqlx::query(
-            "insert into chat_attachments (
-                id,
-                owner_session_id,
-                owner_user_id,
-                kind,
-                mime_type,
-                byte_size,
-                width,
-                height,
-                sha256,
-                storage_key
-             )
-             values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-             returning
-                id,
-                owner_session_id,
-                owner_user_id,
-                chat_id,
-                message_id,
-                kind,
-                mime_type,
-                byte_size,
-                width,
-                height,
-                sha256,
-                storage_key,
-                extract(epoch from created_at)::bigint as created_at,
-                extract(epoch from deleted_at)::bigint as deleted_at",
-        )
-        .bind(attachment.id)
-        .bind(owner.session_id)
-        .bind(owner.user_id)
-        .bind(attachment.kind)
-        .bind(attachment.mime_type)
-        .bind(attachment.byte_size)
-        .bind(attachment.width)
-        .bind(attachment.height)
-        .bind(attachment.sha256)
-        .bind(attachment.storage_key)
-        .fetch_one(self.db.as_ref())
-        .await?;
+        let mut tx = self.db.begin().await?;
+        let row = insert_chat_attachment(&mut tx, owner, attachment).await?;
+        tx.commit().await?;
 
         Ok(chat_attachment_from_row(row))
     }
@@ -423,6 +435,55 @@ impl ChatStore {
     }
 }
 
+async fn insert_chat_attachment(
+    tx: &mut Transaction<'_, Postgres>,
+    owner: OwnerScope,
+    attachment: NewChatAttachmentRecord,
+) -> StoreResult<sqlx::postgres::PgRow> {
+    sqlx::query(
+        "insert into chat_attachments (
+            id,
+            owner_session_id,
+            owner_user_id,
+            kind,
+            mime_type,
+            byte_size,
+            width,
+            height,
+            sha256,
+            storage_key
+         )
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+         returning
+            id,
+            owner_session_id,
+            owner_user_id,
+            chat_id,
+            message_id,
+            kind,
+            mime_type,
+            byte_size,
+            width,
+            height,
+            sha256,
+            storage_key,
+            extract(epoch from created_at)::bigint as created_at,
+            extract(epoch from deleted_at)::bigint as deleted_at",
+    )
+    .bind(attachment.id)
+    .bind(owner.session_id)
+    .bind(owner.user_id)
+    .bind(attachment.kind)
+    .bind(attachment.mime_type)
+    .bind(attachment.byte_size)
+    .bind(attachment.width)
+    .bind(attachment.height)
+    .bind(attachment.sha256)
+    .bind(attachment.storage_key)
+    .fetch_one(&mut **tx)
+    .await
+}
+
 fn chat_attachment_from_row(row: sqlx::postgres::PgRow) -> ChatAttachmentRecord {
     ChatAttachmentRecord {
         id: row.get("id"),
@@ -483,6 +544,253 @@ mod tests {
         .fetch_optional(store.db.as_ref())
         .await
         .unwrap()
+    }
+
+    async fn create_with_quota(
+        store: &ChatStore,
+        owner: OwnerScope,
+        byte_size: i64,
+        max_storage_bytes: i64,
+    ) -> (Uuid, String, CreateChatAttachmentOutcome) {
+        let id = Uuid::new_v4();
+        let record = attachment(id, byte_size);
+        let storage_key = record.storage_key.clone();
+        let outcome = store
+            .create_chat_attachment_with_storage_quota(owner, record, max_storage_bytes)
+            .await
+            .unwrap();
+        (id, storage_key, outcome)
+    }
+
+    #[tokio::test]
+    async fn storage_quota_allows_exact_boundary_and_rejects_over_limit() {
+        let Some(store) = test_store().await else {
+            return;
+        };
+        let guest = store.create_guest_session().await.unwrap();
+        let owner = OwnerScope::from_session(&guest);
+        let (_, first_key, first) = create_with_quota(&store, owner, 40, 100).await;
+        let (_, boundary_key, boundary) = create_with_quota(&store, owner, 60, 100).await;
+        let (_, rejected_key, rejected) = create_with_quota(&store, owner, 1, 100).await;
+
+        assert!(matches!(first, CreateChatAttachmentOutcome::Created(_)));
+        assert!(matches!(boundary, CreateChatAttachmentOutcome::Created(_)));
+        assert!(matches!(
+            rejected,
+            CreateChatAttachmentOutcome::StorageQuotaExceeded
+        ));
+        assert!(!sqlx::query_scalar::<_, bool>(
+            "select exists(select 1 from chat_attachments where storage_key = $1)",
+        )
+        .bind(&rejected_key)
+        .fetch_one(store.db.as_ref())
+        .await
+        .unwrap());
+        assert!(!sqlx::query_scalar::<_, bool>(
+            "select exists(
+                select 1 from chat_attachment_file_deletions where storage_key = $1
+             )",
+        )
+        .bind(&rejected_key)
+        .fetch_one(store.db.as_ref())
+        .await
+        .unwrap());
+
+        store.delete_session_for_test(guest.id).await.unwrap();
+        store
+            .delete_attachment_file_deletions_for_test(&[first_key, boundary_key])
+            .await
+            .unwrap();
+    }
+
+    #[tokio::test]
+    async fn concurrent_storage_quota_reservations_cannot_exceed_limit() {
+        let Some(store) = test_store().await else {
+            return;
+        };
+        let guest = store.create_guest_session().await.unwrap();
+        let owner = OwnerScope::from_session(&guest);
+        let barrier = std::sync::Arc::new(tokio::sync::Barrier::new(3));
+        let mut tasks = Vec::new();
+        let mut keys = Vec::new();
+        for _ in 0..2 {
+            let task_store = store.clone();
+            let task_barrier = barrier.clone();
+            let id = Uuid::new_v4();
+            let record = attachment(id, 60);
+            keys.push(record.storage_key.clone());
+            tasks.push(tokio::spawn(async move {
+                task_barrier.wait().await;
+                task_store
+                    .create_chat_attachment_with_storage_quota(owner, record, 100)
+                    .await
+                    .unwrap()
+            }));
+        }
+        barrier.wait().await;
+        let mut created = 0;
+        let mut rejected = 0;
+        for task in tasks {
+            match task.await.unwrap() {
+                CreateChatAttachmentOutcome::Created(_) => created += 1,
+                CreateChatAttachmentOutcome::StorageQuotaExceeded => rejected += 1,
+            }
+        }
+
+        assert_eq!(created, 1);
+        assert_eq!(rejected, 1);
+        let stored_bytes: i64 = sqlx::query_scalar(
+            "select coalesce(sum(byte_size), 0)::bigint
+             from chat_attachments where owner_session_id = $1",
+        )
+        .bind(guest.id)
+        .fetch_one(store.db.as_ref())
+        .await
+        .unwrap();
+        assert_eq!(stored_bytes, 60);
+
+        store.delete_session_for_test(guest.id).await.unwrap();
+        store
+            .delete_attachment_file_deletions_for_test(&keys)
+            .await
+            .unwrap();
+    }
+
+    #[tokio::test]
+    async fn storage_quota_uses_user_across_sessions_and_isolates_guests() {
+        let Some(store) = test_store().await else {
+            return;
+        };
+        let first = store.create_guest_session().await.unwrap();
+        let second = store.create_guest_session().await.unwrap();
+        let user_id = Uuid::new_v4();
+        let first = store
+            .promote_session_to_registered(first.id, user_id)
+            .await
+            .unwrap()
+            .unwrap();
+        let second = store
+            .promote_session_to_registered(second.id, user_id)
+            .await
+            .unwrap()
+            .unwrap();
+        let first_owner = OwnerScope::from_session(&first);
+        let second_owner = OwnerScope::from_session(&second);
+        let (_, account_key, account_upload) =
+            create_with_quota(&store, first_owner, 60, 100).await;
+        let (_, rejected_key, second_upload) =
+            create_with_quota(&store, second_owner, 41, 100).await;
+        assert!(matches!(
+            account_upload,
+            CreateChatAttachmentOutcome::Created(_)
+        ));
+        assert!(matches!(
+            second_upload,
+            CreateChatAttachmentOutcome::StorageQuotaExceeded
+        ));
+
+        let first_guest = store.create_guest_session().await.unwrap();
+        let second_guest = store.create_guest_session().await.unwrap();
+        let (_, first_guest_key, first_guest_upload) =
+            create_with_quota(&store, OwnerScope::from_session(&first_guest), 100, 100).await;
+        let (_, second_guest_key, second_guest_upload) =
+            create_with_quota(&store, OwnerScope::from_session(&second_guest), 100, 100).await;
+        assert!(matches!(
+            first_guest_upload,
+            CreateChatAttachmentOutcome::Created(_)
+        ));
+        assert!(matches!(
+            second_guest_upload,
+            CreateChatAttachmentOutcome::Created(_)
+        ));
+
+        for session_id in [first.id, second.id, first_guest.id, second_guest.id] {
+            store.delete_session_for_test(session_id).await.unwrap();
+        }
+        store
+            .delete_attachment_file_deletions_for_test(&[
+                account_key,
+                first_guest_key,
+                second_guest_key,
+            ])
+            .await
+            .unwrap();
+        assert!(!sqlx::query_scalar::<_, bool>(
+            "select exists(select 1 from chat_attachments where storage_key = $1)",
+        )
+        .bind(rejected_key)
+        .fetch_one(store.db.as_ref())
+        .await
+        .unwrap());
+    }
+
+    #[tokio::test]
+    async fn deletion_bytes_remain_chargeable_until_completion() {
+        let Some(store) = test_store().await else {
+            return;
+        };
+        let guest = store.create_guest_session().await.unwrap();
+        let owner = OwnerScope::from_session(&guest);
+        let (attachment_id, deletion_key, created) =
+            create_with_quota(&store, owner, 60, 100).await;
+        assert!(matches!(created, CreateChatAttachmentOutcome::Created(_)));
+        let mut deletion_tx = store.db.begin().await.unwrap();
+        sqlx::query("delete from chat_attachments where id = $1")
+            .bind(attachment_id)
+            .execute(&mut *deletion_tx)
+            .await
+            .unwrap();
+        sqlx::query(
+            "update chat_attachment_file_deletions
+             set next_attempt_at = 'infinity'::timestamptz
+             where storage_key = $1",
+        )
+        .bind(&deletion_key)
+        .execute(&mut *deletion_tx)
+        .await
+        .unwrap();
+        deletion_tx.commit().await.unwrap();
+
+        let (_, rejected_key, while_pending) = create_with_quota(&store, owner, 41, 100).await;
+        assert!(matches!(
+            while_pending,
+            CreateChatAttachmentOutcome::StorageQuotaExceeded
+        ));
+
+        let claim_token = Uuid::new_v4();
+        sqlx::query(
+            "update chat_attachment_file_deletions
+             set claim_token = $2, claim_expires_at = now() + interval '15 minutes'
+             where storage_key = $1",
+        )
+        .bind(&deletion_key)
+        .bind(claim_token)
+        .execute(store.db.as_ref())
+        .await
+        .unwrap();
+        assert!(store
+            .complete_chat_attachment_file_deletion(&deletion_key, claim_token)
+            .await
+            .unwrap());
+
+        let (_, released_key, after_completion) = create_with_quota(&store, owner, 41, 100).await;
+        assert!(matches!(
+            after_completion,
+            CreateChatAttachmentOutcome::Created(_)
+        ));
+
+        store.delete_session_for_test(guest.id).await.unwrap();
+        store
+            .delete_attachment_file_deletions_for_test(std::slice::from_ref(&released_key))
+            .await
+            .unwrap();
+        assert!(!sqlx::query_scalar::<_, bool>(
+            "select exists(select 1 from chat_attachments where storage_key = $1)",
+        )
+        .bind(rejected_key)
+        .fetch_one(store.db.as_ref())
+        .await
+        .unwrap());
     }
 
     #[tokio::test]

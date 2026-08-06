@@ -173,6 +173,12 @@ pub struct NewChatAttachmentRecord {
 }
 
 #[derive(Clone, Debug)]
+pub enum CreateChatAttachmentOutcome {
+    Created(Box<ChatAttachmentRecord>),
+    StorageQuotaExceeded,
+}
+
+#[derive(Clone, Debug)]
 pub struct ChatAttachmentFileDeletionRecord {
     pub storage_key: String,
     pub byte_size: i64,

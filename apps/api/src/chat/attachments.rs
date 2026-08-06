@@ -54,6 +54,7 @@ pub(super) async fn upload_chat_attachment(
     let attachment = create_chat_attachment_metadata_then_file(
         &state.store,
         &state.config.chat_attachment_upload_dir,
+        state.config.chat_attachment_max_storage_bytes_per_owner,
         owner,
         NewChatAttachmentRecord {
             id: attachment_id,
@@ -75,16 +76,30 @@ pub(super) async fn upload_chat_attachment(
 async fn create_chat_attachment_metadata_then_file(
     store: &ChatStore,
     upload_dir: &str,
+    max_storage_bytes_per_owner: usize,
     owner: OwnerScope,
     attachment: NewChatAttachmentRecord,
     file_bytes: &[u8],
 ) -> AppResult<ChatAttachmentRecord> {
     let attachment_id = attachment.id;
     let storage_key = attachment.storage_key.clone();
-    let attachment = store
-        .create_chat_attachment(owner, attachment)
+    let outcome = store
+        .create_chat_attachment_with_storage_quota(
+            owner,
+            attachment,
+            i64::try_from(max_storage_bytes_per_owner)
+                .expect("validated attachment storage quota should fit in i64"),
+        )
         .await
         .map_err(|error| AppError::database("save chat attachment metadata", error))?;
+    let attachment = match outcome {
+        CreateChatAttachmentOutcome::Created(attachment) => *attachment,
+        CreateChatAttachmentOutcome::StorageQuotaExceeded => {
+            return Err(AppError::Conflict(
+                "image attachment storage quota exceeded".to_owned(),
+            ));
+        }
+    };
 
     if let Err(write_error) = write_attachment_bytes(upload_dir, &storage_key, file_bytes).await {
         let deleted = store

@@ -29,6 +29,7 @@ const PRODUCTION_CHAT_ATTACHMENT_MAX_PIXELS: u64 = 20_000_000;
 const PRODUCTION_CHAT_ATTACHMENT_DECODER_MAX_ALLOC_BYTES: u64 = 128 * 1024 * 1024;
 const PRODUCTION_CHAT_ATTACHMENT_MAX_CONCURRENT_DECODES: usize = 4;
 const PRODUCTION_CHAT_ATTACHMENT_MAX_TOTAL_BYTES_PER_MESSAGE: usize = 20 * 1024 * 1024;
+const PRODUCTION_CHAT_ATTACHMENT_MAX_STORAGE_BYTES_PER_OWNER: usize = 200 * 1024 * 1024;
 
 const RESERVED_PRODUCTION_HOSTS: [&str; 10] = [
     "localhost",
@@ -166,6 +167,7 @@ pub struct Config {
     pub chat_attachment_decoder_max_alloc_bytes: u64,
     pub chat_attachment_max_concurrent_decodes: usize,
     pub chat_attachment_max_total_bytes_per_message: usize,
+    pub chat_attachment_max_storage_bytes_per_owner: usize,
     pub security: SecurityConfig,
 }
 
@@ -281,6 +283,10 @@ impl Config {
             chat_attachment_max_total_bytes_per_message: parsed_env_value(
                 "CHAT_ATTACHMENT_MAX_TOTAL_BYTES_PER_MESSAGE",
                 20 * 1024 * 1024,
+            )?,
+            chat_attachment_max_storage_bytes_per_owner: parsed_env_value(
+                "CHAT_ATTACHMENT_MAX_STORAGE_BYTES_PER_OWNER",
+                200 * 1024 * 1024,
             )?,
             security,
         };
@@ -451,6 +457,14 @@ impl Config {
                 "CHAT_ATTACHMENT_MAX_TOTAL_BYTES_PER_MESSAGE must be greater than 0".to_owned(),
             );
         }
+        if self.chat_attachment_max_storage_bytes_per_owner == 0 {
+            return Err(
+                "CHAT_ATTACHMENT_MAX_STORAGE_BYTES_PER_OWNER must be greater than 0".to_owned(),
+            );
+        }
+        if i64::try_from(self.chat_attachment_max_storage_bytes_per_owner).is_err() {
+            return Err("CHAT_ATTACHMENT_MAX_STORAGE_BYTES_PER_OWNER is too large".to_owned());
+        }
         if self.chat_attachment_max_total_bytes_per_message < self.chat_attachment_max_bytes {
             return Err(
                 "CHAT_ATTACHMENT_MAX_TOTAL_BYTES_PER_MESSAGE must not be less than CHAT_ATTACHMENT_MAX_BYTES"
@@ -511,6 +525,11 @@ impl Config {
                 "CHAT_ATTACHMENT_MAX_TOTAL_BYTES_PER_MESSAGE",
                 self.chat_attachment_max_total_bytes_per_message,
                 PRODUCTION_CHAT_ATTACHMENT_MAX_TOTAL_BYTES_PER_MESSAGE,
+            )?;
+            validate_production_max(
+                "CHAT_ATTACHMENT_MAX_STORAGE_BYTES_PER_OWNER",
+                self.chat_attachment_max_storage_bytes_per_owner,
+                PRODUCTION_CHAT_ATTACHMENT_MAX_STORAGE_BYTES_PER_OWNER,
             )?;
         }
 
@@ -849,6 +868,7 @@ mod tests {
         PRODUCTION_CHAT_ATTACHMENT_DECODER_MAX_ALLOC_BYTES, PRODUCTION_CHAT_ATTACHMENT_MAX_BYTES,
         PRODUCTION_CHAT_ATTACHMENT_MAX_CONCURRENT_DECODES, PRODUCTION_CHAT_ATTACHMENT_MAX_HEIGHT,
         PRODUCTION_CHAT_ATTACHMENT_MAX_IMAGES_PER_MESSAGE, PRODUCTION_CHAT_ATTACHMENT_MAX_PIXELS,
+        PRODUCTION_CHAT_ATTACHMENT_MAX_STORAGE_BYTES_PER_OWNER,
         PRODUCTION_CHAT_ATTACHMENT_MAX_TOTAL_BYTES_PER_MESSAGE,
         PRODUCTION_CHAT_ATTACHMENT_MAX_WIDTH, PRODUCTION_CHAT_GLOBAL_REQUESTS_PER_MINUTE,
         PRODUCTION_CHAT_MAX_CHATS_PER_OWNER, PRODUCTION_CHAT_MAX_MESSAGES_PER_CHAT,
@@ -902,6 +922,7 @@ mod tests {
             chat_attachment_decoder_max_alloc_bytes: 128 * 1024 * 1024,
             chat_attachment_max_concurrent_decodes: 2,
             chat_attachment_max_total_bytes_per_message: 20 * 1024 * 1024,
+            chat_attachment_max_storage_bytes_per_owner: 200 * 1024 * 1024,
             security: SecurityConfig::default(),
         }
     }
@@ -1161,6 +1182,19 @@ mod tests {
     }
 
     #[test]
+    fn attachment_storage_quota_must_be_positive() {
+        let mut config = base_config();
+        config.chat_attachment_max_storage_bytes_per_owner = 0;
+
+        assert_eq!(
+            config
+                .validate()
+                .expect_err("zero storage quota should fail"),
+            "CHAT_ATTACHMENT_MAX_STORAGE_BYTES_PER_OWNER must be greater than 0"
+        );
+    }
+
+    #[test]
     fn attachment_total_byte_limit_must_cover_one_allowed_image() {
         let mut config = base_config();
         config.chat_attachment_max_total_bytes_per_message = config.chat_attachment_max_bytes - 1;
@@ -1214,6 +1248,10 @@ mod tests {
         assert_attachment_max!(
             chat_attachment_max_total_bytes_per_message,
             PRODUCTION_CHAT_ATTACHMENT_MAX_TOTAL_BYTES_PER_MESSAGE
+        );
+        assert_attachment_max!(
+            chat_attachment_max_storage_bytes_per_owner,
+            PRODUCTION_CHAT_ATTACHMENT_MAX_STORAGE_BYTES_PER_OWNER
         );
     }
 

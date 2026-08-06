@@ -174,6 +174,7 @@ and no-panic validation but does not apply this maxima table:
 | `CHAT_ATTACHMENT_DECODER_MAX_ALLOC_BYTES`    | 128 MiB |           128 MiB |
 | `CHAT_ATTACHMENT_MAX_CONCURRENT_DECODES`     |      2 |                  4 |
 | `CHAT_ATTACHMENT_MAX_TOTAL_BYTES_PER_MESSAGE` | 20 MiB |            20 MiB |
+| `CHAT_ATTACHMENT_MAX_STORAGE_BYTES_PER_OWNER` | 200 MiB |          200 MiB |
 
 Production origins are HTTPS DNS origins with no credentials, path, query, or
 fragment. Hostnames are lowercased and stripped of trailing dots before checks.

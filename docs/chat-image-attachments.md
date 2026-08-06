@@ -82,12 +82,22 @@ Default and production limits are:
 | Decoder allocation budget per image | 128 MiB | 128 MiB |
 | Concurrent decodes per API process | 2 | 4 |
 | Total raw image bytes per message | 20 MiB | 20 MiB |
+| Stored attachment bytes per owner | 200 MiB | 200 MiB |
 
 These limits are configured by `CHAT_ATTACHMENT_*`. Decoder width, height, and
 allocation limits are passed explicitly to the image decoder. Files are stored
 outside the web root under server-generated keys rooted at
 `CHAT_ATTACHMENT_UPLOAD_DIR`. The current implementation stores the validated
 original bytes; it does not re-encode images or strip metadata.
+
+Storage quota is enforced after image validation and before the final-path
+write. Registered owners share one quota by user id across all sessions; each
+guest session has its own quota. PostgreSQL serializes quota admission per
+owner and commits the check together with pending attachment metadata, so
+concurrent uploads and API replicas cannot reserve more than the configured
+limit. Usage may equal the limit. An upload that would exceed it returns `409`
+with `{"error":"conflict: image attachment storage quota exceeded"}` and
+creates neither metadata nor a deletion record.
 
 Hard deletion from `chat_attachments` is the only attachment-removal lifecycle.
 A database trigger records the storage key, byte size, and owner snapshots in a
@@ -101,6 +111,12 @@ a 15-minute PostgreSQL lease before filesystem I/O. Successful deletion and an
 already-missing file both remove the record. Other filesystem failures retain
 the record for one retry no earlier than one hour later. Claim tokens prevent a
 replica from completing work after its lease has been replaced.
+
+Both live attachment metadata and owned durable deletion records count toward
+storage quota. Deleting metadata therefore does not release quota; bytes stop
+counting only after the worker confirms physical deletion (with a missing file
+treated as successful deletion). Unowned reconciliation records are excluded
+because their owner cannot be recovered.
 
 Each maintenance run inspects at most 100 entries from the `chat-images`
 directory. Scan position continues across hourly rounds within one API process;

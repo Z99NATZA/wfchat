@@ -34,8 +34,8 @@ use crate::{
     state::AppState,
     store::{
         AppendChatMessagesOutcome, ChatAttachmentRecord, ChatRecord, ChatStorageLimits, ChatStore,
-        ChatSummaryRecord, CreateChatOutcome, NewChatAttachmentRecord, OwnerScope, SessionRecord,
-        StoredMessage,
+        ChatSummaryRecord, CreateChatAttachmentOutcome, CreateChatOutcome, NewChatAttachmentRecord,
+        OwnerScope, SessionRecord, StoredMessage,
     },
     voice::{SpeechAudioStreamBody, VoiceService},
 };
@@ -2021,6 +2021,70 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn upload_chat_attachment_returns_exact_conflict_when_storage_quota_is_exceeded() {
+        let Some(mut state) = test_state().await else {
+            return;
+        };
+        let session = create_test_session(&state).await;
+        let owner = OwnerScope::from_session(&session);
+        let bytes = png_bytes(2, 3);
+        state.config.chat_attachment_max_storage_bytes_per_owner = bytes.len();
+        let upload_dir = state.config.chat_attachment_upload_dir.clone();
+        let app = build_router(state.clone());
+        let boundary = "wfchat-image-upload";
+        let request = || {
+            Request::builder()
+                .method("POST")
+                .uri("/api/chat/attachments")
+                .header(
+                    header::CONTENT_TYPE,
+                    format!("multipart/form-data; boundary={boundary}"),
+                )
+                .header("x-wfchat-session", session.id.to_string())
+                .body(Body::from(multipart_file_body(boundary, &bytes)))
+                .expect("request should build")
+        };
+
+        let first = app.clone().oneshot(request()).await.unwrap();
+        assert_eq!(first.status(), StatusCode::OK);
+        let first_body = to_bytes(first.into_body(), usize::MAX).await.unwrap();
+        let first_payload: Value = serde_json::from_slice(&first_body).unwrap();
+        let attachment_id = uploaded_attachment_id(first_payload);
+
+        let rejected = app.oneshot(request()).await.unwrap();
+        assert_eq!(rejected.status(), StatusCode::CONFLICT);
+        let rejected_body = to_bytes(rejected.into_body(), usize::MAX).await.unwrap();
+        assert_eq!(
+            rejected_body.as_ref(),
+            br#"{"error":"conflict: image attachment storage quota exceeded"}"#
+        );
+        let mut entries =
+            tokio::fs::read_dir(std::path::Path::new(&upload_dir).join("chat-images"))
+                .await
+                .unwrap();
+        let mut stored_file_count = 0;
+        while entries.next_entry().await.unwrap().is_some() {
+            stored_file_count += 1;
+        }
+        assert_eq!(
+            stored_file_count, 1,
+            "quota rejection must not write a file"
+        );
+
+        state
+            .store
+            .delete_pending_chat_attachment(owner, attachment_id)
+            .await
+            .unwrap();
+        state
+            .store
+            .delete_attachment_file_deletions_for_owner_for_test(session.id)
+            .await
+            .unwrap();
+        let _ = tokio::fs::remove_dir_all(upload_dir).await;
+    }
+
+    #[tokio::test]
     async fn upload_chat_attachment_accepts_png_and_enforces_preview_ownership() {
         let Some(state) = test_state().await else {
             return;
@@ -2662,6 +2726,7 @@ mod tests {
                 chat_attachment_decoder_max_alloc_bytes: 128 * 1024 * 1024,
                 chat_attachment_max_concurrent_decodes: 2,
                 chat_attachment_max_total_bytes_per_message: 20 * 1024 * 1024,
+                chat_attachment_max_storage_bytes_per_owner: 200 * 1024 * 1024,
                 security: Default::default(),
             },
             http: Client::new(),

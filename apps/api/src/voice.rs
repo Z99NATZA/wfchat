@@ -798,6 +798,7 @@ mod tests {
             chat_attachment_decoder_max_alloc_bytes: 128 * 1024 * 1024,
             chat_attachment_max_concurrent_decodes: 2,
             chat_attachment_max_total_bytes_per_message: 20 * 1024 * 1024,
+            chat_attachment_max_storage_bytes_per_owner: 200 * 1024 * 1024,
             security: Default::default(),
         }
     }
