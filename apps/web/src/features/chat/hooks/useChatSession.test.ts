@@ -698,6 +698,36 @@ describe("useChatSession streaming sendMessage", () => {
 		expect(result.current.errorMessage).toBeNull();
 	});
 
+	it.each([
+		["daily_quota_limit", "chat.notice.dailyQuota"],
+		["global_daily_generation_limit", "chat.notice.globalDailyQuota"]
+	] as const)("maps %s to its non-retryable Aiko notice", async (reason, noticeKey) => {
+		const rejection = new Error("daily quota reached");
+		mocks.streamChatMessage.mockRejectedValueOnce(rejection);
+		mocks.chatApiErrorDetails.mockImplementation((error) =>
+			error === rejection
+				? {
+						message: "too many requests",
+						status: 429,
+						reason,
+						retryAfterSeconds: 3600
+					}
+				: null
+		);
+		const { result } = renderHook(() => useChatSession());
+
+		await act(async () => {
+			result.current.setDraft("quota message");
+		});
+		await act(async () => {
+			await result.current.sendMessage();
+		});
+
+		expect(sendChatMessage).not.toHaveBeenCalled();
+		expect(result.current.errorMessage).toBe(noticeKey);
+		expect(result.current.retryError).toBeUndefined();
+	});
+
 	it("maps backend image validation errors to specific upload messages", async () => {
 		const localImage = pendingImage("blob:invalid-image");
 		mocks.uploadChatImageAttachment.mockRejectedValue(

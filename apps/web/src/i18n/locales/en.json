@@ -351,6 +351,7 @@
 	"chat.notice.imageStorage": "Image storage is full. Delete an older chat with images, wait a moment, and try again.",
 	"chat.notice.assistantOutputSize": "This question may be a little too broad. Try making it more specific and Aiko will answer again.",
 	"chat.notice.dailyQuota": "We've reached today's chat limit. Come back and chat again tomorrow.",
+	"chat.notice.globalDailyQuota": "Aiko has reached her quota for today. Please come back and chat again tomorrow.",
 	"chat.session.clearConfirmTitle": "Clear chat history?",
 	"chat.session.clearConfirmDesc": "This removes all messages from this chat.",
 	"chat.session.clearError": "Could not clear this chat. Try again.",

@@ -68,6 +68,13 @@ the SSE response cancels generation as soon as the backend detects the closed
 client channel. Timeout, disconnect, and provider failure do not persist partial
 messages, and provider details are replaced by a generic public error.
 
+Production reserves owner and global daily quota before the SSE response
+starts. It marks the global reservation consumed immediately before provider
+generation. The owner reservation is finalized in the same transaction as the
+completed turn, or released if no assistant reply commits. Disconnect after
+provider start therefore releases only the owner allowance; disconnect before
+that durable boundary releases both.
+
 `CHAT_OUTPUT_MAX_CHARS` counts guarded Unicode scalar values. Each complete
 guarded chunk, including the response guard's buffered tail, is checked before
 send. A chunk that would cross the limit is omitted in full, provider work is

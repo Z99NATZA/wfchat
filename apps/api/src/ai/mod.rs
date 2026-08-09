@@ -136,6 +136,10 @@ impl AiService {
         Self { state }
     }
 
+    pub fn validate_chat_messages(&self, messages: &[AiMessage]) -> AppResult<()> {
+        ensure_provider_supports_messages(self.state.config.ai_provider.as_str(), messages)
+    }
+
     pub async fn complete_chat(
         &self,
         ai_profile_id: &str,

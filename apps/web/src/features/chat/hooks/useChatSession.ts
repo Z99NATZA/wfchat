@@ -1209,6 +1209,10 @@ function chatErrorTranslationKey(reason: ChatApiErrorReason): string {
 			return "chat.notice.generationCapacity";
 		case "chat_generation_active":
 			return "chat.notice.sameChatActive";
+		case "daily_quota_limit":
+			return "chat.notice.dailyQuota";
+		case "global_daily_generation_limit":
+			return "chat.notice.globalDailyQuota";
 		case "owner_chat_limit":
 			return "chat.notice.ownerChatLimit";
 		case "chat_storage_limit":

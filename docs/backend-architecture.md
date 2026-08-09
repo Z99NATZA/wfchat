@@ -131,6 +131,32 @@ Image decode capacity is fail-fast and defaults to two blocking decodes; a full
 decode semaphore returns `429`. Rate-limited HTTP responses include
 `Retry-After: 60`.
 
+Production chat generation also uses PostgreSQL daily admission. Registered
+accounts and Guest sessions each receive 50 successfully committed assistant
+replies per `Asia/Bangkok` calendar day. A separate shared circuit breaker
+allows 2,000 provider-started chat generations per Bangkok day across all API
+instances. Owner and global allowance are reserved atomically after the
+short-window and generation-capacity checks. An owner reservation is released
+when no assistant reply commits; a global reservation is released only when
+provider work never reaches its durable started state. Development follows the
+same send path with daily admission disabled.
+Chat creation, TTS, transcription, and automatic-memory provider work do not
+enter either daily chat-generation counter.
+
+Each quota admission transaction also runs one bounded retention pass. A pass
+deletes at most 500 terminal reservation rows from Bangkok dates before the
+current date, then deletes at most 500 eligible owner counters and 500 eligible
+global counters. Reserved owner/global states keep the corresponding past-day
+counter and reservation available for stale recovery; in particular, a
+provider-started reservation with reserved owner use is never treated as
+terminal. Partial date/state indexes and `FOR UPDATE SKIP LOCKED` keep request
+work bounded and allow concurrent API instances to drain the backlog safely
+over repeated admissions.
+
+The Guest boundary is deliberately best-effort because replacing browser state
+can create a new server session; resolved-IP controls remain only the temporary
+shared-network safeguard.
+
 ## Configuration
 
 `apps/api/src/config.rs` parses and validates environment configuration at
@@ -162,6 +188,9 @@ and no-panic validation but does not apply this maxima table:
 | `AUTH_GUEST_GLOBAL_REQUESTS_PER_MINUTE` |      60 |                 60 |
 | `CHAT_REQUESTS_PER_MINUTE`              |      20 |                 20 |
 | `CHAT_GLOBAL_REQUESTS_PER_MINUTE`       |     120 |                120 |
+| `CHAT_REGISTERED_DAILY_QUOTA`           |      50 |                 50 |
+| `CHAT_GUEST_DAILY_QUOTA`                |      50 |                 50 |
+| `CHAT_GLOBAL_DAILY_GENERATION_LIMIT`    |   2,000 |              2,000 |
 | `CHAT_MAX_CHATS_PER_OWNER`              |      50 |                 50 |
 | `CHAT_MAX_MESSAGES_PER_CHAT`            |     100 |                100 |
 | `CHAT_MAX_STORED_CHARS_PER_CHAT`        | 500,000 |            500,000 |

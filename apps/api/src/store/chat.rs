@@ -320,11 +320,36 @@ impl ChatStore {
         &self,
         owner: OwnerScope,
         chat_id: Uuid,
+        user_message: StoredMessage,
+        assistant_message: StoredMessage,
+        attachment_ids: &[Uuid],
+        user_timezone: &str,
+        limits: ChatStorageLimits,
+    ) -> StoreResult<AppendChatMessagesOutcome> {
+        self.append_chat_messages_limited_with_quota(
+            owner,
+            chat_id,
+            user_message,
+            assistant_message,
+            attachment_ids,
+            user_timezone,
+            limits,
+            None,
+        )
+        .await
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub async fn append_chat_messages_limited_with_quota(
+        &self,
+        owner: OwnerScope,
+        chat_id: Uuid,
         mut user_message: StoredMessage,
         assistant_message: StoredMessage,
         attachment_ids: &[Uuid],
         user_timezone: &str,
         limits: ChatStorageLimits,
+        quota_reservation_id: Option<Uuid>,
     ) -> StoreResult<AppendChatMessagesOutcome> {
         let mut tx = self.db.begin().await?;
         let owner_exists = sqlx::query(
@@ -431,6 +456,22 @@ impl ChatStore {
             .bind(chat_id)
             .execute(&mut *tx)
             .await?;
+
+        if let Some(reservation_id) = quota_reservation_id {
+            let finalized = sqlx::query(
+                "update chat_generation_quota_reservations
+                 set owner_state = 'committed', committed_at = now(), updated_at = now()
+                 where id = $1 and owner_state = 'reserved' and global_state = 'consumed'",
+            )
+            .bind(reservation_id)
+            .execute(&mut *tx)
+            .await?;
+            if finalized.rows_affected() != 1 {
+                return Err(sqlx::Error::Protocol(
+                    "chat quota reservation could not be finalized".to_owned(),
+                ));
+            }
+        }
 
         tx.commit().await?;
         user_message.attachments = self.attachments_for_message(user_message.id).await?;

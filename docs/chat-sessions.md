@@ -60,6 +60,16 @@ Reading, clearing, and deleting a full chat remain available.
 Chat creation and JSON/SSE sends share process-local 60-second buckets: 20
 requests per session and resolved IP and 120 globally.
 
+In production, JSON and SSE sends also share one PostgreSQL owner quota. A
+registered account and a Guest session can each commit at most 50 assistant
+replies per Bangkok calendar day; chat creation does not consume this quota.
+Admission simultaneously reserves space in the separate 2,000-attempt global
+provider-started circuit breaker. An unsuccessful turn releases the owner use.
+Once provider work starts, its global attempt remains consumed even after a
+provider error or client disconnect. Both counters reset at
+`00:00 Asia/Bangkok`, and a daily rejection reports the seconds until that
+boundary.
+
 Generation and clear share one process-local exclusive permit per chat.
 Generation owns it from before context preparation through the append commit.
 Clear acquires it without waiting and returns HTTP `409` with
@@ -76,6 +86,8 @@ stable `reason`. A response includes `retry_after_seconds` and the matching
 | `generation_process_capacity` | 429 | 60 |
 | `generation_session_capacity` | 429 | 60 |
 | `chat_generation_active` | 429 | 60 |
+| `daily_quota_limit` | 429 | next Bangkok midnight |
+| `global_daily_generation_limit` | 429 | next Bangkok midnight |
 | `owner_chat_limit` | 409 | - |
 | `chat_storage_limit` | 409 | - |
 | `message_size_limit` | 400 | - |

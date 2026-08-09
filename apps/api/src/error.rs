@@ -14,6 +14,8 @@ pub enum ErrorReason {
     GenerationProcessCapacity,
     GenerationSessionCapacity,
     ChatGenerationActive,
+    DailyQuotaLimit,
+    GlobalDailyGenerationLimit,
     OwnerChatLimit,
     ChatStorageLimit,
     MessageSizeLimit,

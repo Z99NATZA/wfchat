@@ -18,6 +18,9 @@ const PRODUCTION_AUTH_GUEST_REQUESTS_PER_MINUTE: u32 = 10;
 const PRODUCTION_AUTH_GUEST_GLOBAL_REQUESTS_PER_MINUTE: u32 = 60;
 const PRODUCTION_CHAT_REQUESTS_PER_MINUTE: u32 = 20;
 const PRODUCTION_CHAT_GLOBAL_REQUESTS_PER_MINUTE: u32 = 120;
+const PRODUCTION_CHAT_REGISTERED_DAILY_QUOTA: u32 = 50;
+const PRODUCTION_CHAT_GUEST_DAILY_QUOTA: u32 = 50;
+const PRODUCTION_CHAT_GLOBAL_DAILY_GENERATION_LIMIT: u32 = 2_000;
 const PRODUCTION_CHAT_MAX_CHATS_PER_OWNER: usize = 50;
 const PRODUCTION_CHAT_MAX_MESSAGES_PER_CHAT: usize = 100;
 const PRODUCTION_CHAT_MAX_STORED_CHARS_PER_CHAT: usize = 500_000;
@@ -76,6 +79,9 @@ pub struct ChatSecurityConfig {
     pub max_concurrent_per_session: usize,
     pub requests_per_minute: u32,
     pub global_requests_per_minute: u32,
+    pub registered_daily_quota: u32,
+    pub guest_daily_quota: u32,
+    pub global_daily_generation_limit: u32,
     pub max_chats_per_owner: usize,
     pub max_messages_per_chat: usize,
     pub max_stored_chars_per_chat: usize,
@@ -114,6 +120,9 @@ impl Default for ChatSecurityConfig {
             max_concurrent_per_session: 2,
             requests_per_minute: 20,
             global_requests_per_minute: 120,
+            registered_daily_quota: 50,
+            guest_daily_quota: 50,
+            global_daily_generation_limit: 2_000,
             max_chats_per_owner: 50,
             max_messages_per_chat: 100,
             max_stored_chars_per_chat: 500_000,
@@ -206,6 +215,12 @@ impl Config {
                 global_requests_per_minute: parsed_env_value(
                     "CHAT_GLOBAL_REQUESTS_PER_MINUTE",
                     120,
+                )?,
+                registered_daily_quota: parsed_env_value("CHAT_REGISTERED_DAILY_QUOTA", 50)?,
+                guest_daily_quota: parsed_env_value("CHAT_GUEST_DAILY_QUOTA", 50)?,
+                global_daily_generation_limit: parsed_env_value(
+                    "CHAT_GLOBAL_DAILY_GENERATION_LIMIT",
+                    2_000,
                 )?,
                 max_chats_per_owner: parsed_env_value("CHAT_MAX_CHATS_PER_OWNER", 50)?,
                 max_messages_per_chat: parsed_env_value("CHAT_MAX_MESSAGES_PER_CHAT", 100)?,
@@ -549,6 +564,9 @@ impl Config {
             || self.security.guest_global_requests_per_minute == 0
             || chat.requests_per_minute == 0
             || chat.global_requests_per_minute == 0
+            || chat.registered_daily_quota == 0
+            || chat.guest_daily_quota == 0
+            || chat.global_daily_generation_limit == 0
             || chat.max_chats_per_owner == 0
             || chat.max_messages_per_chat == 0
             || chat.max_stored_chars_per_chat == 0
@@ -668,6 +686,21 @@ impl Config {
             "CHAT_GLOBAL_REQUESTS_PER_MINUTE",
             chat.global_requests_per_minute,
             PRODUCTION_CHAT_GLOBAL_REQUESTS_PER_MINUTE,
+        )?;
+        validate_production_max(
+            "CHAT_REGISTERED_DAILY_QUOTA",
+            chat.registered_daily_quota,
+            PRODUCTION_CHAT_REGISTERED_DAILY_QUOTA,
+        )?;
+        validate_production_max(
+            "CHAT_GUEST_DAILY_QUOTA",
+            chat.guest_daily_quota,
+            PRODUCTION_CHAT_GUEST_DAILY_QUOTA,
+        )?;
+        validate_production_max(
+            "CHAT_GLOBAL_DAILY_GENERATION_LIMIT",
+            chat.global_daily_generation_limit,
+            PRODUCTION_CHAT_GLOBAL_DAILY_GENERATION_LIMIT,
         )?;
         validate_production_max(
             "CHAT_MAX_CHATS_PER_OWNER",
@@ -866,13 +899,14 @@ mod tests {
         PRODUCTION_CHAT_ATTACHMENT_MAX_IMAGES_PER_MESSAGE, PRODUCTION_CHAT_ATTACHMENT_MAX_PIXELS,
         PRODUCTION_CHAT_ATTACHMENT_MAX_STORAGE_BYTES_PER_OWNER,
         PRODUCTION_CHAT_ATTACHMENT_MAX_TOTAL_BYTES_PER_MESSAGE,
-        PRODUCTION_CHAT_ATTACHMENT_MAX_WIDTH, PRODUCTION_CHAT_GLOBAL_REQUESTS_PER_MINUTE,
+        PRODUCTION_CHAT_ATTACHMENT_MAX_WIDTH, PRODUCTION_CHAT_GLOBAL_DAILY_GENERATION_LIMIT,
+        PRODUCTION_CHAT_GLOBAL_REQUESTS_PER_MINUTE, PRODUCTION_CHAT_GUEST_DAILY_QUOTA,
         PRODUCTION_CHAT_MAX_CHATS_PER_OWNER, PRODUCTION_CHAT_MAX_MESSAGES_PER_CHAT,
-        PRODUCTION_CHAT_MAX_STORED_CHARS_PER_CHAT, PRODUCTION_CHAT_REQUESTS_PER_MINUTE,
-        PRODUCTION_CONTEXT_MAX_CHARS, PRODUCTION_CONTEXT_MAX_MESSAGES,
-        PRODUCTION_MAX_CONCURRENT_GENERATIONS, PRODUCTION_MAX_CONCURRENT_PER_SESSION,
-        PRODUCTION_MESSAGE_MAX_CHARS, PRODUCTION_OUTPUT_MAX_CHARS, PRODUCTION_OUTPUT_MAX_TOKENS,
-        PRODUCTION_REQUEST_MAX_BYTES,
+        PRODUCTION_CHAT_MAX_STORED_CHARS_PER_CHAT, PRODUCTION_CHAT_REGISTERED_DAILY_QUOTA,
+        PRODUCTION_CHAT_REQUESTS_PER_MINUTE, PRODUCTION_CONTEXT_MAX_CHARS,
+        PRODUCTION_CONTEXT_MAX_MESSAGES, PRODUCTION_MAX_CONCURRENT_GENERATIONS,
+        PRODUCTION_MAX_CONCURRENT_PER_SESSION, PRODUCTION_MESSAGE_MAX_CHARS,
+        PRODUCTION_OUTPUT_MAX_CHARS, PRODUCTION_OUTPUT_MAX_TOKENS, PRODUCTION_REQUEST_MAX_BYTES,
     };
 
     fn base_config() -> Config {
@@ -1380,6 +1414,15 @@ mod tests {
             PRODUCTION_CHAT_GLOBAL_REQUESTS_PER_MINUTE
         );
         assert_max!(requests_per_minute, PRODUCTION_CHAT_REQUESTS_PER_MINUTE);
+        assert_max!(
+            registered_daily_quota,
+            PRODUCTION_CHAT_REGISTERED_DAILY_QUOTA
+        );
+        assert_max!(guest_daily_quota, PRODUCTION_CHAT_GUEST_DAILY_QUOTA);
+        assert_max!(
+            global_daily_generation_limit,
+            PRODUCTION_CHAT_GLOBAL_DAILY_GENERATION_LIMIT
+        );
         assert_max!(max_chats_per_owner, PRODUCTION_CHAT_MAX_CHATS_PER_OWNER);
         assert_max!(max_messages_per_chat, PRODUCTION_CHAT_MAX_MESSAGES_PER_CHAT);
         assert_max!(
@@ -1420,6 +1463,9 @@ mod tests {
         chat.max_concurrent_per_session = PRODUCTION_MAX_CONCURRENT_PER_SESSION + 1;
         chat.requests_per_minute = PRODUCTION_CHAT_REQUESTS_PER_MINUTE + 1;
         chat.global_requests_per_minute = PRODUCTION_CHAT_GLOBAL_REQUESTS_PER_MINUTE + 1;
+        chat.registered_daily_quota = PRODUCTION_CHAT_REGISTERED_DAILY_QUOTA + 1;
+        chat.guest_daily_quota = PRODUCTION_CHAT_GUEST_DAILY_QUOTA + 1;
+        chat.global_daily_generation_limit = PRODUCTION_CHAT_GLOBAL_DAILY_GENERATION_LIMIT + 1;
         chat.max_chats_per_owner = PRODUCTION_CHAT_MAX_CHATS_PER_OWNER + 1;
         chat.max_messages_per_chat = PRODUCTION_CHAT_MAX_MESSAGES_PER_CHAT + 1;
         chat.max_stored_chars_per_chat = PRODUCTION_CHAT_MAX_STORED_CHARS_PER_CHAT + 1;

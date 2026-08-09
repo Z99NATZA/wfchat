@@ -33,7 +33,8 @@ use crate::{
     session::require_session,
     state::AppState,
     store::{
-        AppendChatMessagesOutcome, ChatAttachmentRecord, ChatRecord, ChatStorageLimits, ChatStore,
+        AppendChatMessagesOutcome, ChatAttachmentRecord, ChatGenerationQuotaAdmission,
+        ChatGenerationQuotaReservation, ChatRecord, ChatStorageLimits, ChatStore,
         ChatSummaryRecord, CreateChatAttachmentOutcome, CreateChatOutcome, NewChatAttachmentRecord,
         OwnerScope, SessionRecord, StoredMessage,
     },
@@ -517,12 +518,13 @@ mod tests {
         io::Cursor,
         time::{SystemTime, UNIX_EPOCH},
     };
+    use tokio_stream::StreamExt;
     use tower::ServiceExt;
 
     use crate::{
         app::build_router,
         attachments::cleanup_stale_pending_chat_attachments,
-        config::Config,
+        config::{AppEnvironment, Config},
         rate_limit::{RateLimitPolicies, RateLimitPolicy, RateLimiter},
         store::{ChatStore, MemoryFollowUpClaim, NewMemoryItemRecord, SessionRecord},
     };
@@ -645,6 +647,298 @@ mod tests {
         assert_eq!(extraction_job.user_timezone, "Asia/Bangkok");
 
         let _ = state.store.delete_chat(owner, chat.id).await;
+    }
+
+    #[tokio::test]
+    async fn json_and_sse_share_the_owner_daily_quota_and_chat_creation_does_not_consume_it() {
+        let Some(mut state) = test_state().await else {
+            return;
+        };
+        let isolation = state.store.isolate_daily_chat_quota_test().await.unwrap();
+        enable_daily_chat_quota(&mut state, 1, 2_000);
+        let session = create_test_session(&state).await;
+        let owner = OwnerScope::from_session(&session);
+        let chat = create_test_chat(&state, owner).await;
+        let app = build_router(state.clone());
+
+        let sent = app
+            .clone()
+            .oneshot(chat_message_request(
+                "POST",
+                &format!("/api/chats/{}/messages", chat.id),
+                session.id,
+                "json quota use",
+            ))
+            .await
+            .expect("JSON send should run");
+        assert_eq!(sent.status(), StatusCode::OK);
+        assert_eq!(
+            state
+                .store
+                .quota_states_for_session_for_test(session.id)
+                .await
+                .unwrap(),
+            [("committed".to_owned(), "consumed".to_owned())]
+        );
+
+        let created = app
+            .clone()
+            .oneshot(chat_message_request(
+                "POST",
+                "/api/personas/aiko/chats",
+                session.id,
+                "ignored by chat creation",
+            ))
+            .await
+            .expect("chat creation should run");
+        assert_eq!(created.status(), StatusCode::OK);
+        assert_eq!(
+            state
+                .store
+                .quota_states_for_session_for_test(session.id)
+                .await
+                .unwrap()
+                .len(),
+            1,
+            "chat creation must not reserve generation quota"
+        );
+
+        let rejected = app
+            .oneshot(chat_message_request(
+                "POST",
+                &format!("/api/chats/{}/messages/stream", chat.id),
+                session.id,
+                "stream quota use",
+            ))
+            .await
+            .expect("SSE rejection should run");
+        assert_eq!(rejected.status(), StatusCode::TOO_MANY_REQUESTS);
+        let retry_after = rejected
+            .headers()
+            .get(header::RETRY_AFTER)
+            .and_then(|value| value.to_str().ok())
+            .and_then(|value| value.parse::<u64>().ok())
+            .expect("daily quota rejection should include Retry-After");
+        assert!((1..=86_400).contains(&retry_after));
+        let body = to_bytes(rejected.into_body(), usize::MAX).await.unwrap();
+        let payload: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(payload["reason"], "daily_quota_limit");
+        assert_eq!(payload["retry_after_seconds"], retry_after);
+
+        state
+            .store
+            .delete_session_quota_for_test(session.id)
+            .await
+            .unwrap();
+        let _ = state.store.delete_chat(owner, chat.id).await;
+        state
+            .store
+            .delete_session_for_test(session.id)
+            .await
+            .unwrap();
+        isolation.finish().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn global_daily_generation_limit_has_distinct_retry_metadata() {
+        let Some(mut state) = test_state().await else {
+            return;
+        };
+        let isolation = state.store.isolate_daily_chat_quota_test().await.unwrap();
+        enable_daily_chat_quota(&mut state, 50, 1);
+        let first_session = create_test_session(&state).await;
+        let second_session = create_test_session(&state).await;
+        let first_owner = OwnerScope::from_session(&first_session);
+        let second_owner = OwnerScope::from_session(&second_session);
+        let first_chat = create_test_chat(&state, first_owner).await;
+        let second_chat = create_test_chat(&state, second_owner).await;
+        let app = build_router(state.clone());
+
+        let first = app
+            .clone()
+            .oneshot(chat_message_request(
+                "POST",
+                &format!("/api/chats/{}/messages", first_chat.id),
+                first_session.id,
+                "consume global attempt",
+            ))
+            .await
+            .unwrap();
+        assert_eq!(first.status(), StatusCode::OK);
+
+        let rejected = app
+            .oneshot(chat_message_request(
+                "POST",
+                &format!("/api/chats/{}/messages", second_chat.id),
+                second_session.id,
+                "blocked globally",
+            ))
+            .await
+            .unwrap();
+        assert_eq!(rejected.status(), StatusCode::TOO_MANY_REQUESTS);
+        let retry_after = rejected
+            .headers()
+            .get(header::RETRY_AFTER)
+            .and_then(|value| value.to_str().ok())
+            .and_then(|value| value.parse::<u64>().ok())
+            .unwrap();
+        assert!((1..=86_400).contains(&retry_after));
+        let body = to_bytes(rejected.into_body(), usize::MAX).await.unwrap();
+        let payload: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(payload["reason"], "global_daily_generation_limit");
+        assert_eq!(payload["retry_after_seconds"], retry_after);
+
+        state
+            .store
+            .delete_session_quota_for_test(first_session.id)
+            .await
+            .unwrap();
+        let _ = state.store.delete_chat(first_owner, first_chat.id).await;
+        let _ = state.store.delete_chat(second_owner, second_chat.id).await;
+        state
+            .store
+            .delete_session_for_test(first_session.id)
+            .await
+            .unwrap();
+        state
+            .store
+            .delete_session_for_test(second_session.id)
+            .await
+            .unwrap();
+        isolation.finish().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn failed_provider_output_releases_owner_quota_but_keeps_global_use() {
+        let Some(mut state) = test_state().await else {
+            return;
+        };
+        let isolation = state.store.isolate_daily_chat_quota_test().await.unwrap();
+        enable_daily_chat_quota(&mut state, 1, 2_000);
+        state.config.security.chat.output_max_chars = 1;
+        let session = create_test_session(&state).await;
+        let owner = OwnerScope::from_session(&session);
+        let chat = create_test_chat(&state, owner).await;
+        let app = build_router(state.clone());
+
+        for content in ["first failure", "second admitted failure"] {
+            let response = app
+                .clone()
+                .oneshot(chat_message_request(
+                    "POST",
+                    &format!("/api/chats/{}/messages", chat.id),
+                    session.id,
+                    content,
+                ))
+                .await
+                .expect("failed JSON send should run");
+            assert_eq!(response.status(), StatusCode::BAD_GATEWAY);
+        }
+        assert_eq!(
+            state
+                .store
+                .quota_states_for_session_for_test(session.id)
+                .await
+                .unwrap(),
+            [
+                ("released".to_owned(), "consumed".to_owned()),
+                ("released".to_owned(), "consumed".to_owned()),
+            ]
+        );
+        assert!(state
+            .store
+            .get_chat(owner, chat.id)
+            .await
+            .unwrap()
+            .unwrap()
+            .messages
+            .is_empty());
+
+        state
+            .store
+            .delete_session_quota_for_test(session.id)
+            .await
+            .unwrap();
+        let _ = state.store.delete_chat(owner, chat.id).await;
+        state
+            .store
+            .delete_session_for_test(session.id)
+            .await
+            .unwrap();
+        isolation.finish().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn disconnected_sse_releases_owner_quota_after_provider_start() {
+        let Some(mut state) = test_state().await else {
+            return;
+        };
+        let isolation = state.store.isolate_daily_chat_quota_test().await.unwrap();
+        enable_daily_chat_quota(&mut state, 1, 2_000);
+        let session = create_test_session(&state).await;
+        let owner = OwnerScope::from_session(&session);
+        let chat = create_test_chat(&state, owner).await;
+        let app = build_router(state.clone());
+        let response = app
+            .oneshot(chat_message_request(
+                "POST",
+                &format!("/api/chats/{}/messages/stream", chat.id),
+                session.id,
+                "disconnect quota use",
+            ))
+            .await
+            .expect("SSE send should start");
+        assert_eq!(response.status(), StatusCode::OK);
+        let mut body = response.into_body().into_data_stream();
+        loop {
+            let chunk = body
+                .next()
+                .await
+                .expect("SSE should emit a provider token before disconnect")
+                .expect("SSE body chunk should be readable");
+            if String::from_utf8_lossy(&chunk).contains("event: token") {
+                break;
+            }
+        }
+        drop(body);
+
+        tokio::time::timeout(Duration::from_secs(3), async {
+            loop {
+                if state
+                    .store
+                    .quota_states_for_session_for_test(session.id)
+                    .await
+                    .unwrap()
+                    == [("released".to_owned(), "consumed".to_owned())]
+                {
+                    break;
+                }
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .expect("disconnect should release owner quota promptly");
+        assert!(state
+            .store
+            .get_chat(owner, chat.id)
+            .await
+            .unwrap()
+            .unwrap()
+            .messages
+            .is_empty());
+
+        state
+            .store
+            .delete_session_quota_for_test(session.id)
+            .await
+            .unwrap();
+        let _ = state.store.delete_chat(owner, chat.id).await;
+        state
+            .store
+            .delete_session_for_test(session.id)
+            .await
+            .unwrap();
+        isolation.finish().await.unwrap();
     }
 
     #[tokio::test]
@@ -1759,26 +2053,14 @@ mod tests {
 
         let response = app.oneshot(request).await.expect("request should run");
 
-        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
         let body = to_bytes(response.into_body(), usize::MAX)
             .await
             .expect("body should collect");
-        let body = String::from_utf8(body.to_vec()).expect("body should be utf-8");
-        let events = parse_sse_events(&body);
+        let error_payload: Value =
+            serde_json::from_slice(&body).expect("validation error should be JSON");
         assert_eq!(
-            events
-                .iter()
-                .map(|event| event.0.as_str())
-                .collect::<Vec<_>>(),
-            ["message_start", "error"]
-        );
-        let error_payload = events
-            .iter()
-            .find(|event| event.0 == "error")
-            .and_then(|event| serde_json::from_str::<Value>(&event.1).ok())
-            .expect("error event should include json payload");
-        assert_eq!(
-            error_payload["message"].as_str(),
+            error_payload["error"].as_str(),
             Some("bad request: image attachments are not supported by the configured AI provider")
         );
 
@@ -2763,6 +3045,13 @@ mod tests {
 
     async fn test_state() -> Option<AppState> {
         test_state_with_provider("mock").await
+    }
+
+    fn enable_daily_chat_quota(state: &mut AppState, owner_limit: u32, global_limit: u32) {
+        state.config.security.environment = AppEnvironment::Production;
+        state.config.security.chat.registered_daily_quota = owner_limit;
+        state.config.security.chat.guest_daily_quota = owner_limit;
+        state.config.security.chat.global_daily_generation_limit = global_limit;
     }
 
     async fn test_state_with_provider(ai_provider: &str) -> Option<AppState> {

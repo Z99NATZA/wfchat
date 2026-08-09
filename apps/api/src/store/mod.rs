@@ -15,6 +15,7 @@ mod auth;
 mod cafe;
 mod chat;
 mod memory;
+mod quota;
 mod sync;
 
 use memory::{cleanup_memory_after_source_removal, recalculate_memory_evidence};
@@ -131,6 +132,19 @@ pub enum AppendChatMessagesOutcome {
     },
     Unavailable,
     LimitReached,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ChatGenerationQuotaReservation {
+    pub id: Uuid,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ChatGenerationQuotaAdmission {
+    Admitted(ChatGenerationQuotaReservation),
+    SessionUnavailable,
+    OwnerLimitReached { retry_after_seconds: u64 },
+    GlobalLimitReached { retry_after_seconds: u64 },
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

@@ -23,7 +23,9 @@ pub(super) async fn send_message(
     let _generation_permit = state.generation_limiter.try_acquire(session.id, chat_id)?;
     let owner = OwnerScope::from_session(&session);
     let context = prepare_chat_completion_context(&state, owner, chat_id, &payload).await?;
-    let completed = complete_and_append_chat_message(state, owner, chat_id, context).await?;
+    let quota_reservation = reserve_daily_generation_quota(&state, &session, chat_id).await?;
+    let completed =
+        complete_and_append_chat_message(state, owner, chat_id, context, quota_reservation).await?;
 
     Ok(Json(SendMessageResponse {
         chat_id,
@@ -51,6 +53,7 @@ pub(super) async fn stream_message(
     let generation_permit = state.generation_limiter.try_acquire(session.id, chat_id)?;
     let owner = OwnerScope::from_session(&session);
     let context = prepare_chat_completion_context(&state, owner, chat_id, &payload).await?;
+    let quota_reservation = reserve_daily_generation_quota(&state, &session, chat_id).await?;
     let persona_id = context.chat.character_id.clone();
     let (sender, receiver) = mpsc::channel::<Result<Event, Infallible>>(16);
 
@@ -67,10 +70,20 @@ pub(super) async fn stream_message(
         .await
         .is_err()
         {
+            release_daily_generation_quota(&state, quota_reservation).await;
             return;
         }
 
-        match stream_and_append_chat_message(state, owner, chat_id, context, sender.clone()).await {
+        match stream_and_append_chat_message(
+            state,
+            owner,
+            chat_id,
+            context,
+            sender.clone(),
+            quota_reservation,
+        )
+        .await
+        {
             Ok(completed) => {
                 let _ = send_sse_event(
                     &sender,
@@ -115,6 +128,118 @@ pub(super) async fn stream_message(
 struct CompletedChatMessage {
     user_message: StoredMessage,
     assistant_message: StoredMessage,
+}
+
+async fn reserve_daily_generation_quota(
+    state: &AppState,
+    session: &SessionRecord,
+    chat_id: Uuid,
+) -> AppResult<Option<ChatGenerationQuotaReservation>> {
+    if !state.config.is_production() {
+        return Ok(None);
+    }
+
+    let chat_config = &state.config.security.chat;
+    let stale_after_seconds = chat_config
+        .ai_total_timeout_seconds
+        .saturating_add(LIMIT_RETRY_AFTER_SECONDS);
+    let admission = state
+        .store
+        .reserve_chat_generation_quota(
+            session.id,
+            chat_id,
+            chat_config.registered_daily_quota,
+            chat_config.guest_daily_quota,
+            chat_config.global_daily_generation_limit,
+            stale_after_seconds,
+        )
+        .await?;
+    match admission {
+        ChatGenerationQuotaAdmission::Admitted(reservation) => Ok(Some(reservation)),
+        ChatGenerationQuotaAdmission::SessionUnavailable => Err(AppError::Forbidden),
+        ChatGenerationQuotaAdmission::OwnerLimitReached {
+            retry_after_seconds,
+        } => Err(AppError::reasoned(
+            axum::http::StatusCode::TOO_MANY_REQUESTS,
+            "too many requests",
+            ErrorReason::DailyQuotaLimit,
+            Some(retry_after_seconds),
+        )),
+        ChatGenerationQuotaAdmission::GlobalLimitReached {
+            retry_after_seconds,
+        } => Err(AppError::reasoned(
+            axum::http::StatusCode::TOO_MANY_REQUESTS,
+            "too many requests",
+            ErrorReason::GlobalDailyGenerationLimit,
+            Some(retry_after_seconds),
+        )),
+    }
+}
+
+async fn mark_daily_generation_provider_started(
+    state: &AppState,
+    reservation: Option<ChatGenerationQuotaReservation>,
+) -> AppResult<()> {
+    let Some(reservation) = reservation else {
+        return Ok(());
+    };
+    if state
+        .store
+        .mark_chat_generation_provider_started(reservation.id)
+        .await?
+    {
+        Ok(())
+    } else {
+        Err(AppError::database(
+            "mark chat generation provider started",
+            sqlx::Error::Protocol("chat quota reservation is unavailable".to_owned()),
+        ))
+    }
+}
+
+async fn release_daily_generation_quota(
+    state: &AppState,
+    reservation: Option<ChatGenerationQuotaReservation>,
+) {
+    let Some(reservation) = reservation else {
+        return;
+    };
+    if let Err(error) = state
+        .store
+        .release_chat_generation_quota(reservation.id)
+        .await
+    {
+        tracing::error!(
+            reservation_id = %reservation.id,
+            error = %error,
+            "failed to release chat generation quota reservation"
+        );
+    }
+}
+
+#[cfg(test)]
+fn seconds_until_next_bangkok_midnight(now: chrono::DateTime<chrono::Utc>) -> u64 {
+    use chrono::TimeZone;
+
+    let bangkok_now = now.with_timezone(&chrono_tz::Asia::Bangkok);
+    let Some(next_date) = bangkok_now.date_naive().succ_opt() else {
+        return 86_400;
+    };
+    let Some(next_midnight) = next_date.and_hms_opt(0, 0, 0) else {
+        return 86_400;
+    };
+    let Some(next_midnight) = chrono_tz::Asia::Bangkok
+        .from_local_datetime(&next_midnight)
+        .single()
+    else {
+        return 86_400;
+    };
+    let remaining_millis = next_midnight
+        .with_timezone(&chrono::Utc)
+        .signed_duration_since(now)
+        .num_milliseconds()
+        .max(1);
+    u64::try_from(remaining_millis.saturating_add(999) / 1_000).unwrap_or(86_400)
 }
 
 pub(super) async fn prepare_chat_completion_context(
@@ -174,6 +299,7 @@ pub(super) async fn prepare_chat_completion_context(
     ));
     let ai_user_message = build_ai_user_message(state, content, &attachments).await?;
     ai_messages.push(ai_user_message.clone());
+    AiService::new(state.clone()).validate_chat_messages(&ai_messages)?;
 
     Ok(ChatCompletionContext {
         chat,
@@ -341,36 +467,46 @@ async fn complete_and_append_chat_message(
     owner: OwnerScope,
     chat_id: Uuid,
     context: ChatCompletionContext,
+    quota_reservation: Option<ChatGenerationQuotaReservation>,
 ) -> AppResult<CompletedChatMessage> {
-    let ai = AiService::new(state.clone());
-    let assistant_ai_message = ai
-        .complete_chat(&context.chat.ai_profile_id, &context.ai_messages)
-        .await?;
-    ensure_output_within_limit(
-        &assistant_ai_message,
-        state.config.security.chat.output_max_chars,
-    )?;
+    let result = async {
+        mark_daily_generation_provider_started(&state, quota_reservation).await?;
+        let ai = AiService::new(state.clone());
+        let assistant_ai_message = ai
+            .complete_chat(&context.chat.ai_profile_id, &context.ai_messages)
+            .await?;
+        ensure_output_within_limit(
+            &assistant_ai_message,
+            state.config.security.chat.output_max_chars,
+        )?;
 
-    let user_message = StoredMessage::from_ai_message(context.user_ai_message);
-    let assistant_message = StoredMessage::from_ai_message(assistant_ai_message);
-    let outcome = state
-        .store
-        .append_chat_messages_limited(
-            owner,
-            chat_id,
+        let user_message = StoredMessage::from_ai_message(context.user_ai_message);
+        let assistant_message = StoredMessage::from_ai_message(assistant_ai_message);
+        let outcome = state
+            .store
+            .append_chat_messages_limited_with_quota(
+                owner,
+                chat_id,
+                user_message,
+                assistant_message,
+                &context.attachment_ids,
+                &context.user_timezone,
+                chat_storage_limits(&state),
+                quota_reservation.map(|reservation| reservation.id),
+            )
+            .await?;
+        let (user_message, assistant_message) = completed_messages(outcome)?;
+
+        Ok(CompletedChatMessage {
             user_message,
             assistant_message,
-            &context.attachment_ids,
-            &context.user_timezone,
-            chat_storage_limits(&state),
-        )
-        .await?;
-    let (user_message, assistant_message) = completed_messages(outcome)?;
-
-    Ok(CompletedChatMessage {
-        user_message,
-        assistant_message,
-    })
+        })
+    }
+    .await;
+    if result.is_err() {
+        release_daily_generation_quota(&state, quota_reservation).await;
+    }
+    result
 }
 
 async fn stream_and_append_chat_message(
@@ -379,55 +515,69 @@ async fn stream_and_append_chat_message(
     chat_id: Uuid,
     context: ChatCompletionContext,
     sender: mpsc::Sender<Result<Event, Infallible>>,
+    quota_reservation: Option<ChatGenerationQuotaReservation>,
 ) -> AppResult<CompletedChatMessage> {
-    let ai = AiService::new(state.clone());
-    let token_sender = sender.clone();
-    let output_chars = Arc::new(AtomicUsize::new(0));
-    let callback_output_chars = output_chars.clone();
-    let output_max_chars = state.config.security.chat.output_max_chars;
-    let assistant_ai_message = ai
-        .stream_chat(
-            &context.chat.ai_profile_id,
-            &context.ai_messages,
-            move |event| {
-                let token_sender = token_sender.clone();
-                let callback_output_chars = callback_output_chars.clone();
-                async move {
-                    match event {
-                        AiChatStreamEvent::Token(text) => {
-                            reserve_output_chunk(&callback_output_chars, &text, output_max_chars)?;
-                            send_sse_event(&token_sender, "token", StreamTokenEvent { text })
-                                .await?;
+    let result = async {
+        mark_daily_generation_provider_started(&state, quota_reservation).await?;
+        let ai = AiService::new(state.clone());
+        let token_sender = sender.clone();
+        let output_chars = Arc::new(AtomicUsize::new(0));
+        let callback_output_chars = output_chars.clone();
+        let output_max_chars = state.config.security.chat.output_max_chars;
+        let assistant_ai_message = ai
+            .stream_chat(
+                &context.chat.ai_profile_id,
+                &context.ai_messages,
+                move |event| {
+                    let token_sender = token_sender.clone();
+                    let callback_output_chars = callback_output_chars.clone();
+                    async move {
+                        match event {
+                            AiChatStreamEvent::Token(text) => {
+                                reserve_output_chunk(
+                                    &callback_output_chars,
+                                    &text,
+                                    output_max_chars,
+                                )?;
+                                send_sse_event(&token_sender, "token", StreamTokenEvent { text })
+                                    .await?;
+                            }
                         }
+
+                        Ok(())
                     }
+                },
+            )
+            .await?;
+        ensure_output_within_limit(&assistant_ai_message, output_max_chars)?;
 
-                    Ok(())
-                }
-            },
-        )
-        .await?;
-    ensure_output_within_limit(&assistant_ai_message, output_max_chars)?;
+        let user_message = StoredMessage::from_ai_message(context.user_ai_message);
+        let assistant_message = StoredMessage::from_ai_message(assistant_ai_message);
+        let outcome = state
+            .store
+            .append_chat_messages_limited_with_quota(
+                owner,
+                chat_id,
+                user_message,
+                assistant_message,
+                &context.attachment_ids,
+                &context.user_timezone,
+                chat_storage_limits(&state),
+                quota_reservation.map(|reservation| reservation.id),
+            )
+            .await?;
+        let (user_message, assistant_message) = completed_messages(outcome)?;
 
-    let user_message = StoredMessage::from_ai_message(context.user_ai_message);
-    let assistant_message = StoredMessage::from_ai_message(assistant_ai_message);
-    let outcome = state
-        .store
-        .append_chat_messages_limited(
-            owner,
-            chat_id,
+        Ok(CompletedChatMessage {
             user_message,
             assistant_message,
-            &context.attachment_ids,
-            &context.user_timezone,
-            chat_storage_limits(&state),
-        )
-        .await?;
-    let (user_message, assistant_message) = completed_messages(outcome)?;
-
-    Ok(CompletedChatMessage {
-        user_message,
-        assistant_message,
-    })
+        })
+    }
+    .await;
+    if result.is_err() {
+        release_daily_generation_quota(&state, quota_reservation).await;
+    }
+    result
 }
 
 fn ensure_output_within_limit(message: &AiMessage, max_chars: usize) -> AppResult<()> {
@@ -612,6 +762,19 @@ mod unit_tests {
             .expect("guarded prefix should fit exactly");
         assert!(reserve_output_chunk(&counter, &chunks[1], max_chars).is_err());
         assert_eq!(counter.load(Ordering::Relaxed), max_chars);
+    }
+
+    #[test]
+    fn daily_quota_retry_uses_the_next_bangkok_midnight() {
+        let before_midnight = chrono::DateTime::parse_from_rfc3339("2026-08-09T16:59:59Z")
+            .unwrap()
+            .with_timezone(&chrono::Utc);
+        let at_midnight = chrono::DateTime::parse_from_rfc3339("2026-08-09T17:00:00Z")
+            .unwrap()
+            .with_timezone(&chrono::Utc);
+
+        assert_eq!(seconds_until_next_bangkok_midnight(before_midnight), 1);
+        assert_eq!(seconds_until_next_bangkok_midnight(at_midnight), 86_400);
     }
 
     #[test]

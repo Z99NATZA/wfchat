@@ -16,6 +16,12 @@ atomically revokes an active registered/admin session and issues one new guest
 session. Account-owned reads use `owner_user_id` across that account's active
 sessions.
 
+Quota ownership stays server-side. Login moves the current Bangkok day's
+counted reservations for that Guest session to the account in the same
+transaction as promotion. A logout replacement Guest carries the account quota
+subject only through the current Bangkok date; later dates use its own session
+identity.
+
 Expired or revoked guest `auth_sessions` rows are processed in batches of at
 most 1,000 every 10 minutes. Before deletion, the legacy backfill reparents
 account-owned chats, attachments, memory/outbox/follow-up rows, Cafe state and
@@ -50,6 +56,9 @@ profile edits.
 | `cafe_room_rewards`           | One reward per room, round, and session                         |
 | `sync_entities`               | Latest generic sync value or tombstone per item                 |
 | `sync_commits`                | Per-session sync operation idempotency record                   |
+| `chat_daily_owner_quotas`     | Reserved or committed daily uses per account or Guest session   |
+| `chat_daily_global_quotas`    | Reserved and provider-started daily generation totals           |
+| `chat_generation_quota_reservations` | Retry-safe owner/global generation transitions          |
 
 ## Core Relationships
 
@@ -66,7 +75,28 @@ registered user
   -> auth_identities
   -> user_profile
   -> account-owned views of chats, memory, cafe progress, and sync
+
+chat generation quota reservation
+  -> one Bangkok-date owner counter
+  -> one Bangkok-date global counter
 ```
+
+Quota admission increments the owner and global counters atomically. The
+reservation records independent owner and global states so a successful turn
+can finalize owner use in the chat append transaction while provider-started
+global use remains durable after later failure. Admission recovers stale
+pre-provider reservations by releasing both counters and stale
+provider-started reservations by releasing only their owner counter.
+
+Past quota ledger retention is driven by chat quota admission. Each admission
+deletes one indexed batch of at most 500 terminal reservations whose
+`quota_date` is earlier than the current Bangkok date. It then independently
+deletes at most 500 past owner counters that have no matching reserved owner
+state and 500 past global counters that have no matching reserved global state.
+Reserved rows remain available for commit or stale recovery. Cleanup uses
+partial date/state indexes with `FOR UPDATE SKIP LOCKED`, so concurrent API
+instances are retry-safe and repeated admissions eventually drain eligible
+rows without an unbounded scan in one request transaction.
 
 Chat attachment bytes live in backend-owned file storage; PostgreSQL stores
 metadata and generated storage keys. Pending rows have no chat/message link.

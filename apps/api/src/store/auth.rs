@@ -48,8 +48,8 @@ impl ChatStore {
         session_id: Uuid,
     ) -> StoreResult<Option<SessionRecord>> {
         let mut tx = self.db.begin().await?;
-        let session_kind = sqlx::query_scalar::<_, String>(
-            "select kind
+        let session = sqlx::query(
+            "select kind, user_id
              from auth_sessions
              where id = $1 and revoked_at is null and expires_at > now()
              for update",
@@ -57,13 +57,16 @@ impl ChatStore {
         .bind(session_id)
         .fetch_optional(&mut *tx)
         .await?;
-        if !session_kind
-            .as_deref()
-            .is_some_and(|kind| matches!(kind, "registered" | "admin"))
-        {
+        let Some(session) = session else {
+            tx.rollback().await?;
+            return Ok(None);
+        };
+        let session_kind: String = session.get("kind");
+        if !matches!(session_kind.as_str(), "registered" | "admin") {
             tx.rollback().await?;
             return Ok(None);
         }
+        let quota_carryover_user_id: Uuid = session.get("user_id");
 
         sqlx::query("update auth_sessions set revoked_at = now() where id = $1")
             .bind(session_id)
@@ -77,12 +80,19 @@ impl ChatStore {
             created_at: now_unix_seconds(),
         };
         sqlx::query(
-            "insert into auth_sessions (id, user_id, kind, created_at)
-             values ($1, $2, 'guest', to_timestamp($3))",
+            "insert into auth_sessions (
+               id, user_id, kind, created_at,
+               quota_carryover_user_id, quota_carryover_date
+             )
+             values (
+               $1, $2, 'guest', to_timestamp($3), $4,
+               (now() at time zone 'Asia/Bangkok')::date
+             )",
         )
         .bind(guest.id)
         .bind(guest.user_id)
         .bind(guest.created_at as i64)
+        .bind(quota_carryover_user_id)
         .execute(&mut *tx)
         .await?;
 
@@ -225,6 +235,8 @@ impl ChatStore {
         session_id: Uuid,
         user_id: Uuid,
     ) -> StoreResult<()> {
+        Self::transfer_session_daily_quota_to_account_in_tx(tx, session_id, user_id).await?;
+
         let duplicate_memories = sqlx::query(
             "select guest.id as guest_id, account.id as account_id
              from memory_items guest

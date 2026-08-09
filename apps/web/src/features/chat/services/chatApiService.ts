@@ -86,6 +86,8 @@ export type ChatApiErrorReason =
 	| "generation_process_capacity"
 	| "generation_session_capacity"
 	| "chat_generation_active"
+	| "daily_quota_limit"
+	| "global_daily_generation_limit"
 	| "owner_chat_limit"
 	| "chat_storage_limit"
 	| "message_size_limit"
@@ -726,6 +728,8 @@ function isChatApiErrorReason(value: unknown): value is ChatApiErrorReason {
 			"generation_process_capacity",
 			"generation_session_capacity",
 			"chat_generation_active",
+			"daily_quota_limit",
+			"global_daily_generation_limit",
 			"owner_chat_limit",
 			"chat_storage_limit",
 			"message_size_limit",
