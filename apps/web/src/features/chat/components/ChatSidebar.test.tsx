@@ -131,4 +131,31 @@ describe("ChatSidebar", () => {
 		expect(activeChat?.className).toContain("dark:border-action-border");
 		expect(activeChat?.className).toContain("dark:bg-action-hover");
 	});
+
+	it("shows delete failure beside the chat action area with neutral tokens", () => {
+		render(
+			<ChatSidebar
+				personas={[persona]}
+				sessions={[]}
+				activeSessionId={null}
+				activePersona={persona}
+				activePersonaId={persona.id}
+				isOpen={false}
+				searchQuery=""
+				actionErrorMessage="Delete failed"
+				onCreateSession={vi.fn()}
+				onSearchQueryChange={vi.fn()}
+				onCloseSidebar={vi.fn()}
+				onDeleteSession={vi.fn(async () => undefined)}
+				onSelectPersona={vi.fn()}
+				onSelectSession={vi.fn()}
+			/>
+		);
+
+		const status = screen.getByRole("status");
+		expect(status.textContent).toBe("Delete failed");
+		expect(status.className).toContain("border-app-border");
+		expect(status.className).toContain("text-muted");
+		expect(status.className).not.toContain("red");
+	});
 });

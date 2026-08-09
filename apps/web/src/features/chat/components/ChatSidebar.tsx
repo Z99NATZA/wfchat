@@ -23,6 +23,7 @@ type ChatSidebarProps = {
 	onSelectPersona: (personaId: string) => void;
 	onSelectSession: (sessionId: string) => void;
 	onDeleteSession: (sessionId: string) => Promise<void>;
+	actionErrorMessage?: string | null;
 };
 
 function ChatSidebar({
@@ -39,7 +40,8 @@ function ChatSidebar({
 	onCloseSidebar,
 	onSelectPersona,
 	onSelectSession,
-	onDeleteSession
+	onDeleteSession,
+	actionErrorMessage
 }: ChatSidebarProps) {
 	const { t } = useI18n();
 	const [activeSessionMenuId, setActiveSessionMenuId] = useState<string | null>(null);
@@ -191,6 +193,14 @@ function ChatSidebar({
 									/>
 								</label>
 							</div>
+							{actionErrorMessage ? (
+								<p
+									className="mx-3 mt-2 rounded-lg border border-app-border bg-app-soft px-3 py-2 text-xs text-muted"
+									role="status"
+								>
+									{actionErrorMessage}
+								</p>
+							) : null}
 							<div
 								className="chat-scroll min-h-0 flex-1 space-y-1 overflow-y-auto px-3 py-3"
 								data-testid="chat-sidebar-session-list"

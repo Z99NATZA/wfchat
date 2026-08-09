@@ -30,6 +30,7 @@ type ChatComposerProps = {
 	userSpeechInput?: UserSpeechInputState;
 	onCancelSpeechInput?: () => void;
 	onToggleSpeechInput?: () => void;
+	attachmentResetVersion?: number;
 };
 
 const MAX_IMAGE_ATTACHMENTS = 4;
@@ -60,13 +61,15 @@ function ChatComposer({
 	isUserSpeechInputEnabled = false,
 	userSpeechInput = { status: "idle" },
 	onCancelSpeechInput,
-	onToggleSpeechInput
+	onToggleSpeechInput,
+	attachmentResetVersion = 0
 }: ChatComposerProps) {
 	const { t } = useI18n();
 	const { openCustom } = useDialog();
 	const textareaRef = useRef<HTMLTextAreaElement>(null);
 	const imageInputRef = useRef<HTMLInputElement>(null);
 	const wasSendingRef = useRef(false);
+	const previousAttachmentResetVersionRef = useRef(attachmentResetVersion);
 	const selectedImagesRef = useRef<PendingChatImageAttachment[]>([]);
 	const [recordingElapsedSeconds, setRecordingElapsedSeconds] = useState(0);
 	const [selectedImages, setSelectedImages] = useState<PendingChatImageAttachment[]>([]);
@@ -75,6 +78,18 @@ function ChatComposer({
 	useEffect(() => {
 		selectedImagesRef.current = selectedImages;
 	}, [selectedImages]);
+
+	useEffect(() => {
+		if (previousAttachmentResetVersionRef.current === attachmentResetVersion) {
+			return;
+		}
+
+		previousAttachmentResetVersionRef.current = attachmentResetVersion;
+		revokePendingImages(selectedImagesRef.current);
+		selectedImagesRef.current = [];
+		setSelectedImages([]);
+		setImageStatus(null);
+	}, [attachmentResetVersion]);
 
 	useEffect(() => {
 		return () => {
@@ -333,7 +348,7 @@ function ChatComposer({
 					</div>
 				) : null}
 				{imageStatus ? (
-					<p className="px-1 text-xs text-red-500" role="alert">
+					<p className="px-1 text-xs text-muted" role="alert">
 						{imageStatus}
 					</p>
 				) : null}
@@ -387,7 +402,7 @@ function ChatComposer({
 							</span>
 						) : speechStatus === "error" ? (
 							<span
-								className="hidden max-w-36 shrink truncate text-xs text-red-600 sm:block"
+								className="hidden max-w-36 shrink truncate text-xs text-muted sm:block"
 								role="alert"
 								aria-label={
 									userSpeechInput.errorDetail

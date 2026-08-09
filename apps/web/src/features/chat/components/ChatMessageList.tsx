@@ -48,6 +48,7 @@ type ChatMessageListProps = {
 	isAssistantSpeechEnabled?: boolean;
 	assistantSpeechPlayback?: AssistantSpeechPlaybackState;
 	onToggleAssistantSpeech?: (messageId: string) => void;
+	onRetryError?: () => void;
 	theme?: Theme;
 };
 
@@ -81,6 +82,7 @@ function ChatMessageList({
 	isAssistantSpeechEnabled = false,
 	assistantSpeechPlayback,
 	onToggleAssistantSpeech,
+	onRetryError,
 	theme = "light"
 }: ChatMessageListProps) {
 	const { confirm } = useDialog();
@@ -624,7 +626,7 @@ function ChatMessageList({
 									<>
 										{assistantSpeechStatus === "error" && (
 											<span
-												className="max-w-28 truncate text-[11px] font-medium text-red-500"
+												className="max-w-28 truncate text-[11px] font-medium text-muted"
 												role="status"
 											>
 												{t("chat.messageList.assistantSpeechFailed")}
@@ -632,11 +634,7 @@ function ChatMessageList({
 										)}
 										<IconButton
 											size="xs"
-											variant={
-												assistantSpeechStatus === "error"
-													? "danger"
-													: "ghost"
-											}
+											variant={"ghost"}
 											aria-label={assistantSpeechLabel(
 												assistantSpeechStatus,
 												t
@@ -773,9 +771,34 @@ function ChatMessageList({
 							</article>
 						)}
 						{errorMessage && (
-							<div className="rounded-lg border border-red-400/30 bg-red-500/10 px-4 py-3 text-sm text-red-500">
-								{errorMessage}
-							</div>
+							<article
+								className="flex items-start gap-3"
+								data-testid="chat-companion-notice"
+							>
+								<img
+									className="size-9 shrink-0 rounded-lg object-cover"
+									src={companionAvatarUrl}
+									alt=""
+								/>
+								<div
+									data-message-bubble="companion"
+									className={assistantMessageLayoutClassName}
+								>
+									<p className="text-sm leading-6 text-app-text" role="status">
+										{errorMessage}
+									</p>
+									{onRetryError && (
+										<Button
+											className="mt-2"
+											variant="secondary"
+											size="xs"
+											onClick={onRetryError}
+										>
+											{t("chat.messageList.retryMessage")}
+										</Button>
+									)}
+								</div>
+							</article>
 						)}
 					</div>
 				</div>

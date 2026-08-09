@@ -77,6 +77,31 @@ type ApiStreamMessageDoneEvent = {
 
 type ApiStreamMessageErrorEvent = {
 	message: string;
+	reason?: ChatApiErrorReason;
+	retry_after_seconds?: number;
+};
+
+export type ChatApiErrorReason =
+	| "chat_request_rate"
+	| "generation_process_capacity"
+	| "generation_session_capacity"
+	| "chat_generation_active"
+	| "owner_chat_limit"
+	| "chat_storage_limit"
+	| "message_size_limit"
+	| "request_size_limit"
+	| "assistant_output_size_limit"
+	| "image_size_limit"
+	| "image_count_limit"
+	| "image_upload_rate"
+	| "image_processing_capacity"
+	| "image_storage_limit";
+
+export type ChatApiErrorDetails = {
+	message: string;
+	status: number;
+	reason?: ChatApiErrorReason;
+	retryAfterSeconds?: number;
 };
 
 export type StreamMessageStartEvent = {
@@ -105,11 +130,20 @@ export type ParsedSseEvent = {
 
 export class ChatApiRequestError extends Error {
 	status: number;
+	reason?: ChatApiErrorReason;
+	retryAfterSeconds?: number;
 
-	constructor(message: string, status: number) {
+	constructor(
+		message: string,
+		status: number,
+		reason?: ChatApiErrorReason,
+		retryAfterSeconds?: number
+	) {
 		super(message);
 		this.name = "ChatApiRequestError";
 		this.status = status;
+		this.reason = reason;
+		this.retryAfterSeconds = retryAfterSeconds;
 	}
 }
 
@@ -473,11 +507,34 @@ function toSessionSummary(chat: ApiChatSummary): ChatSessionSummary {
 }
 
 export function isNotFound(error: unknown): boolean {
-	return error instanceof AxiosError && error.response?.status === 404;
+	return chatApiErrorDetails(error)?.status === 404;
 }
 
 export function isChatApiStatus(error: unknown, status: number): boolean {
-	return error instanceof ChatApiRequestError && error.status === status;
+	return chatApiErrorDetails(error)?.status === status;
+}
+
+export function chatApiErrorDetails(error: unknown): ChatApiErrorDetails | null {
+	if (error instanceof ChatApiRequestError) {
+		return {
+			message: error.message,
+			status: error.status,
+			reason: error.reason,
+			retryAfterSeconds: error.retryAfterSeconds
+		};
+	}
+
+	if (error instanceof AxiosError) {
+		const payload = apiErrorPayload(error.response?.data);
+		return {
+			message: payload.message ?? error.message,
+			status: error.response?.status ?? 0,
+			reason: payload.reason,
+			retryAfterSeconds: payload.retryAfterSeconds
+		};
+	}
+
+	return null;
 }
 
 export function createSseEventParser(onEvent: (event: ParsedSseEvent) => void) {
@@ -574,7 +631,12 @@ function dispatchStreamEvent(event: ParsedSseEvent, handlers: StreamChatMessageH
 		case "error": {
 			const payload = parseStreamEventData<ApiStreamMessageErrorEvent>(event);
 			handlers.onError?.(payload.message);
-			throw new Error(payload.message);
+			throw new ChatApiRequestError(
+				payload.message,
+				0,
+				payload.reason,
+				payload.retry_after_seconds
+			);
 		}
 	}
 }
@@ -587,22 +649,95 @@ function parseStreamEventData<TPayload>(event: ParsedSseEvent): TPayload {
 	}
 }
 
-async function readApiError(response: Response): Promise<string> {
+async function readApiError(response: Response): Promise<ChatApiErrorDetails> {
 	try {
-		const body = (await response.clone().json()) as { error?: string };
-		return body.error ?? `request failed with status ${response.status}`;
+		const body = apiErrorPayload(await response.clone().json());
+		return {
+			message: body.message ?? `request failed with status ${response.status}`,
+			status: response.status,
+			reason: body.reason,
+			retryAfterSeconds:
+				body.retryAfterSeconds ?? retryAfterSecondsFromHeader(response.headers)
+		};
 	} catch {
 		try {
 			const text = (await response.text()).trim();
-			return text || `request failed with status ${response.status}`;
+			return {
+				message: text || `request failed with status ${response.status}`,
+				status: response.status,
+				retryAfterSeconds: retryAfterSecondsFromHeader(response.headers)
+			};
 		} catch {
-			return `request failed with status ${response.status}`;
+			return {
+				message: `request failed with status ${response.status}`,
+				status: response.status,
+				retryAfterSeconds: retryAfterSecondsFromHeader(response.headers)
+			};
 		}
 	}
 }
 
 async function apiRequestError(response: Response): Promise<ChatApiRequestError> {
-	return new ChatApiRequestError(await readApiError(response), response.status);
+	const details = await readApiError(response);
+	return new ChatApiRequestError(
+		details.message,
+		details.status,
+		details.reason,
+		details.retryAfterSeconds
+	);
+}
+
+function apiErrorPayload(value: unknown): {
+	message?: string;
+	reason?: ChatApiErrorReason;
+	retryAfterSeconds?: number;
+} {
+	if (!value || typeof value !== "object") {
+		return {};
+	}
+
+	const payload = value as {
+		error?: unknown;
+		reason?: unknown;
+		retry_after_seconds?: unknown;
+	};
+	return {
+		message: typeof payload.error === "string" ? payload.error : undefined,
+		reason: isChatApiErrorReason(payload.reason) ? payload.reason : undefined,
+		retryAfterSeconds:
+			typeof payload.retry_after_seconds === "number" &&
+			Number.isFinite(payload.retry_after_seconds) &&
+			payload.retry_after_seconds >= 0
+				? payload.retry_after_seconds
+				: undefined
+	};
+}
+
+function retryAfterSecondsFromHeader(headers: Headers): number | undefined {
+	const value = Number(headers.get("retry-after"));
+	return Number.isFinite(value) && value >= 0 ? value : undefined;
+}
+
+function isChatApiErrorReason(value: unknown): value is ChatApiErrorReason {
+	return (
+		typeof value === "string" &&
+		[
+			"chat_request_rate",
+			"generation_process_capacity",
+			"generation_session_capacity",
+			"chat_generation_active",
+			"owner_chat_limit",
+			"chat_storage_limit",
+			"message_size_limit",
+			"request_size_limit",
+			"assistant_output_size_limit",
+			"image_size_limit",
+			"image_count_limit",
+			"image_upload_rate",
+			"image_processing_capacity",
+			"image_storage_limit"
+		].includes(value)
+	);
 }
 
 function apiUrl(path: string): string {

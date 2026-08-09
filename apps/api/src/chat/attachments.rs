@@ -95,8 +95,11 @@ async fn create_chat_attachment_metadata_then_file(
     let attachment = match outcome {
         CreateChatAttachmentOutcome::Created(attachment) => *attachment,
         CreateChatAttachmentOutcome::StorageQuotaExceeded => {
-            return Err(AppError::Conflict(
-                "image attachment storage quota exceeded".to_owned(),
+            return Err(AppError::reasoned(
+                axum::http::StatusCode::CONFLICT,
+                "conflict: image attachment storage quota exceeded",
+                ErrorReason::ImageStorageLimit,
+                None,
             ));
         }
     };
@@ -122,7 +125,12 @@ async fn create_chat_attachment_metadata_then_file(
 
 fn attachment_multipart_error(error: axum::extract::multipart::MultipartError) -> AppError {
     if error.status() == axum::http::StatusCode::PAYLOAD_TOO_LARGE {
-        AppError::PayloadTooLarge
+        AppError::reasoned(
+            axum::http::StatusCode::PAYLOAD_TOO_LARGE,
+            "payload too large",
+            ErrorReason::ImageSizeLimit,
+            None,
+        )
     } else {
         AppError::BadRequest("invalid attachment upload".to_owned())
     }

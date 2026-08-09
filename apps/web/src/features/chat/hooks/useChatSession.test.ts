@@ -38,6 +38,7 @@ const mocks = vi.hoisted(() => ({
 	clearChatMessages: vi.fn(),
 	getChat: vi.fn(),
 	isChatApiStatus: vi.fn(),
+	chatApiErrorDetails: vi.fn(),
 	isNotFound: vi.fn()
 }));
 
@@ -80,6 +81,7 @@ vi.mock("@/features/chat/services/chatApiService", () => ({
 	getAssistantMessageSpeech: mocks.getAssistantMessageSpeech,
 	transcribeUserSpeech: mocks.transcribeUserSpeech,
 	isChatApiStatus: mocks.isChatApiStatus,
+	chatApiErrorDetails: mocks.chatApiErrorDetails,
 	isNotFound: mocks.isNotFound,
 	listMemorySummaries: mocks.listMemorySummaries,
 	listPersonaChats: mocks.listPersonaChats,
@@ -186,6 +188,7 @@ describe("useChatSession streaming sendMessage", () => {
 			previewUrl: "http://localhost:8080/api/chat/attachments/attachment-1/preview"
 		});
 		mocks.isChatApiStatus.mockReturnValue(false);
+		mocks.chatApiErrorDetails.mockReturnValue(null);
 		mocks.isNotFound.mockReturnValue(false);
 	});
 
@@ -558,7 +561,7 @@ describe("useChatSession streaming sendMessage", () => {
 		]);
 	});
 
-	it("rolls back optimistic messages when streaming fails after starting", async () => {
+	it("keeps the rejected user message and offers retry when streaming fails after starting", async () => {
 		const avatarEvents: ChatSessionAvatarEvent[] = [];
 		mocks.streamChatMessage.mockImplementation(
 			async (_chatId, _content, _attachments, handlers) => {
@@ -580,7 +583,10 @@ describe("useChatSession streaming sendMessage", () => {
 
 		expect(sendChatMessage).not.toHaveBeenCalled();
 		expect(deleteChat).toHaveBeenCalledWith("chat-1");
-		expect(result.current.messages).toEqual([]);
+		expect(result.current.messages).toHaveLength(1);
+		expect(result.current.messages[0]).toMatchObject({ author: "user", text: "broken" });
+		expect(result.current.draft).toBe("broken");
+		expect(result.current.retryError).toBeTypeOf("function");
 		expect(result.current.errorMessage).toBe("chat.session.aiNoResponse");
 		expect(avatarEvents.map((event) => event.type)).toEqual([
 			"assistant_waiting",
@@ -609,7 +615,11 @@ describe("useChatSession streaming sendMessage", () => {
 
 		expect(uploadChatImageAttachment).toHaveBeenCalledWith(localImage.file);
 		expect(deleteChatAttachment).toHaveBeenCalledWith("attachment-1");
-		expect(result.current.messages).toEqual([]);
+		expect(result.current.messages).toHaveLength(1);
+		expect(result.current.messages[0]).toMatchObject({
+			author: "user",
+			text: "broken image"
+		});
 		expect(result.current.errorMessage).toBe("chat.session.aiNoResponse");
 	});
 
@@ -628,9 +638,64 @@ describe("useChatSession streaming sendMessage", () => {
 
 		expect(uploadChatImageAttachment).toHaveBeenCalledWith(localImage.file);
 		expect(isChatApiStatus).toHaveBeenCalledWith(uploadError, 413);
-		expect(result.current.errorMessage).toBe("chat.session.attachmentTooLarge");
+		expect(result.current.errorMessage).toBe("chat.notice.imageSize");
 		expect(result.current.messages).toEqual([]);
 		expect(createPersonaChat).not.toHaveBeenCalled();
+	});
+
+	it("does not send the JSON fallback for a recognized pre-stream API rejection", async () => {
+		const rejection = new Error("too many requests");
+		mocks.streamChatMessage.mockRejectedValueOnce(rejection);
+		mocks.chatApiErrorDetails.mockImplementation((error) =>
+			error === rejection
+				? {
+						message: "too many requests",
+						status: 429,
+						reason: "chat_request_rate",
+						retryAfterSeconds: 60
+					}
+				: null
+		);
+		const { result } = renderHook(() => useChatSession());
+
+		await act(async () => {
+			result.current.setDraft("please retry later");
+		});
+		await act(async () => {
+			await result.current.sendMessage();
+		});
+
+		expect(sendChatMessage).not.toHaveBeenCalled();
+		expect(result.current.messages).toHaveLength(1);
+		expect(result.current.messages[0]).toMatchObject({
+			author: "user",
+			text: "please retry later"
+		});
+		expect(result.current.errorMessage).toBe("chat.notice.requestRate");
+		expect(result.current.retryError).toBeTypeOf("function");
+
+		const committedUser = message("server-user-retry", "user", "please retry later");
+		const committedAssistant = message("server-ai-retry", "companion", "ready now");
+		mocks.getChat.mockResolvedValue({
+			chatId: "chat-1",
+			messages: [committedUser, committedAssistant]
+		});
+		mocks.streamChatMessage.mockImplementationOnce(
+			async (_chatId, _content, _attachments, handlers) => {
+				handlers.onStart?.({ chatId: "chat-1", personaId: "aiko" });
+				handlers.onDone?.({
+					chatId: "chat-1",
+					userMessage: committedUser,
+					assistantMessage: committedAssistant
+				});
+			}
+		);
+		await act(async () => {
+			await result.current.retryError?.();
+		});
+
+		expect(result.current.messages).toEqual([committedUser, committedAssistant]);
+		expect(result.current.errorMessage).toBeNull();
 	});
 
 	it("maps backend image validation errors to specific upload messages", async () => {

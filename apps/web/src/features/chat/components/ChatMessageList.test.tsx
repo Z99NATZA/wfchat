@@ -244,6 +244,30 @@ describe("ChatMessageList streaming state", () => {
 		expect(assistantBubble?.className).not.toContain("px-4");
 	});
 
+	it("renders recoverable feedback as a normal companion bubble with retry", () => {
+		const onRetryError = vi.fn();
+		const { container } = render(
+			<ChatMessageList
+				messages={[message("local-user", "user", "hello")]}
+				companionName="Aiko"
+				companionAvatarUrl="/images/aiko-avatar.png"
+				errorMessage="Please wait and try again"
+				onRetryError={onRetryError}
+			/>
+		);
+
+		const notice = screen.getByTestId("chat-companion-notice");
+		const bubble = notice.querySelector('[data-message-bubble="companion"]');
+		expect(notice.querySelector("img")?.getAttribute("src")).toBe("/images/aiko-avatar.png");
+		expect(bubble?.className).toContain("text-app-text");
+		expect(notice.className).not.toContain("red");
+		expect(notice.querySelector("[class*='red']")).toBeNull();
+
+		fireEvent.click(screen.getByRole("button", { name: "chat.messageList.retryMessage" }));
+		expect(onRetryError).toHaveBeenCalledTimes(1);
+		expect(container.textContent).toContain("Please wait and try again");
+	});
+
 	it("copies raw assistant message text", async () => {
 		render(
 			<ChatMessageList
@@ -556,6 +580,11 @@ describe("ChatMessageList streaming state", () => {
 		);
 
 		expect(screen.getByRole("status").textContent).toBe("Voice failed");
+		expect(screen.getByRole("status").className).toContain("text-muted");
+		expect(screen.getByRole("status").className).not.toContain("text-red");
+		expect(screen.getByRole("button", { name: "Retry voice" }).className).not.toContain(
+			"danger"
+		);
 
 		fireEvent.click(screen.getByRole("button", { name: "Retry voice" }));
 

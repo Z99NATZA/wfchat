@@ -19,7 +19,8 @@ owner and character.
   does not call the detail endpoint.
 - Deleting the active chat returns to `/chat`; deleting another chat keeps the
   current route.
-- Clearing messages retains the chat id.
+- The Web UI exposes New Chat and Delete Chat, but no Clear Chat control.
+- The existing clear-messages API remains implemented and retains the chat id.
 
 ## API
 
@@ -51,20 +52,42 @@ configurable through the `CHAT_*` environment keys.
 Production admits at most 50 chats per owner, 100 stored messages per chat, and
 500,000 stored Unicode scalar values per chat. The store rechecks these limits
 inside the owning write transaction. Chat-cap rejection returns HTTP `409` with
-`{"error":"conflict: chat limit reached"}`. Message-count or stored-character
-rejection returns HTTP `409` with
-`{"error":"conflict: chat message limit reached"}`. Reading, clearing, and
-deleting a full chat remain available.
+the existing `conflict: chat limit reached` error and `owner_chat_limit` reason.
+Message-count or stored-character rejection returns HTTP `409` with the existing
+`conflict: chat message limit reached` error and `chat_storage_limit` reason.
+Reading, clearing, and deleting a full chat remain available.
 
 Chat creation and JSON/SSE sends share process-local 60-second buckets: 20
-requests per session and resolved IP and 120 globally. Rejection returns HTTP
-`429`, `Retry-After: 60`, and `{"error":"too many requests"}`.
+requests per session and resolved IP and 120 globally.
 
 Generation and clear share one process-local exclusive permit per chat.
 Generation owns it from before context preparation through the append commit.
 Clear acquires it without waiting and returns HTTP `409` with
 `{"error":"conflict: chat generation in progress"}` if generation is active.
 Provider waits never hold a database transaction or row lock.
+
+Limit responses preserve the existing HTTP status and `error` text and add a
+stable `reason`. A response includes `retry_after_seconds` and the matching
+`Retry-After` header when the same request can be retried after a known delay.
+
+| Reason | HTTP | Retry seconds |
+| --- | ---: | ---: |
+| `chat_request_rate` | 429 | 60 |
+| `generation_process_capacity` | 429 | 60 |
+| `generation_session_capacity` | 429 | 60 |
+| `chat_generation_active` | 429 | 60 |
+| `owner_chat_limit` | 409 | - |
+| `chat_storage_limit` | 409 | - |
+| `message_size_limit` | 400 | - |
+| `request_size_limit` | 413 | - |
+| `assistant_output_size_limit` | 502 | - |
+
+The Web maps these reasons to localized Thai or English Aiko companion
+notices. Notices and retry state are local and are not persisted, synced, or
+included in provider context. A rejected send keeps its local user message and
+restores its composer text. Retry is offered for request rate, generation
+capacity, same-chat contention, and transport/provider failures. Delete failure
+stays beside the sidebar action instead of entering the chat timeline.
 
 Authenticated chat and persona follow-up responses, including errors and SSE,
 use `Cache-Control: private, no-store`.

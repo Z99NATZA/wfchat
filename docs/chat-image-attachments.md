@@ -96,8 +96,9 @@ guest session has its own quota. PostgreSQL serializes quota admission per
 owner and commits the check together with pending attachment metadata, so
 concurrent uploads and API replicas cannot reserve more than the configured
 limit. Usage may equal the limit. An upload that would exceed it returns `409`
-with `{"error":"conflict: image attachment storage quota exceeded"}` and
-creates neither metadata nor a deletion record.
+with the existing `conflict: image attachment storage quota exceeded` error and
+the `image_storage_limit` reason, and creates neither metadata nor a deletion
+record.
 
 Hard deletion from `chat_attachments` is the only attachment-removal lifecycle.
 A database trigger records the storage key, byte size, and owner snapshots in a
@@ -139,6 +140,22 @@ prevents paste/drop image staging, omits the upload route, and rejects
 image-message requests. When the key is omitted,
 production defaults it to disabled and development defaults it to enabled; the
 development `.env.example` explicitly enables it.
+
+Enforced image limits retain their existing HTTP status and `error` text and
+add a stable reason:
+
+| Reason | Boundary |
+| --- | --- |
+| `image_size_limit` | Upload body, bytes, dimensions, pixels, decoder allocation, or total message image bytes |
+| `image_count_limit` | Images per message |
+| `image_upload_rate` | Upload requests per minute |
+| `image_processing_capacity` | Concurrent image decodes |
+| `image_storage_limit` | Stored attachment bytes per owner |
+
+Rate and processing-capacity responses include a 60-second retry value. The Web
+maps these reasons to localized transient Aiko notices. Unsupported or invalid
+images keep their specific friendly notice, and selected local images remain
+available when retry is possible.
 
 The current format allowlist applies to uploads and pending attachments being
 linked. Successfully linked historical attachments remain available through

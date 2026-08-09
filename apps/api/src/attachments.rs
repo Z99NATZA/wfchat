@@ -70,10 +70,14 @@ impl ImageDecodeLimiter {
     }
 
     fn try_acquire(&self) -> AppResult<tokio::sync::OwnedSemaphorePermit> {
-        self.semaphore
-            .clone()
-            .try_acquire_owned()
-            .map_err(|_| AppError::RateLimited)
+        self.semaphore.clone().try_acquire_owned().map_err(|_| {
+            AppError::reasoned(
+                axum::http::StatusCode::TOO_MANY_REQUESTS,
+                "too many requests",
+                crate::error::ErrorReason::ImageProcessingCapacity,
+                Some(crate::error::LIMIT_RETRY_AFTER_SECONDS),
+            )
+        })
     }
 }
 
@@ -151,8 +155,8 @@ fn validate_image_attachment_bytes(
         return Err(AppError::BadRequest("image attachment is empty".to_owned()));
     }
     if bytes.len() > limits.max_bytes {
-        return Err(AppError::BadRequest(
-            "image attachment is too large".to_owned(),
+        return Err(image_size_limit_error(
+            "bad request: image attachment is too large",
         ));
     }
 
@@ -175,18 +179,18 @@ fn validate_image_attachment_bytes(
         ));
     }
     if width > limits.max_width {
-        return Err(AppError::BadRequest(
-            "image attachment width is too large".to_owned(),
+        return Err(image_size_limit_error(
+            "bad request: image attachment width is too large",
         ));
     }
     if height > limits.max_height {
-        return Err(AppError::BadRequest(
-            "image attachment height is too large".to_owned(),
+        return Err(image_size_limit_error(
+            "bad request: image attachment height is too large",
         ));
     }
     if pixel_count > limits.max_pixels {
-        return Err(AppError::BadRequest(
-            "image attachment has too many pixels".to_owned(),
+        return Err(image_size_limit_error(
+            "bad request: image attachment has too many pixels",
         ));
     }
 
@@ -206,6 +210,15 @@ fn validate_image_attachment_bytes(
         height,
         sha256: sha256_hex(bytes),
     })
+}
+
+fn image_size_limit_error(message: &'static str) -> AppError {
+    AppError::reasoned(
+        axum::http::StatusCode::BAD_REQUEST,
+        message,
+        crate::error::ErrorReason::ImageSizeLimit,
+        None,
+    )
 }
 
 pub fn image_storage_key(attachment_id: Uuid, extension: &str) -> String {
@@ -510,7 +523,7 @@ fn now_unix_seconds() -> u64 {
 fn image_validation_error(error: ImageError) -> AppError {
     match error {
         ImageError::Limits(error) if error.kind() == LimitErrorKind::InsufficientMemory => {
-            AppError::BadRequest("image attachment exceeds decoder allocation limit".to_owned())
+            image_size_limit_error("bad request: image attachment exceeds decoder allocation limit")
         }
         _ => AppError::BadRequest("image attachment is not a valid image".to_owned()),
     }
@@ -780,9 +793,19 @@ mod tests {
         )
         .await
         .expect_err("decode should fail fast while capacity is full");
-        assert!(matches!(error, AppError::RateLimited));
+        assert_eq!(
+            error.reason(),
+            Some(crate::error::ErrorReason::ImageProcessingCapacity)
+        );
         task.abort();
-        assert!(matches!(limiter.try_acquire(), Err(AppError::RateLimited)));
+        let error = match limiter.try_acquire() {
+            Ok(_) => panic!("decode capacity should remain owned by the blocking task"),
+            Err(error) => error,
+        };
+        assert_eq!(
+            error.reason(),
+            Some(crate::error::ErrorReason::ImageProcessingCapacity)
+        );
 
         release_tx.send(()).unwrap();
         let _ = task.await;

@@ -253,6 +253,7 @@ describe("ChatComposer", () => {
 		expect(status.textContent).toBe("0:00");
 		expect(status.textContent).not.toContain("chat.composer.recordingVoiceMessage");
 		expect(screen.getByTestId("chat-composer-recording-timer")).toBeTruthy();
+		expect(screen.getByTestId("chat-composer-recording-timer").className).toContain("text-red");
 		expect(screen.getByTestId("chat-composer-speech-cancel").className).toContain(
 			"icon-button--sm"
 		);
@@ -301,6 +302,8 @@ describe("ChatComposer", () => {
 
 		expect(alert.textContent).toContain("chat.composer.voiceMessagePermissionFailed");
 		expect(alert.getAttribute("aria-label")).toContain("NotAllowedError");
+		expect(alert.className).toContain("text-muted");
+		expect(alert.className).not.toContain("text-red");
 	});
 
 	it("adds and removes selected image previews", () => {
@@ -324,6 +327,30 @@ describe("ChatComposer", () => {
 
 		expect(screen.queryByAltText("local.png")).toBeNull();
 		expect(revokeObjectUrl).toHaveBeenCalledWith("blob:image-preview");
+	});
+
+	it("clears selected images after a retry succeeds outside the composer", async () => {
+		const { revokeObjectUrl } = installObjectUrlMocks("blob:retry-preview");
+		const props = {
+			draft: "retry",
+			font: "inter" as const,
+			companionName: "Aiko",
+			onDraftChange: vi.fn(),
+			onSend: vi.fn()
+		};
+		const { container, rerender } = render(
+			<ChatComposer {...props} attachmentResetVersion={0} />
+		);
+		const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+		fireEvent.change(input, {
+			target: { files: [new File(["image"], "retry.png", { type: "image/png" })] }
+		});
+		expect(screen.getByAltText("retry.png")).toBeTruthy();
+
+		rerender(<ChatComposer {...props} attachmentResetVersion={1} />);
+
+		await waitFor(() => expect(screen.queryByAltText("retry.png")).toBeNull());
+		expect(revokeObjectUrl).toHaveBeenCalledWith("blob:retry-preview");
 	});
 
 	it("opens selected image previews before sending", () => {
@@ -413,7 +440,10 @@ describe("ChatComposer", () => {
 
 		fireEvent.change(input, { target: { files: [file] } });
 
-		expect(screen.getByRole("alert").textContent).toBe("chat.composer.imageUnsupported");
+		const alert = screen.getByRole("alert");
+		expect(alert.textContent).toBe("chat.composer.imageUnsupported");
+		expect(alert.className).toContain("text-muted");
+		expect(alert.className).not.toContain("text-red");
 		expect(onSend).not.toHaveBeenCalled();
 	});
 

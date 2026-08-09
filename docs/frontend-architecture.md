@@ -51,8 +51,11 @@ Shared layers must not import page- or feature-specific behavior.
 
 - Chat lifecycle stays in `useChatSession`; rendering components receive state
   and callbacks. Streaming is attempted first, with JSON fallback only before
-  the SSE stream starts. Persona lists consume bounded summary rows, and send
-  completion merges the newly committed pair without requiring full history.
+  the SSE stream starts and only when no HTTP rejection was received. Stable
+  API reasons map to localized transient Aiko notices. Rejected local user
+  messages remain retryable but are excluded from sync and provider context.
+  Persona lists consume bounded summary rows, and send completion merges the
+  newly committed pair without requiring full history.
 - App settings and auth/sync orchestration live above routes. Feature pages do
   not own persisted global settings.
 - Avatar runtime stores semantic expression/motion state. Chat emits semantic

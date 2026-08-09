@@ -20,7 +20,7 @@ The JSON body matches the normal message endpoint:
 | `message_start` | `{ chat_id, persona_id }`                      | Validation passed and generation is starting             |
 | `token`         | `{ text }`                                     | Append a provider-dependent text chunk                   |
 | `message_done`  | `{ chat_id, user_message, assistant_message }` | Both new messages committed; replace the optimistic pair |
-| `error`         | `{ message }`                                  | Stream failed before persistence                         |
+| `error`         | `{ message, reason? }`                         | Stream failed before persistence                         |
 
 The response sets `Cache-Control: private, no-store`, `X-Accel-Buffering: no`, and a
 15-second SSE keepalive. The browser uses `fetch` rather than `EventSource`
@@ -38,17 +38,24 @@ history remains in place.
 
 The backend persists the user message, assistant message, image links, chat
 timestamp, and automatic-memory extraction job only after generation succeeds.
-It does not persist partial generations. An SSE `error` therefore removes the
-optimistic pair and leaves the canonical chat unchanged.
+It does not persist partial generations. An SSE `error` removes the optimistic
+assistant placeholder but retains the local user message with localized Aiko
+feedback and retry when the failure is retryable. The canonical chat remains
+unchanged, and local-only message ids are excluded from sync snapshots.
 
-If the streaming request fails before `message_start`, `useChatSession` retries
-through `POST /api/chats/:chat_id/messages`. It does not retry after a stream
-has started because the provider may already have generated output.
+If the streaming transport fails before `message_start` without receiving an
+HTTP response, `useChatSession` retries through
+`POST /api/chats/:chat_id/messages`. A recognized HTTP rejection does not use
+the JSON fallback, preventing the same user send from consuming the shared
+quota twice. It does not retry after a stream has started because the provider
+may already have generated output.
 
 Chat creation and both message routes share the same per-session/IP and global
 in-memory rate limits. Only one generation may run for a chat at a time; process-wide and
 per-session concurrency limits also apply. Rejection returns HTTP 429 with
-`Retry-After: 60` before streaming begins.
+`Retry-After: 60`, `retry_after_seconds: 60`, and a reason distinguishing chat
+request rate, process capacity, session capacity, and same-chat contention
+before streaming begins.
 
 Clear uses the same exclusive per-chat permit without waiting. It returns HTTP
 409 with `{"error":"conflict: chat generation in progress"}` while generation
@@ -64,9 +71,9 @@ messages, and provider details are replaced by a generic public error.
 `CHAT_OUTPUT_MAX_CHARS` counts guarded Unicode scalar values. Each complete
 guarded chunk, including the response guard's buffered tail, is checked before
 send. A chunk that would cross the limit is omitted in full, provider work is
-canceled, the stream emits the generic `error`, and neither `message_done` nor
-the turn is persisted. Non-streaming output uses the same hard limit on final
-guarded content.
+canceled, the stream emits `error` with `assistant_output_size_limit`, and
+neither `message_done` nor the turn is persisted. Non-streaming output uses the
+same hard limit on final guarded content.
 
 ## Provider Behavior
 

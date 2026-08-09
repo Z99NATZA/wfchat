@@ -9,8 +9,9 @@ pub(super) async fn send_message(
     State(state): State<AppState>,
     headers: HeaderMap,
     Path(chat_id): Path<Uuid>,
-    Json(payload): Json<SendMessageRequest>,
+    payload: Result<Json<SendMessageRequest>, axum::extract::rejection::JsonRejection>,
 ) -> AppResult<Json<SendMessageResponse>> {
+    let payload = send_message_payload(payload)?;
     let session = require_chat_session(&state, &headers).await?;
     enforce_sensitive_rate_limit(
         &state,
@@ -36,8 +37,9 @@ pub(super) async fn stream_message(
     State(state): State<AppState>,
     headers: HeaderMap,
     Path(chat_id): Path<Uuid>,
-    Json(payload): Json<SendMessageRequest>,
+    payload: Result<Json<SendMessageRequest>, axum::extract::rejection::JsonRejection>,
 ) -> AppResult<impl IntoResponse> {
+    let payload = send_message_payload(payload)?;
     let session = require_chat_session(&state, &headers).await?;
     enforce_sensitive_rate_limit(
         &state,
@@ -87,6 +89,7 @@ pub(super) async fn stream_message(
                     "error",
                     StreamMessageErrorEvent {
                         message: stream_error_message(&error),
+                        reason: error.reason(),
                     },
                 )
                 .await;
@@ -127,8 +130,11 @@ pub(super) async fn prepare_chat_completion_context(
         return Err(AppError::BadRequest("message content is empty".to_owned()));
     }
     if content.chars().count() > state.config.security.chat.message_max_chars {
-        return Err(AppError::BadRequest(
-            "message content is too long".to_owned(),
+        return Err(AppError::reasoned(
+            axum::http::StatusCode::BAD_REQUEST,
+            "bad request: message content is too long",
+            ErrorReason::MessageSizeLimit,
+            None,
         ));
     }
     if !payload.attachments.is_empty() && !state.config.security.chat.image_upload_enabled {
@@ -230,8 +236,11 @@ async fn validate_message_attachment_requests(
     attachments: &[SendMessageAttachmentRequest],
 ) -> AppResult<Vec<ChatAttachmentRecord>> {
     if attachments.len() > state.config.chat_attachment_max_images_per_message {
-        return Err(AppError::BadRequest(
-            "too many image attachments for one message".to_owned(),
+        return Err(AppError::reasoned(
+            axum::http::StatusCode::BAD_REQUEST,
+            "bad request: too many image attachments for one message",
+            ErrorReason::ImageCountLimit,
+            None,
         ));
     }
 
@@ -287,8 +296,11 @@ fn add_attachment_byte_size(total: &mut usize, byte_size: i64, maximum: usize) -
         AppError::BadRequest("image attachments exceed total byte limit".to_owned())
     })?;
     if next_total > maximum {
-        return Err(AppError::BadRequest(
-            "image attachments exceed total byte limit".to_owned(),
+        return Err(AppError::reasoned(
+            axum::http::StatusCode::BAD_REQUEST,
+            "bad request: image attachments exceed total byte limit",
+            ErrorReason::ImageSizeLimit,
+            None,
         ));
     }
     *total = next_total;
@@ -439,7 +451,12 @@ fn reserve_output_chunk(counter: &AtomicUsize, chunk: &str, max_chars: usize) ->
 }
 
 fn output_limit_error() -> AppError {
-    AppError::Ai("assistant response exceeded configured output limit".to_owned())
+    AppError::reasoned(
+        axum::http::StatusCode::BAD_GATEWAY,
+        "assistant response failed",
+        ErrorReason::AssistantOutputSizeLimit,
+        None,
+    )
 }
 
 fn completed_messages(
@@ -451,9 +468,7 @@ fn completed_messages(
             assistant_message,
         } => Ok((user_message, assistant_message)),
         AppendChatMessagesOutcome::Unavailable => Err(AppError::NotFound),
-        AppendChatMessagesOutcome::LimitReached => {
-            Err(AppError::Conflict("chat message limit reached".to_owned()))
-        }
+        AppendChatMessagesOutcome::LimitReached => Err(chat_storage_limit_error()),
     }
 }
 
@@ -474,7 +489,7 @@ fn ensure_chat_has_turn_capacity(
         .and_then(|total| total.checked_add(user_content.chars().count()))
         .is_some_and(|count| count <= limits.max_stored_chars_per_chat);
     if !message_count_fits || !stored_chars_fit {
-        return Err(AppError::Conflict("chat message limit reached".to_owned()));
+        return Err(chat_storage_limit_error());
     }
 
     Ok(())
@@ -490,6 +505,7 @@ async fn send_sse_event<T: Serialize>(
         Err(_) => {
             let fallback = StreamMessageErrorEvent {
                 message: "failed to serialize SSE event".to_owned(),
+                reason: None,
             };
             serde_json::to_string(&fallback)
                 .unwrap_or_else(|_| "{\"message\":\"failed to serialize SSE event\"}".to_owned())
@@ -500,6 +516,23 @@ async fn send_sse_event<T: Serialize>(
         .send(Ok(Event::default().event(event_name).data(data)))
         .await
         .map_err(|_| AppError::ClientDisconnected)
+}
+
+fn send_message_payload(
+    payload: Result<Json<SendMessageRequest>, axum::extract::rejection::JsonRejection>,
+) -> AppResult<SendMessageRequest> {
+    match payload {
+        Ok(Json(payload)) => Ok(payload),
+        Err(error) if error.status() == axum::http::StatusCode::PAYLOAD_TOO_LARGE => {
+            Err(AppError::reasoned(
+                axum::http::StatusCode::PAYLOAD_TOO_LARGE,
+                "payload too large",
+                ErrorReason::RequestSizeLimit,
+                None,
+            ))
+        }
+        Err(error) => Err(AppError::BadRequest(error.body_text())),
+    }
 }
 
 pub(super) fn stream_error_message(error: &AppError) -> String {

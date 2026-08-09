@@ -27,7 +27,7 @@ use crate::{
         CHAT_ATTACHMENT_KIND_IMAGE,
     },
     characters,
-    error::{AppError, AppResult},
+    error::{AppError, AppResult, ErrorReason, LIMIT_RETRY_AFTER_SECONDS},
     memory::retrieve_memory_context_observed,
     rate_limit::{RateLimitFamily, RateLimitIdentity},
     session::require_session,
@@ -213,6 +213,8 @@ struct StreamMessageDoneEvent {
 #[derive(Serialize)]
 struct StreamMessageErrorEvent {
     message: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reason: Option<ErrorReason>,
 }
 
 struct ChatCompletionContext {
@@ -319,10 +321,15 @@ async fn create_chat_for_persona(
             return Err(AppError::BadRequest("follow-up is unavailable".to_owned()));
         }
         CreateChatOutcome::ChatLimitReached => {
-            return Err(AppError::Conflict("chat limit reached".to_owned()));
+            return Err(AppError::reasoned(
+                axum::http::StatusCode::CONFLICT,
+                "conflict: chat limit reached",
+                ErrorReason::OwnerChatLimit,
+                None,
+            ));
         }
         CreateChatOutcome::MessageLimitReached => {
-            return Err(AppError::Conflict("chat message limit reached".to_owned()));
+            return Err(chat_storage_limit_error());
         }
     };
 
@@ -391,7 +398,36 @@ fn enforce_sensitive_rate_limit(
         state.config.security.trust_proxy_headers,
         &state.config.security.trusted_proxy_cidrs,
     );
-    state.rate_limiter.check_many(family, identities)
+    state
+        .rate_limiter
+        .check_many(family, identities)
+        .map_err(|error| {
+            if matches!(error, AppError::RateLimited) {
+                let reason = match family {
+                    RateLimitFamily::ChatMessages => Some(ErrorReason::ChatRequestRate),
+                    RateLimitFamily::ImageUpload => Some(ErrorReason::ImageUploadRate),
+                    _ => None,
+                };
+                if let Some(reason) = reason {
+                    return AppError::reasoned(
+                        axum::http::StatusCode::TOO_MANY_REQUESTS,
+                        "too many requests",
+                        reason,
+                        Some(LIMIT_RETRY_AFTER_SECONDS),
+                    );
+                }
+            }
+            error
+        })
+}
+
+fn chat_storage_limit_error() -> AppError {
+    AppError::reasoned(
+        axum::http::StatusCode::CONFLICT,
+        "conflict: chat message limit reached",
+        ErrorReason::ChatStorageLimit,
+        None,
+    )
 }
 
 fn sensitive_rate_limit_identities(
@@ -654,6 +690,8 @@ mod tests {
             .expect("body should collect");
         let payload: Value = serde_json::from_slice(&body).expect("error response should be json");
         assert_eq!(payload["error"].as_str(), Some("too many requests"));
+        assert_eq!(payload["reason"].as_str(), Some("chat_request_rate"));
+        assert_eq!(payload["retry_after_seconds"].as_u64(), Some(60));
 
         let _ = state.store.delete_chat(owner, chat.id).await;
     }
@@ -703,6 +741,8 @@ mod tests {
             .expect("rate response should collect");
         let payload: Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(payload["error"].as_str(), Some("too many requests"));
+        assert_eq!(payload["reason"].as_str(), Some("chat_request_rate"));
+        assert_eq!(payload["retry_after_seconds"].as_u64(), Some(60));
 
         state
             .store
@@ -742,6 +782,7 @@ mod tests {
             payload["error"].as_str(),
             Some("conflict: chat limit reached")
         );
+        assert_eq!(payload["reason"].as_str(), Some("owner_chat_limit"));
 
         state.config.security.chat.max_messages_per_chat = 1;
         let message_cap = build_router(state.clone())
@@ -760,6 +801,7 @@ mod tests {
             payload["error"].as_str(),
             Some("conflict: chat message limit reached")
         );
+        assert_eq!(payload["reason"].as_str(), Some("chat_storage_limit"));
 
         state.config.security.chat.max_messages_per_chat = 100;
         state.config.security.chat.max_stored_chars_per_chat = 1;
@@ -779,6 +821,7 @@ mod tests {
             payload["error"].as_str(),
             Some("conflict: chat message limit reached")
         );
+        assert_eq!(payload["reason"].as_str(), Some("chat_storage_limit"));
 
         state
             .store
@@ -949,6 +992,17 @@ mod tests {
             .await
             .expect("second stream request should run");
         assert_eq!(second_response.status(), StatusCode::TOO_MANY_REQUESTS);
+        let second_body = to_bytes(second_response.into_body(), usize::MAX)
+            .await
+            .expect("duplicate response should collect");
+        let second_payload: Value =
+            serde_json::from_slice(&second_body).expect("duplicate response should be json");
+        assert_eq!(second_payload["error"].as_str(), Some("too many requests"));
+        assert_eq!(
+            second_payload["reason"].as_str(),
+            Some("chat_generation_active")
+        );
+        assert_eq!(second_payload["retry_after_seconds"].as_u64(), Some(60));
 
         let clear_response = app
             .clone()
@@ -1115,6 +1169,9 @@ mod tests {
             .expect("request should run");
 
         assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let payload: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(payload["reason"].as_str(), Some("message_size_limit"));
         let persisted = state
             .store
             .get_chat(owner, chat.id)
@@ -1168,6 +1225,10 @@ mod tests {
         let body = to_bytes(overflow.into_body(), usize::MAX).await.unwrap();
         let payload: Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(payload["error"], "assistant response failed");
+        assert_eq!(
+            payload["reason"].as_str(),
+            Some("assistant_output_size_limit")
+        );
         assert!(state
             .store
             .get_chat(owner, overflow_chat.id)
@@ -1213,7 +1274,15 @@ mod tests {
             .collect::<String>();
 
         assert_eq!(token_text, "[aiko_default] ");
-        assert!(events.iter().any(|event| event.0 == "error"));
+        let error_payload = events
+            .iter()
+            .find(|event| event.0 == "error")
+            .and_then(|event| serde_json::from_str::<Value>(&event.1).ok())
+            .expect("output-limit stream should emit a json error");
+        assert_eq!(
+            error_payload["reason"].as_str(),
+            Some("assistant_output_size_limit")
+        );
         assert!(!events.iter().any(|event| event.0 == "message_done"));
         assert!(state
             .store
@@ -1286,6 +1355,10 @@ mod tests {
             .expect("request should run");
 
         assert_eq!(response.status(), StatusCode::PAYLOAD_TOO_LARGE);
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let payload: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(payload["error"].as_str(), Some("payload too large"));
+        assert_eq!(payload["reason"].as_str(), Some("request_size_limit"));
         let _ = state.store.delete_chat(owner, chat.id).await;
     }
 
@@ -2017,6 +2090,10 @@ mod tests {
         let response = app.oneshot(request).await.expect("request should run");
 
         assert_eq!(response.status(), StatusCode::PAYLOAD_TOO_LARGE);
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let payload: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(payload["error"].as_str(), Some("payload too large"));
+        assert_eq!(payload["reason"].as_str(), Some("image_size_limit"));
         let _ = tokio::fs::remove_dir_all(state.config.chat_attachment_upload_dir).await;
     }
 
@@ -2054,9 +2131,14 @@ mod tests {
         let rejected = app.oneshot(request()).await.unwrap();
         assert_eq!(rejected.status(), StatusCode::CONFLICT);
         let rejected_body = to_bytes(rejected.into_body(), usize::MAX).await.unwrap();
+        let rejected_payload: Value = serde_json::from_slice(&rejected_body).unwrap();
         assert_eq!(
-            rejected_body.as_ref(),
-            br#"{"error":"conflict: image attachment storage quota exceeded"}"#
+            rejected_payload["error"].as_str(),
+            Some("conflict: image attachment storage quota exceeded")
+        );
+        assert_eq!(
+            rejected_payload["reason"].as_str(),
+            Some("image_storage_limit")
         );
         let mut entries =
             tokio::fs::read_dir(std::path::Path::new(&upload_dir).join("chat-images"))
@@ -2250,6 +2332,11 @@ mod tests {
             .expect("second upload request should run");
 
         assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
+        assert_header_contains(&response, header::RETRY_AFTER, "60");
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let payload: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(payload["reason"].as_str(), Some("image_upload_rate"));
+        assert_eq!(payload["retry_after_seconds"].as_u64(), Some(60));
 
         let _ = tokio::fs::remove_dir_all(upload_dir).await;
     }

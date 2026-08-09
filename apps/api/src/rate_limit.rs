@@ -11,7 +11,7 @@ use uuid::Uuid;
 
 use crate::{
     config::Config,
-    error::{AppError, AppResult},
+    error::{AppError, AppResult, ErrorReason, LIMIT_RETRY_AFTER_SECONDS},
 };
 
 const DEFAULT_WINDOW: Duration = Duration::from_secs(60);
@@ -354,27 +354,31 @@ impl GenerationLimiter {
     }
 
     pub fn try_acquire(&self, session_id: Uuid, chat_id: Uuid) -> AppResult<GenerationPermit> {
+        let mut active = self
+            .inner
+            .active
+            .lock()
+            .map_err(|_| generation_limit_error(ErrorReason::GenerationProcessCapacity))?;
+        if active.chats.contains(&chat_id) {
+            return Err(generation_limit_error(ErrorReason::ChatGenerationActive));
+        }
+        if active
+            .sessions
+            .get(&session_id)
+            .copied()
+            .unwrap_or_default()
+            >= self.inner.max_per_session
+        {
+            return Err(generation_limit_error(
+                ErrorReason::GenerationSessionCapacity,
+            ));
+        }
         let global = self
             .inner
             .global
             .clone()
             .try_acquire_owned()
-            .map_err(|_| AppError::RateLimited)?;
-        let mut active = self
-            .inner
-            .active
-            .lock()
-            .map_err(|_| AppError::RateLimited)?;
-        if active.chats.contains(&chat_id)
-            || active
-                .sessions
-                .get(&session_id)
-                .copied()
-                .unwrap_or_default()
-                >= self.inner.max_per_session
-        {
-            return Err(AppError::RateLimited);
-        }
+            .map_err(|_| generation_limit_error(ErrorReason::GenerationProcessCapacity))?;
         active.chats.insert(chat_id);
         *active.sessions.entry(session_id).or_default() += 1;
         drop(active);
@@ -405,6 +409,15 @@ impl GenerationLimiter {
             _global: None,
         })
     }
+}
+
+fn generation_limit_error(reason: ErrorReason) -> AppError {
+    AppError::reasoned(
+        axum::http::StatusCode::TOO_MANY_REQUESTS,
+        "too many requests",
+        reason,
+        Some(LIMIT_RETRY_AFTER_SECONDS),
+    )
 }
 
 impl Drop for GenerationPermit {
@@ -634,15 +647,23 @@ mod tests {
         let second_session = Uuid::new_v4();
         let first = limiter.try_acquire(first_session, Uuid::new_v4()).unwrap();
 
-        assert!(matches!(
-            limiter.try_acquire(first_session, Uuid::new_v4()),
-            Err(AppError::RateLimited)
-        ));
+        let session_error = match limiter.try_acquire(first_session, Uuid::new_v4()) {
+            Ok(_) => panic!("second session generation should reject"),
+            Err(error) => error,
+        };
+        assert_eq!(
+            session_error.reason(),
+            Some(ErrorReason::GenerationSessionCapacity)
+        );
         let second = limiter.try_acquire(second_session, Uuid::new_v4()).unwrap();
-        assert!(matches!(
-            limiter.try_acquire(Uuid::new_v4(), Uuid::new_v4()),
-            Err(AppError::RateLimited)
-        ));
+        let process_error = match limiter.try_acquire(Uuid::new_v4(), Uuid::new_v4()) {
+            Ok(_) => panic!("generation above process capacity should reject"),
+            Err(error) => error,
+        };
+        assert_eq!(
+            process_error.reason(),
+            Some(ErrorReason::GenerationProcessCapacity)
+        );
 
         drop((first, second));
     }
@@ -655,10 +676,14 @@ mod tests {
         let permit = limiter
             .try_acquire(session_id, chat_id)
             .expect("first generation should acquire");
-        assert!(matches!(
-            limiter.try_acquire(session_id, chat_id),
-            Err(AppError::RateLimited)
-        ));
+        let duplicate_error = match limiter.try_acquire(session_id, chat_id) {
+            Ok(_) => panic!("duplicate chat generation should reject"),
+            Err(error) => error,
+        };
+        assert_eq!(
+            duplicate_error.reason(),
+            Some(ErrorReason::ChatGenerationActive)
+        );
         drop(permit);
         assert!(limiter.try_acquire(session_id, chat_id).is_ok());
     }

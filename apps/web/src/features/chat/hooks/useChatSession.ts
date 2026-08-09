@@ -7,6 +7,7 @@ import { useI18n } from "@/i18n/i18nContext";
 import {
 	clearChatMessages,
 	claimPersonaFollowUp,
+	chatApiErrorDetails,
 	createPersonaChat,
 	deleteChat,
 	deleteChatAttachment,
@@ -19,7 +20,7 @@ import {
 	streamChatMessage,
 	uploadChatImageAttachment
 } from "@/features/chat/services/chatApiService";
-import type { ChatFollowUp } from "@/features/chat/services/chatApiService";
+import type { ChatApiErrorReason, ChatFollowUp } from "@/features/chat/services/chatApiService";
 import {
 	markChatMessagesDeleted,
 	markChatSessionDeleted,
@@ -77,6 +78,14 @@ type ActiveAssistantSpeechAvatarState = {
 	personaId: string;
 };
 
+type FailedSend = {
+	content: string;
+	imageAttachments: PendingChatImageAttachment[];
+	optimisticMessageId: string | null;
+};
+
+type ErrorRetryAction = "refresh" | "send" | null;
+
 export function useChatSession({ onAvatarChatEvent }: UseChatSessionOptions = {}) {
 	const { confirm } = useDialog();
 	const { locale, t } = useI18n();
@@ -95,6 +104,9 @@ export function useChatSession({ onAvatarChatEvent }: UseChatSessionOptions = {}
 	const [isClearing, setIsClearing] = useState(false);
 	const isCreatingSession = false;
 	const [errorMessage, setErrorMessage] = useState<string | null>(null);
+	const [errorRetryAction, setErrorRetryAction] = useState<ErrorRetryAction>(null);
+	const [deleteErrorMessage, setDeleteErrorMessage] = useState<string | null>(null);
+	const [composerAttachmentResetVersion, setComposerAttachmentResetVersion] = useState(0);
 	const [isActiveChatReadOnly, setIsActiveChatReadOnly] = useState(false);
 	const [isAssistantSpeechEnabled, setIsAssistantSpeechEnabled] = useState(false);
 	const [isImageUploadEnabled, setIsImageUploadEnabled] = useState(false);
@@ -106,6 +118,8 @@ export function useChatSession({ onAvatarChatEvent }: UseChatSessionOptions = {}
 	const [draftFollowUp, setDraftFollowUp] = useState<ChatFollowUp | null>(null);
 	const draftFollowUpClaimRef = useRef<{ characterId: string; claimKey: string } | null>(null);
 	const pendingCreatedChatIdRef = useRef<string | null>(null);
+	const failedSendRef = useRef<FailedSend | null>(null);
+	const preserveDraftNoticeRef = useRef(false);
 	const activeAssistantSpeechAvatarRef = useRef<ActiveAssistantSpeechAvatarState | null>(null);
 	const assistantSpeechAvatarEventKeyRef = useRef<string | null>(null);
 	const {
@@ -236,6 +250,7 @@ export function useChatSession({ onAvatarChatEvent }: UseChatSessionOptions = {}
 			setDraft("");
 			setIsActiveChatReadOnly(true);
 			setErrorMessage(t("chat.session.cachedReadOnly"));
+			setErrorRetryAction(null);
 			setSessions((currentSessions) =>
 				currentSessions.some((session) => session.id === chatId)
 					? currentSessions
@@ -383,6 +398,7 @@ export function useChatSession({ onAvatarChatEvent }: UseChatSessionOptions = {}
 		}
 
 		setErrorMessage(null);
+		setErrorRetryAction(null);
 		listPersonaChats(selectedPersonaId)
 			.then((nextSessions) => {
 				if (!isCurrent) {
@@ -400,6 +416,7 @@ export function useChatSession({ onAvatarChatEvent }: UseChatSessionOptions = {}
 					);
 					setSessions(cachedSessions);
 					setErrorMessage(t("chat.session.connectError"));
+					setErrorRetryAction("refresh");
 				}
 			});
 
@@ -415,7 +432,14 @@ export function useChatSession({ onAvatarChatEvent }: UseChatSessionOptions = {}
 		}
 
 		async function syncFromRoute() {
-			setErrorMessage(null);
+			const shouldPreserveDraftNotice =
+				!routeChatId &&
+				isDraftChatPath(location.pathname) &&
+				(Boolean(failedSendRef.current) || preserveDraftNoticeRef.current);
+			if (!shouldPreserveDraftNotice) {
+				setErrorMessage(null);
+				setErrorRetryAction(null);
+			}
 
 			if (routeChatId) {
 				if (routeChatId === pendingCreatedChatIdRef.current) {
@@ -455,8 +479,10 @@ export function useChatSession({ onAvatarChatEvent }: UseChatSessionOptions = {}
 						setActiveChatId(null);
 						setMessages([]);
 						setDraft("");
+						preserveDraftNoticeRef.current = true;
 						navigateToDraft();
 						setErrorMessage(t("chat.session.notFound"));
+						setErrorRetryAction(null);
 						return;
 					}
 					const cachedMessages = readChatMessagesCache(routeChatId);
@@ -466,17 +492,22 @@ export function useChatSession({ onAvatarChatEvent }: UseChatSessionOptions = {}
 						setDraft("");
 						setIsActiveChatReadOnly(true);
 						setErrorMessage(t("chat.session.cachedReadOnly"));
+						setErrorRetryAction(null);
 						return;
 					}
 					setErrorMessage(t("chat.session.connectError"));
+					setErrorRetryAction("refresh");
 				}
 				return;
 			}
 
 			if (isDraftChatPath(location.pathname)) {
 				setActiveChatId(null);
-				setMessages([]);
-				setDraft("");
+				if (!failedSendRef.current) {
+					setMessages([]);
+					setDraft("");
+				}
+				preserveDraftNoticeRef.current = false;
 				setIsActiveChatReadOnly(false);
 				return;
 			}
@@ -516,6 +547,9 @@ export function useChatSession({ onAvatarChatEvent }: UseChatSessionOptions = {}
 		setDraft("");
 		setSessions([]);
 		setErrorMessage(null);
+		setErrorRetryAction(null);
+		failedSendRef.current = null;
+		preserveDraftNoticeRef.current = false;
 		setIsActiveChatReadOnly(false);
 		navigateToDraft();
 	}, [cancelUserSpeechInput, navigateToDraft, stopAssistantSpeech]);
@@ -532,6 +566,9 @@ export function useChatSession({ onAvatarChatEvent }: UseChatSessionOptions = {}
 		setDraftFollowUp(null);
 		setDraft("");
 		setErrorMessage(null);
+		setErrorRetryAction(null);
+		failedSendRef.current = null;
+		preserveDraftNoticeRef.current = false;
 		setIsActiveChatReadOnly(false);
 		setIsSidebarOpen(false);
 	}, [cancelUserSpeechInput, isMarkdownQaEnabled, stopAssistantSpeech]);
@@ -539,6 +576,11 @@ export function useChatSession({ onAvatarChatEvent }: UseChatSessionOptions = {}
 	function selectPersona(personaId: string) {
 		stopAssistantSpeech();
 		cancelUserSpeechInput();
+		failedSendRef.current = null;
+		preserveDraftNoticeRef.current = false;
+		setDeleteErrorMessage(null);
+		setErrorMessage(null);
+		setErrorRetryAction(null);
 		setSelectedPersonaId(personaId);
 		setIsSidebarOpen(false);
 	}
@@ -550,6 +592,10 @@ export function useChatSession({ onAvatarChatEvent }: UseChatSessionOptions = {}
 		stopAssistantSpeech();
 		cancelUserSpeechInput();
 		setErrorMessage(null);
+		setErrorRetryAction(null);
+		failedSendRef.current = null;
+		preserveDraftNoticeRef.current = false;
+		setDeleteErrorMessage(null);
 		setIsActiveChatReadOnly(false);
 		setActiveChatId(null);
 		setMessages([]);
@@ -566,6 +612,10 @@ export function useChatSession({ onAvatarChatEvent }: UseChatSessionOptions = {}
 		stopAssistantSpeech();
 		cancelUserSpeechInput();
 		setErrorMessage(null);
+		setErrorRetryAction(null);
+		failedSendRef.current = null;
+		preserveDraftNoticeRef.current = false;
+		setDeleteErrorMessage(null);
 		try {
 			const chat = await getChat(sessionId);
 			setActiveChatId(chat.chatId);
@@ -586,14 +636,20 @@ export function useChatSession({ onAvatarChatEvent }: UseChatSessionOptions = {}
 				);
 				markChatDeletedAndSync(sessionId);
 				setErrorMessage(t("chat.session.notFound"));
+				setErrorRetryAction(null);
 				return;
 			}
 			setErrorMessage(t("chat.session.connectError"));
+			setErrorRetryAction("refresh");
 		}
 	}
 
-	async function sendMessage(imageAttachments: PendingChatImageAttachment[] = []) {
-		const trimmedDraft = draft.trim();
+	async function sendMessage(
+		imageAttachments: PendingChatImageAttachment[] = [],
+		contentOverride?: string,
+		isNoticeRetry = false
+	) {
+		const trimmedDraft = (contentOverride ?? draft).trim();
 		const pendingImageAttachments = imageAttachments.filter(
 			(attachment) => attachment.kind === "image"
 		);
@@ -612,6 +668,16 @@ export function useChatSession({ onAvatarChatEvent }: UseChatSessionOptions = {}
 		cancelUserSpeechInput();
 		setIsSending(true);
 		setErrorMessage(null);
+		setErrorRetryAction(null);
+		const previousFailedSend = failedSendRef.current;
+		failedSendRef.current = null;
+		if (previousFailedSend?.optimisticMessageId) {
+			setMessages((currentMessages) =>
+				currentMessages.filter(
+					(message) => message.id !== previousFailedSend.optimisticMessageId
+				)
+			);
+		}
 
 		let uploadedAttachments: ChatMessageAttachment[] = [];
 		try {
@@ -627,7 +693,14 @@ export function useChatSession({ onAvatarChatEvent }: UseChatSessionOptions = {}
 			}
 		} catch (error) {
 			await cleanupUploadedAttachments(uploadedAttachments);
-			setErrorMessage(attachmentUploadErrorMessage(error, t));
+			failedSendRef.current = {
+				content: trimmedDraft,
+				imageAttachments: pendingImageAttachments,
+				optimisticMessageId: null
+			};
+			const failure = attachmentUploadFailure(error, t);
+			setErrorMessage(failure.message);
+			setErrorRetryAction(failure.retryable ? "send" : null);
 			setIsSending(false);
 			return false;
 		}
@@ -780,7 +853,11 @@ export function useChatSession({ onAvatarChatEvent }: UseChatSessionOptions = {}
 					return;
 				}
 
-				if (!streamStarted && !streamReceivedToken) {
+				if (
+					!streamStarted &&
+					!streamReceivedToken &&
+					chatApiErrorDetails(streamError) === null
+				) {
 					const nextMessages = await sendChatMessage(
 						chatId,
 						trimmedDraft,
@@ -792,26 +869,37 @@ export function useChatSession({ onAvatarChatEvent }: UseChatSessionOptions = {}
 						nextMessages.filter((message) => message.author === "companion").at(-1)
 							?.text ?? ""
 					);
+					if (isNoticeRetry) {
+						setComposerAttachmentResetVersion((version) => version + 1);
+					}
 					return;
 				}
 
 				throw streamError;
 			}
+			if (isNoticeRetry) {
+				setComposerAttachmentResetVersion((version) => version + 1);
+			}
 			return true;
-		} catch {
+		} catch (error) {
 			await cleanupUploadedAttachments(uploadedAttachments);
+			setMessages((currentMessages) =>
+				currentMessages.filter((message) => message.id !== assistantMessageId)
+			);
+			setDraft(trimmedDraft);
+			failedSendRef.current = {
+				content: trimmedDraft,
+				imageAttachments: pendingImageAttachments,
+				optimisticMessageId: optimisticMessage.id
+			};
+			const failure = sendFailureNotice(error, t);
+			setErrorMessage(failure.message);
+			setErrorRetryAction(failure.retryable ? "send" : null);
 			if (createdChatId) {
 				void deleteChat(createdChatId);
 				setActiveChatId(null);
 				navigateToDraft();
 			}
-			setMessages((currentMessages) =>
-				currentMessages.filter(
-					(message) =>
-						message.id !== optimisticMessage.id && message.id !== assistantMessageId
-				)
-			);
-			setErrorMessage(t("chat.session.aiNoResponse"));
 			onAvatarChatEvent?.({
 				type: "assistant_error",
 				chatId: createdChatId ?? activeChatId,
@@ -824,6 +912,22 @@ export function useChatSession({ onAvatarChatEvent }: UseChatSessionOptions = {}
 			}
 			setIsSending(false);
 		}
+	}
+
+	async function retryError() {
+		if (errorRetryAction === "refresh") {
+			setErrorMessage(null);
+			setErrorRetryAction(null);
+			refreshRemoteState();
+			return;
+		}
+
+		const failedSend = failedSendRef.current;
+		if (errorRetryAction !== "send" || !failedSend) {
+			return;
+		}
+
+		await sendMessage(failedSend.imageAttachments, failedSend.content, true);
 	}
 
 	async function clearChat() {
@@ -875,6 +979,7 @@ export function useChatSession({ onAvatarChatEvent }: UseChatSessionOptions = {}
 		if (!targetSession) {
 			return;
 		}
+		setDeleteErrorMessage(null);
 
 		const shouldDelete = await confirm({
 			title: t("chat.session.deleteConfirmTitle"),
@@ -898,6 +1003,10 @@ export function useChatSession({ onAvatarChatEvent }: UseChatSessionOptions = {}
 
 			stopAssistantSpeech();
 			cancelUserSpeechInput();
+			failedSendRef.current = null;
+			preserveDraftNoticeRef.current = false;
+			setErrorMessage(null);
+			setErrorRetryAction(null);
 			setActiveChatId(null);
 			setMessages([]);
 			setDraft("");
@@ -914,7 +1023,7 @@ export function useChatSession({ onAvatarChatEvent }: UseChatSessionOptions = {}
 				applyLocalRemoval();
 				return;
 			}
-			setErrorMessage(t("chat.session.deleteError"));
+			setDeleteErrorMessage(t("chat.session.deleteError"));
 		}
 	}
 
@@ -925,8 +1034,11 @@ export function useChatSession({ onAvatarChatEvent }: UseChatSessionOptions = {}
 		clearChat,
 		closeSidebar: () => setIsSidebarOpen(false),
 		createNewSession,
+		composerAttachmentResetVersion,
 		draft,
 		errorMessage,
+		deleteErrorMessage,
+		retryError: errorRetryAction ? retryError : undefined,
 		isActiveChatReadOnly,
 		isAssistantSpeechEnabled,
 		isImageUploadEnabled,
@@ -1024,21 +1136,108 @@ async function cleanupUploadedAttachments(attachments: ChatMessageAttachment[]) 
 	await Promise.allSettled(attachments.map((attachment) => deleteChatAttachment(attachment.id)));
 }
 
-function attachmentUploadErrorMessage(error: unknown, t: (key: string) => string): string {
+function attachmentUploadFailure(
+	error: unknown,
+	t: (key: string) => string
+): { message: string; retryable: boolean } {
+	const reason = chatApiErrorDetails(error)?.reason;
+	if (reason) {
+		switch (reason) {
+			case "image_size_limit":
+				return { message: t("chat.notice.imageSize"), retryable: false };
+			case "image_count_limit":
+				return { message: t("chat.notice.imageCount"), retryable: false };
+			case "image_storage_limit":
+				return { message: t("chat.notice.imageStorage"), retryable: false };
+			case "image_upload_rate":
+				return { message: t("chat.notice.imageUploadRate"), retryable: true };
+			case "image_processing_capacity":
+				return { message: t("chat.notice.imageProcessing"), retryable: true };
+		}
+	}
 	if (isChatApiStatus(error, 413)) {
-		return t("chat.session.attachmentTooLarge");
+		return { message: t("chat.notice.imageSize"), retryable: false };
 	}
 
 	const message = error instanceof Error ? error.message.toLowerCase() : "";
 	if (message.includes("too large") || message.includes("request entity too large")) {
-		return t("chat.session.attachmentTooLarge");
+		return { message: t("chat.session.attachmentTooLarge"), retryable: false };
 	}
 	if (message.includes("not supported")) {
-		return t("chat.session.attachmentUnsupported");
+		return { message: t("chat.session.attachmentUnsupported"), retryable: false };
 	}
 	if (message.includes("not a valid image") || message.includes("invalid attachment upload")) {
-		return t("chat.session.attachmentInvalid");
+		return { message: t("chat.session.attachmentInvalid"), retryable: false };
 	}
 
-	return t("chat.session.attachmentUploadError");
+	return { message: t("chat.session.attachmentUploadError"), retryable: true };
+}
+
+function sendFailureNotice(
+	error: unknown,
+	t: (key: string) => string
+): { message: string; retryable: boolean } {
+	const details = chatApiErrorDetails(error);
+	const reason = details?.reason;
+	const key = reason ? chatErrorTranslationKey(reason) : undefined;
+
+	if (reason && key) {
+		return {
+			message: t(key),
+			retryable: isRetryableChatErrorReason(reason)
+		};
+	}
+	if (details?.status === 404) {
+		return { message: t("chat.session.notFound"), retryable: false };
+	}
+	if (details?.status === 413) {
+		return { message: t("chat.notice.messageSize"), retryable: false };
+	}
+	if (details?.status === 429) {
+		return { message: t("chat.notice.requestRate"), retryable: true };
+	}
+
+	return { message: t("chat.session.aiNoResponse"), retryable: true };
+}
+
+function chatErrorTranslationKey(reason: ChatApiErrorReason): string {
+	switch (reason) {
+		case "chat_request_rate":
+			return "chat.notice.requestRate";
+		case "generation_process_capacity":
+		case "generation_session_capacity":
+			return "chat.notice.generationCapacity";
+		case "chat_generation_active":
+			return "chat.notice.sameChatActive";
+		case "owner_chat_limit":
+			return "chat.notice.ownerChatLimit";
+		case "chat_storage_limit":
+			return "chat.notice.chatStorageLimit";
+		case "message_size_limit":
+		case "request_size_limit":
+			return "chat.notice.messageSize";
+		case "image_size_limit":
+			return "chat.notice.imageSize";
+		case "image_count_limit":
+			return "chat.notice.imageCount";
+		case "image_storage_limit":
+			return "chat.notice.imageStorage";
+		case "image_upload_rate":
+			return "chat.notice.imageUploadRate";
+		case "image_processing_capacity":
+			return "chat.notice.imageProcessing";
+		case "assistant_output_size_limit":
+			return "chat.notice.assistantOutputSize";
+	}
+}
+
+function isRetryableChatErrorReason(reason: ChatApiErrorReason): boolean {
+	return (
+		reason === "chat_request_rate" ||
+		reason === "generation_process_capacity" ||
+		reason === "generation_session_capacity" ||
+		reason === "chat_generation_active" ||
+		reason === "image_upload_rate" ||
+		reason === "image_processing_capacity"
+	);
 }

@@ -80,6 +80,10 @@ function ChatPage({
 				: chat.messages,
 		[chat.draftFollowUpMessage, chat.messages]
 	);
+	const syncMessages = useMemo(
+		() => chat.messages.filter((message) => !message.id.startsWith("local-")),
+		[chat.messages]
+	);
 	const wasSendingRef = useRef(false);
 	const lastAutoPlayedAssistantMessageIdRef = useRef<string | null>(null);
 	const isSending = chat.isSending;
@@ -88,7 +92,7 @@ function ChatPage({
 	useEffect(() => {
 		onChatSyncSnapshotChange({
 			activeChatId: chat.activeChatId,
-			messages: chat.messages,
+			messages: syncMessages,
 			sessions: chat.sessions,
 			refreshRemoteState: chat.refreshRemoteState,
 			resetToDraft: chat.resetToDraft
@@ -97,7 +101,7 @@ function ChatPage({
 		return () => onChatSyncSnapshotChange(null);
 	}, [
 		chat.activeChatId,
-		chat.messages,
+		syncMessages,
 		chat.sessions,
 		chat.refreshRemoteState,
 		chat.resetToDraft,
@@ -207,6 +211,7 @@ function ChatPage({
 					isOpen={chat.isSidebarOpen}
 					isCreatingSession={chat.isCreatingSession}
 					searchQuery={chat.chatSearchQuery}
+					actionErrorMessage={chat.deleteErrorMessage}
 					onCreateSession={chat.createNewSession}
 					onSearchQueryChange={chat.setChatSearchQuery}
 					onCloseSidebar={chat.closeSidebar}
@@ -240,6 +245,7 @@ function ChatPage({
 						companionName={chat.activePersona.name}
 						companionAvatarUrl={chat.activePersona.avatarUrl}
 						errorMessage={chat.errorMessage}
+						onRetryError={chat.retryError}
 						isSending={chat.isSending}
 						isAssistantSpeechEnabled={isAssistantSpeechActionEnabled}
 						assistantSpeechPlayback={chat.assistantSpeechPlayback}
@@ -264,6 +270,7 @@ function ChatPage({
 							onSend={chat.sendMessage}
 							onCancelSpeechInput={chat.cancelUserSpeechInput}
 							onToggleSpeechInput={chat.toggleUserSpeechInput}
+							attachmentResetVersion={chat.composerAttachmentResetVersion}
 						/>
 					</div>
 				</div>

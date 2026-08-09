@@ -73,5 +73,8 @@ Do not add feature-specific scrollbar colors when it applies.
   `bg-zinc-*` for application surfaces.
 - Check light/dark themes, wallpaper on/off, hover/focus, and mobile overlays
   after visual changes.
+- Recoverable chat feedback uses semantic app text, surface, border, and control
+  tokens. Danger treatment remains for destructive actions and the active
+  microphone-recording state.
 - Add a token only for a repeated semantic role. Define its Tailwind mapping and
   both theme values in `styles.css`, then document its intent here.

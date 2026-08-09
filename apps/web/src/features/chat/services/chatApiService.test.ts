@@ -4,6 +4,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
 	claimPersonaFollowUp,
+	chatApiErrorDetails,
+	ChatApiRequestError,
 	createPersonaChat,
 	createSseEventParser,
 	listPersonaChats,
@@ -133,6 +135,73 @@ describe("bounded chat response contracts", () => {
 });
 
 describe("chat SSE parser", () => {
+	afterEach(() => {
+		window.sessionStorage.clear();
+		vi.unstubAllGlobals();
+	});
+
+	it("keeps API reason and retry timing on a pre-stream rejection", async () => {
+		window.sessionStorage.setItem(sessionCookieReadyKey, "true");
+		vi.stubGlobal(
+			"fetch",
+			vi.fn(
+				async () =>
+					new Response(
+						JSON.stringify({
+							error: "too many requests",
+							reason: "chat_request_rate",
+							retry_after_seconds: 60
+						}),
+						{
+							status: 429,
+							headers: { "Content-Type": "application/json", "Retry-After": "60" }
+						}
+					)
+			)
+		);
+
+		let failure: unknown;
+		try {
+			await streamChatMessage("chat-1", "hello", [], {});
+		} catch (error) {
+			failure = error;
+		}
+
+		expect(failure).toBeInstanceOf(ChatApiRequestError);
+		expect(chatApiErrorDetails(failure)).toEqual({
+			message: "too many requests",
+			status: 429,
+			reason: "chat_request_rate",
+			retryAfterSeconds: 60
+		});
+	});
+
+	it("keeps the reason from an SSE error event", async () => {
+		window.sessionStorage.setItem(sessionCookieReadyKey, "true");
+		vi.stubGlobal(
+			"fetch",
+			vi.fn(
+				async () =>
+					new Response(
+						'event: error\ndata: {"message":"assistant response failed","reason":"assistant_output_size_limit"}\n\n',
+						{ status: 200, headers: { "Content-Type": "text/event-stream" } }
+					)
+			)
+		);
+
+		let failure: unknown;
+		try {
+			await streamChatMessage("chat-1", "broad question", [], {});
+		} catch (error) {
+			failure = error;
+		}
+
+		expect(chatApiErrorDetails(failure)).toMatchObject({
+			message: "assistant response failed",
+			reason: "assistant_output_size_limit"
+		});
+	});
+
 	it("parses events split across chunks", () => {
 		const events: ParsedSseEvent[] = [];
 		const parser = createSseEventParser((event) => events.push(event));
