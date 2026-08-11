@@ -88,14 +88,18 @@ Lobby, progress, and cosmetic operations use `/api/cafe/*`:
   authenticated room WebSocket. `nickname` is optional.
 
 WebSocket client messages are `move`, `interact`, `emote`, `chat`, and `ping`.
-Server messages are `welcome`, `snapshot`, localized-key `dialogue`, `emote`,
-`chat_event`, `chat_error`, targeted `reward`, `pong`, and `error`. Welcome
-messages include up to 30 recent room chat and presence events. Room snapshots
-identify `tea_delivery`,
+Server messages are `welcome`, `snapshot`, `movement`, localized-key `dialogue`,
+`emote`, `chat_event`, `chat_error`, targeted `reward`, `pong`, and `error`.
+Welcome messages include the complete room, the versioned authoritative map,
+and up to 30 recent room chat and presence events. Subsequent snapshots include
+complete dynamic room, player, activity, and Aiko state without repeating the
+map; clients retain the map established by `welcome`. Movement messages contain
+the latest position, direction, and moving state for every connected player.
+Welcome, snapshot, and movement messages share a monotonic room revision, and
+clients ignore equal or older state. Room snapshots identify `tea_delivery`,
 `table_service`, or `cafe_rush`. Service snapshots include order table, drink,
 preparation, claim, and delivery state; Rush snapshots also include its deadline
-and current and best combo. Each room state carries the versioned authoritative
-map layout used by the client. Stable terminal error codes are `room_not_found`,
+and current and best combo. Stable terminal error codes are `room_not_found`,
 `room_full`, and `rate_limited`.
 
 The API is authoritative for room capacity, collision, coordinates, movement
@@ -105,11 +109,14 @@ cosmetics, and allowed emotes. It validates browser origins, message rate, JSON
 shape, interaction distance, target ownership, and monotonic movement sequence
 numbers. The client sends movement immediately when walking starts, stops, or
 changes direction, sends continuous movement at most every 100 milliseconds,
-and sends nothing while idle. The API coalesces accepted movement into the
-latest room state and broadcasts a full snapshot at most every 100 milliseconds
-while movement is dirty. Immediate full-state updates clear pending movement,
-and clean rooms emit no movement snapshots. Each occupied room has one movement
-tick; missed ticks are skipped, and the tick stops when the room is removed.
+and sends nothing while idle. The API coalesces accepted movement into one
+replaceable all-player movement update at most every 100 milliseconds while
+movement is dirty. Immediate dynamic-state updates clear pending movement, and
+clean rooms emit no movement updates. Reliable events and dynamic snapshots use
+a bounded ordered channel; lag closes the socket with a retryable status so the
+client reconnects and obtains a fresh welcome instead of continuing from partial
+state. Each occupied room has one movement tick; missed ticks are skipped, and
+the tick stops when the room is removed.
 Room chat is normalized and limited to 200 characters, rejects control
 characters and common web-link prefixes, and allows at most five messages per
 connection in ten seconds. The client predicts local movement from the

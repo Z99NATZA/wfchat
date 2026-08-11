@@ -87,15 +87,21 @@ type ApiRoom = {
 	aiko: CafeRoomState["aiko"];
 };
 
+type ApiDynamicRoom = Omit<ApiRoom, "map_layout">;
+
+type ApiMovementPlayer = Pick<ApiPlayer, "id" | "x" | "y" | "direction" | "moving">;
+
 type ServerMessage =
 	| {
 			type: "welcome";
 			self_player_id: string;
 			cafe_stars: number;
+			revision: number;
 			room: ApiRoom;
 			chat_history?: ApiChatEvent[];
 	  }
-	| { type: "snapshot"; room: ApiRoom }
+	| { type: "snapshot"; revision: number; room: ApiDynamicRoom }
+	| { type: "movement"; revision: number; players: ApiMovementPlayer[] }
 	| { type: "dialogue"; message_key: string; expression: CafeDialogue["expression"] }
 	| { type: "emote"; player_id: string; emote: string }
 	| { type: "chat_event"; event: ApiChatEvent }
@@ -123,6 +129,8 @@ export function useCafeRoom(roomId: string) {
 	const shouldReconnectRef = useRef(true);
 	const onlineRef = useRef(browserIsOnline());
 	const readyRef = useRef(false);
+	const roomRef = useRef<CafeRoomState | null>(null);
+	const lastRevisionRef = useRef(0);
 	const selfPlayerIdRef = useRef<string | null>(null);
 	const lastPongAtRef = useRef(Date.now());
 	const dialogueTimerRef = useRef<number | null>(null);
@@ -133,6 +141,8 @@ export function useCafeRoom(roomId: string) {
 		reconnectAttemptRef.current = 0;
 		onlineRef.current = browserIsOnline();
 		readyRef.current = false;
+		roomRef.current = null;
+		lastRevisionRef.current = 0;
 		setConnectionState(onlineRef.current ? "connecting" : "offline");
 		setError(null);
 		setChatEvents([]);
@@ -152,6 +162,8 @@ export function useCafeRoom(roomId: string) {
 				return;
 			}
 			clearReconnectTimer();
+			readyRef.current = false;
+			lastRevisionRef.current = 0;
 			setConnectionState(
 				isReconnect || reconnectAttemptRef.current > 0 ? "reconnecting" : "connecting"
 			);
@@ -176,7 +188,7 @@ export function useCafeRoom(roomId: string) {
 					return;
 				}
 				try {
-					handleServerMessage(JSON.parse(event.data) as ServerMessage);
+					handleServerMessage(JSON.parse(event.data) as ServerMessage, socket);
 				} catch {
 					setError("unreadable_update");
 				}
@@ -231,7 +243,14 @@ export function useCafeRoom(roomId: string) {
 			connect(true);
 		}
 
-		function handleServerMessage(message: ServerMessage) {
+		function requestResynchronization(socket: WebSocket) {
+			if (socketRef.current !== socket) return;
+			readyRef.current = false;
+			setError("connection_interrupted");
+			socket.close(1012, "cafe state resynchronization required");
+		}
+
+		function handleServerMessage(message: ServerMessage, socket: WebSocket) {
 			switch (message.type) {
 				case "welcome":
 					reconnectAttemptRef.current = 0;
@@ -239,7 +258,9 @@ export function useCafeRoom(roomId: string) {
 					selfPlayerIdRef.current = message.self_player_id;
 					setSelfPlayerId(message.self_player_id);
 					setCafeStars(message.cafe_stars);
-					setRoom(toRoomState(message.room));
+					lastRevisionRef.current = message.revision;
+					roomRef.current = toRoomState(message.room);
+					setRoom(roomRef.current);
 					setChatEvents((message.chat_history ?? []).map(toChatEvent));
 					setLatestChatMessage(null);
 					setChatError(null);
@@ -247,9 +268,34 @@ export function useCafeRoom(roomId: string) {
 					setConnectionState("connected");
 					setError(null);
 					break;
-				case "snapshot":
-					setRoom(toRoomState(message.room));
+				case "snapshot": {
+					if (!readyRef.current || roomRef.current === null) {
+						requestResynchronization(socket);
+						break;
+					}
+					if (message.revision <= lastRevisionRef.current) break;
+					lastRevisionRef.current = message.revision;
+					roomRef.current = toDynamicRoomState(message.room, roomRef.current.mapLayout);
+					setRoom(roomRef.current);
 					break;
+				}
+				case "movement": {
+					const currentRoom = roomRef.current;
+					if (!readyRef.current || currentRoom === null) {
+						requestResynchronization(socket);
+						break;
+					}
+					if (message.revision <= lastRevisionRef.current) break;
+					const nextRoom = applyMovementBatch(currentRoom, message.players);
+					if (nextRoom === null) {
+						requestResynchronization(socket);
+						break;
+					}
+					lastRevisionRef.current = message.revision;
+					roomRef.current = nextRoom;
+					setRoom(nextRoom);
+					break;
+				}
 				case "dialogue":
 					setDialogue({
 						messageKey: message.message_key,
@@ -363,6 +409,7 @@ export function useCafeRoom(roomId: string) {
 		[send]
 	);
 	const retryConnection = useCallback(() => {
+		roomRef.current = null;
 		setRoom(null);
 		setSelfPlayerId(null);
 		setRetryKey((current) => current + 1);
@@ -400,12 +447,16 @@ function toRoomErrorCode(code: string | undefined): CafeRoomErrorCode {
 }
 
 function toRoomState(room: ApiRoom): CafeRoomState {
+	return toDynamicRoomState(room, toMapLayout(room.map_layout));
+}
+
+function toDynamicRoomState(room: ApiDynamicRoom, mapLayout: CafeMapLayout): CafeRoomState {
 	return {
 		id: room.id,
 		inviteCode: room.invite_code,
 		isPrivate: room.is_private,
 		capacity: room.capacity,
-		mapLayout: toMapLayout(room.map_layout),
+		mapLayout,
 		players: room.players.map((player) => ({
 			id: player.id,
 			name: player.name,
@@ -447,6 +498,31 @@ function toRoomState(room: ApiRoom): CafeRoomState {
 			}))
 		},
 		aiko: room.aiko
+	};
+}
+
+function applyMovementBatch(
+	room: CafeRoomState,
+	updates: ApiMovementPlayer[]
+): CafeRoomState | null {
+	if (updates.length !== room.players.length) return null;
+	const updatesById = new Map(updates.map((player) => [player.id, player]));
+	if (updatesById.size !== room.players.length) return null;
+	if (room.players.some((player) => !updatesById.has(player.id))) return null;
+
+	return {
+		...room,
+		players: room.players.map((player) => {
+			const update = updatesById.get(player.id);
+			if (update === undefined) return player;
+			return {
+				...player,
+				x: update.x,
+				y: update.y,
+				direction: update.direction,
+				moving: update.moving
+			};
+		})
 	};
 }
 

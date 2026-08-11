@@ -9,7 +9,7 @@ lifecycle boundaries. Deliver the work as three independently authorized
 implementation slices. Exclude localhost fallbacks, test-only runtime fixtures
 and behavior, Vite/HMR, `import.meta.env.DEV` paths such as collision debug
 rendering, and asset-format or compression work. The current implementation
-boundary is slice 1 only.
+boundary is slice 2 only.
 
 ## Required Read Order
 
@@ -38,12 +38,27 @@ next slice without another explicit authorization.
    second of idle and continuous movement, immediate transitions, coalesced
    multi-player updates, quiet clean rooms, tick shutdown, reconnects, and all
    three Cafe activities.
-2. Reduce realtime payloads and isolate slow consumers: send versioned movement
-   deltas instead of repeated full room state, send static map layout only when
-   establishing or explicitly resynchronizing authoritative state, retain full
-   snapshots for join/reconnect/resync boundaries, and keep reliable chat,
-   reward, dialogue, presence, and activity events separate from replaceable
-   movement state.
+2. Reduce realtime payloads and isolate slow consumers. Replace movement-driven
+   full room snapshots with a `movement` server message containing a monotonic
+   room-state revision and the current `id`, `x`, `y`, `direction`, and `moving`
+   fields for every connected player. The complete movement batch is the latest
+   replaceable state, so a slow consumer can skip older batches without losing
+   another player's last position. Welcome, non-movement room snapshots, and
+   movement messages share the same monotonic room-state revision; the client
+   ignores any state older than the last revision it applied. `welcome` retains
+   the complete authoritative room and static map for initial join, reconnect,
+   and resynchronization. Subsequent `snapshot` messages retain authoritative
+   dynamic room, player, activity, and Aiko state but omit the static map; the
+   client merges them with the established map. Movement uses a latest-value
+   channel, while chat, reward, dialogue, emote, presence, activity, and dynamic
+   snapshots retain the bounded reliable event channel. Any reliable-channel
+   lag closes that Cafe socket; the existing bounded reconnect obtains a fresh
+   `welcome` instead of continuing with incomplete state. Preserve the Slice 1
+   100-millisecond movement tick, server authority, prediction, interpolation,
+   heartbeat, room capacity, and gameplay. Focused verification covers message
+   serialization, revision ordering across both channels, movement coalescing,
+   static-map retention and omission boundaries, reliable event ordering, lag
+   recovery, reconnect resynchronization, and all three Cafe activities.
 3. Bound production abuse and lifecycle growth: apply configurable active socket
    and room-creation limits at session, resolved-IP, and process scopes; bound
    WebSocket frame size; expire never-joined and inactive empty rooms; safely

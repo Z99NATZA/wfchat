@@ -14,7 +14,7 @@ use std::{
 
 use axum::{
     extract::{
-        ws::{Message, WebSocket, WebSocketUpgrade},
+        ws::{CloseFrame, Message, WebSocket, WebSocketUpgrade},
         Path, Query, State,
     },
     http::{
@@ -27,7 +27,7 @@ use axum::{
 };
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
-use tokio::sync::{broadcast, oneshot, Mutex};
+use tokio::sync::{broadcast, oneshot, watch, Mutex};
 use uuid::Uuid;
 
 use crate::{
@@ -51,6 +51,7 @@ const ROUND_INTERMISSION: Duration = Duration::from_secs(8);
 const CAFE_RUSH_DURATION: Duration = Duration::from_secs(90);
 const CAFE_RUSH_COMBO_WINDOW: Duration = Duration::from_secs(15);
 const MAX_CAFE_PLAYER_NAME_CHARS: usize = 24;
+const CAFE_RESYNC_CLOSE_CODE: u16 = 1013;
 const SERVICE_COUNTER_TARGET_ID: &str = "service-counter";
 const CAFE_MAP_LAYOUT: CafeMapLayout = CafeMapLayout {
     version: "cafe-room-v1",
@@ -134,6 +135,8 @@ struct CafeRoom {
     activity: CafeActivity,
     chat_history: VecDeque<CafeChatEvent>,
     sender: broadcast::Sender<CafeServerMessage>,
+    movement_sender: watch::Sender<CafeMovementUpdate>,
+    revision: u64,
     movement_dirty: bool,
     movement_tick_stop: Option<oneshot::Sender<()>>,
 }
@@ -181,6 +184,32 @@ struct CafeRoomState {
     players: Vec<CafePlayerState>,
     activity: CafeActivity,
     aiko: CafeAikoState,
+}
+
+#[derive(Clone, Serialize)]
+struct CafeDynamicRoomState {
+    id: Uuid,
+    invite_code: String,
+    is_private: bool,
+    capacity: usize,
+    players: Vec<CafePlayerState>,
+    activity: CafeActivity,
+    aiko: CafeAikoState,
+}
+
+#[derive(Clone, Serialize)]
+struct CafeMovementPlayerState {
+    id: Uuid,
+    x: f32,
+    y: f32,
+    direction: Direction,
+    moving: bool,
+}
+
+#[derive(Clone)]
+struct CafeMovementUpdate {
+    revision: u64,
+    players: Vec<CafeMovementPlayerState>,
 }
 
 #[derive(Clone, Copy, Serialize)]
@@ -441,11 +470,17 @@ enum CafeServerMessage {
     Welcome {
         self_player_id: Uuid,
         cafe_stars: u32,
+        revision: u64,
         room: CafeRoomState,
         chat_history: Vec<CafeChatEvent>,
     },
     Snapshot {
-        room: CafeRoomState,
+        revision: u64,
+        room: CafeDynamicRoomState,
+    },
+    Movement {
+        revision: u64,
+        players: Vec<CafeMovementPlayerState>,
     },
     Dialogue {
         message_key: &'static str,
@@ -497,6 +532,8 @@ enum CafeJoinError {
 
 struct CafeJoin {
     receiver: broadcast::Receiver<CafeServerMessage>,
+    movement_receiver: watch::Receiver<CafeMovementUpdate>,
+    revision: u64,
     snapshot: CafeRoomState,
     chat_history: Vec<CafeChatEvent>,
 }
@@ -714,7 +751,9 @@ impl CafeHub {
         let receiver = room.sender.subscribe();
         let chat_history = room.chat_history.iter().cloned().collect();
         room.players.insert(player.id, player);
-        let snapshot = broadcast_room_snapshot(room);
+        let revision = broadcast_room_snapshot(room);
+        let snapshot = room_state(room);
+        let movement_receiver = room.movement_sender.subscribe();
         if !was_present {
             push_chat_event(
                 room,
@@ -739,6 +778,8 @@ impl CafeHub {
 
         let joined = CafeJoin {
             receiver,
+            movement_receiver,
+            revision,
             snapshot,
             chat_history,
         };
@@ -863,7 +904,7 @@ impl CafeHub {
             return MovementTickOutcome::Clean;
         }
 
-        broadcast_room_snapshot(room);
+        broadcast_room_movement(room);
         MovementTickOutcome::Sent
     }
 
@@ -1580,6 +1621,7 @@ async fn handle_cafe_socket(
         &CafeServerMessage::Welcome {
             self_player_id: player_id,
             cafe_stars: initial_stars,
+            revision: joined.revision,
             room: joined.snapshot,
             chat_history: joined.chat_history,
         },
@@ -1594,6 +1636,26 @@ async fn handle_cafe_socket(
     let mut recent_chat_messages = VecDeque::new();
     loop {
         tokio::select! {
+            biased;
+            event = receive_outbound_room_message(
+                &mut joined.receiver,
+                &mut joined.movement_receiver,
+            ) => {
+                match event {
+                    Ok(event) => {
+                        if !send_socket_message(&mut socket, &event).await {
+                            break;
+                        }
+                    }
+                    Err(OutboundRoomError::ReliableLagged) => {
+                        let _ = socket
+                            .send(Message::Close(Some(cafe_resync_close_frame())))
+                            .await;
+                        break;
+                    }
+                    Err(OutboundRoomError::Closed) => break,
+                }
+            }
             incoming = socket.recv() => {
                 let Some(Ok(message)) = incoming else {
                     break;
@@ -1683,21 +1745,49 @@ async fn handle_cafe_socket(
                     _ => {}
                 }
             }
-            event = joined.receiver.recv() => {
-                match event {
-                    Ok(event) => {
-                        if !send_socket_message(&mut socket, &event).await {
-                            break;
-                        }
-                    }
-                    Err(broadcast::error::RecvError::Lagged(_)) => continue,
-                    Err(broadcast::error::RecvError::Closed) => break,
-                }
-            }
         }
     }
 
     state.cafe.leave(room_id, player_id).await;
+}
+
+#[derive(Debug, PartialEq, Eq)]
+enum OutboundRoomError {
+    ReliableLagged,
+    Closed,
+}
+
+fn cafe_resync_close_frame() -> CloseFrame {
+    CloseFrame {
+        code: CAFE_RESYNC_CLOSE_CODE,
+        reason: "cafe state resynchronization required".into(),
+    }
+}
+
+async fn receive_outbound_room_message(
+    reliable: &mut broadcast::Receiver<CafeServerMessage>,
+    movement: &mut watch::Receiver<CafeMovementUpdate>,
+) -> Result<CafeServerMessage, OutboundRoomError> {
+    tokio::select! {
+        biased;
+        event = reliable.recv() => match event {
+            Ok(event) => Ok(event),
+            Err(broadcast::error::RecvError::Lagged(_)) => {
+                Err(OutboundRoomError::ReliableLagged)
+            }
+            Err(broadcast::error::RecvError::Closed) => Err(OutboundRoomError::Closed),
+        },
+        changed = movement.changed() => {
+            if changed.is_err() {
+                return Err(OutboundRoomError::Closed);
+            }
+            let update = movement.borrow_and_update().clone();
+            Ok(CafeServerMessage::Movement {
+                revision: update.revision,
+                players: update.players,
+            })
+        }
+    }
 }
 
 async fn send_socket_message(socket: &mut WebSocket, message: &CafeServerMessage) -> bool {
@@ -1852,6 +1942,10 @@ fn new_room(is_private: bool, rooms: &HashMap<Uuid, CafeRoom>) -> CafeRoom {
     let id = Uuid::new_v4();
     let invite_code = unique_invite_code(id, rooms);
     let (sender, _) = broadcast::channel(128);
+    let (movement_sender, _) = watch::channel(CafeMovementUpdate {
+        revision: 0,
+        players: Vec::new(),
+    });
     CafeRoom {
         id,
         invite_code,
@@ -1860,6 +1954,8 @@ fn new_room(is_private: bool, rooms: &HashMap<Uuid, CafeRoom>) -> CafeRoom {
         activity: CafeActivity::for_round(1, 0),
         chat_history: VecDeque::new(),
         sender,
+        movement_sender,
+        revision: 0,
         movement_dirty: false,
         movement_tick_stop: None,
     }
@@ -1898,7 +1994,32 @@ fn room_summary(room: &CafeRoom) -> CafeRoomSummary {
 }
 
 fn room_state(room: &CafeRoom) -> CafeRoomState {
-    let aiko = cafe_map_interaction_target("aiko");
+    let dynamic = dynamic_room_state(room);
+    CafeRoomState {
+        id: dynamic.id,
+        invite_code: dynamic.invite_code,
+        is_private: dynamic.is_private,
+        capacity: dynamic.capacity,
+        map_layout: CAFE_MAP_LAYOUT,
+        players: dynamic.players,
+        activity: dynamic.activity,
+        aiko: dynamic.aiko,
+    }
+}
+
+fn dynamic_room_state(room: &CafeRoom) -> CafeDynamicRoomState {
+    CafeDynamicRoomState {
+        id: room.id,
+        invite_code: room.invite_code.clone(),
+        is_private: room.is_private,
+        capacity: ROOM_CAPACITY,
+        players: player_states(room),
+        activity: room.activity.clone(),
+        aiko: aiko_state(room),
+    }
+}
+
+fn player_states(room: &CafeRoom) -> Vec<CafePlayerState> {
     let mut players = room
         .players
         .values()
@@ -1916,33 +2037,55 @@ fn room_state(room: &CafeRoom) -> CafeRoomState {
         })
         .collect::<Vec<_>>();
     players.sort_by_key(|player| player.id);
-    CafeRoomState {
-        id: room.id,
-        invite_code: room.invite_code.clone(),
-        is_private: room.is_private,
-        capacity: ROOM_CAPACITY,
-        map_layout: CAFE_MAP_LAYOUT,
-        players,
-        activity: room.activity.clone(),
-        aiko: CafeAikoState {
-            x: aiko.x,
-            y: aiko.y,
-            motion: if room.activity.completed {
-                "celebrate"
-            } else {
-                "idle"
-            },
+    players
+}
+
+fn aiko_state(room: &CafeRoom) -> CafeAikoState {
+    let aiko = cafe_map_interaction_target("aiko");
+    CafeAikoState {
+        x: aiko.x,
+        y: aiko.y,
+        motion: if room.activity.completed {
+            "celebrate"
+        } else {
+            "idle"
         },
     }
 }
 
-fn broadcast_room_snapshot(room: &mut CafeRoom) -> CafeRoomState {
-    let snapshot = room_state(room);
+fn next_room_revision(room: &mut CafeRoom) -> u64 {
+    room.revision = room.revision.saturating_add(1);
+    room.revision
+}
+
+fn broadcast_room_snapshot(room: &mut CafeRoom) -> u64 {
+    let revision = next_room_revision(room);
+    let dynamic = dynamic_room_state(room);
     room.movement_dirty = false;
     let _ = room.sender.send(CafeServerMessage::Snapshot {
-        room: snapshot.clone(),
+        revision,
+        room: dynamic,
     });
-    snapshot
+    revision
+}
+
+fn broadcast_room_movement(room: &mut CafeRoom) {
+    let revision = next_room_revision(room);
+    let mut players = room
+        .players
+        .values()
+        .map(|player| CafeMovementPlayerState {
+            id: player.id,
+            x: player.x,
+            y: player.y,
+            direction: player.direction,
+            moving: player.moving,
+        })
+        .collect::<Vec<_>>();
+    players.sort_by_key(|player| player.id);
+    room.movement_dirty = false;
+    room.movement_sender
+        .send_replace(CafeMovementUpdate { revision, players });
 }
 
 fn progress_response(progress: crate::store::CafeProgressRecord) -> CafeProgressResponse {
@@ -2135,6 +2278,51 @@ mod tests {
         assert_eq!(value["map_layout"]["colliders"][1]["width"], 120.0);
     }
 
+    #[test]
+    fn welcome_serializes_static_map_while_dynamic_updates_omit_it() {
+        let mut room = new_room(false, &HashMap::new());
+        let mut receiver = room.sender.subscribe();
+        let revision = broadcast_room_snapshot(&mut room);
+        let snapshot = room_state(&room);
+        let welcome = CafeServerMessage::Welcome {
+            self_player_id: Uuid::new_v4(),
+            cafe_stars: 0,
+            revision,
+            room: snapshot,
+            chat_history: Vec::new(),
+        };
+        let welcome_value = serde_json::to_value(welcome).expect("welcome should serialize");
+        assert_eq!(welcome_value["revision"], revision);
+        assert_eq!(
+            welcome_value["room"]["map_layout"]["version"],
+            "cafe-room-v1"
+        );
+
+        let snapshot_message = receiver.try_recv().expect("snapshot should be queued");
+        let snapshot_value =
+            serde_json::to_value(snapshot_message).expect("snapshot should serialize");
+        assert_eq!(snapshot_value["revision"], revision);
+        assert!(snapshot_value["room"].get("map_layout").is_none());
+
+        let player_id = Uuid::new_v4();
+        let movement_value = serde_json::to_value(CafeServerMessage::Movement {
+            revision: revision + 1,
+            players: vec![CafeMovementPlayerState {
+                id: player_id,
+                x: 12.0,
+                y: 34.0,
+                direction: Direction::Left,
+                moving: true,
+            }],
+        })
+        .expect("movement should serialize");
+        assert_eq!(movement_value["type"], "movement");
+        assert_eq!(movement_value["revision"], revision + 1);
+        assert_eq!(movement_value["players"][0]["id"], player_id.to_string());
+        assert_eq!(movement_value["players"][0]["direction"], "left");
+        assert!(movement_value["players"][0].get("name").is_none());
+    }
+
     fn guest() -> SessionRecord {
         SessionRecord {
             id: Uuid::new_v4(),
@@ -2289,20 +2477,18 @@ mod tests {
             hub.flush_dirty_movement_snapshot(room.id).await,
             MovementTickOutcome::Sent
         );
-        let CafeServerMessage::Snapshot { room: snapshot } = first_join
-            .receiver
-            .recv()
+        first_join
+            .movement_receiver
+            .changed()
             .await
-            .expect("coalesced movement snapshot should send")
-        else {
-            panic!("expected a movement snapshot");
-        };
-        let first_state = snapshot
+            .expect("coalesced movement update should send");
+        let update = first_join.movement_receiver.borrow_and_update().clone();
+        let first_state = update
             .players
             .iter()
             .find(|player| player.id == first.id)
             .expect("first player should be present");
-        let second_state = snapshot
+        let second_state = update
             .players
             .iter()
             .find(|player| player.id == second.id)
@@ -2311,6 +2497,7 @@ mod tests {
         assert_eq!(first_state.direction, Direction::Right);
         assert_eq!(second_state.x, 630.0);
         assert_eq!(second_state.direction, Direction::Left);
+        assert!(update.revision > first_join.revision);
         assert_eq!(
             hub.flush_dirty_movement_snapshot(room.id).await,
             MovementTickOutcome::Clean
@@ -2319,6 +2506,163 @@ mod tests {
             first_join.receiver.try_recv(),
             Err(broadcast::error::TryRecvError::Empty)
         ));
+    }
+
+    #[tokio::test]
+    async fn reliable_updates_are_dispatched_before_newer_replaceable_movement() {
+        let hub = CafeHub::default();
+        let room = hub.create_room(false).await;
+        let first = guest();
+        let second = guest();
+        let mut first_join = hub
+            .join(room.id, new_player(&first, "Guest FIRST".to_owned(), None))
+            .await
+            .expect("first player should join");
+        while first_join.receiver.try_recv().is_ok() {}
+
+        hub.join(
+            room.id,
+            new_player(&second, "Guest SECOND".to_owned(), None),
+        )
+        .await
+        .expect("second player should join");
+        {
+            let mut rooms = hub.rooms.lock().await;
+            rooms
+                .get_mut(&room.id)
+                .and_then(|room| room.players.get_mut(&first.id))
+                .expect("first player should exist")
+                .last_move_at = Instant::now() - Duration::from_secs(1);
+        }
+        hub.update_player(
+            room.id,
+            first.id,
+            PlayerMovement {
+                x: 650.0,
+                y: CAFE_MAP_LAYOUT.player_spawn.y,
+                direction: Direction::Right,
+                moving: true,
+                sequence: 1,
+            },
+        )
+        .await;
+        assert_eq!(
+            hub.flush_dirty_movement_snapshot(room.id).await,
+            MovementTickOutcome::Sent
+        );
+
+        let first_outbound = receive_outbound_room_message(
+            &mut first_join.receiver,
+            &mut first_join.movement_receiver,
+        )
+        .await
+        .expect("reliable snapshot should dispatch");
+        let CafeServerMessage::Snapshot {
+            revision: snapshot_revision,
+            ..
+        } = first_outbound
+        else {
+            panic!("expected the older reliable snapshot first");
+        };
+        let second_outbound = receive_outbound_room_message(
+            &mut first_join.receiver,
+            &mut first_join.movement_receiver,
+        )
+        .await
+        .expect("presence event should dispatch");
+        assert!(matches!(
+            second_outbound,
+            CafeServerMessage::ChatEvent { .. }
+        ));
+        let third_outbound = receive_outbound_room_message(
+            &mut first_join.receiver,
+            &mut first_join.movement_receiver,
+        )
+        .await
+        .expect("movement should dispatch after reliable updates");
+        let CafeServerMessage::Movement {
+            revision: movement_revision,
+            players,
+        } = third_outbound
+        else {
+            panic!("expected movement after reliable updates");
+        };
+        assert!(movement_revision > snapshot_revision);
+        assert_eq!(players.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn movement_watch_replaces_unread_batches_with_the_latest_room_state() {
+        let hub = CafeHub::default();
+        let room = hub.create_room(false).await;
+        let session = guest();
+        let mut joined = hub
+            .join(room.id, new_player(&session, "Guest SLOW".to_owned(), None))
+            .await
+            .expect("player should join");
+
+        for (sequence, x) in [(1, 650.0), (2, 660.0)] {
+            {
+                let mut rooms = hub.rooms.lock().await;
+                rooms
+                    .get_mut(&room.id)
+                    .and_then(|room| room.players.get_mut(&session.id))
+                    .expect("player should exist")
+                    .last_move_at = Instant::now() - Duration::from_secs(1);
+            }
+            hub.update_player(
+                room.id,
+                session.id,
+                PlayerMovement {
+                    x,
+                    y: CAFE_MAP_LAYOUT.player_spawn.y,
+                    direction: Direction::Right,
+                    moving: true,
+                    sequence,
+                },
+            )
+            .await;
+            assert_eq!(
+                hub.flush_dirty_movement_snapshot(room.id).await,
+                MovementTickOutcome::Sent
+            );
+        }
+
+        joined
+            .movement_receiver
+            .changed()
+            .await
+            .expect("latest movement should be observable");
+        let latest = joined.movement_receiver.borrow_and_update().clone();
+        assert_eq!(latest.players[0].x, 660.0);
+        assert_eq!(latest.revision, joined.revision + 2);
+        assert!(!joined
+            .movement_receiver
+            .has_changed()
+            .expect("movement sender should remain open"));
+    }
+
+    #[tokio::test]
+    async fn reliable_channel_lag_requires_socket_resynchronization() {
+        let (sender, mut receiver) = broadcast::channel(2);
+        let (_movement_sender, mut movement_receiver) = watch::channel(CafeMovementUpdate {
+            revision: 0,
+            players: Vec::new(),
+        });
+        for emote in ["wave", "heart", "tea"] {
+            let _ = sender.send(CafeServerMessage::Emote {
+                player_id: Uuid::new_v4(),
+                emote: emote.to_owned(),
+            });
+        }
+
+        assert!(matches!(
+            receive_outbound_room_message(&mut receiver, &mut movement_receiver).await,
+            Err(OutboundRoomError::ReliableLagged)
+        ));
+        let close = cafe_resync_close_frame();
+        assert_eq!(close.code, 1013);
+        assert_eq!(close.reason, "cafe state resynchronization required");
     }
 
     #[tokio::test]
@@ -2424,7 +2768,7 @@ mod tests {
         } else {
             updated
         };
-        let CafeServerMessage::Snapshot { room } = updated else {
+        let CafeServerMessage::Snapshot { room, .. } = updated else {
             panic!("expected a room snapshot");
         };
         assert_eq!(

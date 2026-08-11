@@ -16,6 +16,8 @@ class FakeWebSocket {
 	onerror: (() => void) | null = null;
 	onclose: (() => void) | null = null;
 	sent: string[] = [];
+	closeCode: number | undefined;
+	closeReason: string | undefined;
 
 	constructor(url: string) {
 		this.url = url;
@@ -35,7 +37,9 @@ class FakeWebSocket {
 		this.sent.push(value);
 	}
 
-	close() {
+	close(code?: number, reason?: string) {
+		this.closeCode = code;
+		this.closeReason = reason;
 		this.readyState = 3;
 		this.onclose?.();
 	}
@@ -124,6 +128,7 @@ describe("useCafeRoom", () => {
 				type: "welcome",
 				self_player_id: room.players[0].id,
 				cafe_stars: 3,
+				revision: 1,
 				room,
 				chat_history: [
 					{
@@ -194,6 +199,7 @@ describe("useCafeRoom", () => {
 				type: "welcome",
 				self_player_id: room.players[0].id,
 				cafe_stars: 1,
+				revision: 1,
 				room
 			});
 			socket.message({
@@ -281,6 +287,7 @@ describe("useCafeRoom", () => {
 				type: "welcome",
 				self_player_id: room.players[0].id,
 				cafe_stars: 7,
+				revision: 1,
 				room: tableRoom
 			});
 		});
@@ -295,6 +302,154 @@ describe("useCafeRoom", () => {
 		expect(result.current.room?.players[0].carriedOrderId).toBe("order-2-1");
 	});
 
+	it("orders welcome, dynamic snapshots, and replaceable movement by room revision", () => {
+		const secondPlayer = {
+			...room.players[0],
+			id: "33333333-3333-4333-8333-333333333333",
+			name: "Guest REMOTE",
+			x: 600
+		};
+		const revisionRoom = { ...room, players: [...room.players, secondPlayer] };
+		const { map_layout: _mapLayout, ...dynamicRoom } = revisionRoom;
+		const rushRoom = {
+			...dynamicRoom,
+			players: [{ ...dynamicRoom.players[0], x: 680 }],
+			activity: {
+				...dynamicRoom.activity,
+				id: "cafe_rush" as const,
+				round_number: 3,
+				delivered: 1,
+				target: 4
+			}
+		};
+		const { result } = renderHook(() => useCafeRoom(room.id));
+		const socket = FakeWebSocket.instances[0];
+
+		act(() => {
+			socket.open();
+			socket.message({
+				type: "welcome",
+				self_player_id: room.players[0].id,
+				cafe_stars: 0,
+				revision: 10,
+				room: revisionRoom
+			});
+			socket.message({
+				type: "movement",
+				revision: 12,
+				players: [
+					{
+						id: room.players[0].id,
+						x: 700,
+						y: 704,
+						direction: "right",
+						moving: true
+					},
+					{
+						id: secondPlayer.id,
+						x: 610,
+						y: 704,
+						direction: "left",
+						moving: true
+					}
+				]
+			});
+			socket.message({
+				type: "movement",
+				revision: 12,
+				players: [
+					{ ...room.players[0], x: 710 },
+					{ ...secondPlayer, x: 620 }
+				]
+			});
+			socket.message({ type: "snapshot", revision: 11, room: rushRoom });
+		});
+
+		expect(result.current.room?.players[0].x).toBe(700);
+		expect(result.current.room?.players[1].x).toBe(610);
+		expect(result.current.room?.activity.id).toBe("tea_delivery");
+
+		act(() => {
+			socket.message({ type: "snapshot", revision: 13, room: rushRoom });
+			socket.message({
+				type: "movement",
+				revision: 12,
+				players: [
+					{
+						id: room.players[0].id,
+						x: 720,
+						y: 704,
+						direction: "right",
+						moving: true
+					},
+					{
+						id: secondPlayer.id,
+						x: 625,
+						y: 704,
+						direction: "left",
+						moving: true
+					}
+				]
+			});
+		});
+
+		expect(result.current.room?.activity.id).toBe("cafe_rush");
+		expect(result.current.room?.activity.target).toBe(4);
+		expect(result.current.room?.players[0].x).toBe(680);
+		expect(result.current.room?.mapLayout.version).toBe("cafe-room-v1");
+	});
+
+	it("reconnects when state arrives before an authoritative welcome", () => {
+		const { result } = renderHook(() => useCafeRoom(room.id));
+		const socket = FakeWebSocket.instances[0];
+		act(() => {
+			socket.open();
+			socket.message({
+				type: "movement",
+				revision: 1,
+				players: []
+			});
+		});
+
+		expect(socket.closeCode).toBe(1012);
+		expect(result.current.connectionState).toBe("reconnecting");
+		expect(result.current.room).toBeNull();
+	});
+
+	it("reconnects for an incomplete movement roster and resets revision from fresh welcome", () => {
+		const { result } = renderHook(() => useCafeRoom(room.id));
+		const first = FakeWebSocket.instances[0];
+		act(() => {
+			first.open();
+			first.message({
+				type: "welcome",
+				self_player_id: room.players[0].id,
+				cafe_stars: 0,
+				revision: 50,
+				room
+			});
+			first.message({ type: "movement", revision: 51, players: [] });
+		});
+
+		expect(first.closeCode).toBe(1012);
+		expect(result.current.connectionState).toBe("reconnecting");
+		act(() => vi.advanceTimersByTime(500));
+		const second = FakeWebSocket.instances[1];
+		act(() => {
+			second.open();
+			second.message({
+				type: "welcome",
+				self_player_id: room.players[0].id,
+				cafe_stars: 0,
+				revision: 2,
+				room: { ...room, players: [{ ...room.players[0], x: 730 }] }
+			});
+		});
+
+		expect(result.current.connectionState).toBe("connected");
+		expect(result.current.room?.players[0].x).toBe(730);
+	});
+
 	it("goes offline immediately, blocks messages, and waits for welcome before resuming", () => {
 		const { result } = renderHook(() => useCafeRoom(room.id));
 		const first = FakeWebSocket.instances[0];
@@ -304,6 +459,7 @@ describe("useCafeRoom", () => {
 				type: "welcome",
 				self_player_id: room.players[0].id,
 				cafe_stars: 2,
+				revision: 1,
 				room
 			});
 		});
@@ -323,6 +479,7 @@ describe("useCafeRoom", () => {
 				type: "welcome",
 				self_player_id: room.players[0].id,
 				cafe_stars: 2,
+				revision: 3,
 				room: {
 					...room,
 					players: [{ ...room.players[0], x: 720 }]
