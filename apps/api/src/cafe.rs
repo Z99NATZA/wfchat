@@ -7,7 +7,10 @@ use std::{
 };
 
 #[cfg(test)]
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::{
+    sync::atomic::{AtomicUsize, Ordering},
+    time::{SystemTime, UNIX_EPOCH},
+};
 
 use axum::{
     extract::{
@@ -24,7 +27,7 @@ use axum::{
 };
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
-use tokio::sync::{broadcast, Mutex};
+use tokio::sync::{broadcast, oneshot, Mutex};
 use uuid::Uuid;
 
 use crate::{
@@ -37,6 +40,7 @@ use crate::{
 
 const ROOM_CAPACITY: usize = 8;
 const MOVE_SPEED: f32 = 210.0;
+const MOVEMENT_SNAPSHOT_INTERVAL: Duration = Duration::from_millis(100);
 const MAX_MESSAGES_PER_WINDOW: usize = 45;
 const MESSAGE_WINDOW: Duration = Duration::from_secs(2);
 const MAX_CHAT_MESSAGES_PER_WINDOW: usize = 5;
@@ -118,9 +122,10 @@ pub fn router() -> Router<AppState> {
 #[derive(Clone, Default)]
 pub struct CafeHub {
     rooms: Arc<Mutex<HashMap<Uuid, CafeRoom>>>,
+    #[cfg(test)]
+    active_movement_ticks: Arc<AtomicUsize>,
 }
 
-#[derive(Clone)]
 struct CafeRoom {
     id: Uuid,
     invite_code: String,
@@ -129,6 +134,15 @@ struct CafeRoom {
     activity: CafeActivity,
     chat_history: VecDeque<CafeChatEvent>,
     sender: broadcast::Sender<CafeServerMessage>,
+    movement_dirty: bool,
+    movement_tick_stop: Option<oneshot::Sender<()>>,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+enum MovementTickOutcome {
+    Stop,
+    Clean,
+    Sent,
 }
 
 #[derive(Clone)]
@@ -329,7 +343,7 @@ enum CafeActivityPhase {
     Intermission,
 }
 
-#[derive(Clone, Copy, Deserialize, Serialize)]
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 enum Direction {
     Up,
@@ -694,15 +708,13 @@ impl CafeHub {
         }
 
         let was_present = room.players.contains_key(&player.id);
+        let start_movement_tick = room.players.is_empty();
         let player_id = player.id;
         let player_name = player.name.clone();
         let receiver = room.sender.subscribe();
         let chat_history = room.chat_history.iter().cloned().collect();
         room.players.insert(player.id, player);
-        let snapshot = room_state(room);
-        let _ = room.sender.send(CafeServerMessage::Snapshot {
-            room: snapshot.clone(),
-        });
+        let snapshot = broadcast_room_snapshot(room);
         if !was_present {
             push_chat_event(
                 room,
@@ -717,11 +729,25 @@ impl CafeHub {
             );
         }
 
-        Ok(CafeJoin {
+        let movement_tick_stop = if start_movement_tick {
+            let (stop_sender, stop_receiver) = oneshot::channel();
+            room.movement_tick_stop = Some(stop_sender);
+            Some(stop_receiver)
+        } else {
+            None
+        };
+
+        let joined = CafeJoin {
             receiver,
             snapshot,
             chat_history,
-        })
+        };
+        drop(rooms);
+        if let Some(stop_receiver) = movement_tick_stop {
+            self.spawn_movement_snapshot_tick(room_id, stop_receiver);
+        }
+
+        Ok(joined)
     }
 
     async fn leave(&self, room_id: Uuid, player_id: Uuid) {
@@ -753,9 +779,7 @@ impl CafeHub {
                 if room.players.is_empty() {
                     true
                 } else {
-                    let _ = room.sender.send(CafeServerMessage::Snapshot {
-                        room: room_state(room),
-                    });
+                    broadcast_room_snapshot(room);
                     if let Some(player_name) = departed_name {
                         push_chat_event(
                             room,
@@ -824,10 +848,59 @@ impl CafeHub {
         player.moving = movement.moving;
         player.last_sequence = movement.sequence;
         player.last_move_at = Instant::now();
+        room.movement_dirty = true;
+    }
 
-        let _ = room.sender.send(CafeServerMessage::Snapshot {
-            room: room_state(room),
+    async fn flush_dirty_movement_snapshot(&self, room_id: Uuid) -> MovementTickOutcome {
+        let mut rooms = self.rooms.lock().await;
+        let Some(room) = rooms.get_mut(&room_id) else {
+            return MovementTickOutcome::Stop;
+        };
+        if room.players.is_empty() {
+            return MovementTickOutcome::Stop;
+        }
+        if !room.movement_dirty {
+            return MovementTickOutcome::Clean;
+        }
+
+        broadcast_room_snapshot(room);
+        MovementTickOutcome::Sent
+    }
+
+    fn spawn_movement_snapshot_tick(
+        &self,
+        room_id: Uuid,
+        mut stop_receiver: oneshot::Receiver<()>,
+    ) {
+        let cafe = self.clone();
+        #[cfg(test)]
+        self.active_movement_ticks.fetch_add(1, Ordering::SeqCst);
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval_at(
+                tokio::time::Instant::now() + MOVEMENT_SNAPSHOT_INTERVAL,
+                MOVEMENT_SNAPSHOT_INTERVAL,
+            );
+            interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+            loop {
+                tokio::select! {
+                    _ = &mut stop_receiver => break,
+                    _ = interval.tick() => {
+                        if cafe.flush_dirty_movement_snapshot(room_id).await
+                            == MovementTickOutcome::Stop
+                        {
+                            break;
+                        }
+                    }
+                }
+            }
+            #[cfg(test)]
+            cafe.active_movement_ticks.fetch_sub(1, Ordering::SeqCst);
         });
+    }
+
+    #[cfg(test)]
+    fn active_movement_tick_count(&self) -> usize {
+        self.active_movement_ticks.load(Ordering::SeqCst)
     }
 
     async fn emote(&self, room_id: Uuid, player_id: Uuid, emote: &str) {
@@ -933,9 +1006,7 @@ impl CafeHub {
                     },
                     expression: "happy",
                 });
-                let _ = room.sender.send(CafeServerMessage::Snapshot {
-                    room: room_state(room),
-                });
+                broadcast_room_snapshot(room);
             }
             return CafeInteractionResult::none();
         }
@@ -993,9 +1064,7 @@ impl CafeHub {
             },
             expression: "happy",
         });
-        let _ = room.sender.send(CafeServerMessage::Snapshot {
-            room: room_state(room),
-        });
+        broadcast_room_snapshot(room);
 
         CafeInteractionResult {
             awarded_owners,
@@ -1026,9 +1095,7 @@ impl CafeHub {
                 player.carried_rush_ingredient_ids.clear();
                 player.carried_order_id = None;
             }
-            let _ = room.sender.send(CafeServerMessage::Snapshot {
-                room: room_state(room),
-            });
+            broadcast_room_snapshot(room);
             let _ = room.sender.send(CafeServerMessage::Dialogue {
                 message_key: match room.activity.id {
                     CafeActivityId::TeaDelivery => "cafe.dialogue.teaRoundReady",
@@ -1075,9 +1142,7 @@ impl CafeHub {
             message_key: "cafe.dialogue.rushTimeUp",
             expression: "neutral",
         });
-        let _ = room.sender.send(CafeServerMessage::Snapshot {
-            room: room_state(room),
-        });
+        broadcast_room_snapshot(room);
         true
     }
 
@@ -1104,9 +1169,7 @@ impl CafeHub {
                 }
             }
             if changed {
-                let _ = room.sender.send(CafeServerMessage::Snapshot {
-                    room: room_state(room),
-                });
+                broadcast_room_snapshot(room);
             }
         }
     }
@@ -1165,9 +1228,7 @@ fn interact_table_service(
             message_key: "cafe.dialogue.servicePickedUp",
             expression: "happy",
         });
-        let _ = room.sender.send(CafeServerMessage::Snapshot {
-            room: room_state(room),
-        });
+        broadcast_room_snapshot(room);
         return CafeInteractionResult::none();
     }
 
@@ -1222,9 +1283,7 @@ fn interact_cafe_rush(
                 message_key: "cafe.dialogue.rushOrderPrepared",
                 expression: "happy",
             });
-            let _ = room.sender.send(CafeServerMessage::Snapshot {
-                room: room_state(room),
-            });
+            broadcast_room_snapshot(room);
             return CafeInteractionResult::none();
         }
     }
@@ -1244,9 +1303,7 @@ fn interact_cafe_rush(
             message_key: "cafe.dialogue.rushOrderPickedUp",
             expression: "happy",
         });
-        let _ = room.sender.send(CafeServerMessage::Snapshot {
-            room: room_state(room),
-        });
+        broadcast_room_snapshot(room);
         return CafeInteractionResult::none();
     }
 
@@ -1350,9 +1407,7 @@ fn serve_claimed_order(
         },
         expression: "happy",
     });
-    let _ = room.sender.send(CafeServerMessage::Snapshot {
-        room: room_state(room),
-    });
+    broadcast_room_snapshot(room);
 
     CafeInteractionResult {
         awarded_owners,
@@ -1805,6 +1860,8 @@ fn new_room(is_private: bool, rooms: &HashMap<Uuid, CafeRoom>) -> CafeRoom {
         activity: CafeActivity::for_round(1, 0),
         chat_history: VecDeque::new(),
         sender,
+        movement_dirty: false,
+        movement_tick_stop: None,
     }
 }
 
@@ -1877,6 +1934,15 @@ fn room_state(room: &CafeRoom) -> CafeRoomState {
             },
         },
     }
+}
+
+fn broadcast_room_snapshot(room: &mut CafeRoom) -> CafeRoomState {
+    let snapshot = room_state(room);
+    room.movement_dirty = false;
+    let _ = room.sender.send(CafeServerMessage::Snapshot {
+        room: snapshot.clone(),
+    });
+    snapshot
 }
 
 fn progress_response(progress: crate::store::CafeProgressRecord) -> CafeProgressResponse {
@@ -2168,6 +2234,160 @@ mod tests {
             .and_then(|room| room.players.get(&session.id))
             .expect("player should remain");
         assert_eq!((player.x, player.y), (175.0, 380.0));
+    }
+
+    #[tokio::test]
+    async fn movement_snapshots_coalesce_latest_state_for_multiple_players() {
+        let hub = CafeHub::default();
+        let room = hub.create_room(false).await;
+        let first = guest();
+        let second = guest();
+        let mut first_join = hub
+            .join(room.id, new_player(&first, "Guest FIRST".to_owned(), None))
+            .await
+            .expect("first player should join");
+        hub.join(
+            room.id,
+            new_player(&second, "Guest SECOND".to_owned(), None),
+        )
+        .await
+        .expect("second player should join");
+        while first_join.receiver.try_recv().is_ok() {}
+
+        for (player_id, sequence, x, direction) in [
+            (first.id, 1, 650.0, Direction::Right),
+            (first.id, 2, 660.0, Direction::Right),
+            (second.id, 1, 630.0, Direction::Left),
+        ] {
+            {
+                let mut rooms = hub.rooms.lock().await;
+                rooms
+                    .get_mut(&room.id)
+                    .and_then(|room| room.players.get_mut(&player_id))
+                    .expect("player should exist")
+                    .last_move_at = Instant::now() - Duration::from_secs(1);
+            }
+            hub.update_player(
+                room.id,
+                player_id,
+                PlayerMovement {
+                    x,
+                    y: CAFE_MAP_LAYOUT.player_spawn.y,
+                    direction,
+                    moving: true,
+                    sequence,
+                },
+            )
+            .await;
+        }
+
+        assert!(matches!(
+            first_join.receiver.try_recv(),
+            Err(broadcast::error::TryRecvError::Empty)
+        ));
+        assert_eq!(
+            hub.flush_dirty_movement_snapshot(room.id).await,
+            MovementTickOutcome::Sent
+        );
+        let CafeServerMessage::Snapshot { room: snapshot } = first_join
+            .receiver
+            .recv()
+            .await
+            .expect("coalesced movement snapshot should send")
+        else {
+            panic!("expected a movement snapshot");
+        };
+        let first_state = snapshot
+            .players
+            .iter()
+            .find(|player| player.id == first.id)
+            .expect("first player should be present");
+        let second_state = snapshot
+            .players
+            .iter()
+            .find(|player| player.id == second.id)
+            .expect("second player should be present");
+        assert_eq!(first_state.x, 660.0);
+        assert_eq!(first_state.direction, Direction::Right);
+        assert_eq!(second_state.x, 630.0);
+        assert_eq!(second_state.direction, Direction::Left);
+        assert_eq!(
+            hub.flush_dirty_movement_snapshot(room.id).await,
+            MovementTickOutcome::Clean
+        );
+        assert!(matches!(
+            first_join.receiver.try_recv(),
+            Err(broadcast::error::TryRecvError::Empty)
+        ));
+    }
+
+    #[tokio::test]
+    async fn immediate_snapshot_clears_pending_movement_and_reconnect_stays_on_one_tick() {
+        let hub = CafeHub::default();
+        let room = hub.create_room(false).await;
+        let session = guest();
+        hub.join(
+            room.id,
+            new_player(&session, "Guest RECONNECT".to_owned(), None),
+        )
+        .await
+        .expect("player should join");
+        assert_eq!(hub.active_movement_tick_count(), 1);
+
+        hub.update_player(
+            room.id,
+            session.id,
+            PlayerMovement {
+                x: 650.0,
+                y: CAFE_MAP_LAYOUT.player_spawn.y,
+                direction: Direction::Right,
+                moving: true,
+                sequence: 1,
+            },
+        )
+        .await;
+        let reconnect = hub
+            .join(
+                room.id,
+                new_player(&session, "Guest RECONNECT".to_owned(), None),
+            )
+            .await
+            .expect("same session should reconnect");
+
+        assert_eq!(hub.active_movement_tick_count(), 1);
+        assert_eq!(reconnect.snapshot.players.len(), 1);
+        assert_eq!(
+            hub.flush_dirty_movement_snapshot(room.id).await,
+            MovementTickOutcome::Clean
+        );
+    }
+
+    #[tokio::test]
+    async fn movement_tick_stops_when_its_room_is_removed() {
+        let hub = CafeHub::default();
+        let room = hub.create_room(false).await;
+        let session = guest();
+        hub.join(
+            room.id,
+            new_player(&session, "Guest LEAVE".to_owned(), None),
+        )
+        .await
+        .expect("player should join");
+        assert_eq!(hub.active_movement_tick_count(), 1);
+
+        hub.leave(room.id, session.id).await;
+        tokio::time::timeout(Duration::from_secs(1), async {
+            while hub.active_movement_tick_count() != 0 {
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .expect("movement tick should stop when the room is removed");
+
+        assert_eq!(
+            hub.flush_dirty_movement_snapshot(room.id).await,
+            MovementTickOutcome::Stop
+        );
     }
 
     #[tokio::test]

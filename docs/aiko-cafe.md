@@ -103,7 +103,14 @@ speed, activity rotation, inventory, Table Service claims, completion, rewards,
 Cafe Rush deadlines, order preparation, combo windows, player-count scaling,
 cosmetics, and allowed emotes. It validates browser origins, message rate, JSON
 shape, interaction distance, target ownership, and monotonic movement sequence
-numbers. Room chat is normalized and limited to 200 characters, rejects control
+numbers. The client sends movement immediately when walking starts, stops, or
+changes direction, sends continuous movement at most every 100 milliseconds,
+and sends nothing while idle. The API coalesces accepted movement into the
+latest room state and broadcasts a full snapshot at most every 100 milliseconds
+while movement is dirty. Immediate full-state updates clear pending movement,
+and clean rooms emit no movement snapshots. Each occupied room has one movement
+tick; missed ticks are skipped, and the tick stops when the room is removed.
+Room chat is normalized and limited to 200 characters, rejects control
 characters and common web-link prefixes, and allows at most five messages per
 connection in ten seconds. The client predicts local movement from the
 server-provided layout and interpolates remote snapshots; it contains no

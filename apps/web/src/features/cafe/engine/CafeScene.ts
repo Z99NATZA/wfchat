@@ -9,6 +9,7 @@ import type {
 } from "@/features/cafe/types";
 import { calculateCafeCameraFraming } from "@/features/cafe/engine/cafeCamera";
 import { resolveCafeMovement } from "@/features/cafe/engine/cafeCollision";
+import { CafeMovementCadence } from "@/features/cafe/engine/cafeMovementCadence";
 import {
 	CAFE_PLAYER_DISPLAY_SIZE,
 	CAFE_PLAYER_FRAME_SIZE,
@@ -71,8 +72,7 @@ export class CafeScene extends Phaser.Scene {
 	private inputEnabled = true;
 	private interactionTarget: string | null = null;
 	private movementSequence = 0;
-	private lastMovementSentAt = 0;
-	private lastMoving = false;
+	private readonly movementCadence = new CafeMovementCadence();
 	private hasLocalPosition = false;
 	private background?: Phaser.GameObjects.Image;
 	private aiko?: Phaser.GameObjects.Image;
@@ -157,12 +157,7 @@ export class CafeScene extends Phaser.Scene {
 		this.localVisual.direction = direction;
 		this.localVisual.moving = moving;
 
-		if (
-			this.inputEnabled &&
-			(time - this.lastMovementSentAt >= 80 || moving !== this.lastMoving)
-		) {
-			this.lastMovementSentAt = time;
-			this.lastMoving = moving;
+		if (this.inputEnabled && this.movementCadence.shouldSend(time, direction, moving)) {
 			this.movementSequence += 1;
 			this.callbacks.onMovement(
 				this.localVisual.container.x,
@@ -210,7 +205,17 @@ export class CafeScene extends Phaser.Scene {
 		this.syncKeyboardInput();
 		if (!enabled) {
 			this.virtualInput = { x: 0, y: 0 };
-			this.lastMoving = false;
+			if (this.movementCadence.markInputDisabled() && this.localVisual) {
+				this.localVisual.moving = false;
+				this.movementSequence += 1;
+				this.callbacks.onMovement(
+					this.localVisual.container.x,
+					this.localVisual.container.y,
+					this.localVisual.direction,
+					false,
+					this.movementSequence
+				);
+			}
 			this.changeInteractionTarget(null);
 		}
 	}
