@@ -2607,7 +2607,7 @@ dependencies = [
 
 [[package]]
 name = "wfchat-api"
-version = "0.3.4"
+version = "0.3.5"
 dependencies = [
  "axum",
  "base64",
