@@ -53,7 +53,8 @@ chat and is available at `/cafe` without login.
 
 The Phaser game loads only on `/cafe/rooms/:roomId`, so it is excluded from the
 initial chat bundle. Active rooms and gameplay simulation live in the API
-process; empty rooms are removed.
+process. Rooms that were never joined expire after 10 minutes; rooms remain
+available for reconnect for 2 minutes after the last player leaves.
 
 The Cafe uses `cafe-room-v1.png` as one background image in a fixed 1280x800
 world. The API-owned `cafe-room-v1` map layout defines the world bounds,
@@ -116,12 +117,30 @@ clean rooms emit no movement updates. Reliable events and dynamic snapshots use
 a bounded ordered channel; lag closes the socket with a retryable status so the
 client reconnects and obtains a fresh welcome instead of continuing from partial
 state. Each occupied room has one movement tick; missed ticks are skipped, and
-the tick stops when the room is removed.
+the tick stops when the room becomes empty. Rejoining during retention starts
+exactly one new tick. Cafe WebSocket frames and assembled messages are limited
+to 16 KiB; oversized messages close with status 1009, while reliable-channel
+lag closes with retryable status 1013.
+
 Room chat is normalized and limited to 200 characters, rejects control
 characters and common web-link prefixes, and allows at most five messages per
 connection in ten seconds. The client predicts local movement from the
 server-provided layout and interpolates remote snapshots; it contains no
 independent collider constants.
+
+Production admission permits 2 active Cafe sockets per session, 32 per
+resolved client IP, and 512 per API process. Capacity is reserved before the
+upgrade and released when the upgrade or socket ends. Actual room creation is
+limited in a shared 10-minute window to 5 per session, 30 per resolved IP, and
+300 per process; quick join consumes capacity only when it creates a room.
+Rejected HTTP requests return `429` with `Retry-After`. Forwarded IP addresses
+are honored only through the API's configured trusted-proxy boundary.
+
+The API sweeps Cafe rooms and expired creation-limit buckets every 30 seconds.
+It emits one structured Cafe aggregate every 60 seconds with room and socket
+counts, incoming and outgoing message totals, outgoing bytes, admission and
+message-rate rejections, and reliable-channel lag. It does not log individual
+movement updates.
 
 When the browser goes offline, gameplay input stops immediately. Controls
 resume only after a reconnected socket receives a fresh `welcome` snapshot.

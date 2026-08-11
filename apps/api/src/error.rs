@@ -26,6 +26,8 @@ pub enum ErrorReason {
     ImageUploadRate,
     ImageProcessingCapacity,
     ImageStorageLimit,
+    CafeSocketCapacity,
+    CafeRoomCreationRate,
 }
 
 #[derive(Debug, thiserror::Error)]

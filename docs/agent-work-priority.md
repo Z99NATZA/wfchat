@@ -4,72 +4,19 @@ Use this file as the first document to read before starting a new scoped agent t
 
 ## Active Scope
 
-Harden production Aiko Cafe realtime bandwidth, backpressure, and room/socket
-lifecycle boundaries. Deliver the work as three independently authorized
-implementation slices. Exclude localhost fallbacks, test-only runtime fixtures
-and behavior, Vite/HMR, `import.meta.env.DEV` paths such as collision debug
-rendering, and asset-format or compression work. The current implementation
-boundary is slice 2 only.
+No implementation scope is currently defined. Define the next concrete scope
+here before making repository changes; do not infer follow-up work from the
+completed Aiko Cafe slices.
 
 ## Required Read Order
 
 1. `docs/agent-work-priority.md`
-2. `docs/aiko-cafe.md`
-3. `docs/backend-architecture.md`
-4. `docs/frontend-architecture.md`
-5. `docs/lessons-learned/aiko-cafe.md`
+2. The owning current-behavior documents named by the next scope.
 
 ## Required Outcome
 
-Each standalone `ok impl` applies only to the slice explicitly agreed in the
-conversation. Finish and verify that slice, then stop; do not continue into the
-next slice without another explicit authorization.
-
-1. Reduce steady-state traffic without changing the Cafe protocol. Idle players
-   send no movement updates. Movement start, stop, and direction changes send
-   immediately; continuous movement sends at most 10 updates per second. Each
-   accepted movement marks its room dirty, and dirty movement state produces at
-   most 10 room snapshots per second instead of one snapshot per message. Rooms
-   without movement produce no movement snapshots. Join, leave, interaction,
-   activity, cosmetic, reward, and reconnect state remain immediate. Tick work
-   runs only while a room is occupied and ends when the room is removed.
-   Preserve heartbeat, authoritative validation, client prediction, gameplay,
-   and the existing full-snapshot protocol. Focused verification covers one
-   second of idle and continuous movement, immediate transitions, coalesced
-   multi-player updates, quiet clean rooms, tick shutdown, reconnects, and all
-   three Cafe activities.
-2. Reduce realtime payloads and isolate slow consumers. Replace movement-driven
-   full room snapshots with a `movement` server message containing a monotonic
-   room-state revision and the current `id`, `x`, `y`, `direction`, and `moving`
-   fields for every connected player. The complete movement batch is the latest
-   replaceable state, so a slow consumer can skip older batches without losing
-   another player's last position. Welcome, non-movement room snapshots, and
-   movement messages share the same monotonic room-state revision; the client
-   ignores any state older than the last revision it applied. `welcome` retains
-   the complete authoritative room and static map for initial join, reconnect,
-   and resynchronization. Subsequent `snapshot` messages retain authoritative
-   dynamic room, player, activity, and Aiko state but omit the static map; the
-   client merges them with the established map. Movement uses a latest-value
-   channel, while chat, reward, dialogue, emote, presence, activity, and dynamic
-   snapshots retain the bounded reliable event channel. Any reliable-channel
-   lag closes that Cafe socket; the existing bounded reconnect obtains a fresh
-   `welcome` instead of continuing with incomplete state. Preserve the Slice 1
-   100-millisecond movement tick, server authority, prediction, interpolation,
-   heartbeat, room capacity, and gameplay. Focused verification covers message
-   serialization, revision ordering across both channels, movement coalescing,
-   static-map retention and omission boundaries, reliable event ordering, lag
-   recovery, reconnect resynchronization, and all three Cafe activities.
-3. Bound production abuse and lifecycle growth: apply configurable active socket
-   and room-creation limits at session, resolved-IP, and process scopes; bound
-   WebSocket frame size; expire never-joined and inactive empty rooms; safely
-   release limits on disconnect and cleanup; and expose production-observable
-   room, connection, message-rate, lag, and outgoing-byte signals using the
-   repository's existing logging or telemetry patterns.
-
-Every slice includes focused tests for its changed boundaries and updates the
-owning current-behavior documentation. Preserve the eight-player room contract,
-guest/account identity, rewards, ephemeral room chat, origin validation, and
-the existing development-only behavior excluded above.
+No implementation outcome is currently authorized. Preserve current behavior
+until a new scoped priority and applicable standalone authorization are added.
 
 ## Authorization And Verification
 

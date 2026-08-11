@@ -1,25 +1,29 @@
 use std::{
     collections::{HashMap, VecDeque},
     future::Future,
+    net::SocketAddr,
     pin::Pin,
-    sync::Arc,
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        Arc, Mutex as StdMutex,
+    },
     time::{Duration, Instant},
 };
 
 #[cfg(test)]
 use std::{
-    sync::atomic::{AtomicUsize, Ordering},
+    sync::atomic::AtomicUsize,
     time::{SystemTime, UNIX_EPOCH},
 };
 
 use axum::{
     extract::{
         ws::{CloseFrame, Message, WebSocket, WebSocketUpgrade},
-        Path, Query, State,
+        ConnectInfo, Path, Query, State,
     },
     http::{
         header::{ORIGIN, SET_COOKIE},
-        HeaderMap, HeaderValue,
+        HeaderMap, HeaderValue, StatusCode,
     },
     response::Response,
     routing::{get, post},
@@ -32,7 +36,9 @@ use uuid::Uuid;
 
 use crate::{
     cafe_cosmetics::{cafe_cosmetic, CafeCosmeticDefinition, CAFE_COSMETICS},
-    error::{AppError, AppResult},
+    config::CafeSecurityConfig,
+    error::{AppError, AppResult, ErrorReason},
+    rate_limit::client_ip_from_request,
     session::{require_session, session_cookie},
     state::AppState,
     store::{OwnerScope, SessionRecord, UserKind},
@@ -52,6 +58,7 @@ const CAFE_RUSH_DURATION: Duration = Duration::from_secs(90);
 const CAFE_RUSH_COMBO_WINDOW: Duration = Duration::from_secs(15);
 const MAX_CAFE_PLAYER_NAME_CHARS: usize = 24;
 const CAFE_RESYNC_CLOSE_CODE: u16 = 1013;
+const CAFE_MESSAGE_TOO_BIG_CLOSE_CODE: u16 = 1009;
 const SERVICE_COUNTER_TARGET_ID: &str = "service-counter";
 const CAFE_MAP_LAYOUT: CafeMapLayout = CafeMapLayout {
     version: "cafe-room-v1",
@@ -120,11 +127,71 @@ pub fn router() -> Router<AppState> {
         .route("/cafe/cosmetics/equipped", post(equip_cafe_cosmetic))
 }
 
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub struct CafeHub {
     rooms: Arc<Mutex<HashMap<Uuid, CafeRoom>>>,
+    creation_gate: Arc<Mutex<()>>,
+    limits: Arc<CafeSecurityConfig>,
+    abuse: Arc<StdMutex<CafeAbuseState>>,
+    telemetry: Arc<CafeTelemetry>,
     #[cfg(test)]
     active_movement_ticks: Arc<AtomicUsize>,
+}
+
+#[derive(Default)]
+struct CafeAbuseState {
+    sockets_by_session: HashMap<Uuid, usize>,
+    sockets_by_ip: HashMap<String, usize>,
+    active_sockets: usize,
+    room_creation_buckets: HashMap<CafeCreationIdentity, VecDeque<Instant>>,
+}
+
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+enum CafeCreationIdentity {
+    Session(Uuid),
+    Ip(String),
+    Global,
+}
+
+#[derive(Default)]
+struct CafeTelemetry {
+    incoming_messages: AtomicU64,
+    outgoing_messages: AtomicU64,
+    outgoing_bytes: AtomicU64,
+    socket_rejections: AtomicU64,
+    room_creation_rejections: AtomicU64,
+    message_rate_rejections: AtomicU64,
+    reliable_lag: AtomicU64,
+}
+
+#[derive(Debug, Default, PartialEq, Eq)]
+pub struct CafeTelemetrySnapshot {
+    pub active_rooms: usize,
+    pub occupied_rooms: usize,
+    pub active_sockets: usize,
+    pub incoming_messages: u64,
+    pub outgoing_messages: u64,
+    pub outgoing_bytes: u64,
+    pub socket_rejections: u64,
+    pub room_creation_rejections: u64,
+    pub message_rate_rejections: u64,
+    pub reliable_lag: u64,
+}
+
+pub struct CafeSocketReservation {
+    hub: CafeHub,
+    session_id: Uuid,
+    resolved_ip: String,
+    released: bool,
+}
+
+impl Drop for CafeSocketReservation {
+    fn drop(&mut self) {
+        if !self.released {
+            self.hub.release_socket(self.session_id, &self.resolved_ip);
+            self.released = true;
+        }
+    }
 }
 
 struct CafeRoom {
@@ -139,6 +206,9 @@ struct CafeRoom {
     revision: u64,
     movement_dirty: bool,
     movement_tick_stop: Option<oneshot::Sender<()>>,
+    created_at: Instant,
+    ever_joined: bool,
+    empty_since: Option<Instant>,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -164,6 +234,7 @@ struct CafePlayer {
     equipped_cosmetic: Option<String>,
     last_sequence: u64,
     last_move_at: Instant,
+    connection_id: Uuid,
 }
 
 struct PlayerMovement {
@@ -678,7 +749,168 @@ fn cafe_rush_target(player_count: usize) -> u8 {
     .unwrap_or(CAFE_RUSH_ORDERS.len() as u8)
 }
 
+impl Default for CafeHub {
+    fn default() -> Self {
+        Self::new(CafeSecurityConfig::default())
+    }
+}
+
 impl CafeHub {
+    pub fn new(limits: CafeSecurityConfig) -> Self {
+        Self {
+            rooms: Arc::new(Mutex::new(HashMap::new())),
+            creation_gate: Arc::new(Mutex::new(())),
+            limits: Arc::new(limits),
+            abuse: Arc::new(StdMutex::new(CafeAbuseState::default())),
+            telemetry: Arc::new(CafeTelemetry::default()),
+            #[cfg(test)]
+            active_movement_ticks: Arc::new(AtomicUsize::new(0)),
+        }
+    }
+
+    pub fn reserve_socket(
+        &self,
+        session_id: Uuid,
+        resolved_ip: String,
+    ) -> AppResult<CafeSocketReservation> {
+        let mut abuse = self
+            .abuse
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let session_count = abuse
+            .sockets_by_session
+            .get(&session_id)
+            .copied()
+            .unwrap_or_default();
+        let ip_count = abuse
+            .sockets_by_ip
+            .get(&resolved_ip)
+            .copied()
+            .unwrap_or_default();
+        if session_count >= self.limits.max_sockets_per_session
+            || ip_count >= self.limits.max_sockets_per_ip
+            || abuse.active_sockets >= self.limits.max_sockets_global
+        {
+            self.telemetry
+                .socket_rejections
+                .fetch_add(1, Ordering::Relaxed);
+            return Err(AppError::reasoned(
+                StatusCode::TOO_MANY_REQUESTS,
+                "cafe socket capacity reached",
+                ErrorReason::CafeSocketCapacity,
+                Some(1),
+            ));
+        }
+        *abuse.sockets_by_session.entry(session_id).or_default() += 1;
+        *abuse.sockets_by_ip.entry(resolved_ip.clone()).or_default() += 1;
+        abuse.active_sockets += 1;
+        Ok(CafeSocketReservation {
+            hub: self.clone(),
+            session_id,
+            resolved_ip,
+            released: false,
+        })
+    }
+
+    fn release_socket(&self, session_id: Uuid, resolved_ip: &str) {
+        let mut abuse = self
+            .abuse
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        decrement_counter(&mut abuse.sockets_by_session, &session_id);
+        let resolved_ip = resolved_ip.to_owned();
+        decrement_counter(&mut abuse.sockets_by_ip, &resolved_ip);
+        abuse.active_sockets = abuse.active_sockets.saturating_sub(1);
+    }
+
+    async fn consume_room_creation(
+        &self,
+        session_id: Uuid,
+        resolved_ip: String,
+        now: Instant,
+    ) -> AppResult<()> {
+        let mut abuse = self
+            .abuse
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        prune_creation_buckets(&mut abuse, now, self.creation_window());
+        let identities = [
+            (
+                CafeCreationIdentity::Session(session_id),
+                self.limits.room_creations_per_session,
+            ),
+            (
+                CafeCreationIdentity::Ip(resolved_ip),
+                self.limits.room_creations_per_ip,
+            ),
+            (
+                CafeCreationIdentity::Global,
+                self.limits.room_creations_global,
+            ),
+        ];
+        if identities.iter().any(|(identity, limit)| {
+            abuse
+                .room_creation_buckets
+                .get(identity)
+                .is_some_and(|bucket| bucket.len() >= *limit as usize)
+        }) {
+            self.telemetry
+                .room_creation_rejections
+                .fetch_add(1, Ordering::Relaxed);
+            return Err(AppError::reasoned(
+                StatusCode::TOO_MANY_REQUESTS,
+                "cafe room creation limit reached",
+                ErrorReason::CafeRoomCreationRate,
+                Some(self.limits.room_creation_window_seconds),
+            ));
+        }
+        for (identity, _) in identities {
+            abuse
+                .room_creation_buckets
+                .entry(identity)
+                .or_default()
+                .push_back(now);
+        }
+        Ok(())
+    }
+
+    fn creation_window(&self) -> Duration {
+        Duration::from_secs(self.limits.room_creation_window_seconds)
+    }
+
+    pub async fn create_room_limited(
+        &self,
+        session_id: Uuid,
+        resolved_ip: String,
+        is_private: bool,
+    ) -> AppResult<CafeRoomSummary> {
+        let _gate = self.creation_gate.lock().await;
+        self.consume_room_creation(session_id, resolved_ip, Instant::now())
+            .await?;
+        Ok(self.create_room(is_private).await)
+    }
+
+    pub async fn quick_join_limited(
+        &self,
+        session_id: Uuid,
+        resolved_ip: String,
+    ) -> AppResult<CafeRoomSummary> {
+        let _gate = self.creation_gate.lock().await;
+        {
+            let rooms = self.rooms.lock().await;
+            if let Some(room) = rooms
+                .values()
+                .filter(|room| !room.is_private && room.players.len() < ROOM_CAPACITY)
+                .max_by_key(|room| room.players.len())
+            {
+                return Ok(room_summary(room));
+            }
+        }
+        self.consume_room_creation(session_id, resolved_ip, Instant::now())
+            .await?;
+        Ok(self.create_room(false).await)
+    }
+
     pub async fn list_public_rooms(&self) -> Vec<CafeRoomSummary> {
         let rooms = self.rooms.lock().await;
         let mut summaries = rooms
@@ -695,7 +927,7 @@ impl CafeHub {
         summaries
     }
 
-    pub async fn create_room(&self, is_private: bool) -> CafeRoomSummary {
+    async fn create_room(&self, is_private: bool) -> CafeRoomSummary {
         let mut rooms = self.rooms.lock().await;
         let room = new_room(is_private, &rooms);
         let summary = room_summary(&room);
@@ -703,7 +935,8 @@ impl CafeHub {
         summary
     }
 
-    pub async fn quick_join(&self) -> CafeRoomSummary {
+    #[cfg(test)]
+    async fn quick_join(&self) -> CafeRoomSummary {
         let mut rooms = self.rooms.lock().await;
         if let Some(room) = rooms
             .values()
@@ -737,7 +970,7 @@ impl CafeHub {
         self.rooms.lock().await.contains_key(&room_id)
     }
 
-    async fn join(&self, room_id: Uuid, player: CafePlayer) -> Result<CafeJoin, CafeJoinError> {
+    async fn join(&self, room_id: Uuid, mut player: CafePlayer) -> Result<CafeJoin, CafeJoinError> {
         let mut rooms = self.rooms.lock().await;
         let room = rooms.get_mut(&room_id).ok_or(CafeJoinError::RoomNotFound)?;
         if !room.players.contains_key(&player.id) && room.players.len() >= ROOM_CAPACITY {
@@ -748,9 +981,20 @@ impl CafeHub {
         let start_movement_tick = room.players.is_empty();
         let player_id = player.id;
         let player_name = player.name.clone();
+        if let Some(existing) = room.players.get(&player.id) {
+            player.x = existing.x;
+            player.y = existing.y;
+            player.direction = existing.direction;
+            player.moving = false;
+            player.carried_tea = existing.carried_tea;
+            player.carried_rush_ingredient_ids = existing.carried_rush_ingredient_ids.clone();
+            player.carried_order_id = existing.carried_order_id.clone();
+        }
         let receiver = room.sender.subscribe();
         let chat_history = room.chat_history.iter().cloned().collect();
         room.players.insert(player.id, player);
+        room.ever_joined = true;
+        room.empty_since = None;
         let revision = broadcast_room_snapshot(room);
         let snapshot = room_state(room);
         let movement_receiver = room.movement_sender.subscribe();
@@ -791,61 +1035,83 @@ impl CafeHub {
         Ok(joined)
     }
 
-    async fn leave(&self, room_id: Uuid, player_id: Uuid) {
+    async fn leave_for_connection(&self, room_id: Uuid, player_id: Uuid, connection_id: Uuid) {
         let mut rooms = self.rooms.lock().await;
-        let should_remove =
-            if let Some(room) = rooms.get_mut(&room_id) {
-                let player = room.players.remove(&player_id);
-                let departed_name = player.as_ref().map(|player| player.name.clone());
-                if let Some(player) = player {
-                    for ingredient_id in player.carried_rush_ingredient_ids {
-                        if let Some(ingredient) = room
-                            .activity
-                            .tea_leaves
-                            .iter_mut()
-                            .find(|ingredient| ingredient.id == ingredient_id)
-                        {
-                            ingredient.available = true;
-                        }
-                    }
-                    if let Some(order_id) = player.carried_order_id {
-                        if let Some(order) = room.activity.table_orders.iter_mut().find(|order| {
-                            order.id == order_id && order.claimed_by == Some(player_id)
-                        }) {
-                            order.status = CafeTableOrderStatus::Available;
-                            order.claimed_by = None;
-                        }
+        if let Some(room) = rooms.get_mut(&room_id) {
+            if room
+                .players
+                .get(&player_id)
+                .is_none_or(|player| player.connection_id != connection_id)
+            {
+                return;
+            }
+            let player = room.players.remove(&player_id);
+            let departed_name = player.as_ref().map(|player| player.name.clone());
+            if let Some(player) = player {
+                for ingredient_id in player.carried_rush_ingredient_ids {
+                    if let Some(ingredient) = room
+                        .activity
+                        .tea_leaves
+                        .iter_mut()
+                        .find(|ingredient| ingredient.id == ingredient_id)
+                    {
+                        ingredient.available = true;
                     }
                 }
-                if room.players.is_empty() {
-                    true
-                } else {
-                    broadcast_room_snapshot(room);
-                    if let Some(player_name) = departed_name {
-                        push_chat_event(
-                            room,
-                            CafeChatEvent {
-                                id: Uuid::new_v4(),
-                                kind: CafeChatEventKind::Left,
-                                player_id,
-                                player_name,
-                                text: None,
-                                created_at: Utc::now().timestamp_millis(),
-                            },
-                        );
+                if let Some(order_id) = player.carried_order_id {
+                    if let Some(order) =
+                        room.activity.table_orders.iter_mut().find(|order| {
+                            order.id == order_id && order.claimed_by == Some(player_id)
+                        })
+                    {
+                        order.status = CafeTableOrderStatus::Available;
+                        order.claimed_by = None;
                     }
-                    false
+                }
+            }
+            if room.players.is_empty() {
+                if let Some(player_name) = departed_name {
+                    push_left_event(room, player_id, player_name);
+                }
+                room.movement_dirty = false;
+                room.empty_since = Some(Instant::now());
+                if let Some(stop) = room.movement_tick_stop.take() {
+                    let _ = stop.send(());
                 }
             } else {
-                false
-            };
-
-        if should_remove {
-            rooms.remove(&room_id);
+                broadcast_room_snapshot(room);
+                if let Some(player_name) = departed_name {
+                    push_left_event(room, player_id, player_name);
+                }
+            }
         }
     }
 
-    async fn update_player(&self, room_id: Uuid, player_id: Uuid, movement: PlayerMovement) {
+    #[cfg(test)]
+    async fn leave(&self, room_id: Uuid, player_id: Uuid) {
+        if let Some(connection_id) = self.current_connection_id(room_id, player_id).await {
+            self.leave_for_connection(room_id, player_id, connection_id)
+                .await;
+        }
+    }
+
+    #[cfg(test)]
+    async fn current_connection_id(&self, room_id: Uuid, player_id: Uuid) -> Option<Uuid> {
+        self.rooms
+            .lock()
+            .await
+            .get(&room_id)
+            .and_then(|room| room.players.get(&player_id))
+            .map(|player| player.connection_id)
+    }
+
+    async fn update_player_for_connection(
+        &self,
+        room_id: Uuid,
+        player_id: Uuid,
+        connection_id: Uuid,
+        movement: PlayerMovement,
+    ) {
         let mut rooms = self.rooms.lock().await;
         let Some(room) = rooms.get_mut(&room_id) else {
             return;
@@ -853,6 +1119,9 @@ impl CafeHub {
         let Some(player) = room.players.get_mut(&player_id) else {
             return;
         };
+        if player.connection_id != connection_id {
+            return;
+        }
         if movement.sequence <= player.last_sequence
             || !movement.x.is_finite()
             || !movement.y.is_finite()
@@ -892,6 +1161,14 @@ impl CafeHub {
         room.movement_dirty = true;
     }
 
+    #[cfg(test)]
+    async fn update_player(&self, room_id: Uuid, player_id: Uuid, movement: PlayerMovement) {
+        if let Some(connection_id) = self.current_connection_id(room_id, player_id).await {
+            self.update_player_for_connection(room_id, player_id, connection_id, movement)
+                .await;
+        }
+    }
+
     async fn flush_dirty_movement_snapshot(&self, room_id: Uuid) -> MovementTickOutcome {
         let mut rooms = self.rooms.lock().await;
         let Some(room) = rooms.get_mut(&room_id) else {
@@ -924,6 +1201,7 @@ impl CafeHub {
             interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
             loop {
                 tokio::select! {
+                    biased;
                     _ = &mut stop_receiver => break,
                     _ = interval.tick() => {
                         if cafe.flush_dirty_movement_snapshot(room_id).await
@@ -944,7 +1222,105 @@ impl CafeHub {
         self.active_movement_ticks.load(Ordering::SeqCst)
     }
 
-    async fn emote(&self, room_id: Uuid, player_id: Uuid, emote: &str) {
+    pub async fn cleanup_expired(&self) {
+        self.cleanup_at(Instant::now()).await;
+    }
+
+    async fn cleanup_at(&self, now: Instant) -> usize {
+        let never_joined_ttl = Duration::from_secs(self.limits.never_joined_ttl_seconds);
+        let empty_ttl = Duration::from_secs(self.limits.empty_room_ttl_seconds);
+        let mut rooms = self.rooms.lock().await;
+        let expired = rooms
+            .iter()
+            .filter_map(|(room_id, room)| {
+                let expired = if room.players.is_empty() {
+                    if room.ever_joined {
+                        room.empty_since.is_some_and(|empty_since| {
+                            now.saturating_duration_since(empty_since) >= empty_ttl
+                        })
+                    } else {
+                        now.saturating_duration_since(room.created_at) >= never_joined_ttl
+                    }
+                } else {
+                    false
+                };
+                expired.then_some(*room_id)
+            })
+            .collect::<Vec<_>>();
+        for room_id in &expired {
+            if let Some(mut room) = rooms.remove(room_id) {
+                if let Some(stop) = room.movement_tick_stop.take() {
+                    let _ = stop.send(());
+                }
+            }
+        }
+        drop(rooms);
+        let mut abuse = self
+            .abuse
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        prune_creation_buckets(&mut abuse, now, self.creation_window());
+        expired.len()
+    }
+
+    pub async fn emit_telemetry(&self) {
+        let snapshot = self.telemetry_snapshot(true).await;
+        tracing::info!(
+            active_rooms = snapshot.active_rooms,
+            occupied_rooms = snapshot.occupied_rooms,
+            active_sockets = snapshot.active_sockets,
+            incoming_messages = snapshot.incoming_messages,
+            outgoing_messages = snapshot.outgoing_messages,
+            outgoing_bytes = snapshot.outgoing_bytes,
+            socket_rejections = snapshot.socket_rejections,
+            room_creation_rejections = snapshot.room_creation_rejections,
+            message_rate_rejections = snapshot.message_rate_rejections,
+            reliable_lag = snapshot.reliable_lag,
+            "cafe aggregate telemetry"
+        );
+    }
+
+    async fn telemetry_snapshot(&self, reset: bool) -> CafeTelemetrySnapshot {
+        let rooms = self.rooms.lock().await;
+        let active_rooms = rooms.len();
+        let occupied_rooms = rooms
+            .values()
+            .filter(|room| !room.players.is_empty())
+            .count();
+        drop(rooms);
+        let active_sockets = self
+            .abuse
+            .lock()
+            .map(|abuse| abuse.active_sockets)
+            .unwrap_or_default();
+        let load = |counter: &AtomicU64| {
+            if reset {
+                counter.swap(0, Ordering::Relaxed)
+            } else {
+                counter.load(Ordering::Relaxed)
+            }
+        };
+        CafeTelemetrySnapshot {
+            active_rooms,
+            occupied_rooms,
+            active_sockets,
+            incoming_messages: load(&self.telemetry.incoming_messages),
+            outgoing_messages: load(&self.telemetry.outgoing_messages),
+            outgoing_bytes: load(&self.telemetry.outgoing_bytes),
+            socket_rejections: load(&self.telemetry.socket_rejections),
+            room_creation_rejections: load(&self.telemetry.room_creation_rejections),
+            message_rate_rejections: load(&self.telemetry.message_rate_rejections),
+            reliable_lag: load(&self.telemetry.reliable_lag),
+        }
+    }
+
+    async fn emote_for_connection(
+        &self,
+        room_id: Uuid,
+        player_id: Uuid,
+        connection_id: Uuid,
+        emote: &str,
+    ) {
         const ALLOWED: &[&str] = &["wave", "heart", "happy", "tea"];
         if !ALLOWED.contains(&emote) {
             return;
@@ -953,7 +1329,11 @@ impl CafeHub {
         let Some(room) = rooms.get(&room_id) else {
             return;
         };
-        if room.players.contains_key(&player_id) {
+        if room
+            .players
+            .get(&player_id)
+            .is_some_and(|player| player.connection_id == connection_id)
+        {
             let _ = room.sender.send(CafeServerMessage::Emote {
                 player_id,
                 emote: emote.to_owned(),
@@ -961,10 +1341,11 @@ impl CafeHub {
         }
     }
 
-    async fn chat(
+    async fn chat_for_connection(
         &self,
         room_id: Uuid,
         player_id: Uuid,
+        connection_id: Uuid,
         text: &str,
     ) -> Result<(), CafeChatErrorCode> {
         let text = normalize_cafe_chat_message(text)?;
@@ -975,6 +1356,9 @@ impl CafeHub {
         let Some(player) = room.players.get(&player_id) else {
             return Ok(());
         };
+        if player.connection_id != connection_id {
+            return Ok(());
+        }
         let event = CafeChatEvent {
             id: Uuid::new_v4(),
             kind: CafeChatEventKind::Message,
@@ -987,10 +1371,25 @@ impl CafeHub {
         Ok(())
     }
 
-    async fn interact(
+    #[cfg(test)]
+    async fn chat(
         &self,
         room_id: Uuid,
         player_id: Uuid,
+        text: &str,
+    ) -> Result<(), CafeChatErrorCode> {
+        let Some(connection_id) = self.current_connection_id(room_id, player_id).await else {
+            return Ok(());
+        };
+        self.chat_for_connection(room_id, player_id, connection_id, text)
+            .await
+    }
+
+    async fn interact_for_connection(
+        &self,
+        room_id: Uuid,
+        player_id: Uuid,
+        connection_id: Uuid,
         target_id: &str,
     ) -> CafeInteractionResult {
         let mut rooms = self.rooms.lock().await;
@@ -1000,6 +1399,9 @@ impl CafeHub {
         let Some(player) = room.players.get(&player_id) else {
             return CafeInteractionResult::none();
         };
+        if player.connection_id != connection_id {
+            return CafeInteractionResult::none();
+        }
         let player_position = (player.x, player.y);
         let aiko = cafe_map_interaction_target("aiko");
 
@@ -1111,6 +1513,20 @@ impl CafeHub {
             awarded_owners,
             completed_round,
         }
+    }
+
+    #[cfg(test)]
+    async fn interact(
+        &self,
+        room_id: Uuid,
+        player_id: Uuid,
+        target_id: &str,
+    ) -> CafeInteractionResult {
+        let Some(connection_id) = self.current_connection_id(room_id, player_id).await else {
+            return CafeInteractionResult::none();
+        };
+        self.interact_for_connection(room_id, player_id, connection_id, target_id)
+            .await
     }
 
     fn start_next_round(
@@ -1472,27 +1888,37 @@ async fn list_rooms(
 
 async fn create_room(
     State(state): State<AppState>,
+    ConnectInfo(peer_addr): ConnectInfo<SocketAddr>,
     headers: HeaderMap,
     Json(payload): Json<CreateRoomRequest>,
 ) -> AppResult<(HeaderMap, Json<CafeRoomResponse>)> {
-    let (_, response_headers) = ensure_cafe_session(&state, &headers).await?;
+    let (session, response_headers) = ensure_cafe_session(&state, &headers).await?;
+    let resolved_ip = resolved_cafe_ip(&state, &headers, peer_addr);
     Ok((
         response_headers,
         Json(CafeRoomResponse {
-            room: state.cafe.create_room(payload.is_private).await,
+            room: state
+                .cafe
+                .create_room_limited(session.id, resolved_ip, payload.is_private)
+                .await?,
         }),
     ))
 }
 
 async fn quick_join(
     State(state): State<AppState>,
+    ConnectInfo(peer_addr): ConnectInfo<SocketAddr>,
     headers: HeaderMap,
 ) -> AppResult<(HeaderMap, Json<CafeRoomResponse>)> {
-    let (_, response_headers) = ensure_cafe_session(&state, &headers).await?;
+    let (session, response_headers) = ensure_cafe_session(&state, &headers).await?;
+    let resolved_ip = resolved_cafe_ip(&state, &headers, peer_addr);
     Ok((
         response_headers,
         Json(CafeRoomResponse {
-            room: state.cafe.quick_join().await,
+            room: state
+                .cafe
+                .quick_join_limited(session.id, resolved_ip)
+                .await?,
         }),
     ))
 }
@@ -1552,12 +1978,15 @@ async fn cafe_socket(
     Path(room_id): Path<Uuid>,
     Query(query): Query<CafeSocketQuery>,
     State(state): State<AppState>,
+    ConnectInfo(peer_addr): ConnectInfo<SocketAddr>,
     headers: HeaderMap,
 ) -> AppResult<Response> {
     if !is_allowed_websocket_origin(&headers, &state.config.frontend_origin) {
         return Err(AppError::Forbidden);
     }
     let (session, response_headers) = ensure_cafe_session(&state, &headers).await?;
+    let resolved_ip = resolved_cafe_ip(&state, &headers, peer_addr);
+    let reservation = state.cafe.reserve_socket(session.id, resolved_ip)?;
     let player_name = cafe_display_name(&state, &session, query.nickname.as_deref()).await?;
     let progress = state
         .store
@@ -1565,13 +1994,27 @@ async fn cafe_socket(
         .await?;
     let player = new_player(&session, player_name, progress.equipped_cosmetic);
     let initial_stars = progress.cafe_stars;
-    let mut response = ws.on_upgrade(move |socket| {
-        handle_cafe_socket(socket, state, room_id, player, initial_stars)
-    });
+    let max_bytes = state.config.security.cafe.websocket_max_bytes;
+    let mut response = ws
+        .max_frame_size(max_bytes)
+        .max_message_size(max_bytes)
+        .on_upgrade(move |socket| {
+            handle_cafe_socket(socket, state, room_id, player, initial_stars, reservation)
+        });
     if let Some(cookie) = response_headers.get(SET_COOKIE).cloned() {
         response.headers_mut().insert(SET_COOKIE, cookie);
     }
     Ok(response)
+}
+
+fn resolved_cafe_ip(state: &AppState, headers: &HeaderMap, peer_addr: SocketAddr) -> String {
+    client_ip_from_request(
+        headers,
+        peer_addr.ip(),
+        state.config.security.trust_proxy_headers,
+        &state.config.security.trusted_proxy_cidrs,
+    )
+    .to_string()
 }
 
 fn is_allowed_websocket_origin(headers: &HeaderMap, configured_origins: &str) -> bool {
@@ -1593,8 +2036,10 @@ async fn handle_cafe_socket(
     room_id: Uuid,
     player: CafePlayer,
     initial_stars: u32,
+    _reservation: CafeSocketReservation,
 ) {
     let player_id = player.id;
+    let connection_id = player.connection_id;
     let mut joined = match state.cafe.join(room_id, player).await {
         Ok(joined) => joined,
         Err(error) => {
@@ -1606,6 +2051,7 @@ async fn handle_cafe_socket(
             };
             send_socket_message(
                 &mut socket,
+                &state.cafe,
                 &CafeServerMessage::Error {
                     code,
                     message: message.to_owned(),
@@ -1618,6 +2064,7 @@ async fn handle_cafe_socket(
 
     if !send_socket_message(
         &mut socket,
+        &state.cafe,
         &CafeServerMessage::Welcome {
             self_player_id: player_id,
             cafe_stars: initial_stars,
@@ -1628,7 +2075,10 @@ async fn handle_cafe_socket(
     )
     .await
     {
-        state.cafe.leave(room_id, player_id).await;
+        state
+            .cafe
+            .leave_for_connection(room_id, player_id, connection_id)
+            .await;
         return;
     }
 
@@ -1643,11 +2093,12 @@ async fn handle_cafe_socket(
             ) => {
                 match event {
                     Ok(event) => {
-                        if !send_socket_message(&mut socket, &event).await {
+                        if !send_socket_message(&mut socket, &state.cafe, &event).await {
                             break;
                         }
                     }
                     Err(OutboundRoomError::ReliableLagged) => {
+                        state.cafe.telemetry.reliable_lag.fetch_add(1, Ordering::Relaxed);
                         let _ = socket
                             .send(Message::Close(Some(cafe_resync_close_frame())))
                             .await;
@@ -1657,14 +2108,37 @@ async fn handle_cafe_socket(
                 }
             }
             incoming = socket.recv() => {
-                let Some(Ok(message)) = incoming else {
-                    break;
+                let Some(incoming) = incoming else { break; };
+                let message = match incoming {
+                    Ok(message) => message,
+                    Err(error) => {
+                        if error.to_string().to_ascii_lowercase().contains("too long") {
+                            let _ = socket.send(Message::Close(Some(cafe_message_too_big_close_frame()))).await;
+                        }
+                        break;
+                    }
                 };
+                state.cafe.telemetry.incoming_messages.fetch_add(1, Ordering::Relaxed);
+                if cafe_message_exceeds_limit(
+                    &message,
+                    state.config.security.cafe.websocket_max_bytes,
+                ) {
+                    let _ = socket
+                        .send(Message::Close(Some(cafe_message_too_big_close_frame())))
+                        .await;
+                    break;
+                }
                 match message {
                     Message::Text(text) => {
                         if !accept_message(&mut recent_messages) {
+                            state
+                                .cafe
+                                .telemetry
+                                .message_rate_rejections
+                                .fetch_add(1, Ordering::Relaxed);
                             let _ = send_socket_message(
                                 &mut socket,
+                                &state.cafe,
                                 &CafeServerMessage::Error {
                                     code: CafeErrorCode::RateLimited,
                                     message: "Too many cafe messages".to_owned(),
@@ -1677,7 +2151,7 @@ async fn handle_cafe_socket(
                         };
                         match message {
                             CafeClientMessage::Move { x, y, direction, moving, sequence } => {
-                                state.cafe.update_player(room_id, player_id, PlayerMovement {
+                                state.cafe.update_player_for_connection(room_id, player_id, connection_id, PlayerMovement {
                                     x,
                                     y,
                                     direction,
@@ -1686,7 +2160,7 @@ async fn handle_cafe_socket(
                                 }).await;
                             }
                             CafeClientMessage::Interact { target_id } => {
-                                let result = state.cafe.interact(room_id, player_id, &target_id).await;
+                                let result = state.cafe.interact_for_connection(room_id, player_id, connection_id, &target_id).await;
                                 if let Some(completed_round) = result.completed_round {
                                     let cafe = state.cafe.clone();
                                     tokio::spawn(async move {
@@ -1711,23 +2185,32 @@ async fn handle_cafe_socket(
                                 }
                             }
                             CafeClientMessage::Emote { emote } => {
-                                state.cafe.emote(room_id, player_id, &emote).await;
+                                state.cafe.emote_for_connection(room_id, player_id, connection_id, &emote).await;
                             }
                             CafeClientMessage::Chat { text } => {
-                                let result = if accept_chat_message(&mut recent_chat_messages) {
-                                    state.cafe.chat(room_id, player_id, &text).await
+                                let chat_allowed = accept_chat_message(&mut recent_chat_messages);
+                                if !chat_allowed {
+                                    state
+                                        .cafe
+                                        .telemetry
+                                        .message_rate_rejections
+                                        .fetch_add(1, Ordering::Relaxed);
+                                }
+                                let result = if chat_allowed {
+                                    state.cafe.chat_for_connection(room_id, player_id, connection_id, &text).await
                                 } else {
                                     Err(CafeChatErrorCode::RateLimited)
                                 };
                                 if let Err(code) = result {
                                     let _ = send_socket_message(
                                         &mut socket,
+                                        &state.cafe,
                                         &CafeServerMessage::ChatError { code },
                                     ).await;
                                 }
                             }
                             CafeClientMessage::Ping => {
-                                if !send_socket_message(&mut socket, &CafeServerMessage::Pong).await {
+                                if !send_socket_message(&mut socket, &state.cafe, &CafeServerMessage::Pong).await {
                                     break;
                                 }
                             }
@@ -1748,7 +2231,10 @@ async fn handle_cafe_socket(
         }
     }
 
-    state.cafe.leave(room_id, player_id).await;
+    state
+        .cafe
+        .leave_for_connection(room_id, player_id, connection_id)
+        .await;
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -1761,6 +2247,21 @@ fn cafe_resync_close_frame() -> CloseFrame {
     CloseFrame {
         code: CAFE_RESYNC_CLOSE_CODE,
         reason: "cafe state resynchronization required".into(),
+    }
+}
+
+fn cafe_message_too_big_close_frame() -> CloseFrame {
+    CloseFrame {
+        code: CAFE_MESSAGE_TOO_BIG_CLOSE_CODE,
+        reason: "cafe message exceeds configured size".into(),
+    }
+}
+
+fn cafe_message_exceeds_limit(message: &Message, max_bytes: usize) -> bool {
+    match message {
+        Message::Text(text) => text.len() > max_bytes,
+        Message::Binary(bytes) => bytes.len() > max_bytes,
+        _ => false,
     }
 }
 
@@ -1790,11 +2291,25 @@ async fn receive_outbound_room_message(
     }
 }
 
-async fn send_socket_message(socket: &mut WebSocket, message: &CafeServerMessage) -> bool {
+async fn send_socket_message(
+    socket: &mut WebSocket,
+    cafe: &CafeHub,
+    message: &CafeServerMessage,
+) -> bool {
     let Ok(text) = serde_json::to_string(message) else {
         return false;
     };
-    socket.send(Message::Text(text.into())).await.is_ok()
+    let bytes = u64::try_from(text.len()).unwrap_or(u64::MAX);
+    let sent = socket.send(Message::Text(text.into())).await.is_ok();
+    if sent {
+        cafe.telemetry
+            .outgoing_messages
+            .fetch_add(1, Ordering::Relaxed);
+        cafe.telemetry
+            .outgoing_bytes
+            .fetch_add(bytes, Ordering::Relaxed);
+    }
+    sent
 }
 
 fn accept_message(recent_messages: &mut VecDeque<Instant>) -> bool {
@@ -1854,6 +2369,20 @@ fn push_chat_event(room: &mut CafeRoom, event: CafeChatEvent) {
         room.chat_history.pop_front();
     }
     let _ = room.sender.send(CafeServerMessage::ChatEvent { event });
+}
+
+fn push_left_event(room: &mut CafeRoom, player_id: Uuid, player_name: String) {
+    push_chat_event(
+        room,
+        CafeChatEvent {
+            id: Uuid::new_v4(),
+            kind: CafeChatEventKind::Left,
+            player_id,
+            player_name,
+            text: None,
+            created_at: Utc::now().timestamp_millis(),
+        },
+    );
 }
 
 async fn ensure_cafe_session(
@@ -1933,6 +2462,7 @@ fn new_player(
         equipped_cosmetic,
         last_sequence: 0,
         last_move_at: Instant::now(),
+        connection_id: Uuid::new_v4(),
     }
 }
 
@@ -1958,7 +2488,37 @@ fn new_room(is_private: bool, rooms: &HashMap<Uuid, CafeRoom>) -> CafeRoom {
         revision: 0,
         movement_dirty: false,
         movement_tick_stop: None,
+        created_at: Instant::now(),
+        ever_joined: false,
+        empty_since: None,
     }
+}
+
+fn decrement_counter<K>(counters: &mut HashMap<K, usize>, key: &K)
+where
+    K: Eq + std::hash::Hash,
+{
+    let remove = if let Some(count) = counters.get_mut(key) {
+        *count = count.saturating_sub(1);
+        *count == 0
+    } else {
+        false
+    };
+    if remove {
+        counters.remove(key);
+    }
+}
+
+fn prune_creation_buckets(state: &mut CafeAbuseState, now: Instant, window: Duration) {
+    state.room_creation_buckets.retain(|_, bucket| {
+        while bucket
+            .front()
+            .is_some_and(|created_at| now.saturating_duration_since(*created_at) >= window)
+        {
+            bucket.pop_front();
+        }
+        !bucket.is_empty()
+    });
 }
 
 fn unique_invite_code(seed: Uuid, rooms: &HashMap<Uuid, CafeRoom>) -> String {
@@ -2707,7 +3267,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn movement_tick_stops_when_its_room_is_removed() {
+    async fn movement_tick_stops_while_room_is_retained_empty() {
         let hub = CafeHub::default();
         let room = hub.create_room(false).await;
         let session = guest();
@@ -2726,7 +3286,9 @@ mod tests {
             }
         })
         .await
-        .expect("movement tick should stop when the room is removed");
+        .expect("movement tick should stop while the room is empty");
+
+        assert!(hub.contains_room(room.id).await);
 
         assert_eq!(
             hub.flush_dirty_movement_snapshot(room.id).await,
@@ -3113,7 +3675,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn full_rooms_are_distinct_and_empty_rooms_are_removed() {
+    async fn full_rooms_are_distinct_and_empty_rooms_are_retained_for_reconnect() {
         let hub = CafeHub::default();
         let room = hub.create_room(true).await;
         let mut sessions = Vec::new();
@@ -3142,11 +3704,429 @@ mod tests {
         for session in sessions {
             hub.leave(room.id, session.id).await;
         }
+        assert!(hub.contains_room(room.id).await);
+        let reusable = hub
+            .find_by_invite_code(&room.invite_code)
+            .await
+            .expect("empty room should remain available during reconnect grace");
+        assert_eq!(reusable.player_count, 0);
+    }
+
+    #[test]
+    fn socket_reservations_are_atomic_and_release_every_identity() {
+        let mut limits = CafeSecurityConfig::default();
+        limits.max_sockets_per_session = 2;
+        limits.max_sockets_per_ip = 3;
+        limits.max_sockets_global = 3;
+        let hub = CafeHub::new(limits);
+        let session = Uuid::new_v4();
+        let ip = "198.51.100.8".to_owned();
+        let first = hub.reserve_socket(session, ip.clone()).unwrap();
+        let second = hub.reserve_socket(session, ip.clone()).unwrap();
+
+        let rejected = hub
+            .reserve_socket(session, ip.clone())
+            .err()
+            .expect("third same-session socket must be rejected");
+        assert_eq!(rejected.reason(), Some(ErrorReason::CafeSocketCapacity));
+        let other = hub
+            .reserve_socket(Uuid::new_v4(), ip.clone())
+            .expect("failed session admission must not consume IP/global capacity");
+        assert!(hub
+            .reserve_socket(Uuid::new_v4(), "203.0.113.4".to_owned())
+            .is_err());
+
+        drop(first);
+        let replacement = hub
+            .reserve_socket(session, ip)
+            .expect("dropping a socket must release all counters");
+        drop((second, other, replacement));
+        let abuse = hub.abuse.lock().unwrap();
+        assert_eq!(abuse.active_sockets, 0);
+        assert!(abuse.sockets_by_session.is_empty());
+        assert!(abuse.sockets_by_ip.is_empty());
+    }
+
+    #[test]
+    fn socket_ip_and_process_limits_are_independent() {
+        let mut ip_limits = CafeSecurityConfig::default();
+        ip_limits.max_sockets_per_session = 10;
+        ip_limits.max_sockets_per_ip = 2;
+        ip_limits.max_sockets_global = 10;
+        let ip_hub = CafeHub::new(ip_limits);
+        let shared_ip = "198.51.100.20".to_owned();
+        let first = ip_hub
+            .reserve_socket(Uuid::new_v4(), shared_ip.clone())
+            .unwrap();
+        let second = ip_hub
+            .reserve_socket(Uuid::new_v4(), shared_ip.clone())
+            .unwrap();
+        let rejected_session = Uuid::new_v4();
+        assert!(ip_hub.reserve_socket(rejected_session, shared_ip).is_err());
+        let other_ip = ip_hub
+            .reserve_socket(rejected_session, "203.0.113.20".to_owned())
+            .expect("an IP rejection must not consume process capacity");
+        drop((first, second, other_ip));
+
+        let mut global_limits = CafeSecurityConfig::default();
+        global_limits.max_sockets_per_session = 10;
+        global_limits.max_sockets_per_ip = 10;
+        global_limits.max_sockets_global = 2;
+        let global_hub = CafeHub::new(global_limits);
+        let first = global_hub
+            .reserve_socket(Uuid::new_v4(), "192.0.2.1".to_owned())
+            .unwrap();
+        let second = global_hub
+            .reserve_socket(Uuid::new_v4(), "192.0.2.2".to_owned())
+            .unwrap();
+        assert!(global_hub
+            .reserve_socket(Uuid::new_v4(), "192.0.2.3".to_owned())
+            .is_err());
+        assert_eq!(global_hub.abuse.lock().unwrap().active_sockets, 2);
+        drop((first, second));
+    }
+
+    #[tokio::test]
+    async fn quick_join_reuse_does_not_consume_room_creation_quota() {
+        let mut limits = CafeSecurityConfig::default();
+        limits.room_creations_per_session = 1;
+        let hub = CafeHub::new(limits);
+        let session = Uuid::new_v4();
+        let ip = "198.51.100.9".to_owned();
+        let created = hub.quick_join_limited(session, ip.clone()).await.unwrap();
+        let reused = hub
+            .quick_join_limited(session, ip.clone())
+            .await
+            .expect("reusing an existing public room must not consume quota");
+        assert_eq!(reused.id, created.id);
+        let rejected = hub
+            .create_room_limited(session, ip, true)
+            .await
+            .err()
+            .expect("a subsequent actual creation must hit the consumed quota");
+        assert_eq!(rejected.reason(), Some(ErrorReason::CafeRoomCreationRate));
+        assert_eq!(rejected.retry_after_seconds(), Some(600));
+    }
+
+    #[tokio::test]
+    async fn room_creation_window_expires_and_cleanup_prunes_buckets() {
+        let mut limits = CafeSecurityConfig::default();
+        limits.room_creations_per_session = 1;
+        limits.room_creations_per_ip = 1;
+        limits.room_creations_global = 1;
+        let hub = CafeHub::new(limits);
+        let now = Instant::now();
+        let session = Uuid::new_v4();
+        hub.consume_room_creation(session, "192.0.2.1".to_owned(), now)
+            .await
+            .unwrap();
+        assert!(hub
+            .consume_room_creation(
+                session,
+                "192.0.2.1".to_owned(),
+                now + Duration::from_secs(599),
+            )
+            .await
+            .is_err());
+        hub.cleanup_at(now + Duration::from_secs(600)).await;
+        assert!(hub.abuse.lock().unwrap().room_creation_buckets.is_empty());
+        hub.consume_room_creation(
+            session,
+            "192.0.2.1".to_owned(),
+            now + Duration::from_secs(600),
+        )
+        .await
+        .expect("quota must reopen only after the complete ten-minute window");
+    }
+
+    #[tokio::test]
+    async fn room_creation_ip_and_process_limits_are_independent_and_atomic() {
+        let now = Instant::now();
+        let mut ip_limits = CafeSecurityConfig::default();
+        ip_limits.room_creations_per_session = 10;
+        ip_limits.room_creations_per_ip = 2;
+        ip_limits.room_creations_global = 10;
+        let ip_hub = CafeHub::new(ip_limits);
+        let shared_ip = "198.51.100.30".to_owned();
+        ip_hub
+            .consume_room_creation(Uuid::new_v4(), shared_ip.clone(), now)
+            .await
+            .unwrap();
+        ip_hub
+            .consume_room_creation(Uuid::new_v4(), shared_ip.clone(), now)
+            .await
+            .unwrap();
+        let rejected_session = Uuid::new_v4();
+        let error = ip_hub
+            .consume_room_creation(rejected_session, shared_ip, now)
+            .await
+            .err()
+            .unwrap();
+        assert_eq!(error.reason(), Some(ErrorReason::CafeRoomCreationRate));
+        let response = axum::response::IntoResponse::into_response(error);
+        assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
+        assert_eq!(response.headers().get("retry-after").unwrap(), "600");
+        ip_hub
+            .consume_room_creation(rejected_session, "203.0.113.30".to_owned(), now)
+            .await
+            .expect("an IP rejection must not consume session or process quota");
+
+        let mut global_limits = CafeSecurityConfig::default();
+        global_limits.room_creations_per_session = 10;
+        global_limits.room_creations_per_ip = 10;
+        global_limits.room_creations_global = 2;
+        let global_hub = CafeHub::new(global_limits);
+        for ip in ["192.0.2.10", "192.0.2.11"] {
+            global_hub
+                .consume_room_creation(Uuid::new_v4(), ip.to_owned(), now)
+                .await
+                .unwrap();
+        }
+        assert!(global_hub
+            .consume_room_creation(Uuid::new_v4(), "192.0.2.12".to_owned(), now)
+            .await
+            .is_err());
+        let abuse = global_hub.abuse.lock().unwrap();
+        assert_eq!(
+            abuse
+                .room_creation_buckets
+                .get(&CafeCreationIdentity::Global)
+                .unwrap()
+                .len(),
+            2,
+            "rejected atomic admission must not increment the global bucket"
+        );
+    }
+
+    #[tokio::test]
+    async fn room_expiry_and_reconnect_connection_ownership_are_bounded() {
+        let hub = CafeHub::default();
+        let never_joined = hub.create_room(false).await;
+        let now = Instant::now();
+        assert_eq!(hub.cleanup_at(now + Duration::from_secs(599)).await, 0);
+        assert!(hub.contains_room(never_joined.id).await);
+        assert_eq!(hub.cleanup_at(now + Duration::from_secs(601)).await, 1);
+
+        let room = hub.create_room(false).await;
+        let session = guest();
+        let old_player = new_player(&session, "Guest OLD".to_owned(), None);
+        let old_connection = old_player.connection_id;
+        hub.join(room.id, old_player).await.unwrap();
+        let replacement = new_player(&session, "Guest NEW".to_owned(), None);
+        let replacement_connection = replacement.connection_id;
+        hub.join(room.id, replacement).await.unwrap();
+        hub.leave_for_connection(room.id, session.id, old_connection)
+            .await;
+        assert_eq!(hub.list_public_rooms().await[0].player_count, 1);
+
+        hub.leave_for_connection(room.id, session.id, replacement_connection)
+            .await;
+        {
+            let rooms = hub.rooms.lock().await;
+            let retained = rooms.get(&room.id).unwrap();
+            assert_eq!(
+                retained.chat_history.back().map(|event| event.kind),
+                Some(CafeChatEventKind::Left),
+                "the last departure must remain in reconnect history"
+            );
+        }
+        tokio::time::timeout(Duration::from_secs(1), async {
+            while hub.active_movement_tick_count() != 0 {
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .unwrap();
+        assert!(hub.contains_room(room.id).await);
+
+        let rejoin = new_player(&session, "Guest RETURN".to_owned(), None);
+        let rejoin_connection = rejoin.connection_id;
+        hub.join(room.id, rejoin).await.unwrap();
+        assert_eq!(hub.active_movement_tick_count(), 1);
+        assert_eq!(
+            hub.cleanup_at(Instant::now() + Duration::from_secs(10_000))
+                .await,
+            0,
+            "occupied rooms must never expire"
+        );
+        hub.leave_for_connection(room.id, session.id, rejoin_connection)
+            .await;
+        assert_eq!(
+            hub.cleanup_at(Instant::now() + Duration::from_secs(121))
+                .await,
+            1
+        );
         assert!(!hub.contains_room(room.id).await);
-        assert!(matches!(
-            hub.find_by_invite_code(&room.invite_code).await,
-            Err(CafeJoinError::RoomNotFound)
+    }
+
+    #[tokio::test]
+    async fn reconnect_replacement_preserves_authoritative_carried_and_claimed_work() {
+        let hub = CafeHub::default();
+        let room = hub.create_room(false).await;
+        let session = guest();
+        let old_player = new_player(&session, "Guest OLD".to_owned(), None);
+        let old_connection = old_player.connection_id;
+        hub.join(room.id, old_player).await.unwrap();
+        let (ingredient_id, order_id) = {
+            let mut rooms = hub.rooms.lock().await;
+            let room = rooms.get_mut(&room.id).unwrap();
+            room.activity = CafeActivity::cafe_rush(3, 1);
+            let ingredient_id = room.activity.tea_leaves[0].id.clone();
+            room.activity.tea_leaves[0].available = false;
+            let order_id = room.activity.table_orders[0].id.clone();
+            room.activity.table_orders[0].status = CafeTableOrderStatus::Claimed;
+            room.activity.table_orders[0].claimed_by = Some(session.id);
+            let player = room.players.get_mut(&session.id).unwrap();
+            player.x = 700.0;
+            player.y = 700.0;
+            player.direction = Direction::Left;
+            player.moving = true;
+            player.carried_tea = 1;
+            player
+                .carried_rush_ingredient_ids
+                .push(ingredient_id.clone());
+            player.carried_order_id = Some(order_id.clone());
+            player.last_sequence = 99;
+            (ingredient_id, order_id)
+        };
+
+        let replacement = new_player(&session, "Guest NEW".to_owned(), None);
+        let replacement_connection = replacement.connection_id;
+        hub.join(room.id, replacement).await.unwrap();
+        hub.leave_for_connection(room.id, session.id, old_connection)
+            .await;
+        {
+            let rooms = hub.rooms.lock().await;
+            let room = rooms.get(&room.id).unwrap();
+            let player = room.players.get(&session.id).unwrap();
+            assert_eq!(player.connection_id, replacement_connection);
+            assert_eq!((player.x, player.y), (700.0, 700.0));
+            assert_eq!(player.direction, Direction::Left);
+            assert!(!player.moving);
+            assert_eq!(player.carried_tea, 1);
+            assert_eq!(player.carried_rush_ingredient_ids, [ingredient_id.clone()]);
+            assert_eq!(player.carried_order_id.as_deref(), Some(order_id.as_str()));
+            assert_eq!(player.last_sequence, 0);
+            assert!(room
+                .activity
+                .table_orders
+                .iter()
+                .find(|order| order.id == order_id)
+                .is_some_and(|order| order.claimed_by == Some(session.id)));
+        }
+
+        hub.update_player_for_connection(
+            room.id,
+            session.id,
+            replacement_connection,
+            PlayerMovement {
+                x: 701.0,
+                y: 700.0,
+                direction: Direction::Right,
+                moving: true,
+                sequence: 1,
+            },
+        )
+        .await;
+        assert_eq!(
+            hub.rooms
+                .lock()
+                .await
+                .get(&room.id)
+                .unwrap()
+                .players
+                .get(&session.id)
+                .unwrap()
+                .last_sequence,
+            1
+        );
+
+        hub.leave_for_connection(room.id, session.id, replacement_connection)
+            .await;
+        let rooms = hub.rooms.lock().await;
+        let retained = rooms.get(&room.id).unwrap();
+        assert!(retained
+            .activity
+            .tea_leaves
+            .iter()
+            .find(|ingredient| ingredient.id == ingredient_id)
+            .is_some_and(|ingredient| ingredient.available));
+        assert!(retained
+            .activity
+            .table_orders
+            .iter()
+            .find(|order| order.id == order_id)
+            .is_some_and(|order| {
+                order.status == CafeTableOrderStatus::Available && order.claimed_by.is_none()
+            }));
+    }
+
+    #[tokio::test]
+    async fn aggregate_telemetry_reports_gauges_and_resets_interval_counters() {
+        let mut limits = CafeSecurityConfig::default();
+        limits.max_sockets_per_session = 1;
+        limits.room_creations_per_session = 1;
+        let hub = CafeHub::new(limits);
+        let room = hub.create_room(false).await;
+        let player_session = guest();
+        hub.join(
+            room.id,
+            new_player(&player_session, "Guest METRIC".to_owned(), None),
+        )
+        .await
+        .unwrap();
+        let socket_session = Uuid::new_v4();
+        let reservation = hub
+            .reserve_socket(socket_session, "192.0.2.10".to_owned())
+            .unwrap();
+        assert!(hub
+            .reserve_socket(socket_session, "192.0.2.10".to_owned())
+            .is_err());
+        let creator = Uuid::new_v4();
+        hub.create_room_limited(creator, "192.0.2.11".to_owned(), true)
+            .await
+            .unwrap();
+        assert!(hub
+            .create_room_limited(creator, "192.0.2.11".to_owned(), true)
+            .await
+            .is_err());
+        hub.telemetry.incoming_messages.store(4, Ordering::Relaxed);
+        hub.telemetry.outgoing_messages.store(3, Ordering::Relaxed);
+        hub.telemetry.outgoing_bytes.store(900, Ordering::Relaxed);
+        hub.telemetry.reliable_lag.store(1, Ordering::Relaxed);
+        let snapshot = hub.telemetry_snapshot(true).await;
+        assert_eq!(snapshot.active_rooms, 2);
+        assert_eq!(snapshot.occupied_rooms, 1);
+        assert_eq!(snapshot.active_sockets, 1);
+        assert_eq!(snapshot.incoming_messages, 4);
+        assert_eq!(snapshot.outgoing_messages, 3);
+        assert_eq!(snapshot.outgoing_bytes, 900);
+        assert_eq!(snapshot.reliable_lag, 1);
+        assert_eq!(snapshot.socket_rejections, 1);
+        assert_eq!(snapshot.room_creation_rejections, 1);
+        assert_eq!(hub.telemetry_snapshot(false).await.incoming_messages, 0);
+        drop(reservation);
+    }
+
+    #[test]
+    fn oversized_websocket_close_remains_distinct_from_reliable_lag() {
+        let limit = CafeSecurityConfig::default().websocket_max_bytes;
+        assert!(!cafe_message_exceeds_limit(
+            &Message::Text("x".repeat(limit).into()),
+            limit
         ));
+        assert!(cafe_message_exceeds_limit(
+            &Message::Text("x".repeat(limit + 1).into()),
+            limit
+        ));
+        assert!(cafe_message_exceeds_limit(
+            &Message::Binary(vec![0; limit + 1].into()),
+            limit
+        ));
+        let oversized = cafe_message_too_big_close_frame();
+        assert_eq!(oversized.code, 1009);
+        assert_eq!(cafe_resync_close_frame().code, 1013);
+        assert_eq!(limit, 16 * 1024);
     }
 
     #[test]

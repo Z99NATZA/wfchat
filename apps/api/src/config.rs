@@ -33,6 +33,18 @@ const PRODUCTION_CHAT_ATTACHMENT_DECODER_MAX_ALLOC_BYTES: u64 = 128 * 1024 * 102
 const PRODUCTION_CHAT_ATTACHMENT_MAX_CONCURRENT_DECODES: usize = 4;
 const PRODUCTION_CHAT_ATTACHMENT_MAX_TOTAL_BYTES_PER_MESSAGE: usize = 20 * 1024 * 1024;
 const PRODUCTION_CHAT_ATTACHMENT_MAX_STORAGE_BYTES_PER_OWNER: usize = 200 * 1024 * 1024;
+const PRODUCTION_CAFE_MAX_SOCKETS_PER_SESSION: usize = 2;
+const PRODUCTION_CAFE_MAX_SOCKETS_PER_IP: usize = 32;
+const PRODUCTION_CAFE_MAX_SOCKETS_GLOBAL: usize = 512;
+const PRODUCTION_CAFE_ROOM_CREATIONS_PER_SESSION: u32 = 5;
+const PRODUCTION_CAFE_ROOM_CREATIONS_PER_IP: u32 = 30;
+const PRODUCTION_CAFE_ROOM_CREATIONS_GLOBAL: u32 = 300;
+const PRODUCTION_CAFE_WEBSOCKET_MAX_BYTES: usize = 16 * 1024;
+const PRODUCTION_CAFE_ROOM_CREATION_WINDOW_SECONDS_MIN: u64 = 10 * 60;
+const PRODUCTION_CAFE_NEVER_JOINED_TTL_SECONDS: u64 = 10 * 60;
+const PRODUCTION_CAFE_EMPTY_ROOM_TTL_SECONDS: u64 = 2 * 60;
+const PRODUCTION_CAFE_CLEANUP_INTERVAL_SECONDS: u64 = 30;
+const PRODUCTION_CAFE_TELEMETRY_INTERVAL_SECONDS: u64 = 60;
 
 const RESERVED_PRODUCTION_HOSTS: [&str; 10] = [
     "localhost",
@@ -62,6 +74,23 @@ pub struct SecurityConfig {
     pub guest_requests_per_minute: u32,
     pub guest_global_requests_per_minute: u32,
     pub chat: ChatSecurityConfig,
+    pub cafe: CafeSecurityConfig,
+}
+
+#[derive(Clone, Debug)]
+pub struct CafeSecurityConfig {
+    pub max_sockets_per_session: usize,
+    pub max_sockets_per_ip: usize,
+    pub max_sockets_global: usize,
+    pub room_creations_per_session: u32,
+    pub room_creations_per_ip: u32,
+    pub room_creations_global: u32,
+    pub room_creation_window_seconds: u64,
+    pub websocket_max_bytes: usize,
+    pub never_joined_ttl_seconds: u64,
+    pub empty_room_ttl_seconds: u64,
+    pub cleanup_interval_seconds: u64,
+    pub telemetry_interval_seconds: u64,
 }
 
 #[derive(Clone, Debug)]
@@ -100,6 +129,26 @@ impl Default for SecurityConfig {
             guest_requests_per_minute: 10,
             guest_global_requests_per_minute: 60,
             chat: ChatSecurityConfig::default(),
+            cafe: CafeSecurityConfig::default(),
+        }
+    }
+}
+
+impl Default for CafeSecurityConfig {
+    fn default() -> Self {
+        Self {
+            max_sockets_per_session: 2,
+            max_sockets_per_ip: 32,
+            max_sockets_global: 512,
+            room_creations_per_session: 5,
+            room_creations_per_ip: 30,
+            room_creations_global: 300,
+            room_creation_window_seconds: 10 * 60,
+            websocket_max_bytes: 16 * 1024,
+            never_joined_ttl_seconds: 10 * 60,
+            empty_room_ttl_seconds: 2 * 60,
+            cleanup_interval_seconds: 30,
+            telemetry_interval_seconds: 60,
         }
     }
 }
@@ -234,6 +283,29 @@ impl Config {
                     !is_production,
                 )?,
                 tts_enabled: bool_env_value("CHAT_TTS_ENABLED", !is_production)?,
+            },
+            cafe: CafeSecurityConfig {
+                max_sockets_per_session: parsed_env_value("CAFE_MAX_SOCKETS_PER_SESSION", 2)?,
+                max_sockets_per_ip: parsed_env_value("CAFE_MAX_SOCKETS_PER_IP", 32)?,
+                max_sockets_global: parsed_env_value("CAFE_MAX_SOCKETS_GLOBAL", 512)?,
+                room_creations_per_session: parsed_env_value("CAFE_ROOM_CREATIONS_PER_SESSION", 5)?,
+                room_creations_per_ip: parsed_env_value("CAFE_ROOM_CREATIONS_PER_IP", 30)?,
+                room_creations_global: parsed_env_value("CAFE_ROOM_CREATIONS_GLOBAL", 300)?,
+                room_creation_window_seconds: parsed_env_value(
+                    "CAFE_ROOM_CREATION_WINDOW_SECONDS",
+                    10 * 60,
+                )?,
+                websocket_max_bytes: parsed_env_value("CAFE_WEBSOCKET_MAX_BYTES", 16 * 1024)?,
+                never_joined_ttl_seconds: parsed_env_value(
+                    "CAFE_NEVER_JOINED_TTL_SECONDS",
+                    10 * 60,
+                )?,
+                empty_room_ttl_seconds: parsed_env_value("CAFE_EMPTY_ROOM_TTL_SECONDS", 2 * 60)?,
+                cleanup_interval_seconds: parsed_env_value("CAFE_CLEANUP_INTERVAL_SECONDS", 30)?,
+                telemetry_interval_seconds: parsed_env_value(
+                    "CAFE_TELEMETRY_INTERVAL_SECONDS",
+                    60,
+                )?,
             },
         };
         let config = Self {
@@ -549,6 +621,34 @@ impl Config {
 
     fn validate_security_config(&self) -> Result<(), String> {
         let chat = &self.security.chat;
+        let cafe = &self.security.cafe;
+        if cafe.max_sockets_per_session == 0
+            || cafe.max_sockets_per_ip == 0
+            || cafe.max_sockets_global == 0
+            || cafe.room_creations_per_session == 0
+            || cafe.room_creations_per_ip == 0
+            || cafe.room_creations_global == 0
+            || cafe.room_creation_window_seconds == 0
+            || cafe.websocket_max_bytes == 0
+            || cafe.never_joined_ttl_seconds == 0
+            || cafe.empty_room_ttl_seconds == 0
+            || cafe.cleanup_interval_seconds == 0
+            || cafe.telemetry_interval_seconds == 0
+        {
+            return Err("cafe security limits must be greater than 0".to_owned());
+        }
+        if cafe.max_sockets_per_session > cafe.max_sockets_per_ip
+            || cafe.max_sockets_per_ip > cafe.max_sockets_global
+        {
+            return Err("Cafe socket limits must be ordered session <= IP <= global".to_owned());
+        }
+        if cafe.room_creations_per_session > cafe.room_creations_per_ip
+            || cafe.room_creations_per_ip > cafe.room_creations_global
+        {
+            return Err(
+                "Cafe room creation limits must be ordered session <= IP <= global".to_owned(),
+            );
+        }
         if chat.message_max_chars == 0
             || chat.request_max_bytes == 0
             || chat.context_max_messages == 0
@@ -717,6 +817,66 @@ impl Config {
             chat.max_stored_chars_per_chat,
             PRODUCTION_CHAT_MAX_STORED_CHARS_PER_CHAT,
         )?;
+        validate_production_max(
+            "CAFE_MAX_SOCKETS_PER_SESSION",
+            cafe.max_sockets_per_session,
+            PRODUCTION_CAFE_MAX_SOCKETS_PER_SESSION,
+        )?;
+        validate_production_max(
+            "CAFE_MAX_SOCKETS_PER_IP",
+            cafe.max_sockets_per_ip,
+            PRODUCTION_CAFE_MAX_SOCKETS_PER_IP,
+        )?;
+        validate_production_max(
+            "CAFE_MAX_SOCKETS_GLOBAL",
+            cafe.max_sockets_global,
+            PRODUCTION_CAFE_MAX_SOCKETS_GLOBAL,
+        )?;
+        validate_production_max(
+            "CAFE_ROOM_CREATIONS_PER_SESSION",
+            cafe.room_creations_per_session,
+            PRODUCTION_CAFE_ROOM_CREATIONS_PER_SESSION,
+        )?;
+        validate_production_max(
+            "CAFE_ROOM_CREATIONS_PER_IP",
+            cafe.room_creations_per_ip,
+            PRODUCTION_CAFE_ROOM_CREATIONS_PER_IP,
+        )?;
+        validate_production_max(
+            "CAFE_ROOM_CREATIONS_GLOBAL",
+            cafe.room_creations_global,
+            PRODUCTION_CAFE_ROOM_CREATIONS_GLOBAL,
+        )?;
+        validate_production_max(
+            "CAFE_WEBSOCKET_MAX_BYTES",
+            cafe.websocket_max_bytes,
+            PRODUCTION_CAFE_WEBSOCKET_MAX_BYTES,
+        )?;
+        validate_production_min(
+            "CAFE_ROOM_CREATION_WINDOW_SECONDS",
+            cafe.room_creation_window_seconds,
+            PRODUCTION_CAFE_ROOM_CREATION_WINDOW_SECONDS_MIN,
+        )?;
+        validate_production_max(
+            "CAFE_NEVER_JOINED_TTL_SECONDS",
+            cafe.never_joined_ttl_seconds,
+            PRODUCTION_CAFE_NEVER_JOINED_TTL_SECONDS,
+        )?;
+        validate_production_max(
+            "CAFE_EMPTY_ROOM_TTL_SECONDS",
+            cafe.empty_room_ttl_seconds,
+            PRODUCTION_CAFE_EMPTY_ROOM_TTL_SECONDS,
+        )?;
+        validate_production_max(
+            "CAFE_CLEANUP_INTERVAL_SECONDS",
+            cafe.cleanup_interval_seconds,
+            PRODUCTION_CAFE_CLEANUP_INTERVAL_SECONDS,
+        )?;
+        validate_production_max(
+            "CAFE_TELEMETRY_INTERVAL_SECONDS",
+            cafe.telemetry_interval_seconds,
+            PRODUCTION_CAFE_TELEMETRY_INTERVAL_SECONDS,
+        )?;
 
         for origin in self.frontend_origin.split(',').map(str::trim) {
             validate_production_origin(origin)?;
@@ -771,6 +931,19 @@ where
 {
     if value > maximum {
         Err(format!("{key} must not exceed {maximum} in production"))
+    } else {
+        Ok(())
+    }
+}
+
+fn validate_production_min<T>(key: &str, value: T, minimum: T) -> Result<(), String>
+where
+    T: Copy + PartialOrd + std::fmt::Display,
+{
+    if value < minimum {
+        Err(format!(
+            "{key} must be at least {minimum} in production (received {value})"
+        ))
     } else {
         Ok(())
     }
@@ -1512,5 +1685,33 @@ mod tests {
         concurrency.security.chat.max_concurrent_per_session =
             concurrency.security.chat.max_concurrent_generations + 1;
         assert!(concurrency.validate().is_err());
+    }
+
+    #[test]
+    fn cafe_limits_are_positive_ordered_and_production_safe() {
+        let mut zero = base_config();
+        zero.security.cafe.websocket_max_bytes = 0;
+        assert!(zero.validate().is_err());
+
+        let mut unordered = base_config();
+        unordered.security.cafe.max_sockets_per_session = 33;
+        assert!(unordered.validate().is_err());
+
+        let mut production = production_config();
+        assert!(production.validate().is_ok());
+        production.security.cafe.max_sockets_global = 513;
+        assert!(production.validate().is_err());
+
+        let mut short_window = production_config();
+        short_window.security.cafe.room_creation_window_seconds = 599;
+        assert!(short_window.validate().is_err());
+
+        let mut slow_cleanup = production_config();
+        slow_cleanup.security.cafe.cleanup_interval_seconds = 31;
+        assert!(slow_cleanup.validate().is_err());
+
+        let mut long_empty_ttl = production_config();
+        long_empty_ttl.security.cafe.empty_room_ttl_seconds = 121;
+        assert!(long_empty_ttl.validate().is_err());
     }
 }

@@ -260,7 +260,7 @@ struct RateLimitBucket {
     count: u32,
 }
 
-fn client_ip_from_request(
+pub fn client_ip_from_request(
     headers: &HeaderMap,
     peer_ip: IpAddr,
     trust_proxy_headers: bool,

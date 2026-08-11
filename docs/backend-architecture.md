@@ -131,6 +131,21 @@ Image decode capacity is fail-fast and defaults to two blocking decodes; a full
 decode semaphore returns `429`. Rate-limited HTTP responses include
 `Retry-After: 60`.
 
+Cafe WebSocket admission is reserved atomically before upgrade and defaults to
+2 active sockets per session, 32 per resolved IP, and 512 per process. The
+session allowance includes one reconnect overlap. Actual Cafe room creation
+uses a separate shared 10-minute limiter with defaults of 5 per session, 30 per
+resolved IP, and 300 per process; joining or reusing a room is not charged.
+Creation-limit responses use `Retry-After: 600`. Both controls use the same
+trusted-proxy client-IP resolver as the other API abuse boundaries.
+
+Cafe frames and assembled WebSocket messages are capped at 16 KiB. Empty Cafe
+rooms retain reconnect state for 2 minutes, never-joined rooms expire after 10
+minutes, and a 30-second process worker removes expired rooms and limiter
+buckets. Empty rooms own no movement tick. One structured aggregate every 60
+seconds reports Cafe room/socket gauges, message counts, outgoing bytes,
+rejections, and reliable lag without logging individual movement updates.
+
 Production chat generation also uses PostgreSQL daily admission. Registered
 accounts and Guest sessions each receive 50 successfully committed assistant
 replies per `Asia/Bangkok` calendar day. A separate shared circuit breaker
@@ -203,6 +218,22 @@ and no-panic validation but does not apply this maxima table:
 | `CHAT_ATTACHMENT_MAX_CONCURRENT_DECODES`     |      2 |                  4 |
 | `CHAT_ATTACHMENT_MAX_TOTAL_BYTES_PER_MESSAGE` | 20 MiB |            20 MiB |
 | `CHAT_ATTACHMENT_MAX_STORAGE_BYTES_PER_OWNER` | 200 MiB |          200 MiB |
+| `CAFE_MAX_SOCKETS_PER_SESSION`                 |      2 |                  2 |
+| `CAFE_MAX_SOCKETS_PER_IP`                      |     32 |                 32 |
+| `CAFE_MAX_SOCKETS_GLOBAL`                      |    512 |                512 |
+| `CAFE_ROOM_CREATIONS_PER_SESSION`              |      5 |                  5 |
+| `CAFE_ROOM_CREATIONS_PER_IP`                   |     30 |                 30 |
+| `CAFE_ROOM_CREATIONS_GLOBAL`                   |    300 |                300 |
+| `CAFE_WEBSOCKET_MAX_BYTES`                     | 16,384 |             16,384 |
+| `CAFE_NEVER_JOINED_TTL_SECONDS`                 |    600 |                600 |
+| `CAFE_EMPTY_ROOM_TTL_SECONDS`                   |    120 |                120 |
+| `CAFE_CLEANUP_INTERVAL_SECONDS`                 |     30 |                 30 |
+| `CAFE_TELEMETRY_INTERVAL_SECONDS`               |     60 |                 60 |
+
+Production permits lower Cafe admission and payload limits.
+`CAFE_ROOM_CREATION_WINDOW_SECONDS` defaults to 600 and cannot be lower in
+production. The never-joined TTL, empty-room TTL, cleanup interval, and
+telemetry interval are capped at 600, 120, 30, and 60 seconds respectively.
 
 Production origins are HTTPS DNS origins with no credentials, path, query, or
 fragment. Hostnames are lowercased and stripped of trailing dots before checks.

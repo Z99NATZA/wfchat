@@ -61,6 +61,7 @@ impl AppState {
         );
         let image_decode_limiter =
             ImageDecodeLimiter::new(config.chat_attachment_max_concurrent_decodes);
+        let cafe = CafeHub::new(config.security.cafe.clone());
 
         let state = Self {
             config,
@@ -69,7 +70,7 @@ impl AppState {
             generation_limiter,
             image_decode_limiter,
             store,
-            cafe: CafeHub::default(),
+            cafe,
             memory_telemetry: MemoryTelemetry::default(),
         };
 
@@ -82,6 +83,9 @@ impl AppState {
         if background_workers.memory_capture {
             spawn_memory_capture_worker(state.clone());
         }
+        if background_workers.cafe_maintenance {
+            spawn_cafe_maintenance(state.cafe.clone(), state.config.clone());
+        }
 
         Ok(state)
     }
@@ -92,6 +96,7 @@ struct BackgroundWorkerOptions {
     memory_capture: bool,
     guest_cleanup: bool,
     attachment_maintenance: bool,
+    cafe_maintenance: bool,
 }
 
 impl BackgroundWorkerOptions {
@@ -99,13 +104,38 @@ impl BackgroundWorkerOptions {
         memory_capture: true,
         guest_cleanup: true,
         attachment_maintenance: true,
+        cafe_maintenance: true,
     };
     #[cfg(test)]
     const NONE: Self = Self {
         memory_capture: false,
         guest_cleanup: false,
         attachment_maintenance: false,
+        cafe_maintenance: false,
     };
+}
+
+fn spawn_cafe_maintenance(cafe: CafeHub, config: Config) {
+    tokio::spawn(async move {
+        let mut cleanup = tokio::time::interval_at(
+            tokio::time::Instant::now()
+                + Duration::from_secs(config.security.cafe.cleanup_interval_seconds),
+            Duration::from_secs(config.security.cafe.cleanup_interval_seconds),
+        );
+        cleanup.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+        let mut telemetry = tokio::time::interval_at(
+            tokio::time::Instant::now()
+                + Duration::from_secs(config.security.cafe.telemetry_interval_seconds),
+            Duration::from_secs(config.security.cafe.telemetry_interval_seconds),
+        );
+        telemetry.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+        loop {
+            tokio::select! {
+                _ = cleanup.tick() => cafe.cleanup_expired().await,
+                _ = telemetry.tick() => cafe.emit_telemetry().await,
+            }
+        }
+    });
 }
 
 fn spawn_guest_session_cleanup(store: ChatStore) {
@@ -171,6 +201,7 @@ mod tests {
                 memory_capture: true,
                 guest_cleanup: true,
                 attachment_maintenance: true,
+                cafe_maintenance: true,
             }
         );
         assert_eq!(
@@ -179,6 +210,7 @@ mod tests {
                 memory_capture: false,
                 guest_cleanup: false,
                 attachment_maintenance: false,
+                cafe_maintenance: false,
             }
         );
     }
