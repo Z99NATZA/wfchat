@@ -18,6 +18,7 @@ const smokeWebServers = webServers.map((server) => ({
 	...server,
 	env: {
 		...server.env,
+		VITE_API_BASE_URL: apiBaseUrl,
 		WFCHAT_API_PROXY_TARGET: apiBaseUrl
 	}
 }));

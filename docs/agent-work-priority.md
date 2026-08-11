@@ -4,19 +4,29 @@ Use this file as the first document to read before starting a new scoped agent t
 
 ## Active Scope
 
-No implementation scope is currently defined. Define the next concrete scope
-here before making repository changes; do not infer follow-up work from the
-completed Aiko Cafe slices.
+Add one CI-owned Aiko Cafe full-stack smoke through the real Web, API,
+PostgreSQL, and WebSocket stack. Limit the change to the existing Playwright
+smoke job and its current-behavior documentation; exclude broader Cafe UI
+coverage, load testing, protocol changes, and production behavior changes.
 
 ## Required Read Order
 
 1. `docs/agent-work-priority.md`
-2. The owning current-behavior documents named by the next scope.
+2. `docs/ci.md`
+3. `docs/aiko-cafe.md`
+4. `apps/web/e2e/full-stack-smoke.spec.ts`
+5. `apps/web/playwright.smoke.config.ts`
+6. `.github/workflows/ci.yml`
 
 ## Required Outcome
 
-No implementation outcome is currently authorized. Preserve current behavior
-until a new scoped priority and applicable standalone authorization are added.
+Extend the existing full-stack smoke suite with a deterministic Cafe path that
+creates a room, receives a real WebSocket welcome, reloads the same room, and
+receives a fresh welcome on a replacement connection. Do not mock Cafe HTTP or
+WebSocket traffic. Keep the existing guest-chat smoke intact, use the disposable
+E2E database and Playwright-owned servers, and update CI documentation and job
+wording where needed. Focused verification runs the smoke suite and formatting
+or lint checks relevant to changed files.
 
 ## Authorization And Verification
 

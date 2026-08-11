@@ -49,9 +49,10 @@ warnings as errors.
 
 The E2E job uses a separate PostgreSQL 16 database and installs Chromium with
 its Linux runtime dependencies. Playwright starts the API with mock AI and
-disabled voice providers, starts the Vite Web app, then verifies that a guest
-chat survives a browser reload. A failure uploads Playwright traces and other
-test results for seven days.
+disabled voice providers and starts the Vite Web app. Its full-stack smokes
+verify that a guest chat survives a browser reload and that a newly created
+Cafe room receives a real WebSocket welcome before and after a reload. A
+failure uploads Playwright traces and other test results for seven days.
 
 ## Local Verification
 
