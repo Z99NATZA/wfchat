@@ -16,7 +16,7 @@ type AppSettingsDialogProps = {
 	isAssistantSpeechAutoPlayEnabled: boolean;
 	avatarOverlayPosition: AvatarOverlayPosition;
 	avatarOverlaySize: AvatarOverlaySize;
-	aikoName: string;
+	companionName: string;
 	onClose: () => void;
 	onUpdateBackgroundImageUrl: (url: string) => void;
 	onAvatarOverlayVisibleChange: (isVisible: boolean) => void;
@@ -36,7 +36,7 @@ function AppSettingsDialog({
 	isAssistantSpeechAutoPlayEnabled,
 	avatarOverlayPosition,
 	avatarOverlaySize,
-	aikoName,
+	companionName,
 	onClose,
 	onUpdateBackgroundImageUrl,
 	onAvatarOverlayVisibleChange,
@@ -76,8 +76,8 @@ function AppSettingsDialog({
 
 	async function handleResetLearnedContext() {
 		const shouldReset = await confirm({
-			title: t("settings.memory.resetConfirm", { aiko: aikoName }),
-			confirmLabel: t("settings.memory.reset", { aiko: aikoName }),
+			title: t("settings.memory.resetConfirm", { name: companionName }),
+			confirmLabel: t("settings.memory.reset", { name: companionName }),
 			tone: "destructive"
 		});
 		if (!shouldReset) {
@@ -88,7 +88,7 @@ function AppSettingsDialog({
 		try {
 			await onResetLearnedContext();
 		} catch {
-			await alert({ title: t("settings.memory.resetError", { aiko: aikoName }) });
+			await alert({ title: t("settings.memory.resetError", { name: companionName }) });
 		} finally {
 			setIsResettingMemory(false);
 		}
@@ -260,8 +260,8 @@ function AppSettingsDialog({
 							onClick={() => void handleResetLearnedContext()}
 						>
 							{isResettingMemory
-								? t("settings.memory.resetting", { aiko: aikoName })
-								: t("settings.memory.reset", { aiko: aikoName })}
+								? t("settings.memory.resetting", { name: companionName })
+								: t("settings.memory.reset", { name: companionName })}
 						</Button>
 					</section>
 				</div>

@@ -9,7 +9,8 @@ import type { ChatPersona } from "@/types/chat";
 vi.mock("@/i18n/i18nContext", () => ({
 	useI18n: () => ({
 		locale: "en",
-		t: (key: string) => key
+		t: (key: string, params?: Record<string, string>) =>
+			key === "chat.sidebar.subtitle" ? `Chat with ${params?.name}` : key
 	})
 }));
 
@@ -88,6 +89,7 @@ describe("ChatSidebar", () => {
 		expect(profileFacts.querySelectorAll("dd")).toHaveLength(3);
 		expect(profileFacts.querySelector("[class*='border']")).toBeNull();
 		expect(profileFacts.querySelector("[class*='bg-app-soft']")).toBeNull();
+		expect(screen.getByText("Chat with Aiko")).toBeTruthy();
 
 		fireEvent.click(disclosure.querySelector("summary")!);
 

@@ -27,13 +27,13 @@ vi.mock("@/i18n/i18nContext", () => ({
 				return "Credits";
 			}
 			if (key === "settings.memory.reset") {
-				return `Clear ${params?.aiko}'s memory`;
+				return `Clear ${params?.name}'s memory`;
 			}
 			if (key === "settings.memory.resetConfirm") {
-				return `Clear ${params?.aiko}'s memory?`;
+				return `Clear ${params?.name}'s memory?`;
 			}
 			if (key === "settings.memory.resetError") {
-				return `Could not clear ${params?.aiko}'s memory`;
+				return `Could not clear ${params?.name}'s memory`;
 			}
 			return key;
 		}
@@ -49,7 +49,7 @@ const baseProps = {
 	isAssistantSpeechAutoPlayEnabled: false,
 	avatarOverlayPosition: "bottom-right" as const,
 	avatarOverlaySize: "small" as const,
-	aikoName: "Aiko",
+	companionName: "Aiko",
 	onClose: vi.fn(),
 	onUpdateBackgroundImageUrl: vi.fn(),
 	onAvatarOverlayVisibleChange: vi.fn(),

@@ -82,7 +82,9 @@ function ChatSidebar({
 						<div className="flex items-center gap-3">
 							<div>
 								<p className="text-base font-semibold">{t("chat.sidebar.title")}</p>
-								<p className="text-xs text-muted">{t("chat.sidebar.subtitle")}</p>
+								<p className="text-xs text-muted">
+									{t("chat.sidebar.subtitle", { name: activePersona.name })}
+								</p>
 							</div>
 						</div>
 

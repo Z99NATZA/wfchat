@@ -40,7 +40,7 @@ function App() {
 	const [isSyncing, setIsSyncing] = useState(false);
 	const [syncError, setSyncError] = useState<string | null>(null);
 	const [voiceCredits, setVoiceCredits] = useState<VoiceCredit[]>([]);
-	const [aikoName, setAikoName] = useState(CHAT_PERSONAS[0]?.name ?? "");
+	const [companionName, setCompanionName] = useState(CHAT_PERSONAS[0]?.name ?? "");
 	const chatSyncSnapshotRef = useRef<ChatSyncSnapshot | null>(null);
 	const wasAuthenticatedRef = useRef(isAuthenticated);
 	const activityBar = <ActivityBar />;
@@ -60,7 +60,7 @@ function App() {
 			.then((config) => {
 				if (isCurrent) {
 					setVoiceCredits(config.voiceCredits);
-					setAikoName(config.personas[0]?.name ?? CHAT_PERSONAS[0]?.name ?? "");
+					setCompanionName(config.personas[0]?.name ?? CHAT_PERSONAS[0]?.name ?? "");
 				}
 			})
 			.catch(() => {
@@ -381,7 +381,7 @@ function App() {
 				isAssistantSpeechAutoPlayEnabled={settings.isAssistantSpeechAutoPlayEnabled}
 				avatarOverlayPosition={settings.avatarOverlayPosition}
 				avatarOverlaySize={settings.avatarOverlaySize}
-				aikoName={aikoName}
+				companionName={companionName}
 				onClose={() => setIsSettingsOpen(false)}
 				onUpdateBackgroundImageUrl={handleUpdateBackgroundImageUrl}
 				onAvatarOverlayVisibleChange={settings.setAvatarOverlayVisible}
