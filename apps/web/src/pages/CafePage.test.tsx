@@ -139,6 +139,8 @@ describe("CafePage", () => {
 		expect(entryActions.contains(createRoom)).toBe(true);
 		expect(quickJoin.className).toContain("w-full");
 		expect(createRoom.className).toContain("w-full");
+		expect(joinWithCode.className).toContain("button--lg");
+		expect(joinWithCode.className).not.toContain("button--md");
 		for (const formButton of [quickJoin, createRoom, joinWithCode]) {
 			expect(formButton.className).toContain("rounded-lg");
 			expect(formButton.className).not.toContain("rounded-xl");

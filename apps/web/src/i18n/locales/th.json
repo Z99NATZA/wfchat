@@ -274,7 +274,7 @@
 	"settings.memory.resetConfirm": "ต้องการล้างความทรงจำของ {aiko} หรือไม่?",
 	"settings.memory.resetError": "ไม่สามารถล้างความทรงจำของ {aiko} ได้ กรุณาลองใหม่",
 	"chat.sidebar.title": "Chat",
-	"chat.sidebar.subtitle": "Waifu",
+	"chat.sidebar.subtitle": "คุยกับ Aiko",
 	"chat.sidebar.closeSidebar": "ปิดแถบด้านข้าง",
 	"chat.sidebar.searchChats": "ค้นหาแชท",
 	"chat.sidebar.noChatsFound": "ไม่พบแชทที่ค้นหา",

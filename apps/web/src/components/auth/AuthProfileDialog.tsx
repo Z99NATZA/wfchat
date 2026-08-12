@@ -3,7 +3,7 @@ import { useDialogBackgroundSurface } from "@/components/dialog/useDialogBackgro
 import Button from "@/components/ui/Button";
 import IconButton from "@/components/ui/IconButton";
 import { useI18n } from "@/i18n/i18nContext";
-import { CheckCircle2, LogOut, Mail, RefreshCw, User, X } from "lucide-react";
+import { CheckCircle2, LogOut, Mail, User, X } from "lucide-react";
 import { type FormEvent, useEffect, useMemo, useState } from "react";
 
 type AuthProfileDialogProps = {
@@ -130,37 +130,38 @@ function AuthProfileDialog({
 				</header>
 
 				<div className="flex-1 space-y-4 overflow-y-auto px-5 py-4">
-					<section className="rounded-2xl border border-dialog-border bg-dialog-soft p-4">
-						<div className="flex items-center justify-between gap-3">
-							<div className="flex min-w-0 items-center gap-3">
-								<div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-sky-500/10 text-lg font-semibold text-sky-600 dark:bg-sky-300/15 dark:text-sky-200">
-									{avatarUrlDraft ? (
-										<img
-											src={avatarUrlDraft}
-											alt={t("auth.profile.avatarAlt")}
-											className="h-full w-full object-cover"
-										/>
-									) : (
-										initials || <User size={24} aria-hidden="true" />
-									)}
+					{isAuthenticated && (
+						<section
+							className="rounded-2xl border border-dialog-border bg-dialog-soft p-4"
+							data-testid="profile-summary"
+						>
+							<div className="flex items-center justify-between gap-3">
+								<div className="flex min-w-0 items-center gap-3">
+									<div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-sky-500/10 text-lg font-semibold text-sky-600 dark:bg-sky-300/15 dark:text-sky-200">
+										{avatarUrlDraft ? (
+											<img
+												src={avatarUrlDraft}
+												alt={t("auth.profile.avatarAlt")}
+												className="h-full w-full object-cover"
+											/>
+										) : (
+											initials || <User size={24} aria-hidden="true" />
+										)}
+									</div>
+									<div className="min-w-0">
+										<p className="truncate text-base font-semibold text-app-text">
+											{profileLabel}
+										</p>
+										<p className="mt-1 truncate text-sm text-muted">{email}</p>
+									</div>
 								</div>
-								<div className="min-w-0">
-									<p className="truncate text-base font-semibold text-app-text">
-										{profileLabel}
-									</p>
-									<p className="mt-1 truncate text-sm text-muted">
-										{isAuthenticated ? email : t("auth.profile.guestMode")}
-									</p>
-								</div>
-							</div>
-							{isAuthenticated && (
 								<Button variant="destructive" size="md" onClick={onLogout}>
 									<LogOut size={16} aria-hidden="true" />
 									{t("auth.profile.logout")}
 								</Button>
-							)}
-						</div>
-					</section>
+							</div>
+						</section>
+					)}
 
 					{!isAuthenticated ? (
 						<section className="space-y-3">
@@ -234,20 +235,16 @@ function AuthProfileDialog({
 								</form>
 							</section>
 
-							<section className="rounded-2xl border border-dialog-border bg-dialog-panel p-4">
-								<div className="flex items-start gap-3">
-									<div className="rounded-xl bg-sky-500/10 p-2 text-sky-600 dark:bg-sky-300/15 dark:text-sky-200">
-										<RefreshCw size={18} aria-hidden="true" />
-									</div>
-									<div className="min-w-0 flex-1">
-										<h3 className="text-sm font-semibold text-app-text">
-											{t("auth.profile.syncSection")}
-										</h3>
-										<p className="mt-1 text-sm text-muted">
-											{t("auth.profile.syncReady")}
-										</p>
-									</div>
-								</div>
+							<section
+								className="rounded-2xl border border-dialog-border bg-dialog-panel p-4"
+								data-testid="profile-sync-section"
+							>
+								<h3 className="text-sm font-semibold text-app-text">
+									{t("auth.profile.syncSection")}
+								</h3>
+								<p className="mt-1 text-sm text-muted">
+									{t("auth.profile.syncReady")}
+								</p>
 								{hasPendingGuestSync && (
 									<div className="mt-4 space-y-2">
 										<Button
@@ -272,12 +269,15 @@ function AuthProfileDialog({
 								<h3 className="text-sm font-semibold text-app-text">
 									{t("auth.profile.accountSection")}
 								</h3>
-								<div className="mt-3 flex items-center gap-3 rounded-xl bg-dialog-soft px-3 py-3 text-sm text-muted">
-									<Mail size={16} aria-hidden="true" />
-									<div className="min-w-0">
+								<div
+									className="mt-3 min-w-0 rounded-xl bg-dialog-soft px-3 py-3 text-sm text-muted"
+									data-testid="profile-email-field"
+								>
+									<div className="flex items-center gap-1.5">
+										<Mail size={16} aria-hidden="true" />
 										<p className="text-xs">{t("auth.profile.emailLabel")}</p>
-										<p className="truncate text-app-text">{email}</p>
 									</div>
+									<p className="mt-1 truncate text-app-text">{email}</p>
 								</div>
 							</section>
 						</>

@@ -309,6 +309,7 @@ function CafePage({ activityBar, backgroundImageUrl, headerControls }: CafePageP
 									</div>
 									<Button
 										type="submit"
+										size="lg"
 										className="rounded-lg sm:shrink-0 lg:col-start-2 lg:w-full"
 										disabled={!inviteCode.trim() || pendingAction !== null}
 									>
