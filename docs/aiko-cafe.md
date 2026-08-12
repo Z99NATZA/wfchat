@@ -6,8 +6,14 @@ chat and is available at `/cafe` without login.
 ## Player Experience
 
 - `/cafe` supports Join, Create Room, and Join by Code.
+- The lobby entry panel is mobile-first: Aiko sits beside the welcome heading
+  instead of occupying a separate tall hero area, while the optional name and
+  primary room actions remain the visual priority.
 - On narrow lobby viewports, Join and Create Room share one full-width row as
-  equal columns; wider layouts keep them compact and inline.
+  equal columns; wider layouts keep them compact and inline. Join by Code is
+  disclosed on demand on narrow viewports and remains visible at wider sizes so
+  public rooms appear sooner without removing any entry path. At desktop widths,
+  the name and room-code rows share aligned input and action columns.
 - The entry panel ends with a borderless cosmetics footer separated by one top
   divider. It shows the current look and Cafe Stars without adding another card,
   and opens an on-demand wardrobe as a bottom sheet on narrow viewports or a

@@ -87,6 +87,7 @@ describe("CafePage", () => {
 	it("uses concise lobby copy in Thai and English", () => {
 		expect(th["cafe.lobby.quickJoin"]).toBe("เข้าห้อง");
 		expect(th["cafe.lobby.joinCodeTitle"]).toBe("รหัสห้อง");
+		expect(th["cafe.lobby.haveCode"]).toBe("มีรหัสห้อง?");
 		expect(th["cafe.cosmetics.title"]).toBe("ของแต่ง");
 		expect(th["cafe.cosmetics.classic"]).toBe("ถอดของแต่ง");
 		expect(th["cafe.cosmetics.defaultLook"]).toBe("ลุคปกติ");
@@ -94,6 +95,7 @@ describe("CafePage", () => {
 
 		expect(en["cafe.lobby.quickJoin"]).toBe("Join");
 		expect(en["cafe.lobby.joinCodeTitle"]).toBe("Room code");
+		expect(en["cafe.lobby.haveCode"]).toBe("Have a room code?");
 		expect(en["cafe.cosmetics.title"]).toBe("Cosmetics");
 		expect(en["cafe.cosmetics.classic"]).toBe("Reset look");
 		expect(en["cafe.cosmetics.defaultLook"]).toBe("Classic look");
@@ -126,15 +128,17 @@ describe("CafePage", () => {
 		const createRoom = screen.getByRole("button", { name: "cafe.lobby.createRoom" });
 		const joinWithCode = screen.getByRole("button", { name: "cafe.lobby.joinCode" });
 		const entryActions = screen.getByTestId("cafe-entry-actions");
+		const primaryEntryRow = screen.getByTestId("cafe-primary-entry-row");
+		const desktopEntryColumns = "lg:grid-cols-[minmax(0,1fr)_10rem_10rem]";
 		expect(entryActions.className).toContain("grid-cols-2");
 		expect(entryActions.className).toContain("w-full");
-		expect(entryActions.className).toContain("sm:contents");
+		expect(entryActions.className).toContain("sm:w-fit");
+		expect(entryActions.className).toContain("lg:contents");
+		expect(primaryEntryRow.className).toContain(desktopEntryColumns);
 		expect(entryActions.contains(quickJoin)).toBe(true);
 		expect(entryActions.contains(createRoom)).toBe(true);
 		expect(quickJoin.className).toContain("w-full");
-		expect(quickJoin.className).toContain("sm:w-auto");
 		expect(createRoom.className).toContain("w-full");
-		expect(createRoom.className).toContain("sm:w-auto");
 		for (const formButton of [quickJoin, createRoom, joinWithCode]) {
 			expect(formButton.className).toContain("rounded-lg");
 			expect(formButton.className).not.toContain("rounded-xl");
@@ -149,6 +153,9 @@ describe("CafePage", () => {
 		const lobbyAiko = screen.getByTestId("cafe-lobby-aiko");
 		expect(lobbyAiko.querySelector(".cafe-lobby-aiko-idle")).toBeTruthy();
 		expect(lobbyAiko.querySelector(".cafe-lobby-aiko-shadow")).toBeTruthy();
+		expect(lobbyAiko.className).toContain("h-24");
+		expect(lobbyAiko.className).toContain("md:h-44");
+		expect(lobbyAiko.className).not.toContain("h-52");
 		expect(screen.getByTestId("cafe-lobby-scroll").className).toContain("chat-scroll");
 		expect(screen.queryByText("cafe.lobby.guestFriendly")).toBeNull();
 		expect(screen.queryByText("cafe.lobby.heroDescription")).toBeNull();
@@ -175,6 +182,7 @@ describe("CafePage", () => {
 		expect(cosmeticFooter.className).toContain("border-t");
 		expect(cosmeticSummary.className).toContain("button--ghost");
 		expect(cosmeticSummary.className).toContain("rounded-none");
+		expect(cosmeticSummary.className).toContain("px-5");
 		expect(cosmeticSummary.className).not.toContain("rounded-xl");
 		expect(cosmeticSummary.getAttribute("aria-haspopup")).toBe("dialog");
 		expect(cosmeticSummary.getAttribute("aria-expanded")).toBe("false");
@@ -192,10 +200,28 @@ describe("CafePage", () => {
 				.contains(screen.getByLabelText("cafe.lobby.joinCodeTitle"))
 		).toBe(true);
 		const inviteCodeInput = screen.getByLabelText("cafe.lobby.joinCodeTitle");
+		const inviteCodeToggle = screen.getByRole("button", {
+			name: "cafe.lobby.haveCode"
+		});
+		const inviteCodeForm = screen.getByTestId("cafe-invite-code-form");
+		expect(inviteCodeToggle.getAttribute("aria-controls")).toBe("cafe-invite-code-form");
+		expect(inviteCodeToggle.getAttribute("aria-expanded")).toBe("false");
+		expect(inviteCodeToggle.className).toContain("sm:hidden");
+		expect(inviteCodeToggle.className).toContain("px-2");
+		expect(screen.getByTestId("cafe-invite-code-leading").className).toContain("w-10");
+		expect(inviteCodeForm.className).toContain("hidden");
+		expect(inviteCodeForm.className).toContain("sm:flex");
+		expect(inviteCodeForm.className).toContain("lg:grid");
+		expect(inviteCodeForm.className).toContain(desktopEntryColumns);
+		expect(joinWithCode.className).toContain("lg:col-start-2");
+		expect(joinWithCode.className).toContain("lg:w-full");
+		fireEvent.click(inviteCodeToggle);
+		expect(inviteCodeToggle.getAttribute("aria-expanded")).toBe("true");
+		expect(inviteCodeForm.className).toContain("flex");
 		expect(inviteCodeInput.className).toContain("h-11");
 		expect(inviteCodeInput.className).toContain("w-full");
-		expect(inviteCodeInput.className).toContain("sm:flex-1");
-		expect(inviteCodeInput.className.split(" ")).not.toContain("flex-1");
+		expect(inviteCodeInput.parentElement?.className).toContain("sm:flex-1");
+		expect(inviteCodeInput.parentElement?.className).toContain("lg:col-start-1");
 		fireEvent.click(quickJoin);
 
 		await waitFor(() => expect(serviceMocks.quickJoinCafe).toHaveBeenCalledTimes(1));
@@ -243,7 +269,9 @@ describe("CafePage", () => {
 			</MemoryRouter>
 		);
 
-		fireEvent.change(await screen.findByLabelText("cafe.lobby.joinCodeTitle"), {
+		await screen.findByLabelText("cafe.lobby.joinCodeTitle");
+		fireEvent.click(screen.getByRole("button", { name: "cafe.lobby.haveCode" }));
+		fireEvent.change(screen.getByLabelText("cafe.lobby.joinCodeTitle"), {
 			target: { value: "ABC123" }
 		});
 		expect(screen.getByText("cafe.lobby.noRooms")).toBeTruthy();
@@ -276,7 +304,8 @@ describe("CafePage", () => {
 
 		expect(screen.getByRole("dialog")).toBeTruthy();
 		expect(cosmeticSummary.getAttribute("aria-expanded")).toBe("true");
-		expect(screen.getByTestId("cafe-cosmetic-wardrobe")).toBeTruthy();
+		expect(screen.getByTestId("cafe-cosmetic-wardrobe").className).toContain("pb-12");
+		expect(screen.getByTestId("cafe-cosmetic-wardrobe").className).not.toContain("sm:pb-12");
 		const mintTile = screen.getByTestId("cafe-cosmetic-tile-mint_scarf");
 		fireEvent.click(mintTile);
 		await waitFor(() =>

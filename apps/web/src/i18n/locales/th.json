@@ -47,6 +47,7 @@
 	"cafe.lobby.joining": "กำลังเข้าห้อง...",
 	"cafe.lobby.aikoAlt": "Aiko กำลังต้อนรับผู้มาเยือนในคาเฟ่",
 	"cafe.lobby.joinCodeTitle": "รหัสห้อง",
+	"cafe.lobby.haveCode": "มีรหัสห้อง?",
 	"cafe.lobby.joinCodePlaceholder": "A1B2C3",
 	"cafe.lobby.joinCode": "เข้าด้วยรหัส",
 	"cafe.lobby.publicRooms": "คาเฟ่สาธารณะ",

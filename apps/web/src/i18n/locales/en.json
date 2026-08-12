@@ -47,6 +47,7 @@
 	"cafe.lobby.joining": "Joining...",
 	"cafe.lobby.aikoAlt": "Aiko welcoming visitors to the cafe",
 	"cafe.lobby.joinCodeTitle": "Room code",
+	"cafe.lobby.haveCode": "Have a room code?",
 	"cafe.lobby.joinCodePlaceholder": "A1B2C3",
 	"cafe.lobby.joinCode": "Join by Code",
 	"cafe.lobby.publicRooms": "Public cafes",

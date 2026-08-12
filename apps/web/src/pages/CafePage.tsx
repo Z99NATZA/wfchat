@@ -5,6 +5,7 @@ import {
 	ChevronRight,
 	Coffee,
 	DoorOpen,
+	KeyRound,
 	Lock,
 	Plus,
 	RefreshCw,
@@ -63,6 +64,7 @@ function CafePage({ activityBar, backgroundImageUrl, headerControls }: CafePageP
 	const [pendingCosmetic, setPendingCosmetic] = useState<string | null | undefined>();
 	const [cosmeticError, setCosmeticError] = useState(false);
 	const [isWardrobeOpen, setIsWardrobeOpen] = useState(false);
+	const [isJoinCodeOpen, setIsJoinCodeOpen] = useState(false);
 
 	const refresh = useCallback(async () => {
 		setIsLoading(true);
@@ -132,7 +134,7 @@ function CafePage({ activityBar, backgroundImageUrl, headerControls }: CafePageP
 			details={<CafeLobbyDetails />}
 		>
 			<section
-				className="chat-scroll min-h-0 flex-1 overflow-y-auto bg-app-bg/44 p-4 sm:p-6 lg:p-8"
+				className="chat-scroll min-h-0 flex-1 overflow-y-auto bg-app-bg/44 p-3 sm:p-6 lg:p-8"
 				data-testid="cafe-lobby-scroll"
 			>
 				<div className="mx-auto max-w-5xl space-y-5">
@@ -140,13 +142,34 @@ function CafePage({ activityBar, backgroundImageUrl, headerControls }: CafePageP
 						className="overflow-hidden rounded-2xl border border-app-border bg-app-panel/76"
 						data-testid="cafe-entry-panel"
 					>
-						<div className="grid gap-6 p-5 sm:p-7 lg:grid-cols-[1.25fr_0.75fr] lg:items-center">
-							<div>
-								<h2 className="text-balance text-2xl font-semibold text-app-text sm:text-3xl">
-									{t("cafe.lobby.heroTitle")}
-								</h2>
-								<div className="mt-6 flex max-w-xl flex-wrap items-end gap-3">
-									<div className="w-full min-w-0 sm:min-w-[14rem] sm:flex-1">
+						<div className="grid grid-cols-[minmax(0,1fr)_5rem] gap-x-3 gap-y-4 p-3 sm:grid-cols-[minmax(0,1fr)_7rem] sm:p-6 md:grid-cols-[minmax(0,1fr)_10rem] md:gap-x-6 lg:p-7">
+							<h2 className="col-start-1 row-start-1 self-center text-balance text-xl font-semibold text-app-text sm:text-2xl md:self-end lg:text-3xl">
+								{t("cafe.lobby.heroTitle")}
+							</h2>
+							<div
+								className="relative isolate col-start-2 row-start-1 flex h-24 items-end justify-center sm:h-28 md:row-span-2 md:h-44 md:self-center"
+								data-testid="cafe-lobby-aiko"
+							>
+								<span
+									className="cafe-lobby-aiko-aura absolute inset-x-2 bottom-2 top-2 -z-10 md:inset-x-4"
+									aria-hidden="true"
+								/>
+								<span
+									className="cafe-lobby-aiko-shadow absolute bottom-1 -z-10 h-2 w-14 rounded-full bg-black/20 blur-sm md:h-3 md:w-20"
+									aria-hidden="true"
+								/>
+								<img
+									src="/images/aiko-cafe/aiko-host-v1.png"
+									alt={t("cafe.lobby.aikoAlt")}
+									className="cafe-lobby-aiko-idle h-full w-auto object-contain"
+								/>
+							</div>
+							<div className="col-span-2 row-start-2 min-w-0 md:col-span-1 md:col-start-1">
+								<div
+									className="max-w-3xl lg:grid lg:grid-cols-[minmax(0,1fr)_10rem_10rem] lg:items-end lg:gap-3"
+									data-testid="cafe-primary-entry-row"
+								>
+									<div className="min-w-0 lg:flex-1">
 										<label
 											className="text-xs font-semibold text-muted"
 											htmlFor="cafe-player-name"
@@ -167,11 +190,11 @@ function CafePage({ activityBar, backgroundImageUrl, headerControls }: CafePageP
 										/>
 									</div>
 									<div
-										className="grid w-full grid-cols-2 gap-3 sm:contents"
+										className="mt-3 grid w-full grid-cols-2 gap-2 sm:w-fit sm:grid-cols-[repeat(2,minmax(0,10rem))] sm:gap-3 lg:contents"
 										data-testid="cafe-entry-actions"
 									>
 										<div
-											className="cafe-quick-join-effect relative isolate min-w-0 sm:shrink-0"
+											className="cafe-quick-join-effect relative isolate min-w-0"
 											data-active={pendingAction === null}
 											data-testid="cafe-quick-join-effect"
 										>
@@ -202,13 +225,17 @@ function CafePage({ activityBar, backgroundImageUrl, headerControls }: CafePageP
 											<Button
 												variant="primary"
 												size="lg"
-												className="relative z-10 w-full rounded-lg sm:w-auto"
+												className="relative z-10 w-full gap-1.5 rounded-lg px-2 min-[360px]:px-4"
 												disabled={pendingAction !== null}
 												onClick={() =>
 													void openRoom("quick", quickJoinCafe)
 												}
 											>
-												<DoorOpen size={18} aria-hidden="true" />
+												<DoorOpen
+													size={18}
+													className="hidden min-[360px]:block"
+													aria-hidden="true"
+												/>
 												{pendingAction === "quick"
 													? t("cafe.lobby.joining")
 													: t("cafe.lobby.quickJoin")}
@@ -216,28 +243,62 @@ function CafePage({ activityBar, backgroundImageUrl, headerControls }: CafePageP
 										</div>
 										<Button
 											size="lg"
-											className="w-full rounded-lg sm:w-auto"
+											className="w-full gap-1.5 rounded-lg px-2 min-[360px]:px-4"
 											disabled={pendingAction !== null}
 											onClick={() =>
 												void openRoom("create", () => createCafeRoom(true))
 											}
 										>
-											<Plus size={18} aria-hidden="true" />
+											<Plus
+												size={18}
+												className="hidden min-[360px]:block"
+												aria-hidden="true"
+											/>
 											{t("cafe.lobby.createRoom")}
 										</Button>
 									</div>
 								</div>
-								<form onSubmit={handleJoinCode} className="mt-5 max-w-xl">
-									<label
-										className="text-xs font-semibold text-muted"
-										htmlFor="cafe-invite-code"
-									>
-										{t("cafe.lobby.joinCodeTitle")}
-									</label>
-									<div className="mt-2 flex flex-col gap-2 sm:flex-row">
+								<Button
+									align="between"
+									fullWidth
+									size="sm"
+									variant="ghost"
+									className="mt-3 px-2 sm:hidden"
+									aria-controls="cafe-invite-code-form"
+									aria-expanded={isJoinCodeOpen}
+									onClick={() => setIsJoinCodeOpen((isOpen) => !isOpen)}
+								>
+									<span className="inline-flex min-w-0 items-center gap-3">
+										<span
+											className="flex w-10 shrink-0 items-center justify-center"
+											data-testid="cafe-invite-code-leading"
+										>
+											<KeyRound size={16} aria-hidden="true" />
+										</span>
+										{t("cafe.lobby.haveCode")}
+									</span>
+									<ChevronRight
+										size={16}
+										className={`transition-transform ${isJoinCodeOpen ? "rotate-90" : ""}`}
+										aria-hidden="true"
+									/>
+								</Button>
+								<form
+									id="cafe-invite-code-form"
+									data-testid="cafe-invite-code-form"
+									onSubmit={handleJoinCode}
+									className={`mt-3 max-w-xl flex-col gap-2 ${isJoinCodeOpen ? "flex" : "hidden"} sm:flex sm:flex-row sm:items-end lg:max-w-3xl lg:grid lg:grid-cols-[minmax(0,1fr)_10rem_10rem] lg:gap-3`}
+								>
+									<div className="min-w-0 sm:flex-1 lg:col-start-1">
+										<label
+											className="text-xs font-semibold text-muted"
+											htmlFor="cafe-invite-code"
+										>
+											{t("cafe.lobby.joinCodeTitle")}
+										</label>
 										<input
 											id="cafe-invite-code"
-											className="h-11 min-w-0 w-full rounded-lg border border-app-border bg-app-soft px-3 text-sm font-semibold uppercase tracking-[0.2em] text-app-text outline-none transition focus:border-control-focus-border sm:flex-1"
+											className="mt-2 h-11 w-full min-w-0 rounded-lg border border-app-border bg-app-soft px-3 text-sm font-semibold uppercase tracking-[0.2em] text-app-text outline-none transition focus:border-control-focus-border"
 											value={inviteCode}
 											maxLength={6}
 											placeholder={t("cafe.lobby.joinCodePlaceholder")}
@@ -245,16 +306,16 @@ function CafePage({ activityBar, backgroundImageUrl, headerControls }: CafePageP
 												setInviteCode(event.target.value.toUpperCase())
 											}
 										/>
-										<Button
-											type="submit"
-											className="rounded-lg"
-											disabled={!inviteCode.trim() || pendingAction !== null}
-										>
-											{pendingAction === "code"
-												? t("cafe.lobby.joining")
-												: t("cafe.lobby.joinCode")}
-										</Button>
 									</div>
+									<Button
+										type="submit"
+										className="rounded-lg sm:shrink-0 lg:col-start-2 lg:w-full"
+										disabled={!inviteCode.trim() || pendingAction !== null}
+									>
+										{pendingAction === "code"
+											? t("cafe.lobby.joining")
+											: t("cafe.lobby.joinCode")}
+									</Button>
 								</form>
 								{error && (
 									<p
@@ -264,24 +325,6 @@ function CafePage({ activityBar, backgroundImageUrl, headerControls }: CafePageP
 										{t(lobbyErrorTranslationKey(error))}
 									</p>
 								)}
-							</div>
-							<div
-								className="relative isolate mx-auto flex h-52 w-full max-w-64 items-end justify-center sm:h-56"
-								data-testid="cafe-lobby-aiko"
-							>
-								<span
-									className="cafe-lobby-aiko-aura absolute inset-x-6 bottom-3 top-5 -z-10"
-									aria-hidden="true"
-								/>
-								<span
-									className="cafe-lobby-aiko-shadow absolute bottom-1 -z-10 h-3 w-24 rounded-full bg-black/20 blur-sm"
-									aria-hidden="true"
-								/>
-								<img
-									src="/images/aiko-cafe/aiko-host-v1.png"
-									alt={t("cafe.lobby.aikoAlt")}
-									className="cafe-lobby-aiko-idle h-full w-auto object-contain"
-								/>
 							</div>
 						</div>
 						<CafeCosmeticSummary
@@ -460,7 +503,7 @@ function CafeCosmeticWardrobe({
 	const { t } = useI18n();
 	const isSaving = pendingCosmetic !== undefined;
 	return (
-		<div data-testid="cafe-cosmetic-wardrobe">
+		<div className="pb-12" data-testid="cafe-cosmetic-wardrobe">
 			<div className="flex items-center justify-between gap-2">
 				<span
 					className="inline-flex shrink-0 items-center gap-1 rounded-full bg-dialog-panel px-2 py-1 text-xs font-semibold text-muted"
