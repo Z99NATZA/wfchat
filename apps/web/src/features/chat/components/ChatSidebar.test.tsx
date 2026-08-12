@@ -27,21 +27,18 @@ const persona: ChatPersona = {
 describe("ChatSidebar", () => {
 	afterEach(cleanup);
 
-	it("keeps persona details in a compact sidebar disclosure", () => {
+	it("starts with compact persona details and omits the companion summary card", () => {
 		render(
 			<ChatSidebar
-				personas={[persona]}
 				sessions={[]}
 				activeSessionId={null}
 				activePersona={persona}
-				activePersonaId={persona.id}
 				isOpen={false}
 				searchQuery=""
 				onCreateSession={vi.fn()}
 				onSearchQueryChange={vi.fn()}
 				onCloseSidebar={vi.fn()}
 				onDeleteSession={vi.fn(async () => undefined)}
-				onSelectPersona={vi.fn()}
 				onSelectSession={vi.fn()}
 			/>
 		);
@@ -67,6 +64,8 @@ describe("ChatSidebar", () => {
 		expect(sessionList.className).toContain("overflow-y-auto");
 		expect(chatsSection.textContent).toContain("chat.sidebar.chats");
 		expect(chatsSection.textContent).toContain("chat.sidebar.newChat");
+		expect(screen.queryByAltText("Aiko avatar")).toBeNull();
+		expect(screen.queryByText("Ready when you are.")).toBeNull();
 		expect(screen.queryByText("chat.sidebar.moodSync")).toBeNull();
 		expect(disclosure.textContent).toContain("chat.details.about");
 		expect(disclosure.textContent).toContain("chat.details.profile");
@@ -98,7 +97,6 @@ describe("ChatSidebar", () => {
 	it("gives the active chat a clear border and filled surface in both themes", () => {
 		render(
 			<ChatSidebar
-				personas={[persona]}
 				sessions={[
 					{
 						id: "chat-1",
@@ -110,14 +108,12 @@ describe("ChatSidebar", () => {
 				]}
 				activeSessionId="chat-1"
 				activePersona={persona}
-				activePersonaId={persona.id}
 				isOpen={false}
 				searchQuery=""
 				onCreateSession={vi.fn()}
 				onSearchQueryChange={vi.fn()}
 				onCloseSidebar={vi.fn()}
 				onDeleteSession={vi.fn(async () => undefined)}
-				onSelectPersona={vi.fn()}
 				onSelectSession={vi.fn()}
 			/>
 		);
@@ -135,11 +131,9 @@ describe("ChatSidebar", () => {
 	it("shows delete failure beside the chat action area with neutral tokens", () => {
 		render(
 			<ChatSidebar
-				personas={[persona]}
 				sessions={[]}
 				activeSessionId={null}
 				activePersona={persona}
-				activePersonaId={persona.id}
 				isOpen={false}
 				searchQuery=""
 				actionErrorMessage="Delete failed"
@@ -147,7 +141,6 @@ describe("ChatSidebar", () => {
 				onSearchQueryChange={vi.fn()}
 				onCloseSidebar={vi.fn()}
 				onDeleteSession={vi.fn(async () => undefined)}
-				onSelectPersona={vi.fn()}
 				onSelectSession={vi.fn()}
 			/>
 		);

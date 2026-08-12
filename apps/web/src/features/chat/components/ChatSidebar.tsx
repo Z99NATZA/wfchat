@@ -9,36 +9,30 @@ import { cn } from "@/utils/classNames";
 import { formatMessageTime } from "@/utils/date";
 
 type ChatSidebarProps = {
-	personas: ChatPersona[];
 	sessions: ChatSessionSummary[];
 	activeSessionId: string | null;
 	activePersona: ChatPersona;
-	activePersonaId: string;
 	isOpen: boolean;
 	isCreatingSession?: boolean;
 	searchQuery: string;
 	onCreateSession: () => void;
 	onSearchQueryChange: (value: string) => void;
 	onCloseSidebar: () => void;
-	onSelectPersona: (personaId: string) => void;
 	onSelectSession: (sessionId: string) => void;
 	onDeleteSession: (sessionId: string) => Promise<void>;
 	actionErrorMessage?: string | null;
 };
 
 function ChatSidebar({
-	personas,
 	sessions,
 	activeSessionId,
 	activePersona,
-	activePersonaId,
 	isOpen,
 	isCreatingSession = false,
 	searchQuery,
 	onCreateSession,
 	onSearchQueryChange,
 	onCloseSidebar,
-	onSelectPersona,
 	onSelectSession,
 	onDeleteSession,
 	actionErrorMessage
@@ -105,48 +99,6 @@ function ChatSidebar({
 						className="flex min-h-0 flex-1 flex-col overflow-hidden"
 						data-testid="chat-sidebar-body"
 					>
-						<nav
-							className="shrink-0 space-y-2 p-3"
-							aria-label={t("chat.sidebar.companions")}
-						>
-							{personas.map((persona) => (
-								<Button
-									key={persona.id}
-									variant={persona.id === activePersonaId ? "selected" : "ghost"}
-									size="row"
-									align="start"
-									fullWidth
-									onClick={() => onSelectPersona(persona.id)}
-								>
-									<div className="size-11 shrink-0 overflow-hidden rounded-lg border-2 border-primary/35 bg-app-soft">
-										<img
-											className="h-full w-full object-cover"
-											src={persona.avatarUrl}
-											alt={`${persona.name} avatar`}
-										/>
-									</div>
-									<span className="min-w-0 flex-1">
-										<span className="flex items-center justify-between gap-3">
-											<span className="truncate text-sm font-semibold">
-												{persona.name}
-											</span>
-											<span className="text-xs text-muted">
-												{persona.lastActiveAt}
-											</span>
-										</span>
-										<span className="mt-1 block truncate text-xs text-muted">
-											{persona.lastMessage}
-										</span>
-									</span>
-									{persona.unreadCount > 0 && (
-										<span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-primary text-[11px] font-semibold text-primary-text">
-											{persona.unreadCount}
-										</span>
-									)}
-								</Button>
-							))}
-						</nav>
-
 						<details
 							className="chat-scroll max-h-[40vh] shrink-0 overflow-y-auto bg-app-soft/25"
 							data-testid="chat-sidebar-persona-details"

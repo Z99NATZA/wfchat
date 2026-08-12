@@ -25,8 +25,8 @@ show a memory list or per-item controls.
 
 ## Chat Components
 
-- `ChatSidebar`: persona chats, search, selection, deletion, and neutral
-  delete-action feedback.
+- `ChatSidebar`: compact persona disclosure followed by chat search, selection,
+  deletion, and neutral delete-action feedback.
 - `ChatHeader`: active persona and shared app controls.
 - `ChatMessageList`: virtualized timeline, scroll state, and transient Aiko
   companion notices with optional retry.

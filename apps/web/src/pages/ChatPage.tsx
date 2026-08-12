@@ -205,11 +205,9 @@ function ChatPage({
 			backgroundImageUrl={backgroundImageUrl}
 			sidebar={
 				<ChatSidebar
-					personas={chat.personas}
 					sessions={chat.sessions}
 					activeSessionId={chat.activeChatId}
 					activePersona={chat.activePersona}
-					activePersonaId={chat.activePersona.id}
 					isOpen={chat.isSidebarOpen}
 					isCreatingSession={chat.isCreatingSession}
 					searchQuery={chat.chatSearchQuery}
@@ -218,7 +216,6 @@ function ChatPage({
 					onSearchQueryChange={chat.setChatSearchQuery}
 					onCloseSidebar={chat.closeSidebar}
 					onDeleteSession={chat.removeSession}
-					onSelectPersona={chat.selectPersona}
 					onSelectSession={chat.selectSession}
 				/>
 			}
