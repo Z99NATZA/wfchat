@@ -219,6 +219,7 @@ function chat(messages: ApiMessage[]) {
 		character_id: "aiko",
 		ai_profile_id: "aiko_default",
 		messages,
+		last_message: messages.at(-1)?.content ?? "",
 		created_at: 1_784_000_000,
 		updated_at: 1_784_000_001
 	};

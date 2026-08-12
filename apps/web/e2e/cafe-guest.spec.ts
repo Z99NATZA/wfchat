@@ -21,21 +21,39 @@ test("cafe chrome follows the app theme in dark mode", async ({ page }) => {
 	});
 });
 
-test("lobby keeps mobile control height and concise localized copy", async ({ page }) => {
+test("lobby adapts room entry and wardrobe controls across viewport sizes", async ({ page }) => {
 	await page.setViewportSize({ width: 320, height: 844 });
 	await page.goto(cafeUrl);
 
 	const playerName = page.locator("#cafe-player-name");
 	const inviteCode = page.locator("#cafe-invite-code");
+	const roomCodeToggle = page.getByRole("button", {
+		name: "Have a room code?",
+		exact: true
+	});
 	for (const width of [320, 390]) {
 		await page.setViewportSize({ width, height: 844 });
 		await expect(playerName).toHaveCSS("height", "44px");
-		await expect(inviteCode).toHaveCSS("height", "44px");
+		await expect(roomCodeToggle).toBeVisible();
+		await expect(inviteCode).toBeHidden();
 	}
 	await expect(page.getByRole("button", { name: "Join", exact: true })).toBeVisible();
+	await expect(roomCodeToggle).toHaveAttribute("aria-expanded", "false");
+	await roomCodeToggle.click();
+	await expect(roomCodeToggle).toHaveAttribute("aria-expanded", "true");
 	await expect(page.getByText("Room code", { exact: true })).toBeVisible();
+	await expect(inviteCode).toBeVisible();
+	await expect(inviteCode).toHaveCSS("height", "44px");
 	await expect(page.getByText("Cosmetics", { exact: true })).toBeVisible();
+	await expect(page.getByRole("button", { name: "Reset look", exact: true })).toHaveCount(0);
+	await page.getByTestId("cafe-cosmetic-summary").click();
+	await expect(page.getByRole("dialog")).toBeVisible();
 	await expect(page.getByRole("button", { name: "Reset look", exact: true })).toBeVisible();
+	await expect(page.getByTestId("cafe-cosmetic-wardrobe")).toHaveCSS("padding-bottom", "48px");
+	await page
+		.getByRole("dialog")
+		.getByRole("button", { name: "Close dialog", exact: true })
+		.click();
 	await expect(page.locator("[data-testid='cafe-entry-panel'] h2")).toHaveCSS(
 		"text-wrap",
 		"balance"
@@ -49,9 +67,22 @@ test("lobby keeps mobile control height and concise localized copy", async ({ pa
 	await page.evaluate(() => localStorage.setItem("wfchat.locale", "th"));
 	await page.reload();
 	await expect(page.getByRole("button", { name: "เข้าห้อง", exact: true })).toBeVisible();
+	const thaiRoomCodeToggle = page.getByRole("button", {
+		name: "มีรหัสห้อง?",
+		exact: true
+	});
+	await expect(thaiRoomCodeToggle).toBeVisible();
+	await expect(page.getByText("รหัสห้อง", { exact: true })).toBeHidden();
+	await thaiRoomCodeToggle.click();
 	await expect(page.getByText("รหัสห้อง", { exact: true })).toBeVisible();
 	await expect(page.getByText("ของแต่ง", { exact: true })).toBeVisible();
+	await page.getByTestId("cafe-cosmetic-summary").click();
 	await expect(page.getByRole("button", { name: "ถอดของแต่ง", exact: true })).toBeVisible();
+	await expect(page.getByTestId("cafe-cosmetic-wardrobe")).toHaveCSS("padding-bottom", "48px");
+	await page
+		.getByRole("dialog")
+		.getByRole("button", { name: "Close dialog", exact: true })
+		.click();
 	await expect(page.locator("[data-testid='cafe-entry-panel'] h2")).toHaveCSS(
 		"text-wrap",
 		"balance"
@@ -68,7 +99,37 @@ test("lobby keeps mobile control height and concise localized copy", async ({ pa
 	});
 
 	await page.setViewportSize({ width: 640, height: 844 });
+	await page.reload();
+	await expect(thaiRoomCodeToggle).toBeHidden();
+	await expect(inviteCode).toBeVisible();
 	await expect(inviteCode).toHaveCSS("height", "44px");
+
+	await page.evaluate(() => localStorage.setItem("wfchat.locale", "en"));
+	await page.setViewportSize({ width: 1280, height: 900 });
+	await page.reload();
+	await expect(roomCodeToggle).toBeHidden();
+	await expect(inviteCode).toBeVisible();
+	const [playerNameBox, inviteCodeBox, joinBox, joinByCodeBox, createRoomBox] = await Promise.all(
+		[
+			playerName.boundingBox(),
+			inviteCode.boundingBox(),
+			page.getByRole("button", { name: "Join", exact: true }).boundingBox(),
+			page.getByRole("button", { name: "Join by Code", exact: true }).boundingBox(),
+			page.getByRole("button", { name: "Create Room", exact: true }).boundingBox()
+		]
+	);
+	for (const box of [playerNameBox, inviteCodeBox, joinBox, joinByCodeBox, createRoomBox]) {
+		expect(box).not.toBeNull();
+	}
+	expect(Math.abs((playerNameBox?.x ?? 0) - (inviteCodeBox?.x ?? 0))).toBeLessThanOrEqual(1);
+	expect(Math.abs((playerNameBox?.width ?? 0) - (inviteCodeBox?.width ?? 0))).toBeLessThanOrEqual(
+		1
+	);
+	expect(Math.abs((joinBox?.x ?? 0) - (joinByCodeBox?.x ?? 0))).toBeLessThanOrEqual(1);
+	expect(Math.abs((joinBox?.width ?? 0) - (joinByCodeBox?.width ?? 0))).toBeLessThanOrEqual(1);
+	expect(Math.abs((joinBox?.width ?? 0) - (createRoomBox?.width ?? 0))).toBeLessThanOrEqual(1);
+	await page.getByTestId("cafe-cosmetic-summary").click();
+	await expect(page.getByTestId("cafe-cosmetic-wardrobe")).toHaveCSS("padding-bottom", "48px");
 });
 
 test("mobile overlays reserve separate control and status zones", async ({ page }) => {
@@ -400,11 +461,17 @@ test("two guests quick join the same cafe and mobile controls stay usable", asyn
 
 		const wardrobePage = await firstContext.newPage();
 		await wardrobePage.goto(cafeUrl);
+		await wardrobePage.getByTestId("cafe-cosmetic-summary").click();
 		await expect(wardrobePage.getByTestId("cafe-cosmetic-wardrobe")).toBeVisible();
-		await wardrobePage.getByRole("button", { name: /^Equip$|^สวมใส่$/ }).click();
+		await wardrobePage.getByTestId("cafe-cosmetic-tile-sakura_pin").click();
 		await expect(
 			wardrobePage.getByRole("status", { name: /Equipped|กำลังใช้อยู่/ })
 		).toBeVisible();
+		await wardrobePage
+			.getByRole("dialog")
+			.getByRole("button", { name: "Close dialog", exact: true })
+			.click();
+		await wardrobePage.close();
 		await expect(secondPage.getByLabel(/Wearing Sakura pin|กำลังสวม ปิ่นซากุระ/)).toBeVisible();
 		await secondPage.getByRole("button", { name: "Ok", exact: true }).click();
 		await secondPage.screenshot({
@@ -453,7 +520,7 @@ function rectanglesOverlap(
 	);
 }
 
-test("invite rooms accept their code and disappear after the final player leaves", async ({
+test("invite rooms accept their code and remain joinable during reconnect grace", async ({
 	browser
 }) => {
 	const contexts = [];
@@ -487,19 +554,20 @@ test("invite rooms accept their code and disappear after the final player leaves
 		await expect(invitedPage.getByLabel(/Connected|เชื่อมต่อแล้ว/)).toBeVisible();
 		await expect(ownerPage.getByText(/^Guest [0-9A-F]{4}$/)).toHaveCount(2);
 		await observerPage.goto(cafeUrl);
+		const observerSession = await observerPage.request.get("http://localhost:5173/api/auth/me");
+		expect(observerSession.ok()).toBe(true);
 
 		for (const context of contexts.splice(0)) {
 			await context.close();
 		}
-		await expect
-			.poll(async () => {
-				const response = await observerPage.request.post(
-					"http://localhost:5173/api/cafe/rooms/join",
-					{ data: { invite_code: roomPayload.room.invite_code } }
-				);
-				return response.status();
-			})
-			.toBe(404);
+		const reconnectResponse = await observerPage.request.post(
+			"http://localhost:5173/api/cafe/rooms/join",
+			{ data: { invite_code: roomPayload.room.invite_code } }
+		);
+		expect(reconnectResponse.status()).toBe(200);
+		await expect(reconnectResponse.json()).resolves.toMatchObject({
+			room: { id: roomPayload.room.id, player_count: 0 }
+		});
 	} finally {
 		for (const context of contexts) {
 			await context.close();

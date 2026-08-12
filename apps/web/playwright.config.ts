@@ -1,6 +1,12 @@
 import { defineConfig, devices } from "@playwright/test";
 
-export const e2ePort = 4173;
+const configuredE2ePort = Number(process.env.WFCHAT_E2E_PORT ?? 4173);
+
+if (!Number.isInteger(configuredE2ePort) || configuredE2ePort < 1 || configuredE2ePort > 65_535) {
+	throw new Error("WFCHAT_E2E_PORT must be a valid TCP port");
+}
+
+export const e2ePort = configuredE2ePort;
 
 export default defineConfig({
 	testDir: "./e2e",

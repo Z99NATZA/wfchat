@@ -1,6 +1,6 @@
 # WaifuChat
 
-Project created: 2026-05-27
+Project created: 2026-05-27 (Open Source)
 
 ![WaifuChat chat interface](docs/images/wfchat-chat-interface.png)
 ![Aiko Cafe interface](docs/images/aiko-cafe.png)

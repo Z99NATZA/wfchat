@@ -3714,10 +3714,12 @@ mod tests {
 
     #[test]
     fn socket_reservations_are_atomic_and_release_every_identity() {
-        let mut limits = CafeSecurityConfig::default();
-        limits.max_sockets_per_session = 2;
-        limits.max_sockets_per_ip = 3;
-        limits.max_sockets_global = 3;
+        let limits = CafeSecurityConfig {
+            max_sockets_per_session: 2,
+            max_sockets_per_ip: 3,
+            max_sockets_global: 3,
+            ..Default::default()
+        };
         let hub = CafeHub::new(limits);
         let session = Uuid::new_v4();
         let ip = "198.51.100.8".to_owned();
@@ -3749,10 +3751,12 @@ mod tests {
 
     #[test]
     fn socket_ip_and_process_limits_are_independent() {
-        let mut ip_limits = CafeSecurityConfig::default();
-        ip_limits.max_sockets_per_session = 10;
-        ip_limits.max_sockets_per_ip = 2;
-        ip_limits.max_sockets_global = 10;
+        let ip_limits = CafeSecurityConfig {
+            max_sockets_per_session: 10,
+            max_sockets_per_ip: 2,
+            max_sockets_global: 10,
+            ..Default::default()
+        };
         let ip_hub = CafeHub::new(ip_limits);
         let shared_ip = "198.51.100.20".to_owned();
         let first = ip_hub
@@ -3768,10 +3772,12 @@ mod tests {
             .expect("an IP rejection must not consume process capacity");
         drop((first, second, other_ip));
 
-        let mut global_limits = CafeSecurityConfig::default();
-        global_limits.max_sockets_per_session = 10;
-        global_limits.max_sockets_per_ip = 10;
-        global_limits.max_sockets_global = 2;
+        let global_limits = CafeSecurityConfig {
+            max_sockets_per_session: 10,
+            max_sockets_per_ip: 10,
+            max_sockets_global: 2,
+            ..Default::default()
+        };
         let global_hub = CafeHub::new(global_limits);
         let first = global_hub
             .reserve_socket(Uuid::new_v4(), "192.0.2.1".to_owned())
@@ -3788,8 +3794,10 @@ mod tests {
 
     #[tokio::test]
     async fn quick_join_reuse_does_not_consume_room_creation_quota() {
-        let mut limits = CafeSecurityConfig::default();
-        limits.room_creations_per_session = 1;
+        let limits = CafeSecurityConfig {
+            room_creations_per_session: 1,
+            ..Default::default()
+        };
         let hub = CafeHub::new(limits);
         let session = Uuid::new_v4();
         let ip = "198.51.100.9".to_owned();
@@ -3810,10 +3818,12 @@ mod tests {
 
     #[tokio::test]
     async fn room_creation_window_expires_and_cleanup_prunes_buckets() {
-        let mut limits = CafeSecurityConfig::default();
-        limits.room_creations_per_session = 1;
-        limits.room_creations_per_ip = 1;
-        limits.room_creations_global = 1;
+        let limits = CafeSecurityConfig {
+            room_creations_per_session: 1,
+            room_creations_per_ip: 1,
+            room_creations_global: 1,
+            ..Default::default()
+        };
         let hub = CafeHub::new(limits);
         let now = Instant::now();
         let session = Uuid::new_v4();
@@ -3842,10 +3852,12 @@ mod tests {
     #[tokio::test]
     async fn room_creation_ip_and_process_limits_are_independent_and_atomic() {
         let now = Instant::now();
-        let mut ip_limits = CafeSecurityConfig::default();
-        ip_limits.room_creations_per_session = 10;
-        ip_limits.room_creations_per_ip = 2;
-        ip_limits.room_creations_global = 10;
+        let ip_limits = CafeSecurityConfig {
+            room_creations_per_session: 10,
+            room_creations_per_ip: 2,
+            room_creations_global: 10,
+            ..Default::default()
+        };
         let ip_hub = CafeHub::new(ip_limits);
         let shared_ip = "198.51.100.30".to_owned();
         ip_hub
@@ -3871,10 +3883,12 @@ mod tests {
             .await
             .expect("an IP rejection must not consume session or process quota");
 
-        let mut global_limits = CafeSecurityConfig::default();
-        global_limits.room_creations_per_session = 10;
-        global_limits.room_creations_per_ip = 10;
-        global_limits.room_creations_global = 2;
+        let global_limits = CafeSecurityConfig {
+            room_creations_per_session: 10,
+            room_creations_per_ip: 10,
+            room_creations_global: 2,
+            ..Default::default()
+        };
         let global_hub = CafeHub::new(global_limits);
         for ip in ["192.0.2.10", "192.0.2.11"] {
             global_hub
@@ -4004,7 +4018,10 @@ mod tests {
             assert_eq!(player.direction, Direction::Left);
             assert!(!player.moving);
             assert_eq!(player.carried_tea, 1);
-            assert_eq!(player.carried_rush_ingredient_ids, [ingredient_id.clone()]);
+            assert_eq!(
+                player.carried_rush_ingredient_ids.as_slice(),
+                std::slice::from_ref(&ingredient_id)
+            );
             assert_eq!(player.carried_order_id.as_deref(), Some(order_id.as_str()));
             assert_eq!(player.last_sequence, 0);
             assert!(room
@@ -4063,9 +4080,11 @@ mod tests {
 
     #[tokio::test]
     async fn aggregate_telemetry_reports_gauges_and_resets_interval_counters() {
-        let mut limits = CafeSecurityConfig::default();
-        limits.max_sockets_per_session = 1;
-        limits.room_creations_per_session = 1;
+        let limits = CafeSecurityConfig {
+            max_sockets_per_session: 1,
+            room_creations_per_session: 1,
+            ..Default::default()
+        };
         let hub = CafeHub::new(limits);
         let room = hub.create_room(false).await;
         let player_session = guest();
