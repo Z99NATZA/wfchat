@@ -1,6 +1,7 @@
 import AppLayout from "@/layouts/AppLayout";
 import AvatarOverlay from "@/features/avatar/components/AvatarOverlay";
-import ChatComposer from "@/features/chat/components/ChatComposer";
+import ChatComposer, { type ChatComposerHandle } from "@/features/chat/components/ChatComposer";
+import ChatImageDropZone from "@/features/chat/components/ChatImageDropZone";
 import ChatDetailsPanel from "@/features/chat/components/ChatDetailsPanel";
 import ChatHeader from "@/features/chat/components/ChatHeader";
 import ChatMessageList from "@/features/chat/components/ChatMessageList";
@@ -60,6 +61,7 @@ function ChatPage({
 	const { notifyAvatarChatEvent } = useAvatarChatBridge();
 	const chat = useChatSession({ onAvatarChatEvent: notifyAvatarChatEvent });
 	const composerContainerRef = useRef<HTMLDivElement>(null);
+	const composerRef = useRef<ChatComposerHandle>(null);
 	const avatarOverlayRef = useRef<HTMLDivElement>(null);
 	const [composerHeight, setComposerHeight] = useState(104);
 	const [avatarOverlayHeight, setAvatarOverlayHeight] = useState(0);
@@ -238,7 +240,12 @@ function ChatPage({
 			details={<ChatDetailsPanel persona={chat.activePersona} />}
 		>
 			<div className="relative flex min-h-0 flex-1 flex-col">
-				<div className="relative z-10 flex min-h-0 flex-1 flex-col">
+				<ChatImageDropZone
+					isEnabled={
+						chat.isImageUploadEnabled && !chat.isActiveChatReadOnly && !chat.isSending
+					}
+					onImageFilesDropped={(files) => composerRef.current?.addImageFiles(files)}
+				>
 					<ChatMessageList
 						activeChatId={chat.activeChatId}
 						messages={displayedMessages}
@@ -258,6 +265,7 @@ function ChatPage({
 					/>
 					<div ref={composerContainerRef}>
 						<ChatComposer
+							ref={composerRef}
 							draft={chat.draft}
 							font={font}
 							companionName={chat.activePersona.name}
@@ -273,7 +281,7 @@ function ChatPage({
 							attachmentResetVersion={chat.composerAttachmentResetVersion}
 						/>
 					</div>
-				</div>
+				</ChatImageDropZone>
 				{isAvatarOverlayVisible ? (
 					<AvatarOverlay
 						ref={avatarOverlayRef}

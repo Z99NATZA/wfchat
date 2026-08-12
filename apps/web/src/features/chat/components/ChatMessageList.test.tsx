@@ -1,7 +1,7 @@
 /**
  * @vitest-environment happy-dom
  */
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import ChatMessageList from "@/features/chat/components/ChatMessageList";
 import { fetchChatAttachmentPreview } from "@/features/chat/services/chatApiService";
@@ -47,6 +47,24 @@ vi.mock("@/i18n/i18nContext", () => ({
 			}
 			if (key === "chat.messageList.openImagePreview") {
 				return `Open preview for ${params?.label}`;
+			}
+			if (key === "chat.imageLightbox.title") {
+				return "Image preview";
+			}
+			if (key === "chat.imageLightbox.position") {
+				return `Image ${params?.current} of ${params?.total}`;
+			}
+			if (key === "chat.imageLightbox.previous") {
+				return "Previous image";
+			}
+			if (key === "chat.imageLightbox.next") {
+				return "Next image";
+			}
+			if (key === "chat.imageLightbox.close") {
+				return "Close image preview";
+			}
+			if (key === "chat.imageLightbox.showImage") {
+				return `Show image ${params?.index}`;
 			}
 			if (key === "chat.messageList.loadMarkdownQa") {
 				return "Load QA";
@@ -170,10 +188,12 @@ describe("ChatMessageList streaming state", () => {
 		);
 
 		const userBubble = container.querySelector('[data-message-bubble="user"]');
+		const userLayout = container.querySelector('[data-user-message-layout="separated"]');
 		const assistantBubble = container.querySelector('[data-message-bubble="companion"]');
 		const scrollContainer = container.querySelector(".chat-scroll");
 
-		expect(userBubble?.className).toContain("sm:max-w-[min(32rem,70%)]");
+		expect(userLayout?.className).toContain("sm:max-w-[min(32rem,70%)]");
+		expect(userBubble?.className).toContain("max-w-full");
 		expect(userBubble?.className).toContain("rounded-lg");
 		expect(userBubble?.className).toContain("px-3");
 		expect(userBubble?.className).toContain("sm:px-4");
@@ -295,8 +315,8 @@ describe("ChatMessageList streaming state", () => {
 		expect(screen.queryByRole("button", { name: "Copy message" })).toBeNull();
 	});
 
-	it("fetches and renders image attachments inside message bubbles", async () => {
-		render(
+	it("fetches and renders user image attachments separately from the text bubble", async () => {
+		const { container } = render(
 			<ChatMessageList
 				messages={[
 					{
@@ -321,8 +341,69 @@ describe("ChatMessageList streaming state", () => {
 		);
 
 		const image = (await screen.findByRole("img", { name: "Image 1" })) as HTMLImageElement;
+		const gallery = container.querySelector('[data-message-attachments="user"]');
+		const bubble = container.querySelector('[data-message-bubble="user"]');
+
 		expect(fetchChatAttachmentPreview).toHaveBeenCalledWith("attachment-1");
 		expect(image.src).toBe("blob:fetched-preview");
+		expect(gallery).toBeTruthy();
+		expect(bubble).toBeTruthy();
+		expect(bubble?.contains(gallery)).toBe(false);
+		expect(bubble?.textContent).toContain("look");
+	});
+
+	it.each([1, 2, 3, 4])(
+		"lays out a separated user gallery containing %i image(s)",
+		(attachmentCount) => {
+			const { container } = render(
+				<ChatMessageList
+					messages={[
+						{
+							...message("user-1", "user", "gallery"),
+							attachments: imageAttachments(attachmentCount)
+						}
+					]}
+					companionName="Aiko"
+					companionAvatarUrl="/images/aiko-avatar.png"
+				/>
+			);
+
+			const gallery = container.querySelector('[data-message-attachments="user"]');
+			const previewButtons = gallery?.querySelectorAll("button");
+
+			expect(gallery?.getAttribute("data-attachment-count")).toBe(String(attachmentCount));
+			expect(previewButtons).toHaveLength(attachmentCount);
+			expect(gallery?.className).toContain(
+				attachmentCount === 1 ? "grid-cols-1" : "grid-cols-2"
+			);
+
+			if (attachmentCount === 3) {
+				expect(previewButtons?.[0].className).toContain("col-span-2");
+				expect(previewButtons?.[0].className).toContain("aspect-[2/1]");
+			}
+		}
+	);
+
+	it("shows image-only message time below the gallery without an empty text bubble", () => {
+		const { container } = render(
+			<ChatMessageList
+				messages={[
+					{
+						...message("user-1", "user", ""),
+						attachments: imageAttachments(1)
+					}
+				]}
+				companionName="Aiko"
+				companionAvatarUrl="/images/aiko-avatar.png"
+			/>
+		);
+
+		const gallery = container.querySelector('[data-message-attachments="user"]');
+		const messageTime = container.querySelector('[data-message-time="user"]');
+
+		expect(gallery).toBeTruthy();
+		expect(messageTime?.textContent).toBe("12:00");
+		expect(container.querySelector('[data-message-bubble="user"]')).toBeNull();
 	});
 
 	it("opens successful sent image attachments in an in-app preview dialog", async () => {
@@ -355,20 +436,17 @@ describe("ChatMessageList streaming state", () => {
 
 		expect(dialogMocks.openCustom).toHaveBeenCalledWith(
 			expect.objectContaining({
-				title: "Image 1",
-				isDraggable: true,
-				showCancelAction: false,
-				size: "wide"
+				title: "Image preview",
+				isDraggable: false,
+				variant: "lightbox"
 			})
 		);
 		expect(dialogMocks.openCustom.mock.calls[0][0].render).toEqual(expect.any(Function));
 		const renderPreview = dialogMocks.openCustom.mock.calls[0][0].render;
-		const preview = render(renderPreview());
+		const preview = render(renderPreview({ cancel: vi.fn(), close: vi.fn() }));
 		const previewImage = preview.container.querySelector('img[alt="Image 1"]');
-		expect(previewImage?.parentElement?.className).toContain("border-primary");
-		expect(previewImage?.parentElement?.className).toContain("dark:border-action-border");
-		expect(previewImage?.parentElement?.className).not.toContain("bg-black");
-		expect(previewImage?.parentElement?.className).not.toContain("p-2");
+		expect(previewImage?.className).toContain("object-contain");
+		expect(screen.queryByRole("button", { name: "Next image" })).toBeNull();
 	});
 
 	it("shows a compact placeholder when a sent image preview cannot be fetched", async () => {
@@ -467,23 +545,13 @@ describe("ChatMessageList streaming state", () => {
 		expect(image.src).toBe("blob:local-preview");
 	});
 
-	it("opens pending local blob image attachments in the same preview dialog", () => {
+	it("opens a pending local gallery at the selected image and navigates without closing", () => {
 		render(
 			<ChatMessageList
 				messages={[
 					{
 						...message("user-1", "user", "look"),
-						attachments: [
-							{
-								id: "local-attachment",
-								kind: "image",
-								mimeType: "image/png",
-								byteSize: 12,
-								width: 2,
-								height: 3,
-								previewUrl: "blob:local-preview"
-							}
-						]
+						attachments: imageAttachments(3)
 					}
 				]}
 				companionName="Aiko"
@@ -491,15 +559,50 @@ describe("ChatMessageList streaming state", () => {
 			/>
 		);
 
-		fireEvent.click(screen.getByRole("button", { name: "Open preview for Image 1" }));
+		fireEvent.click(screen.getByRole("button", { name: "Open preview for Image 2" }));
 
 		expect(fetchChatAttachmentPreview).not.toHaveBeenCalled();
 		expect(dialogMocks.openCustom).toHaveBeenCalledWith(
 			expect.objectContaining({
-				title: "Image 1",
-				size: "wide"
+				title: "Image preview",
+				variant: "lightbox"
 			})
 		);
+
+		const renderPreview = dialogMocks.openCustom.mock.calls[0][0].render;
+		const preview = render(renderPreview({ cancel: vi.fn(), close: vi.fn() }));
+		const previewScreen = within(preview.container);
+		expect(previewScreen.getByRole("img", { name: "Image 2" })).toBeTruthy();
+
+		fireEvent.click(previewScreen.getByRole("button", { name: "Next image" }));
+		expect(previewScreen.getByRole("img", { name: "Image 3" })).toBeTruthy();
+		expect(dialogMocks.openCustom).toHaveBeenCalledTimes(1);
+	});
+
+	it("reuses loaded sent-image URLs while navigating the lightbox", async () => {
+		render(
+			<ChatMessageList
+				messages={[
+					{
+						...message("user-1", "user", "look"),
+						attachments: sentImageAttachments(3)
+					}
+				]}
+				companionName="Aiko"
+				companionAvatarUrl="/images/aiko-avatar.png"
+			/>
+		);
+
+		await waitFor(() => expect(fetchChatAttachmentPreview).toHaveBeenCalledTimes(3));
+		fireEvent.click(await screen.findByRole("button", { name: "Open preview for Image 2" }));
+
+		const renderPreview = dialogMocks.openCustom.mock.calls[0][0].render;
+		const preview = render(renderPreview({ cancel: vi.fn(), close: vi.fn() }));
+		const previewScreen = within(preview.container);
+		fireEvent.click(previewScreen.getByRole("button", { name: "Next image" }));
+
+		expect(previewScreen.getByRole("img", { name: "Image 3" })).toBeTruthy();
+		expect(fetchChatAttachmentPreview).toHaveBeenCalledTimes(3);
 	});
 
 	it("keeps pending local blob previews unchanged after image error events", () => {
@@ -1009,4 +1112,23 @@ function message(id: string, author: ChatMessage["author"], text: string): ChatM
 		createdAt: 1_780_325_400,
 		time: "12:00"
 	};
+}
+
+function imageAttachments(count: number) {
+	return Array.from({ length: count }, (_, index) => ({
+		id: `local-attachment-${index + 1}`,
+		kind: "image" as const,
+		mimeType: "image/png",
+		byteSize: 12,
+		width: 2,
+		height: 3,
+		previewUrl: `blob:local-preview-${index + 1}`
+	}));
+}
+
+function sentImageAttachments(count: number) {
+	return imageAttachments(count).map((attachment) => ({
+		...attachment,
+		previewUrl: `http://localhost:8080/api/chat/attachments/${attachment.id}/preview`
+	}));
 }

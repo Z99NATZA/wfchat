@@ -134,6 +134,7 @@ function DialogProvider({ children }: DialogProviderProps) {
 				description={customDialogState?.description}
 				isDraggable={customDialogState?.isDraggable}
 				size={customDialogState?.size}
+				variant={customDialogState?.variant}
 				onClose={() => closeCustom(undefined)}
 				content={
 					customDialogState?.render({
@@ -142,20 +143,22 @@ function DialogProvider({ children }: DialogProviderProps) {
 					}) ?? null
 				}
 				actions={
-					<div className="flex items-center gap-2">
-						{customDialogState?.showCancelAction === false ? null : (
-							<Button
-								surface="dialog"
-								variant="secondary"
-								onClick={() => closeCustom(undefined)}
-							>
-								{customDialogState?.cancelLabel ?? t("common.cancel")}
+					customDialogState?.variant === "lightbox" ? null : (
+						<div className="flex items-center gap-2">
+							{customDialogState?.showCancelAction === false ? null : (
+								<Button
+									surface="dialog"
+									variant="secondary"
+									onClick={() => closeCustom(undefined)}
+								>
+									{customDialogState?.cancelLabel ?? t("common.cancel")}
+								</Button>
+							)}
+							<Button variant="primary" onClick={() => closeCustom(undefined)}>
+								{customDialogState?.confirmLabel ?? t("common.done")}
 							</Button>
-						)}
-						<Button variant="primary" onClick={() => closeCustom(undefined)}>
-							{customDialogState?.confirmLabel ?? t("common.done")}
-						</Button>
-					</div>
+						</div>
+					)
 				}
 			/>
 		</DialogContext.Provider>

@@ -1,10 +1,11 @@
 /**
  * @vitest-environment happy-dom
  */
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { useState } from "react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { createRef, useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import ChatComposer from "@/features/chat/components/ChatComposer";
+import type { ChatComposerHandle } from "@/features/chat/components/ChatComposer";
 
 const dialogMocks = vi.hoisted(() => ({
 	openCustom: vi.fn()
@@ -329,6 +330,29 @@ describe("ChatComposer", () => {
 		expect(revokeObjectUrl).toHaveBeenCalledWith("blob:image-preview");
 	});
 
+	it("stages canvas-dropped images through the same attachment pipeline", () => {
+		installObjectUrlMocks("blob:canvas-drop-preview");
+		const composerRef = createRef<ChatComposerHandle>();
+		const file = new File(["image"], "canvas-drop.png", { type: "image/png" });
+
+		render(
+			<ChatComposer
+				ref={composerRef}
+				draft=""
+				font="inter"
+				companionName="Aiko"
+				onDraftChange={vi.fn()}
+				onSend={vi.fn()}
+			/>
+		);
+
+		act(() => composerRef.current?.addImageFiles([file]));
+
+		expect((screen.getByAltText("canvas-drop.png") as HTMLImageElement).src).toBe(
+			"blob:canvas-drop-preview"
+		);
+	});
+
 	it("clears selected images after a retry succeeds outside the composer", async () => {
 		const { revokeObjectUrl } = installObjectUrlMocks("blob:retry-preview");
 		const props = {
@@ -374,23 +398,19 @@ describe("ChatComposer", () => {
 
 		expect(dialogMocks.openCustom).toHaveBeenCalledWith(
 			expect.objectContaining({
-				isDraggable: true,
-				showCancelAction: false,
-				size: "wide",
-				title: "local.png"
+				isDraggable: false,
+				title: "chat.imageLightbox.title",
+				variant: "lightbox"
 			})
 		);
 
 		const renderPreview = dialogMocks.openCustom.mock.calls[0][0].render;
-		const preview = render(renderPreview());
+		const preview = render(renderPreview({ cancel: vi.fn(), close: vi.fn() }));
 		const previewImage = preview.container.querySelector(
 			'img[alt="local.png"]'
 		) as HTMLImageElement;
 		expect(previewImage.src).toBe("blob:image-preview");
-		expect(previewImage.parentElement?.className).toContain("border-primary");
-		expect(previewImage.parentElement?.className).toContain("dark:border-action-border");
-		expect(previewImage.parentElement?.className).not.toContain("bg-black");
-		expect(previewImage.parentElement?.className).not.toContain("p-2");
+		expect(previewImage.className).toContain("object-contain");
 	});
 
 	it("sends image-only messages and clears previews after success", async () => {

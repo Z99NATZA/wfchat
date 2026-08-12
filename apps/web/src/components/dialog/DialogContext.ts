@@ -19,6 +19,8 @@ export type CustomDialogRenderParams<TResult> = {
 	cancel: () => void;
 };
 
+export type DialogVariant = "default" | "lightbox";
+
 export type CustomDialogOptions<TResult = void> = {
 	title: string;
 	description?: string;
@@ -27,6 +29,7 @@ export type CustomDialogOptions<TResult = void> = {
 	isDraggable?: boolean;
 	showCancelAction?: boolean;
 	size?: "default" | "wide";
+	variant?: DialogVariant;
 	render: (params: CustomDialogRenderParams<TResult>) => ReactNode;
 };
 

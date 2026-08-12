@@ -28,6 +28,7 @@ import { useDialog } from "@/components/dialog/DialogContext";
 import Button from "@/components/ui/Button";
 import IconButton from "@/components/ui/IconButton";
 import ChatMessageContent from "@/features/chat/components/ChatMessageContent";
+import ImageLightbox, { type ImageLightboxItem } from "@/features/chat/components/ImageLightbox";
 import { fetchChatAttachmentPreview } from "@/features/chat/services/chatApiService";
 import { useI18n } from "@/i18n/i18nContext";
 import type { ChatMessage, ChatMessageAttachment } from "@/types/chat";
@@ -535,6 +536,81 @@ function ChatMessageList({
 			isStreamingAssistant && !message.text
 				? t("chat.messageList.thinking", { name: companionName })
 				: message.text;
+		const attachments = message.attachments ?? [];
+		const hasAttachments = attachments.length > 0;
+		const hasMessageText = messageText.length > 0;
+		const messageTimestamp = (
+			<p
+				className={cn(
+					"text-[11px]",
+					isUser && hasMessageText ? "text-primary-text/70" : "text-muted"
+				)}
+			>
+				{message.time}
+			</p>
+		);
+		const messageFooter = (
+			<div className="mt-2 flex items-center justify-between gap-3">
+				{messageTimestamp}
+
+				<div className="flex items-center gap-1 justify-end">
+					{canPlayAssistantSpeech && (
+						<>
+							{assistantSpeechStatus === "error" && (
+								<span
+									className="max-w-28 truncate text-[11px] font-medium text-muted"
+									role="status"
+								>
+									{t("chat.messageList.assistantSpeechFailed")}
+								</span>
+							)}
+							<IconButton
+								size="xs"
+								variant={"ghost"}
+								aria-label={assistantSpeechLabel(assistantSpeechStatus, t)}
+								title={assistantSpeechLabel(assistantSpeechStatus, t)}
+								onClick={() => onToggleAssistantSpeech?.(message.id)}
+							>
+								{assistantSpeechStatus === "loading" ? (
+									<LoaderCircle
+										className="animate-spin"
+										size={14}
+										aria-hidden="true"
+									/>
+								) : assistantSpeechStatus === "playing" ? (
+									<VolumeX size={14} aria-hidden="true" />
+								) : (
+									<Volume2 size={14} aria-hidden="true" />
+								)}
+							</IconButton>
+						</>
+					)}
+					{canCopyAssistantMessage && (
+						<IconButton
+							size="xs"
+							variant="ghost"
+							aria-label={
+								didCopyAssistantMessage
+									? t("chat.messageList.assistantMessageCopied")
+									: t("chat.messageList.copyAssistantMessage")
+							}
+							title={
+								didCopyAssistantMessage
+									? t("chat.messageList.assistantMessageCopied")
+									: t("chat.messageList.copyAssistantMessage")
+							}
+							onClick={() => copyAssistantMessage(message)}
+						>
+							{didCopyAssistantMessage ? (
+								<Check size={14} aria-hidden="true" />
+							) : (
+								<Clipboard size={14} aria-hidden="true" />
+							)}
+						</IconButton>
+					)}
+				</div>
+			</div>
+		);
 
 		return (
 			<div className="space-y-3 sm:space-y-4">
@@ -590,98 +666,56 @@ function ChatMessageList({
 							)}
 						</div>
 					)}
-					<div
-						data-message-bubble={message.author}
-						className={cn(
-							isUser ? userMessageBubbleClassName : assistantMessageLayoutClassName,
-							isUser
-								? "rounded-lg bg-primary px-3 py-2.5 text-primary-text dark:border dark:border-app-border sm:px-4 sm:py-3"
-								: undefined
-						)}
-					>
-						{message.attachments && message.attachments.length > 0 ? (
-							<ChatMessageAttachmentGrid
-								attachments={message.attachments}
-								isUser={isUser}
-							/>
-						) : null}
-						<ChatMessageContent
-							author={message.author}
-							isStreaming={isStreamingAssistant}
-							text={messageText}
-							theme={theme}
-						/>
-						<div className="mt-2 flex items-center justify-between gap-3">
-							<p
-								className={cn(
-									"text-[11px]",
-									isUser ? "text-primary-text/70" : "text-muted"
-								)}
-							>
-								{message.time}
-							</p>
-
-							<div className="flex items-center gap-1 justify-end">
-								{canPlayAssistantSpeech && (
-									<>
-										{assistantSpeechStatus === "error" && (
-											<span
-												className="max-w-28 truncate text-[11px] font-medium text-muted"
-												role="status"
-											>
-												{t("chat.messageList.assistantSpeechFailed")}
-											</span>
-										)}
-										<IconButton
-											size="xs"
-											variant={"ghost"}
-											aria-label={assistantSpeechLabel(
-												assistantSpeechStatus,
-												t
-											)}
-											title={assistantSpeechLabel(assistantSpeechStatus, t)}
-											onClick={() => onToggleAssistantSpeech?.(message.id)}
-										>
-											{assistantSpeechStatus === "loading" ? (
-												<LoaderCircle
-													className="animate-spin"
-													size={14}
-													aria-hidden="true"
-												/>
-											) : assistantSpeechStatus === "playing" ? (
-												<VolumeX size={14} aria-hidden="true" />
-											) : (
-												<Volume2 size={14} aria-hidden="true" />
-											)}
-										</IconButton>
-									</>
-								)}
-								{canCopyAssistantMessage && (
-									<IconButton
-										size="xs"
-										variant="ghost"
-										aria-label={
-											didCopyAssistantMessage
-												? t("chat.messageList.assistantMessageCopied")
-												: t("chat.messageList.copyAssistantMessage")
-										}
-										title={
-											didCopyAssistantMessage
-												? t("chat.messageList.assistantMessageCopied")
-												: t("chat.messageList.copyAssistantMessage")
-										}
-										onClick={() => copyAssistantMessage(message)}
-									>
-										{didCopyAssistantMessage ? (
-											<Check size={14} aria-hidden="true" />
-										) : (
-											<Clipboard size={14} aria-hidden="true" />
-										)}
-									</IconButton>
-								)}
-							</div>
+					{isUser ? (
+						<div
+							data-user-message-layout="separated"
+							className={cn(
+								"flex flex-col items-end gap-2",
+								userMessageBubbleClassName
+							)}
+						>
+							{hasAttachments ? (
+								<ChatMessageAttachmentGrid attachments={attachments} isUser />
+							) : null}
+							{hasMessageText ? (
+								<div
+									data-message-bubble="user"
+									className="w-fit max-w-full rounded-lg bg-primary px-3 py-2.5 text-primary-text dark:border dark:border-app-border sm:px-4 sm:py-3"
+								>
+									<ChatMessageContent
+										author={message.author}
+										isStreaming={isStreamingAssistant}
+										text={messageText}
+										theme={theme}
+									/>
+									{messageFooter}
+								</div>
+							) : (
+								<div data-message-time="user" className="px-1 text-muted">
+									{messageTimestamp}
+								</div>
+							)}
 						</div>
-					</div>
+					) : (
+						<div
+							data-message-bubble="companion"
+							className={assistantMessageLayoutClassName}
+						>
+							{hasAttachments ? (
+								<ChatMessageAttachmentGrid
+									attachments={attachments}
+									isUser={false}
+								/>
+							) : null}
+							<ChatMessageContent
+								author={message.author}
+								isStreaming={isStreamingAssistant}
+								text={messageText}
+								theme={theme}
+							/>
+							{messageFooter}
+						</div>
+					)}
 				</article>
 				{dateLabel && (
 					<div className="flex justify-center">
@@ -1035,20 +1069,109 @@ function ChatMessageAttachmentGrid({
 	isUser: boolean;
 }) {
 	const { t } = useI18n();
+	const { openCustom } = useDialog();
+	const [previewByAttachmentId, setPreviewByAttachmentId] = useState<
+		Record<string, AttachmentPreviewState>
+	>(() => initialAttachmentPreviewStates(attachments));
+
+	useEffect(() => {
+		let isCurrent = true;
+		const objectUrls: string[] = [];
+		setPreviewByAttachmentId(initialAttachmentPreviewStates(attachments));
+
+		for (const attachment of attachments) {
+			if (attachment.previewUrl.startsWith("blob:")) {
+				continue;
+			}
+
+			fetchChatAttachmentPreview(attachment.id)
+				.then((blob) => {
+					if (!isCurrent) {
+						return;
+					}
+
+					const objectUrl = URL.createObjectURL(blob);
+					objectUrls.push(objectUrl);
+					setPreviewByAttachmentId((currentPreviews) => ({
+						...currentPreviews,
+						[attachment.id]: { didFail: false, imageUrl: objectUrl }
+					}));
+				})
+				.catch(() => {
+					if (isCurrent) {
+						setPreviewByAttachmentId((currentPreviews) => ({
+							...currentPreviews,
+							[attachment.id]: { didFail: true, imageUrl: null }
+						}));
+					}
+				});
+		}
+
+		return () => {
+			isCurrent = false;
+			for (const objectUrl of objectUrls) {
+				URL.revokeObjectURL(objectUrl);
+			}
+		};
+	}, [attachments]);
+
+	function openAttachmentLightbox(attachmentId: string) {
+		const items = attachments.flatMap<ImageLightboxItem>((attachment, index) => {
+			const preview = previewByAttachmentId[attachment.id];
+			if (!preview?.imageUrl || preview.didFail) {
+				return [];
+			}
+
+			return [
+				{
+					alt: t("chat.messageList.imageAttachmentAlt", { index: index + 1 }),
+					id: attachment.id,
+					url: preview.imageUrl
+				}
+			];
+		});
+		const initialIndex = items.findIndex((item) => item.id === attachmentId);
+		if (initialIndex < 0) {
+			return;
+		}
+
+		void openCustom({
+			title: t("chat.imageLightbox.title"),
+			isDraggable: false,
+			variant: "lightbox",
+			render: ({ cancel }) => (
+				<ImageLightbox initialIndex={initialIndex} items={items} onClose={cancel} />
+			)
+		});
+	}
 
 	return (
 		<div
+			data-message-attachments={isUser ? "user" : "companion"}
+			data-attachment-count={attachments.length}
 			className={cn(
-				"mb-3 grid gap-2",
-				attachments.length === 1 ? "grid-cols-1" : "grid-cols-2"
+				"grid gap-2",
+				!isUser && "mb-3",
+				attachments.length === 1
+					? "w-[min(18rem,72vw)] grid-cols-1"
+					: "w-[min(30rem,72vw)] grid-cols-2 sm:w-[min(32rem,70vw)]"
 			)}
 		>
 			{attachments.map((attachment, index) => (
 				<ChatMessageAttachmentPreview
 					key={attachment.id}
-					attachment={attachment}
 					alt={t("chat.messageList.imageAttachmentAlt", { index: index + 1 })}
-					isUser={isUser}
+					didFail={previewByAttachmentId[attachment.id]?.didFail ?? false}
+					imageUrl={previewByAttachmentId[attachment.id]?.imageUrl ?? null}
+					isLocalPreview={attachment.previewUrl.startsWith("blob:")}
+					isWide={attachments.length === 3 && index === 0}
+					onImageError={() =>
+						setPreviewByAttachmentId((currentPreviews) => ({
+							...currentPreviews,
+							[attachment.id]: { didFail: true, imageUrl: null }
+						}))
+					}
+					onOpen={() => openAttachmentLightbox(attachment.id)}
 				/>
 			))}
 		</div>
@@ -1057,78 +1180,26 @@ function ChatMessageAttachmentGrid({
 
 function ChatMessageAttachmentPreview({
 	alt,
-	attachment,
-	isUser
+	didFail,
+	imageUrl,
+	isLocalPreview,
+	isWide,
+	onImageError,
+	onOpen
 }: {
 	alt: string;
-	attachment: ChatMessageAttachment;
-	isUser: boolean;
+	didFail: boolean;
+	imageUrl: string | null;
+	isLocalPreview: boolean;
+	isWide: boolean;
+	onImageError: () => void;
+	onOpen: () => void;
 }) {
 	const { t } = useI18n();
-	const { openCustom } = useDialog();
-	const isLocalPreview = attachment.previewUrl.startsWith("blob:");
-	const [imageUrl, setImageUrl] = useState(() => (isLocalPreview ? attachment.previewUrl : null));
-	const [didFail, setDidFail] = useState(false);
 	const frameClassName = cn(
-		"block overflow-hidden rounded-md border",
-		isUser ? "border-primary-text/20 dark:border-app-border" : "border-app-border"
+		"block overflow-hidden rounded-md border border-app-border",
+		isWide && "col-span-2 aspect-[2/1]"
 	);
-
-	function handleOpenPreview() {
-		if (!imageUrl || didFail) {
-			return;
-		}
-
-		void openCustom({
-			title: alt,
-			isDraggable: true,
-			showCancelAction: false,
-			size: "wide",
-			render: () => (
-				<div className="flex max-h-[72vh] items-center justify-center overflow-auto rounded-md border border-primary dark:border-action-border">
-					<img
-						className="max-h-[70vh] max-w-full object-contain"
-						src={imageUrl}
-						alt={alt}
-					/>
-				</div>
-			)
-		});
-	}
-
-	useEffect(() => {
-		if (attachment.previewUrl.startsWith("blob:")) {
-			setImageUrl(attachment.previewUrl);
-			setDidFail(false);
-			return;
-		}
-
-		let isCurrent = true;
-		let objectUrl: string | null = null;
-		setImageUrl(null);
-		setDidFail(false);
-
-		fetchChatAttachmentPreview(attachment.id)
-			.then((blob) => {
-				if (!isCurrent) {
-					return;
-				}
-				objectUrl = URL.createObjectURL(blob);
-				setImageUrl(objectUrl);
-			})
-			.catch(() => {
-				if (isCurrent) {
-					setDidFail(true);
-				}
-			});
-
-		return () => {
-			isCurrent = false;
-			if (objectUrl) {
-				URL.revokeObjectURL(objectUrl);
-			}
-		};
-	}, [attachment.id, attachment.previewUrl]);
 
 	if (imageUrl && !didFail) {
 		return (
@@ -1136,20 +1207,20 @@ function ChatMessageAttachmentPreview({
 				type="button"
 				className={cn(
 					frameClassName,
+					!isWide && "aspect-square",
 					"w-full cursor-zoom-in border border-transparent bg-transparent p-0 text-left transition hover:opacity-95 focus:outline-none focus-visible:border-control-focus-border"
 				)}
 				aria-label={t("chat.messageList.openImagePreview", { label: alt })}
-				onClick={handleOpenPreview}
+				onClick={onOpen}
 			>
 				<img
-					className="aspect-square max-h-56 w-full object-cover"
+					className="h-full w-full object-cover"
 					src={imageUrl}
 					alt={alt}
 					loading="lazy"
 					onError={() => {
 						if (!isLocalPreview) {
-							setDidFail(true);
-							setImageUrl(null);
+							onImageError();
 						}
 					}}
 				/>
@@ -1161,8 +1232,8 @@ function ChatMessageAttachmentPreview({
 		<div
 			className={cn(
 				frameClassName,
-				"flex aspect-square max-h-56 w-full flex-col items-center justify-center gap-2 bg-app-soft px-3 text-center text-xs",
-				isUser ? "text-primary-text/70" : "text-muted"
+				!isWide && "aspect-square",
+				"flex w-full flex-col items-center justify-center gap-2 bg-app-soft px-3 text-center text-xs text-muted"
 			)}
 			role={didFail ? "alert" : "status"}
 			aria-label={didFail ? t("chat.messageList.imageAttachmentMissing") : alt}
@@ -1174,6 +1245,25 @@ function ChatMessageAttachmentPreview({
 				</>
 			) : null}
 		</div>
+	);
+}
+
+type AttachmentPreviewState = {
+	didFail: boolean;
+	imageUrl: string | null;
+};
+
+function initialAttachmentPreviewStates(
+	attachments: ChatMessageAttachment[]
+): Record<string, AttachmentPreviewState> {
+	return Object.fromEntries(
+		attachments.map((attachment) => [
+			attachment.id,
+			{
+				didFail: false,
+				imageUrl: attachment.previewUrl.startsWith("blob:") ? attachment.previewUrl : null
+			}
+		])
 	);
 }
 

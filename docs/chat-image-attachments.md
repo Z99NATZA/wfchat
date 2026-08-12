@@ -1,9 +1,9 @@
 # Chat Image Attachments
 
-Chat accepts local PNG, JPEG/JPG, and WebP images. Users can select, paste, or
-drag images into the composer and send text-plus-image or image-only messages.
-SVG, arbitrary files, user URLs, `file://` paths, and browser `blob:` URLs are
-not accepted by the backend.
+Chat accepts local PNG, JPEG/JPG, and WebP images. Users can select or paste
+images in the composer, or drag them onto the message-and-composer canvas, and
+send text-plus-image or image-only messages. SVG, arbitrary files, user URLs,
+`file://` paths, and browser `blob:` URLs are not accepted by the backend.
 
 ## Flow
 
@@ -175,10 +175,26 @@ and never supplied as provider payloads by the browser.
 
 ## Frontend Rendering And Sync
 
-Pending images use local previews. Sent images are fetched with credentials,
-converted to temporary browser object URLs, and open in the shared preview
-dialog. Missing or inaccessible previews show a compact placeholder. Copy
-actions copy message text only.
+Pending images use local previews. Sent images are fetched with credentials and
+converted to temporary browser object URLs. User image galleries render above
+and separately from the compact text bubble: one image uses a single column,
+two and four images use a two-column grid, and three images use a wide first
+image above two smaller images. Opening any image uses the shared dialog
+lifecycle through a media-focused lightbox. The lightbox uses a compact
+toolbar and full viewer surface without generic dialog padding, drag behavior,
+or footer actions. One image uses the uncluttered viewer alone. Multiple images
+add bounded previous/next buttons, direct thumbnails, left/right keyboard
+navigation, and horizontal touch swipe. Navigation reuses the gallery's loaded
+object URLs and does not fetch an image again. Missing or inaccessible previews
+show a compact placeholder. Copy actions copy message text only.
+
+Dragging a supported image file anywhere over the message-and-composer canvas
+shows a non-interactive drop overlay. Dropping stages the files in the composer
+through the same format, count, preview, cleanup, and send path as its file
+picker. Nested drag events do not flicker the overlay. Text, links, unsupported
+files, read-only chats, active sends, and deployments with image upload disabled
+do not activate the canvas drop target. Composer-local drop remains available
+and is handled only once when its event bubbles through the canvas.
 
 The generic sync layer does not sync image bytes or attachment metadata.
 Canonical backend chats still return their attachment metadata; cache-only

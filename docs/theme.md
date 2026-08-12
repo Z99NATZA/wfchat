@@ -11,6 +11,11 @@ surfaces. Components use semantic tokens, not raw colors.
 - `dialog-*`: solid controls and modal surfaces such as confirms and alerts.
 - `action-*`: theme-adaptive command controls.
 
+Media lightboxes reuse the shared dialog lifecycle but use a full viewer surface
+with a compact toolbar instead of the generic dialog card, padding, draggable
+header, and footer actions. The viewer uses semantic `app-*` surfaces and no
+large-area blur.
+
 | Intent               | Typical utility                        |
 | -------------------- | -------------------------------------- |
 | App base             | `bg-app-bg`                            |

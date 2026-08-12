@@ -1,14 +1,15 @@
 /**
  * @vitest-environment happy-dom
  */
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
-import type { ReactNode } from "react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { forwardRef, type ForwardedRef, type ReactNode, useImperativeHandle } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import ChatPage from "@/pages/ChatPage";
 
 const mocks = vi.hoisted(() => ({
 	useChatSession: vi.fn(),
-	notifyAvatarChatEvent: vi.fn()
+	notifyAvatarChatEvent: vi.fn(),
+	addImageFiles: vi.fn()
 }));
 
 vi.mock("@/layouts/AppLayout", () => ({
@@ -59,11 +60,42 @@ vi.mock("@/features/chat/components/ChatDetailsPanel", () => ({
 }));
 
 vi.mock("@/features/chat/components/ChatComposer", () => ({
-	default: ({ isUserSpeechInputEnabled }: { isUserSpeechInputEnabled?: boolean }) => (
-		<div
-			data-testid="chat-composer"
-			data-user-speech-input-enabled={String(isUserSpeechInputEnabled)}
-		/>
+	default: forwardRef(function MockChatComposer(
+		{ isUserSpeechInputEnabled }: { isUserSpeechInputEnabled?: boolean },
+		ref: ForwardedRef<{ addImageFiles: (files: FileList) => void }>
+	) {
+		useImperativeHandle(ref, () => ({ addImageFiles: mocks.addImageFiles }));
+		return (
+			<div
+				data-testid="chat-composer"
+				data-user-speech-input-enabled={String(isUserSpeechInputEnabled)}
+			/>
+		);
+	})
+}));
+
+vi.mock("@/features/chat/components/ChatImageDropZone", () => ({
+	default: ({
+		children,
+		isEnabled,
+		onImageFilesDropped
+	}: {
+		children: ReactNode;
+		isEnabled: boolean;
+		onImageFilesDropped: (files: FileList) => void;
+	}) => (
+		<div data-drop-enabled={String(isEnabled)} data-testid="chat-image-drop-zone">
+			{children}
+			<button
+				type="button"
+				data-testid="drop-image-probe"
+				onClick={() =>
+					onImageFilesDropped([
+						new File(["image"], "canvas.png", { type: "image/png" })
+					] as unknown as FileList)
+				}
+			/>
+		</div>
 	)
 }));
 
@@ -159,6 +191,34 @@ describe("ChatPage assistant speech visibility", () => {
 		renderChatPage({ isAssistantSpeechVisible: true });
 
 		expect(screen.getByTestId("chat-composer").dataset.userSpeechInputEnabled).toBe("false");
+	});
+
+	it("enables canvas image drop and forwards dropped files to the composer", () => {
+		mocks.useChatSession.mockReturnValue(
+			chatState({ isAssistantSpeechEnabled: false, isImageUploadEnabled: true })
+		);
+
+		renderChatPage({ isAssistantSpeechVisible: false });
+
+		expect(screen.getByTestId("chat-image-drop-zone").dataset.dropEnabled).toBe("true");
+		fireEvent.click(screen.getByTestId("drop-image-probe"));
+		expect(mocks.addImageFiles).toHaveBeenCalledTimes(1);
+		expect(mocks.addImageFiles.mock.calls[0][0][0].name).toBe("canvas.png");
+	});
+
+	it("disables canvas image drop while sending or in a read-only chat", () => {
+		mocks.useChatSession.mockReturnValue(
+			chatState({
+				isAssistantSpeechEnabled: false,
+				isActiveChatReadOnly: true,
+				isImageUploadEnabled: true,
+				isSending: true
+			})
+		);
+
+		renderChatPage({ isAssistantSpeechVisible: false });
+
+		expect(screen.getByTestId("chat-image-drop-zone").dataset.dropEnabled).toBe("false");
 	});
 
 	it("does not auto-play the latest assistant message when auto-play is disabled", () => {
@@ -360,6 +420,7 @@ function chatPageElement({
 type ChatStateOptions = {
 	isAssistantSpeechEnabled: boolean;
 	isActiveChatReadOnly?: boolean;
+	isImageUploadEnabled?: boolean;
 	isUserTranscriptionEnabled?: boolean;
 	isSending?: boolean;
 	messages?: ReturnType<typeof assistantMessage>[];
@@ -376,6 +437,7 @@ type ChatStateOptions = {
 function chatState({
 	isAssistantSpeechEnabled,
 	isActiveChatReadOnly = false,
+	isImageUploadEnabled = true,
 	isUserTranscriptionEnabled = false,
 	isSending = false,
 	messages = [],
@@ -400,6 +462,7 @@ function chatState({
 		draft: "",
 		errorMessage: null,
 		isActiveChatReadOnly,
+		isImageUploadEnabled,
 		isAssistantSpeechEnabled,
 		isUserTranscriptionEnabled,
 		assistantSpeechPlayback: { messageId: null, status: "idle" },

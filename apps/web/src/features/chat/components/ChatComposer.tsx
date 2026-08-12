@@ -2,8 +2,10 @@ import {
 	ClipboardEvent,
 	DragEvent,
 	FormEvent,
+	forwardRef,
 	KeyboardEvent,
 	useEffect,
+	useImperativeHandle,
 	useRef,
 	useState
 } from "react";
@@ -11,6 +13,7 @@ import { Image, LoaderCircle, MessageCircle, Mic, Send, Square, X } from "lucide
 import { useDialog } from "@/components/dialog/DialogContext";
 import { useI18n } from "@/i18n/i18nContext";
 import IconButton from "@/components/ui/IconButton";
+import ImageLightbox from "@/features/chat/components/ImageLightbox";
 import type { UserSpeechInputState } from "@/features/chat/hooks/useUserSpeechTranscription";
 import type { AppFont } from "@/types/font";
 import type { PendingChatImageAttachment } from "@/types/chat";
@@ -33,6 +36,10 @@ type ChatComposerProps = {
 	attachmentResetVersion?: number;
 };
 
+export type ChatComposerHandle = {
+	addImageFiles: (files: FileList | File[]) => void;
+};
+
 const MAX_IMAGE_ATTACHMENTS = 4;
 const SUPPORTED_IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/webp"]);
 const IMAGE_INPUT_ACCEPT = "image/png,image/jpeg,image/webp";
@@ -49,21 +56,24 @@ function focusComposerTextArea(textarea: HTMLTextAreaElement | null) {
 	textarea?.focus({ preventScroll: true });
 }
 
-function ChatComposer({
-	draft,
-	font,
-	companionName,
-	onDraftChange,
-	onSend,
-	isDisabled = false,
-	isSending = false,
-	isImageUploadEnabled = true,
-	isUserSpeechInputEnabled = false,
-	userSpeechInput = { status: "idle" },
-	onCancelSpeechInput,
-	onToggleSpeechInput,
-	attachmentResetVersion = 0
-}: ChatComposerProps) {
+const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(function ChatComposer(
+	{
+		draft,
+		font,
+		companionName,
+		onDraftChange,
+		onSend,
+		isDisabled = false,
+		isSending = false,
+		isImageUploadEnabled = true,
+		isUserSpeechInputEnabled = false,
+		userSpeechInput = { status: "idle" },
+		onCancelSpeechInput,
+		onToggleSpeechInput,
+		attachmentResetVersion = 0
+	},
+	ref
+) {
 	const { t } = useI18n();
 	const { openCustom } = useDialog();
 	const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -74,6 +84,8 @@ function ChatComposer({
 	const [recordingElapsedSeconds, setRecordingElapsedSeconds] = useState(0);
 	const [selectedImages, setSelectedImages] = useState<PendingChatImageAttachment[]>([]);
 	const [imageStatus, setImageStatus] = useState<string | null>(null);
+
+	useImperativeHandle(ref, () => ({ addImageFiles }));
 
 	useEffect(() => {
 		selectedImagesRef.current = selectedImages;
@@ -276,21 +288,24 @@ function ChatComposer({
 	}
 
 	function openSelectedImagePreview(image: PendingChatImageAttachment) {
-		const label = image.name || t("chat.composer.selectedImage");
+		const items = selectedImagesRef.current.map((selectedImage, index) => ({
+			alt:
+				selectedImage.name ||
+				t("chat.composer.selectedImageWithIndex", { index: index + 1 }),
+			id: selectedImage.id,
+			url: selectedImage.previewUrl
+		}));
+		const initialIndex = items.findIndex((item) => item.id === image.id);
+		if (initialIndex < 0) {
+			return;
+		}
 
 		void openCustom({
-			title: label,
-			isDraggable: true,
-			showCancelAction: false,
-			size: "wide",
-			render: () => (
-				<div className="flex max-h-[72vh] items-center justify-center overflow-auto rounded-md border border-primary dark:border-action-border">
-					<img
-						className="max-h-[70vh] max-w-full object-contain"
-						src={image.previewUrl}
-						alt={label}
-					/>
-				</div>
+			title: t("chat.imageLightbox.title"),
+			isDraggable: false,
+			variant: "lightbox",
+			render: ({ cancel }) => (
+				<ImageLightbox initialIndex={initialIndex} items={items} onClose={cancel} />
 			)
 		});
 	}
@@ -501,7 +516,7 @@ function ChatComposer({
 			</div>
 		</div>
 	);
-}
+});
 
 export default ChatComposer;
 

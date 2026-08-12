@@ -2,6 +2,7 @@ import { PointerEvent, ReactNode, useEffect, useRef, useState } from "react";
 import { X } from "lucide-react";
 import { createPortal } from "react-dom";
 import IconButton from "@/components/ui/IconButton";
+import type { DialogVariant } from "@/components/dialog/DialogContext";
 
 type DialogProps = {
 	isOpen: boolean;
@@ -12,6 +13,7 @@ type DialogProps = {
 	onClose: () => void;
 	isDraggable?: boolean;
 	size?: "default" | "wide";
+	variant?: DialogVariant;
 };
 
 function Dialog({
@@ -22,7 +24,8 @@ function Dialog({
 	actions,
 	onClose,
 	isDraggable = true,
-	size = "default"
+	size = "default",
+	variant = "default"
 }: DialogProps) {
 	const [offset, setOffset] = useState({ x: 0, y: 0 });
 	const dragStateRef = useRef<{ pointerId: number; startX: number; startY: number } | null>(null);
@@ -98,12 +101,20 @@ function Dialog({
 
 	return createPortal(
 		<div
-			className="fixed inset-0 z-50 flex items-center justify-center p-4"
+			className={
+				variant === "lightbox"
+					? "fixed inset-0 z-50 flex items-center justify-center p-0 sm:p-3"
+					: "fixed inset-0 z-50 flex items-center justify-center p-4"
+			}
 			role="presentation"
 		>
 			<button
 				type="button"
-				className="absolute inset-0 bg-slate-950/45"
+				className={
+					variant === "lightbox"
+						? "absolute inset-0 bg-app-bg/95"
+						: "absolute inset-0 bg-slate-950/45"
+				}
 				tabIndex={-1}
 				onClick={onClose}
 				aria-label="Close dialog"
@@ -114,49 +125,69 @@ function Dialog({
 				aria-labelledby="wfchat-dialog-title"
 				aria-describedby={description ? "wfchat-dialog-description" : undefined}
 				className={
-					size === "wide"
-						? "relative w-full max-w-4xl overflow-hidden rounded-xl border border-dialog-border bg-dialog-soft text-app-text"
-						: "relative w-full max-w-md overflow-hidden rounded-xl border border-dialog-border bg-dialog-soft text-app-text"
+					variant === "lightbox"
+						? "relative flex h-full w-full flex-col overflow-hidden bg-app-bg/95 text-app-text sm:rounded-xl sm:border sm:border-dialog-border"
+						: size === "wide"
+							? "relative w-full max-w-4xl overflow-hidden rounded-xl border border-dialog-border bg-dialog-soft text-app-text"
+							: "relative w-full max-w-md overflow-hidden rounded-xl border border-dialog-border bg-dialog-soft text-app-text"
 				}
 				style={{
 					transform: `translate(${offset.x}px, ${offset.y}px)`
 				}}
 			>
-				<div
-					className={
-						canDragDialog
-							? "cursor-move select-none border-b border-dialog-border bg-dialog-soft px-5 py-3"
-							: "border-b border-dialog-border bg-dialog-soft px-5 py-3"
-					}
-					onPointerDown={handleDragStart}
-					onPointerMove={handleDragMove}
-					onPointerUp={handleDragEnd}
-					onPointerCancel={handleDragEnd}
-				>
-					<h2 id="wfchat-dialog-title" className="text-base font-semibold">
-						{title}
-					</h2>
-					<IconButton
-						size="sm"
-						variant="ghostDanger"
-						onPointerDown={(event) => event.stopPropagation()}
-						onClick={onClose}
-						className="absolute right-3 top-3"
-						aria-label="Close dialog"
-					>
-						<X size={16} aria-hidden="true" />
-					</IconButton>
-				</div>
-				{description && (
-					<p
-						id="wfchat-dialog-description"
-						className="px-5 pt-4 text-sm leading-6 text-muted"
-					>
-						{description}
-					</p>
+				{variant === "lightbox" ? (
+					<>
+						<h2 id="wfchat-dialog-title" className="sr-only">
+							{title}
+						</h2>
+						{description ? (
+							<p id="wfchat-dialog-description" className="sr-only">
+								{description}
+							</p>
+						) : null}
+						{content ? <div className="min-h-0 flex-1">{content}</div> : null}
+					</>
+				) : (
+					<>
+						<div
+							className={
+								canDragDialog
+									? "cursor-move select-none border-b border-dialog-border bg-dialog-soft px-5 py-3"
+									: "border-b border-dialog-border bg-dialog-soft px-5 py-3"
+							}
+							onPointerDown={handleDragStart}
+							onPointerMove={handleDragMove}
+							onPointerUp={handleDragEnd}
+							onPointerCancel={handleDragEnd}
+						>
+							<h2 id="wfchat-dialog-title" className="text-base font-semibold">
+								{title}
+							</h2>
+							<IconButton
+								size="sm"
+								variant="ghostDanger"
+								onPointerDown={(event) => event.stopPropagation()}
+								onClick={onClose}
+								className="absolute right-3 top-3"
+								aria-label="Close dialog"
+							>
+								<X size={16} aria-hidden="true" />
+							</IconButton>
+						</div>
+						{description && (
+							<p
+								id="wfchat-dialog-description"
+								className="px-5 pt-4 text-sm leading-6 text-muted"
+							>
+								{description}
+							</p>
+						)}
+						{content && <div className="px-5 pt-4">{content}</div>}
+						{actions ? (
+							<div className="flex justify-end gap-2 px-5 py-5">{actions}</div>
+						) : null}
+					</>
 				)}
-				{content && <div className="px-5 pt-4">{content}</div>}
-				<div className="flex justify-end gap-2 px-5 py-5">{actions}</div>
 			</section>
 		</div>,
 		document.body
