@@ -143,7 +143,8 @@ function DialogProvider({ children }: DialogProviderProps) {
 					}) ?? null
 				}
 				actions={
-					customDialogState?.variant === "lightbox" ? null : (
+					customDialogState?.variant === "lightbox" ||
+					customDialogState?.variant === "sheet" ? null : (
 						<div className="flex items-center gap-2">
 							{customDialogState?.showCancelAction === false ? null : (
 								<Button

@@ -89,12 +89,14 @@ describe("CafePage", () => {
 		expect(th["cafe.lobby.joinCodeTitle"]).toBe("รหัสห้อง");
 		expect(th["cafe.cosmetics.title"]).toBe("ของแต่ง");
 		expect(th["cafe.cosmetics.classic"]).toBe("ถอดของแต่ง");
+		expect(th["cafe.cosmetics.defaultLook"]).toBe("ลุคปกติ");
 		expect("cafe.lobby.heroDescription" in th).toBe(false);
 
 		expect(en["cafe.lobby.quickJoin"]).toBe("Join");
 		expect(en["cafe.lobby.joinCodeTitle"]).toBe("Room code");
 		expect(en["cafe.cosmetics.title"]).toBe("Cosmetics");
 		expect(en["cafe.cosmetics.classic"]).toBe("Reset look");
+		expect(en["cafe.cosmetics.defaultLook"]).toBe("Classic look");
 		expect("cafe.lobby.heroDescription" in en).toBe(false);
 	});
 
@@ -123,6 +125,16 @@ describe("CafePage", () => {
 		const quickJoin = await screen.findByRole("button", { name: "cafe.lobby.quickJoin" });
 		const createRoom = screen.getByRole("button", { name: "cafe.lobby.createRoom" });
 		const joinWithCode = screen.getByRole("button", { name: "cafe.lobby.joinCode" });
+		const entryActions = screen.getByTestId("cafe-entry-actions");
+		expect(entryActions.className).toContain("grid-cols-2");
+		expect(entryActions.className).toContain("w-full");
+		expect(entryActions.className).toContain("sm:contents");
+		expect(entryActions.contains(quickJoin)).toBe(true);
+		expect(entryActions.contains(createRoom)).toBe(true);
+		expect(quickJoin.className).toContain("w-full");
+		expect(quickJoin.className).toContain("sm:w-auto");
+		expect(createRoom.className).toContain("w-full");
+		expect(createRoom.className).toContain("sm:w-auto");
 		for (const formButton of [quickJoin, createRoom, joinWithCode]) {
 			expect(formButton.className).toContain("rounded-lg");
 			expect(formButton.className).not.toContain("rounded-xl");
@@ -131,6 +143,7 @@ describe("CafePage", () => {
 		expect(createRoom.className).not.toContain("cafe-quick-join-effect");
 		const quickJoinEffect = screen.getByTestId("cafe-quick-join-effect");
 		expect(quickJoinEffect.contains(quickJoin)).toBe(true);
+		expect(quickJoinEffect.className).toContain("min-w-0");
 		expect(quickJoinEffect.querySelectorAll(".cafe-quick-join-sparkle")).toHaveLength(4);
 		expect(quickJoinEffect.getAttribute("data-active")).toBe("true");
 		const lobbyAiko = screen.getByTestId("cafe-lobby-aiko");
@@ -155,6 +168,17 @@ describe("CafePage", () => {
 		expect(screen.getByTestId("cafe-sidebar-activity").textContent).toContain(
 			"cafe.activity.description"
 		);
+		const cosmeticSummary = screen.getByTestId("cafe-cosmetic-summary");
+		const cosmeticFooter = screen.getByTestId("cafe-cosmetic-footer");
+		const entryPanel = screen.getByTestId("cafe-entry-panel");
+		expect(entryPanel.contains(cosmeticFooter)).toBe(true);
+		expect(cosmeticFooter.className).toContain("border-t");
+		expect(cosmeticSummary.className).toContain("button--ghost");
+		expect(cosmeticSummary.className).toContain("rounded-none");
+		expect(cosmeticSummary.className).not.toContain("rounded-xl");
+		expect(cosmeticSummary.getAttribute("aria-haspopup")).toBe("dialog");
+		expect(cosmeticSummary.getAttribute("aria-expanded")).toBe("false");
+		expect(screen.queryByTestId("cafe-cosmetic-wardrobe")).toBeNull();
 		const details = screen.getByTestId("cafe-lobby-details");
 		expect(screen.getByTestId("layout-details").contains(details)).toBe(true);
 		expect(details.childElementCount).toBe(0);
@@ -247,25 +271,38 @@ describe("CafePage", () => {
 			</MemoryRouter>
 		);
 
-		const equipButtons = await screen.findAllByRole("button", { name: "cafe.cosmetics.equip" });
-		fireEvent.click(equipButtons[1]);
+		const cosmeticSummary = await screen.findByTestId("cafe-cosmetic-summary");
+		fireEvent.click(cosmeticSummary);
+
+		expect(screen.getByRole("dialog")).toBeTruthy();
+		expect(cosmeticSummary.getAttribute("aria-expanded")).toBe("true");
+		expect(screen.getByTestId("cafe-cosmetic-wardrobe")).toBeTruthy();
+		const mintTile = screen.getByTestId("cafe-cosmetic-tile-mint_scarf");
+		fireEvent.click(mintTile);
 		await waitFor(() =>
 			expect(serviceMocks.equipCafeCosmetic).toHaveBeenCalledWith("mint_scarf")
 		);
 		const equippedStatus = screen.getByRole("status", {
 			name: "cafe.cosmetics.equipped"
 		});
-		expect(equippedStatus.textContent).toBe("cafe.cosmetics.equip");
-		expect(equippedStatus.className).not.toContain("border");
-		expect(equippedStatus.className).not.toContain("bg-");
-		expect(screen.getByLabelText("cafe.cosmetics.locked")).toBeTruthy();
-		expect(screen.getByTestId("cafe-cosmetic-track").className).toContain("overflow-x-auto");
+		expect(equippedStatus.textContent).toBe("cafe.cosmetics.equipped");
+		expect(mintTile.className).toContain("button--primary");
+		expect(mintTile.getAttribute("aria-pressed")).toBe("true");
+		expect(cosmeticSummary.textContent).toContain("cafe.cosmetics.mint_scarf.name");
+		const cosmeticTrack = screen.getByTestId("cafe-cosmetic-track");
+		expect(cosmeticTrack.className).toContain("grid-cols-2");
+		expect(cosmeticTrack.className).toContain("sm:grid-cols-4");
+		expect(cosmeticTrack.className).not.toContain("overflow-x-auto");
 		const equippedPreview = screen.getByTestId("cafe-cosmetic-preview-mint_scarf");
 		const lockedPreview = screen.getByTestId("cafe-cosmetic-preview-tea_hat");
-		expect(equippedPreview.className).toContain("bg-app-panel/70");
+		expect(equippedPreview.className).toContain("size-10");
+		expect(equippedPreview.className).toContain("text-xl");
+		expect(equippedPreview.className).toContain("bg-dialog-panel");
 		expect(equippedPreview.getAttribute("style")).not.toContain("background-color");
-		expect(equippedPreview.closest("article")?.className).toContain("border-transparent");
-		expect(equippedPreview.closest("article")?.className).toContain("bg-app-soft/70");
+		expect(mintTile.className).toContain("min-w-0");
+		expect(mintTile.className).toContain("p-2.5");
+		const lockedTile = screen.getByTestId("cafe-cosmetic-tile-tea_hat");
+		expect((lockedTile as HTMLButtonElement).disabled).toBe(true);
 		expect(lockedPreview.className).toContain("opacity-55");
 		expect(lockedPreview.className).toContain("grayscale");
 		expect(screen.queryByText("cafe.cosmetics.unlocked")).toBeNull();
@@ -300,8 +337,9 @@ describe("CafePage", () => {
 			</MemoryRouter>
 		);
 
-		const preview = await screen.findByTestId("cafe-cosmetic-preview-cafe_apron");
-		const equipButton = preview.closest("article")?.querySelector("button");
+		fireEvent.click(await screen.findByTestId("cafe-cosmetic-summary"));
+		const preview = screen.getByTestId("cafe-cosmetic-preview-cafe_apron");
+		const equipButton = preview.closest("button");
 		expect(equipButton).toBeTruthy();
 		fireEvent.click(equipButton!);
 

@@ -19,7 +19,7 @@ export type CustomDialogRenderParams<TResult> = {
 	cancel: () => void;
 };
 
-export type DialogVariant = "default" | "lightbox";
+export type DialogVariant = "default" | "lightbox" | "sheet";
 
 export type CustomDialogOptions<TResult = void> = {
 	title: string;

@@ -26,6 +26,20 @@ describe("DialogProvider", () => {
 		expect(screen.queryByRole("button", { name: "common.done" })).toBeNull();
 		expect(screen.queryByRole("button", { name: "common.cancel" })).toBeNull();
 	});
+
+	it("omits generic custom-dialog actions for a responsive sheet", () => {
+		render(
+			<DialogProvider>
+				<SheetOpener />
+			</DialogProvider>
+		);
+
+		fireEvent.click(screen.getByRole("button", { name: "Open sheet" }));
+
+		expect(screen.getByText("Sheet content")).toBeTruthy();
+		expect(screen.queryByRole("button", { name: "common.done" })).toBeNull();
+		expect(screen.queryByRole("button", { name: "common.cancel" })).toBeNull();
+	});
 });
 
 function LightboxOpener() {
@@ -44,6 +58,26 @@ function LightboxOpener() {
 			}
 		>
 			Open lightbox
+		</button>
+	);
+}
+
+function SheetOpener() {
+	const { openCustom } = useDialog();
+
+	return (
+		<button
+			type="button"
+			onClick={() =>
+				void openCustom({
+					title: "Wardrobe",
+					isDraggable: false,
+					variant: "sheet",
+					render: () => <div>Sheet content</div>
+				})
+			}
+		>
+			Open sheet
 		</button>
 	);
 }

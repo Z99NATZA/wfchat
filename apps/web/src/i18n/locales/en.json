@@ -20,6 +20,7 @@
 	"cafe.cosmetics.title": "Cosmetics",
 	"cafe.cosmetics.description": "Cafe Stars are lifetime progress. Reach each goal to unlock a look; stars are never spent.",
 	"cafe.cosmetics.classic": "Reset look",
+	"cafe.cosmetics.defaultLook": "Classic look",
 	"cafe.cosmetics.unlocked": "Unlocked",
 	"cafe.cosmetics.needStars": "Earn {count} more star(s)",
 	"cafe.cosmetics.equip": "Equip",

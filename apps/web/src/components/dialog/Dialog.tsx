@@ -104,7 +104,9 @@ function Dialog({
 			className={
 				variant === "lightbox"
 					? "fixed inset-0 z-50 flex items-center justify-center p-0 sm:p-3"
-					: "fixed inset-0 z-50 flex items-center justify-center p-4"
+					: variant === "sheet"
+						? "fixed inset-0 z-50 flex items-end justify-center p-0 sm:items-center sm:p-4"
+						: "fixed inset-0 z-50 flex items-center justify-center p-4"
 			}
 			role="presentation"
 		>
@@ -113,7 +115,9 @@ function Dialog({
 				className={
 					variant === "lightbox"
 						? "absolute inset-0 bg-app-bg/95"
-						: "absolute inset-0 bg-slate-950/45"
+						: variant === "sheet"
+							? "absolute inset-0 bg-app-bg/70"
+							: "absolute inset-0 bg-slate-950/45"
 				}
 				tabIndex={-1}
 				onClick={onClose}
@@ -127,9 +131,11 @@ function Dialog({
 				className={
 					variant === "lightbox"
 						? "relative flex h-full w-full flex-col overflow-hidden bg-app-bg/95 text-app-text sm:rounded-xl sm:border sm:border-dialog-border"
-						: size === "wide"
-							? "relative w-full max-w-4xl overflow-hidden rounded-xl border border-dialog-border bg-dialog-soft text-app-text"
-							: "relative w-full max-w-md overflow-hidden rounded-xl border border-dialog-border bg-dialog-soft text-app-text"
+						: variant === "sheet"
+							? "relative flex max-h-[85dvh] w-full flex-col overflow-hidden rounded-t-2xl border border-dialog-border bg-dialog-soft text-app-text sm:max-w-2xl sm:rounded-xl"
+							: size === "wide"
+								? "relative w-full max-w-4xl overflow-hidden rounded-xl border border-dialog-border bg-dialog-soft text-app-text"
+								: "relative w-full max-w-md overflow-hidden rounded-xl border border-dialog-border bg-dialog-soft text-app-text"
 				}
 				style={{
 					transform: `translate(${offset.x}px, ${offset.y}px)`
@@ -152,8 +158,8 @@ function Dialog({
 						<div
 							className={
 								canDragDialog
-									? "cursor-move select-none border-b border-dialog-border bg-dialog-soft px-5 py-3"
-									: "border-b border-dialog-border bg-dialog-soft px-5 py-3"
+									? "shrink-0 cursor-move select-none border-b border-dialog-border bg-dialog-soft px-5 py-3"
+									: "shrink-0 border-b border-dialog-border bg-dialog-soft px-5 py-3"
 							}
 							onPointerDown={handleDragStart}
 							onPointerMove={handleDragMove}
@@ -182,7 +188,17 @@ function Dialog({
 								{description}
 							</p>
 						)}
-						{content && <div className="px-5 pt-4">{content}</div>}
+						{content ? (
+							<div
+								className={
+									variant === "sheet"
+										? "chat-scroll min-h-0 overflow-y-auto px-4 py-4 sm:px-5"
+										: "px-5 pt-4"
+								}
+							>
+								{content}
+							</div>
+						) : null}
 						{actions ? (
 							<div className="flex justify-end gap-2 px-5 py-5">{actions}</div>
 						) : null}

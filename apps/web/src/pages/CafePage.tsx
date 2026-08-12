@@ -1,6 +1,18 @@
 import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
-import { Check, Coffee, DoorOpen, Lock, Plus, RefreshCw, Star, Users } from "lucide-react";
+import {
+	Check,
+	ChevronRight,
+	Coffee,
+	DoorOpen,
+	Lock,
+	Plus,
+	RefreshCw,
+	Sparkles,
+	Star,
+	Users
+} from "lucide-react";
+import Dialog from "@/components/dialog/Dialog";
 import AppHeaderBar from "@/components/header/AppHeaderBar";
 import {
 	AppHeaderDesktopControls,
@@ -50,6 +62,7 @@ function CafePage({ activityBar, backgroundImageUrl, headerControls }: CafePageP
 	const [error, setError] = useState<CafeLobbyErrorCode | "load_failed" | null>(null);
 	const [pendingCosmetic, setPendingCosmetic] = useState<string | null | undefined>();
 	const [cosmeticError, setCosmeticError] = useState(false);
+	const [isWardrobeOpen, setIsWardrobeOpen] = useState(false);
 
 	const refresh = useCallback(async () => {
 		setIsLoading(true);
@@ -133,7 +146,7 @@ function CafePage({ activityBar, backgroundImageUrl, headerControls }: CafePageP
 									{t("cafe.lobby.heroTitle")}
 								</h2>
 								<div className="mt-6 flex max-w-xl flex-wrap items-end gap-3">
-									<div className="min-w-[14rem] flex-1">
+									<div className="w-full min-w-0 sm:min-w-[14rem] sm:flex-1">
 										<label
 											className="text-xs font-semibold text-muted"
 											htmlFor="cafe-player-name"
@@ -154,58 +167,65 @@ function CafePage({ activityBar, backgroundImageUrl, headerControls }: CafePageP
 										/>
 									</div>
 									<div
-										className="cafe-quick-join-effect relative isolate shrink-0"
-										data-active={pendingAction === null}
-										data-testid="cafe-quick-join-effect"
+										className="grid w-full grid-cols-2 gap-3 sm:contents"
+										data-testid="cafe-entry-actions"
 									>
-										<span
-											className="cafe-quick-join-sparkle cafe-quick-join-sparkle--one"
-											aria-hidden="true"
+										<div
+											className="cafe-quick-join-effect relative isolate min-w-0 sm:shrink-0"
+											data-active={pendingAction === null}
+											data-testid="cafe-quick-join-effect"
 										>
-											✦
-										</span>
-										<span
-											className="cafe-quick-join-sparkle cafe-quick-join-sparkle--two"
-											aria-hidden="true"
-										>
-											✧
-										</span>
-										<span
-											className="cafe-quick-join-sparkle cafe-quick-join-sparkle--three"
-											aria-hidden="true"
-										>
-											✦
-										</span>
-										<span
-											className="cafe-quick-join-sparkle cafe-quick-join-sparkle--four"
-											aria-hidden="true"
-										>
-											✧
-										</span>
+											<span
+												className="cafe-quick-join-sparkle cafe-quick-join-sparkle--one"
+												aria-hidden="true"
+											>
+												✦
+											</span>
+											<span
+												className="cafe-quick-join-sparkle cafe-quick-join-sparkle--two"
+												aria-hidden="true"
+											>
+												✧
+											</span>
+											<span
+												className="cafe-quick-join-sparkle cafe-quick-join-sparkle--three"
+												aria-hidden="true"
+											>
+												✦
+											</span>
+											<span
+												className="cafe-quick-join-sparkle cafe-quick-join-sparkle--four"
+												aria-hidden="true"
+											>
+												✧
+											</span>
+											<Button
+												variant="primary"
+												size="lg"
+												className="relative z-10 w-full rounded-lg sm:w-auto"
+												disabled={pendingAction !== null}
+												onClick={() =>
+													void openRoom("quick", quickJoinCafe)
+												}
+											>
+												<DoorOpen size={18} aria-hidden="true" />
+												{pendingAction === "quick"
+													? t("cafe.lobby.joining")
+													: t("cafe.lobby.quickJoin")}
+											</Button>
+										</div>
 										<Button
-											variant="primary"
 											size="lg"
-											className="relative z-10 rounded-lg"
+											className="w-full rounded-lg sm:w-auto"
 											disabled={pendingAction !== null}
-											onClick={() => void openRoom("quick", quickJoinCafe)}
+											onClick={() =>
+												void openRoom("create", () => createCafeRoom(true))
+											}
 										>
-											<DoorOpen size={18} aria-hidden="true" />
-											{pendingAction === "quick"
-												? t("cafe.lobby.joining")
-												: t("cafe.lobby.quickJoin")}
+											<Plus size={18} aria-hidden="true" />
+											{t("cafe.lobby.createRoom")}
 										</Button>
 									</div>
-									<Button
-										size="lg"
-										className="rounded-lg"
-										disabled={pendingAction !== null}
-										onClick={() =>
-											void openRoom("create", () => createCafeRoom(true))
-										}
-									>
-										<Plus size={18} aria-hidden="true" />
-										{t("cafe.lobby.createRoom")}
-									</Button>
 								</div>
 								<form onSubmit={handleJoinCode} className="mt-5 max-w-xl">
 									<label
@@ -264,15 +284,13 @@ function CafePage({ activityBar, backgroundImageUrl, headerControls }: CafePageP
 								/>
 							</div>
 						</div>
+						<CafeCosmeticSummary
+							progress={progress}
+							isLoading={isLoading}
+							isOpen={isWardrobeOpen}
+							onOpen={() => setIsWardrobeOpen(true)}
+						/>
 					</div>
-
-					<CafeCosmeticWardrobe
-						progress={progress}
-						isLoading={isLoading}
-						pendingCosmetic={pendingCosmetic}
-						hasError={cosmeticError}
-						onEquip={handleEquipCosmetic}
-					/>
 
 					<div>
 						<div className="flex items-center justify-between gap-3">
@@ -337,7 +355,92 @@ function CafePage({ activityBar, backgroundImageUrl, headerControls }: CafePageP
 					</div>
 				</div>
 			</section>
+			<Dialog
+				isOpen={isWardrobeOpen}
+				title={t("cafe.cosmetics.title")}
+				variant="sheet"
+				isDraggable
+				actions={null}
+				onClose={() => setIsWardrobeOpen(false)}
+				content={
+					<CafeCosmeticWardrobe
+						progress={progress}
+						isLoading={isLoading}
+						pendingCosmetic={pendingCosmetic}
+						hasError={cosmeticError}
+						onEquip={handleEquipCosmetic}
+					/>
+				}
+			/>
 		</AppLayout>
+	);
+}
+
+function CafeCosmeticSummary({
+	progress,
+	isLoading,
+	isOpen,
+	onOpen
+}: {
+	progress: CafeProgress;
+	isLoading: boolean;
+	isOpen: boolean;
+	onOpen: () => void;
+}) {
+	const { t } = useI18n();
+	const equippedCosmetic = progress.cosmetics.find(
+		(cosmetic) => cosmetic.id === progress.equippedCosmetic
+	);
+	const equippedName = equippedCosmetic
+		? t(`cafe.cosmetics.${equippedCosmetic.id}.name`)
+		: t("cafe.cosmetics.defaultLook");
+
+	return (
+		<div className="border-t border-app-border" data-testid="cafe-cosmetic-footer">
+			<Button
+				align="between"
+				fullWidth
+				size="row"
+				variant="ghost"
+				className="rounded-none px-5 sm:px-7"
+				aria-expanded={isOpen}
+				aria-haspopup="dialog"
+				data-testid="cafe-cosmetic-summary"
+				onClick={onOpen}
+			>
+				<span className="flex min-w-0 items-center gap-3">
+					{equippedCosmetic ? (
+						<CosmeticPreview
+							cosmeticId={equippedCosmetic.id}
+							muted={false}
+							testId={`cafe-cosmetic-summary-preview-${equippedCosmetic.id}`}
+						/>
+					) : (
+						<span className="flex size-10 shrink-0 items-center justify-center rounded-md border border-app-border bg-app-panel/70 text-muted">
+							<Sparkles size={18} aria-hidden="true" />
+						</span>
+					)}
+					<span className="min-w-0">
+						<span
+							id="cafe-cosmetics-summary-title"
+							className="block text-sm font-semibold text-app-text"
+						>
+							{t("cafe.cosmetics.title")}
+						</span>
+						<span className="mt-0.5 block truncate text-xs font-normal text-muted">
+							{isLoading ? t("cafe.cosmetics.loading") : equippedName}
+						</span>
+					</span>
+				</span>
+				<span className="flex shrink-0 items-center gap-3">
+					<span className="inline-flex items-center gap-1 text-xs text-muted">
+						<Star size={13} aria-hidden="true" />
+						{progress.cafeStars}
+					</span>
+					<ChevronRight size={17} className="text-muted" aria-hidden="true" />
+				</span>
+			</Button>
+		</div>
 	);
 }
 
@@ -357,31 +460,20 @@ function CafeCosmeticWardrobe({
 	const { t } = useI18n();
 	const isSaving = pendingCosmetic !== undefined;
 	return (
-		<section
-			className="rounded-2xl border border-app-border bg-app-panel/76 p-3 sm:p-4"
-			aria-labelledby="cafe-cosmetics-title"
-			data-testid="cafe-cosmetic-wardrobe"
-		>
+		<div data-testid="cafe-cosmetic-wardrobe">
 			<div className="flex items-center justify-between gap-2">
-				<div className="flex min-w-0 items-center gap-2">
-					<p
-						id="cafe-cosmetics-title"
-						className="truncate text-sm font-semibold text-app-text sm:text-base"
-					>
-						{t("cafe.cosmetics.title")}
-					</p>
-					<span
-						className="inline-flex shrink-0 items-center gap-1 rounded-full bg-app-soft px-2 py-1 text-xs font-semibold text-muted"
-						aria-label={`${t("cafe.stars")}: ${progress.cafeStars}`}
-					>
-						<Star size={13} aria-hidden="true" />
-						{progress.cafeStars}
-					</span>
-				</div>
+				<span
+					className="inline-flex shrink-0 items-center gap-1 rounded-full bg-dialog-panel px-2 py-1 text-xs font-semibold text-muted"
+					aria-label={`${t("cafe.stars")}: ${progress.cafeStars}`}
+				>
+					<Star size={13} aria-hidden="true" />
+					{progress.cafeStars}
+				</span>
 				<Button
 					className="shrink-0"
 					size="xs"
-					variant="ghost"
+					variant="secondary"
+					surface="dialog"
 					disabled={isSaving || progress.equippedCosmetic === null}
 					onClick={() => onEquip(null)}
 				>
@@ -399,7 +491,7 @@ function CafeCosmeticWardrobe({
 				</p>
 			)}
 			<div
-				className="chat-scroll mt-3 flex gap-2 overflow-x-auto pb-1"
+				className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4"
 				data-testid="cafe-cosmetic-track"
 			>
 				{progress.cosmetics.map((cosmetic) => (
@@ -415,18 +507,18 @@ function CafeCosmeticWardrobe({
 			</div>
 			{isLoading && progress.cosmetics.length === 0 && (
 				<p
-					className="mt-4 rounded-xl border border-app-border bg-app-soft/70 p-5 text-center text-sm text-muted"
+					className="mt-4 rounded-xl border border-dialog-border bg-dialog-panel p-5 text-center text-sm text-muted"
 					role="status"
 				>
 					{t("cafe.cosmetics.loading")}
 				</p>
 			)}
 			{!isLoading && progress.cosmetics.length === 0 && (
-				<p className="mt-4 rounded-xl border border-dashed border-app-border bg-app-soft/70 p-5 text-center text-sm text-muted">
+				<p className="mt-4 rounded-xl border border-dashed border-dialog-border bg-dialog-panel p-5 text-center text-sm text-muted">
 					{t("cafe.cosmetics.empty")}
 				</p>
 			)}
-		</section>
+		</div>
 	);
 }
 
@@ -444,59 +536,77 @@ function CafeCosmeticCard({
 	onEquip: () => void;
 }) {
 	const { t } = useI18n();
+	const cosmeticName = t(`cafe.cosmetics.${cosmetic.id}.name`);
 	return (
-		<article className="flex min-w-[9.5rem] flex-1 flex-col rounded-xl border border-transparent bg-app-soft/70 p-2.5 sm:min-w-[10.5rem]">
-			<div className="relative">
-				<CosmeticPreview cosmeticId={cosmetic.id} muted={!cosmetic.unlocked} />
-				{!cosmetic.unlocked && (
+		<Button
+			align="start"
+			fullWidth
+			size="row"
+			variant={equipped ? "primary" : "secondary"}
+			className="min-w-0 rounded-lg p-2.5"
+			surface="dialog"
+			data-testid={`cafe-cosmetic-tile-${cosmetic.id}`}
+			disabled={!cosmetic.unlocked || isSaving}
+			aria-pressed={cosmetic.unlocked ? equipped : undefined}
+			onClick={() => {
+				if (!equipped) {
+					onEquip();
+				}
+			}}
+		>
+			<CosmeticPreview cosmeticId={cosmetic.id} muted={!cosmetic.unlocked} surface="dialog" />
+			<span className="min-w-0 flex-1">
+				<span
+					className="block truncate text-sm font-semibold leading-tight"
+					title={cosmeticName}
+				>
+					{cosmeticName}
+				</span>
+				{pending ? (
+					<span className="mt-1 block text-[11px] text-muted">
+						{t("cafe.cosmetics.saving")}
+					</span>
+				) : equipped ? (
 					<span
-						className="absolute right-2 top-2 inline-flex items-center gap-1 rounded-full border border-app-border bg-app-panel/92 px-2 py-1 text-xs font-semibold text-app-text"
+						className="mt-1 inline-flex items-center gap-1 text-[11px]"
+						role="status"
+						aria-label={t("cafe.cosmetics.equipped")}
+					>
+						<Check size={13} aria-hidden="true" />
+						{t("cafe.cosmetics.equipped")}
+					</span>
+				) : cosmetic.unlocked ? (
+					<span className="mt-1 block text-[11px] text-muted">
+						{t("cafe.cosmetics.equip")}
+					</span>
+				) : (
+					<span
+						className="mt-1 inline-flex items-center gap-1 text-[11px] text-muted"
 						aria-label={t("cafe.cosmetics.needStars", {
 							count: cosmetic.requiredStars
 						})}
 					>
-						<Star size={12} aria-hidden="true" />
+						<Lock size={11} aria-hidden="true" />
+						<Star size={10} aria-hidden="true" />
 						{cosmetic.requiredStars}
 					</span>
 				)}
-			</div>
-			<p className="mt-2 text-sm font-semibold text-app-text">
-				{t(`cafe.cosmetics.${cosmetic.id}.name`)}
-			</p>
-			<div className="mt-auto pt-2">
-				{pending ? (
-					<Button fullWidth size="sm" disabled>
-						{t("cafe.cosmetics.saving")}
-					</Button>
-				) : equipped ? (
-					<span
-						className="inline-flex h-8 w-full items-center justify-center gap-1.5 text-xs font-semibold text-app-text"
-						role="status"
-						aria-label={t("cafe.cosmetics.equipped")}
-						title={t("cafe.cosmetics.equipped")}
-					>
-						<Check size={16} aria-hidden="true" />
-						{t("cafe.cosmetics.equip")}
-					</span>
-				) : cosmetic.unlocked ? (
-					<Button fullWidth size="sm" disabled={isSaving} onClick={onEquip}>
-						{t("cafe.cosmetics.equip")}
-					</Button>
-				) : (
-					<span
-						className="inline-flex h-8 w-full items-center justify-center gap-1.5 rounded-lg border border-app-border bg-app-panel/30 px-2 text-xs font-semibold text-muted"
-						aria-label={t("cafe.cosmetics.locked")}
-					>
-						<Lock size={13} aria-hidden="true" />
-						{t("cafe.cosmetics.locked")}
-					</span>
-				)}
-			</div>
-		</article>
+			</span>
+		</Button>
 	);
 }
 
-function CosmeticPreview({ cosmeticId, muted }: { cosmeticId: string; muted: boolean }) {
+function CosmeticPreview({
+	cosmeticId,
+	muted,
+	surface = "app",
+	testId
+}: {
+	cosmeticId: string;
+	muted: boolean;
+	surface?: "app" | "dialog";
+	testId?: string;
+}) {
 	const glyph =
 		{ sakura_pin: "✿", mint_scarf: "〰", tea_hat: "🍵", cafe_apron: "🎀" }[cosmeticId] ?? "✦";
 	const accent = {
@@ -507,11 +617,13 @@ function CosmeticPreview({ cosmeticId, muted }: { cosmeticId: string; muted: boo
 	}[cosmeticId];
 	return (
 		<div
-			className={`flex h-12 items-center justify-center rounded-lg border border-app-border bg-app-panel/70 text-2xl transition ${
-				muted ? "opacity-55 grayscale" : ""
-			}`}
+			className={`flex size-10 shrink-0 items-center justify-center rounded-md border text-xl transition ${
+				surface === "dialog"
+					? "border-dialog-border bg-dialog-panel"
+					: "border-app-border bg-app-panel/70"
+			} ${muted ? "opacity-55 grayscale" : ""}`}
 			style={{ color: accent ?? "var(--color-app-text)" }}
-			data-testid={`cafe-cosmetic-preview-${cosmeticId}`}
+			data-testid={testId ?? `cafe-cosmetic-preview-${cosmeticId}`}
 			aria-hidden="true"
 		>
 			{glyph}

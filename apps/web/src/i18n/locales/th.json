@@ -20,6 +20,7 @@
 	"cafe.cosmetics.title": "ของแต่ง",
 	"cafe.cosmetics.description": "Cafe Stars คือความคืบหน้าสะสม เมื่อถึงเป้าจะปลดล็อกรูปลักษณ์ใหม่โดยไม่หักดาว",
 	"cafe.cosmetics.classic": "ถอดของแต่ง",
+	"cafe.cosmetics.defaultLook": "ลุคปกติ",
 	"cafe.cosmetics.unlocked": "ปลดล็อกแล้ว",
 	"cafe.cosmetics.needStars": "รับดาวเพิ่มอีก {count} ดวง",
 	"cafe.cosmetics.equip": "สวมใส่",

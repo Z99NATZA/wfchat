@@ -52,6 +52,35 @@ describe("Dialog", () => {
 		expect(contentShell?.className).not.toContain("px-5");
 		expect(container.querySelector(".cursor-move")).toBeNull();
 	});
+
+	it("renders a mobile-bottom sheet that becomes a compact desktop dialog", () => {
+		mockMatchMedia(true);
+		render(
+			<Dialog
+				isOpen
+				title="Wardrobe"
+				variant="sheet"
+				isDraggable
+				content={<div>Wardrobe choices</div>}
+				actions={null}
+				onClose={vi.fn()}
+			/>
+		);
+
+		const dialog = screen.getByRole("dialog");
+		const overlay = dialog.parentElement;
+		const contentShell = screen.getByText("Wardrobe choices").parentElement;
+
+		expect(overlay?.className).toContain("items-end");
+		expect(overlay?.className).toContain("sm:items-center");
+		expect(dialog.className).toContain("rounded-t-2xl");
+		expect(dialog.className).toContain("sm:max-w-2xl");
+		expect(dialog.className).toContain("max-h-[85dvh]");
+		expect(contentShell?.className).toContain("overflow-y-auto");
+		expect(contentShell?.className).toContain("py-4");
+		expect(screen.getByText("Wardrobe").className).not.toContain("sr-only");
+		expect(screen.getByText("Wardrobe").parentElement?.className).toContain("cursor-move");
+	});
 });
 
 function mockMatchMedia(matches: boolean) {

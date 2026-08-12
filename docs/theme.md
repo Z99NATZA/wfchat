@@ -16,6 +16,10 @@ with a compact toolbar instead of the generic dialog card, padding, draggable
 header, and footer actions. The viewer uses semantic `app-*` surfaces and no
 large-area blur.
 
+Responsive sheets use semantic `dialog-*` surfaces with an `app-*` backdrop.
+They align to the viewport bottom on narrow screens and become centered compact
+dialogs on wider screens, without large-area blur.
+
 | Intent               | Typical utility                        |
 | -------------------- | -------------------------------------- |
 | App base             | `bg-app-bg`                            |

@@ -12,9 +12,11 @@ stays under `apps/web/src/features/<feature>/components/`.
 - `DialogProvider` and `Dialog`: modal host and shell.
 - `ConfirmDialog`: shared confirmation UI.
 
-`useDialog()` exposes `confirm`, `alert`, and `openCustom`. Custom dialogs
-can use the wide size and hide the cancel action. Dragging is enabled only on
-desktop-like fine-pointer viewports.
+`useDialog()` exposes `confirm`, `alert`, and `openCustom`. Custom dialogs can
+use the wide size, media lightbox, or responsive sheet and can hide generic
+actions. A sheet is bottom-aligned on narrow viewports and centered at a compact
+maximum width on wider viewports. When enabled by its owner, dragging applies
+only on desktop-like fine-pointer viewports.
 
 Choose `Button`/`IconButton` variants and sizes instead of repeating padding,
 border, hover, focus, danger, or dark-mode classes. Their `className` should

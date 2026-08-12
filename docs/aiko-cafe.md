@@ -6,6 +6,15 @@ chat and is available at `/cafe` without login.
 ## Player Experience
 
 - `/cafe` supports Join, Create Room, and Join by Code.
+- On narrow lobby viewports, Join and Create Room share one full-width row as
+  equal columns; wider layouts keep them compact and inline.
+- The entry panel ends with a borderless cosmetics footer separated by one top
+  divider. It shows the current look and Cafe Stars without adding another card,
+  and opens an on-demand wardrobe as a bottom sheet on narrow viewports or a
+  compact dialog on wider viewports. Inside, unlocked tiles equip on click, the
+  current tile is selected, locked tiles show their star goal, and Reset look
+  removes the equipped cosmetic. Fine-pointer desktop users can drag the dialog
+  by its header; touch and narrow layouts cannot.
 - A room supports 1-8 players. Join selects the busiest public room with
   space; a created room also gets a six-character invite code.
 - The optional cafe name applies only to the current browser tab. If empty, the
