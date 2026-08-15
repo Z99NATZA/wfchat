@@ -61,6 +61,9 @@ npm run init
 # start
 docker compose up -d --build
 
+# follow the API's structured JSON logs
+docker compose logs --follow api
+
 # stop
 docker compose down
 
@@ -72,6 +75,10 @@ docker compose down
 Open `http://<LAN_IP>:5173` from the other device. The Docker web container
 proxies `/api` to the API container internally, so the browser only needs to
 reach port `5173`.
+
+The Rust API writes structured JSON to standard output and Docker captures that
+stream. See [Logging](docs/logging.md) for the event and sensitive-data
+contracts.
 
 Assistant text-to-speech and push-to-talk microphone transcription are separate
 capabilities. See [Chat voice](docs/chat-voice.md) for provider behavior and

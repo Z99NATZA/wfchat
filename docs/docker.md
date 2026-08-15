@@ -32,6 +32,24 @@ The API waits for PostgreSQL health, applies embedded SQLx migrations, then
 starts background memory and attachment-cleanup work. Web waits for API health.
 `/api/health` checks the API directly on port 8080 and through nginx on 5173.
 
+## Logs
+
+The Rust API emits newline-delimited structured JSON through `tracing` to
+standard output. Docker captures the `api` container stream, which can be read
+or followed with:
+
+```powershell
+docker compose logs api
+docker compose logs --follow api
+```
+
+The runtime flow is `Rust tracing -> API stdout -> Docker capture -> docker
+compose logs`. The application does not write log files. The checked-in Compose
+file does not select a logging driver or configure rotation, retention, or
+external storage; Docker therefore uses the host's configured default. Those
+controls are responsibilities of the separately managed production deployment.
+See [Logging](logging.md) for event fields and sensitive-data boundaries.
+
 ## Networking
 
 The Docker web build leaves `VITE_API_BASE_URL` empty. Browser requests remain

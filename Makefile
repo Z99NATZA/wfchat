@@ -7,9 +7,13 @@ down:
 logs:
 	docker compose logs -f
 
+logs-api:
+	docker compose logs --follow api
+
 ci:
 	npm ci --prefix apps/web
 	npm --prefix apps/web run lint
 	npm --prefix apps/web run format:check
 	npm --prefix apps/web test
 	npm --prefix apps/web run build
+
