@@ -1,5 +1,6 @@
 use axum::{
     http::{header::CONTENT_TYPE, HeaderName, HeaderValue, Method},
+    middleware,
     routing::get,
     Json, Router,
 };
@@ -9,10 +10,11 @@ use tower_http::{
     trace::TraceLayer,
 };
 
-use crate::{admin, auth, cafe, characters, chat, memory, state::AppState, sync};
+use crate::{access_log, admin, auth, cafe, characters, chat, memory, state::AppState, sync};
 
 pub fn build_router(state: AppState) -> Router {
     let frontend_origins = parse_frontend_origins(&state.config.frontend_origin);
+    let access_log_config = access_log::AccessLogConfig::from(&state.config);
     let mut allowed_headers = vec![CONTENT_TYPE];
     if state.config.security.allow_session_header {
         allowed_headers.push(HeaderName::from_static("x-wfchat-session"));
@@ -42,6 +44,10 @@ pub fn build_router(state: AppState) -> Router {
         .nest("/api", api)
         .layer(TraceLayer::new_for_http())
         .layer(cors)
+        .layer(middleware::from_fn_with_state(
+            access_log_config,
+            access_log::log_http_request,
+        ))
         .with_state(state);
 
     #[cfg(test)]

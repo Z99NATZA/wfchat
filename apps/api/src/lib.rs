@@ -1,3 +1,4 @@
+pub mod access_log;
 pub mod admin;
 pub mod ai;
 pub mod app;

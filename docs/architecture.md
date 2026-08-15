@@ -63,6 +63,7 @@ adapters. Provider adapters should not depend on frontend concepts.
 
 - [Frontend architecture](frontend-architecture.md)
 - [Backend architecture](backend-architecture.md)
+- [Logging](logging.md)
 - [State management](state-management.md)
 - [App navigation](app-navigation.md)
 - [Chat sessions](chat-sessions.md)
