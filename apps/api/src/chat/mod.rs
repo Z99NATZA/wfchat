@@ -27,7 +27,8 @@ use crate::{
         CHAT_ATTACHMENT_KIND_IMAGE,
     },
     authorization_log::{
-        self, AuthorizationAction, AuthorizationRejectionReason, AuthorizationResource,
+        self, AttachmentUploadRejectionReason, AuthorizationAction, AuthorizationRejectionReason,
+        AuthorizationResource,
     },
     characters,
     error::{AppError, AppResult, ErrorReason, LIMIT_RETRY_AFTER_SECONDS},
@@ -96,7 +97,10 @@ pub fn router(config: &crate::config::Config) -> Router<AppState> {
         router.route(
             "/chat/attachments",
             axum::routing::post(upload_chat_attachment)
-                .layer(DefaultBodyLimit::max(multipart_max_bytes)),
+                .layer(DefaultBodyLimit::max(multipart_max_bytes))
+                .layer(axum::middleware::from_fn(
+                    authorization_log::attachment_body_limit_rejection,
+                )),
         )
     } else {
         router
@@ -596,9 +600,9 @@ mod tests {
     }
 
     #[derive(Clone, Default)]
-    struct CapturedAuthorizationWriter(Arc<Mutex<Vec<u8>>>);
+    struct CapturedSecurityWriter(Arc<Mutex<Vec<u8>>>);
 
-    impl Write for CapturedAuthorizationWriter {
+    impl Write for CapturedSecurityWriter {
         fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
             self.0.lock().expect("captured log lock").extend(bytes);
             Ok(bytes.len())
@@ -609,19 +613,19 @@ mod tests {
         }
     }
 
-    impl<'writer> MakeWriter<'writer> for CapturedAuthorizationWriter {
-        type Writer = CapturedAuthorizationWriter;
+    impl<'writer> MakeWriter<'writer> for CapturedSecurityWriter {
+        type Writer = CapturedSecurityWriter;
 
         fn make_writer(&'writer self) -> Self::Writer {
             self.clone()
         }
     }
 
-    async fn capture_authorization_request(
+    async fn capture_security_request(
         state: AppState,
         request: Request<Body>,
     ) -> (axum::response::Response, Vec<Value>) {
-        let writer = CapturedAuthorizationWriter::default();
+        let writer = CapturedSecurityWriter::default();
         let subscriber = tracing_subscriber::fmt()
             .json()
             .flatten_event(true)
@@ -640,7 +644,12 @@ mod tests {
             .expect("captured logs should be UTF-8")
             .lines()
             .map(|line| serde_json::from_str(line).expect("captured log should be JSON"))
-            .filter(|event: &Value| event["target"] == "wfchat::authorization_security")
+            .filter(|event: &Value| {
+                matches!(
+                    event["target"].as_str(),
+                    Some("wfchat::authorization_security" | "wfchat::attachment_security")
+                )
+            })
             .collect();
         (response, events)
     }
@@ -690,8 +699,7 @@ mod tests {
 
         for (method, uri, action) in missing_session_cases {
             let (response, events) =
-                capture_authorization_request(state.clone(), core_chat_request(method, uri, None))
-                    .await;
+                capture_security_request(state.clone(), core_chat_request(method, uri, None)).await;
             assert_eq!(response.status(), StatusCode::FORBIDDEN);
             assert_eq!(events.len(), 1);
             let event = &events[0];
@@ -709,7 +717,7 @@ mod tests {
         }
 
         let invalid_session_id = Uuid::new_v4();
-        let (response, events) = capture_authorization_request(
+        let (response, events) = capture_security_request(
             state.clone(),
             core_chat_request(
                 "GET",
@@ -726,7 +734,7 @@ mod tests {
 
         let session = create_test_session(&state).await;
         let unavailable_chat_id = Uuid::new_v4();
-        let (response, events) = capture_authorization_request(
+        let (response, events) = capture_security_request(
             state.clone(),
             core_chat_request(
                 "GET",
@@ -742,7 +750,7 @@ mod tests {
             .unwrap()
             .contains(&unavailable_chat_id.to_string()));
 
-        let (response, events) = capture_authorization_request(
+        let (response, events) = capture_security_request(
             state.clone(),
             core_chat_request(
                 "POST",
@@ -759,6 +767,161 @@ mod tests {
             .delete_session_for_test(session.id)
             .await
             .unwrap();
+    }
+
+    fn attachment_request(
+        method: &str,
+        uri: String,
+        session_id: Option<Uuid>,
+        boundary: &str,
+        body: Vec<u8>,
+    ) -> Request<Body> {
+        let mut request = Request::builder().method(method).uri(uri);
+        if method == "POST" {
+            request = request.header(
+                header::CONTENT_TYPE,
+                format!("multipart/form-data; boundary={boundary}"),
+            );
+        }
+        if let Some(session_id) = session_id {
+            request = request.header("x-wfchat-session", session_id.to_string());
+        }
+        request
+            .body(Body::from(body))
+            .expect("attachment request should build")
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn attachment_security_routes_emit_authorization_and_upload_rejections() {
+        let Some(mut state) = test_state().await else {
+            return;
+        };
+        let attachment_id = Uuid::new_v4();
+        let boundary = "wfchat-secret-boundary";
+        let upload_body = multipart_file_body(boundary, b"secret-file-bytes");
+        let missing_session_cases = [
+            (
+                "POST",
+                "/api/chat/attachments".to_owned(),
+                "upload_attachment",
+                upload_body,
+            ),
+            (
+                "GET",
+                format!("/api/chat/attachments/{attachment_id}/preview"),
+                "preview_attachment",
+                Vec::new(),
+            ),
+            (
+                "DELETE",
+                format!("/api/chat/attachments/{attachment_id}"),
+                "delete_attachment",
+                Vec::new(),
+            ),
+        ];
+
+        for (method, uri, action, body) in missing_session_cases {
+            let (response, events) = capture_security_request(
+                state.clone(),
+                attachment_request(method, uri, None, boundary, body),
+            )
+            .await;
+            assert_eq!(response.status(), StatusCode::FORBIDDEN);
+            assert_eq!(events.len(), 1);
+            assert_eq!(events[0]["event"], "authorization_rejected");
+            assert_eq!(events[0]["resource"], "attachment");
+            assert_eq!(events[0]["action"], action);
+            assert_eq!(events[0]["reason"], "missing_session");
+            assert_eq!(
+                events[0]["request_id"],
+                response.headers()["x-request-id"].to_str().unwrap()
+            );
+            let encoded = serde_json::to_string(&events[0]).unwrap();
+            assert!(!encoded.contains(&attachment_id.to_string()));
+            assert!(!encoded.contains("secret-file-bytes"));
+            assert!(!encoded.contains(boundary));
+        }
+
+        let invalid_session_id = Uuid::new_v4();
+        let (response, events) = capture_security_request(
+            state.clone(),
+            attachment_request(
+                "GET",
+                format!("/api/chat/attachments/{attachment_id}/preview"),
+                Some(invalid_session_id),
+                boundary,
+                Vec::new(),
+            ),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+        assert_eq!(events[0]["reason"], "invalid_session");
+
+        let session = create_test_session(&state).await;
+        for (method, uri, action) in [
+            (
+                "GET",
+                format!("/api/chat/attachments/{attachment_id}/preview"),
+                "preview_attachment",
+            ),
+            (
+                "DELETE",
+                format!("/api/chat/attachments/{attachment_id}"),
+                "delete_attachment",
+            ),
+        ] {
+            let (response, events) = capture_security_request(
+                state.clone(),
+                attachment_request(method, uri, Some(session.id), boundary, Vec::new()),
+            )
+            .await;
+            assert_eq!(response.status(), StatusCode::NOT_FOUND);
+            assert_eq!(events.len(), 1);
+            assert_eq!(events[0]["action"], action);
+            assert_eq!(events[0]["reason"], "resource_unavailable");
+        }
+
+        let (response, events) = capture_security_request(
+            state.clone(),
+            attachment_request(
+                "POST",
+                "/api/chat/attachments".to_owned(),
+                Some(session.id),
+                boundary,
+                multipart_file_body(boundary, b"secret-invalid-image"),
+            ),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0]["event"], "attachment_upload_rejected");
+        assert_eq!(events[0]["reason"], "invalid_request");
+        assert!(!serde_json::to_string(&events[0])
+            .unwrap()
+            .contains("secret-invalid-image"));
+
+        state.config.chat_attachment_max_bytes = 64;
+        let (response, events) = capture_security_request(
+            state.clone(),
+            attachment_request(
+                "POST",
+                "/api/chat/attachments".to_owned(),
+                Some(session.id),
+                boundary,
+                multipart_file_body(boundary, &vec![0u8; 64 * 1024 + 1]),
+            ),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::PAYLOAD_TOO_LARGE);
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0]["reason"], "image_size_limit");
+
+        state
+            .store
+            .delete_session_for_test(session.id)
+            .await
+            .unwrap();
+        let _ = tokio::fs::remove_dir_all(state.config.chat_attachment_upload_dir).await;
     }
 
     #[test]

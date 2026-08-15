@@ -9,22 +9,33 @@ pub(super) async fn upload_chat_attachment(
     if !state.config.security.chat.image_upload_enabled {
         return Err(AppError::NotFound);
     }
-    let session = require_chat_session(&state, &headers).await?;
-    enforce_sensitive_rate_limit(
+    let session =
+        require_attachment_session(&state, &headers, AuthorizationAction::UploadAttachment).await?;
+    if let Err(error) = enforce_sensitive_rate_limit(
         &state,
         &headers,
         peer_addr,
         session.id,
         RateLimitFamily::ImageUpload,
-    )?;
+    ) {
+        log_attachment_upload_rejection(&error);
+        return Err(error);
+    }
     let owner = OwnerScope::from_session(&session);
     let mut file_bytes = None;
 
-    while let Some(field) = multipart
-        .next_field()
-        .await
-        .map_err(attachment_multipart_error)?
-    {
+    loop {
+        let field = match multipart.next_field().await {
+            Ok(field) => field,
+            Err(error) => {
+                let error = attachment_multipart_error(error);
+                log_attachment_upload_rejection(&error);
+                return Err(error);
+            }
+        };
+        let Some(field) = field else {
+            break;
+        };
         let Some(name) = field.name().map(str::to_owned) else {
             continue;
         };
@@ -34,20 +45,39 @@ pub(super) async fn upload_chat_attachment(
         }
 
         if file_bytes.is_some() {
-            return Err(AppError::BadRequest(
+            let error = AppError::BadRequest(
                 "only one image attachment can be uploaded per request".to_owned(),
-            ));
+            );
+            log_attachment_upload_rejection(&error);
+            return Err(error);
         }
 
-        let bytes = field.bytes().await.map_err(attachment_multipart_error)?;
+        let bytes = match field.bytes().await {
+            Ok(bytes) => bytes,
+            Err(error) => {
+                let error = attachment_multipart_error(error);
+                log_attachment_upload_rejection(&error);
+                return Err(error);
+            }
+        };
         file_bytes = Some(bytes.to_vec());
     }
 
-    let file_bytes = file_bytes.ok_or_else(|| {
-        AppError::BadRequest("image attachment upload requires a file".to_owned())
-    })?;
+    let Some(file_bytes) = file_bytes else {
+        let error = AppError::BadRequest("image attachment upload requires a file".to_owned());
+        log_attachment_upload_rejection(&error);
+        return Err(error);
+    };
     let (validated, file_bytes) =
-        validate_image_attachment(&state.config, &state.image_decode_limiter, file_bytes).await?;
+        match validate_image_attachment(&state.config, &state.image_decode_limiter, file_bytes)
+            .await
+        {
+            Ok(validated) => validated,
+            Err(error) => {
+                log_attachment_upload_rejection(&error);
+                return Err(error);
+            }
+        };
     let attachment_id = Uuid::new_v4();
     let storage_key = image_storage_key(attachment_id, validated.extension);
 
@@ -95,6 +125,10 @@ async fn create_chat_attachment_metadata_then_file(
     let attachment = match outcome {
         CreateChatAttachmentOutcome::Created(attachment) => *attachment,
         CreateChatAttachmentOutcome::StorageQuotaExceeded => {
+            authorization_log::attachment_upload_rejected(
+                axum::http::StatusCode::CONFLICT,
+                AttachmentUploadRejectionReason::ImageStorageLimit,
+            );
             return Err(AppError::reasoned(
                 axum::http::StatusCode::CONFLICT,
                 "conflict: image attachment storage quota exceeded",
@@ -123,6 +157,67 @@ async fn create_chat_attachment_metadata_then_file(
     Ok(attachment)
 }
 
+async fn require_attachment_session(
+    state: &AppState,
+    headers: &HeaderMap,
+    action: AuthorizationAction,
+) -> AppResult<SessionRecord> {
+    let Some(session_id) = session_id_from_headers(&state.config, headers) else {
+        authorization_log::rejected(
+            AuthorizationResource::Attachment,
+            action,
+            axum::http::StatusCode::FORBIDDEN,
+            AuthorizationRejectionReason::MissingSession,
+        );
+        return Err(AppError::Forbidden);
+    };
+    let Some(session) = state.store.get_session(session_id).await? else {
+        authorization_log::rejected(
+            AuthorizationResource::Attachment,
+            action,
+            axum::http::StatusCode::FORBIDDEN,
+            AuthorizationRejectionReason::InvalidSession,
+        );
+        return Err(AppError::Forbidden);
+    };
+    Ok(session)
+}
+
+fn unavailable_attachment(action: AuthorizationAction) -> AppError {
+    authorization_log::rejected(
+        AuthorizationResource::Attachment,
+        action,
+        axum::http::StatusCode::NOT_FOUND,
+        AuthorizationRejectionReason::ResourceUnavailable,
+    );
+    AppError::NotFound
+}
+
+fn log_attachment_upload_rejection(error: &AppError) {
+    let (status, reason) = match error {
+        AppError::BadRequest(_) => (
+            axum::http::StatusCode::BAD_REQUEST,
+            AttachmentUploadRejectionReason::InvalidRequest,
+        ),
+        AppError::Reasoned { status, reason, .. } => {
+            let reason = match reason {
+                ErrorReason::ImageSizeLimit => AttachmentUploadRejectionReason::ImageSizeLimit,
+                ErrorReason::ImageUploadRate => AttachmentUploadRejectionReason::ImageUploadRate,
+                ErrorReason::ImageProcessingCapacity => {
+                    AttachmentUploadRejectionReason::ImageProcessingCapacity
+                }
+                ErrorReason::ImageStorageLimit => {
+                    AttachmentUploadRejectionReason::ImageStorageLimit
+                }
+                _ => return,
+            };
+            (*status, reason)
+        }
+        _ => return,
+    };
+    authorization_log::attachment_upload_rejected(status, reason);
+}
+
 fn attachment_multipart_error(error: axum::extract::multipart::MultipartError) -> AppError {
     if error.status() == axum::http::StatusCode::PAYLOAD_TOO_LARGE {
         AppError::reasoned(
@@ -141,13 +236,15 @@ pub(super) async fn preview_chat_attachment(
     headers: HeaderMap,
     Path(attachment_id): Path<Uuid>,
 ) -> AppResult<impl IntoResponse> {
-    let session = require_chat_session(&state, &headers).await?;
+    let session =
+        require_attachment_session(&state, &headers, AuthorizationAction::PreviewAttachment)
+            .await?;
     let owner = OwnerScope::from_session(&session);
     let attachment = state
         .store
         .get_chat_attachment(owner, attachment_id)
         .await?
-        .ok_or(AppError::NotFound)?;
+        .ok_or_else(|| unavailable_attachment(AuthorizationAction::PreviewAttachment))?;
     let bytes = read_attachment_bytes(
         &state.config.chat_attachment_upload_dir,
         &attachment.storage_key,
@@ -170,13 +267,14 @@ pub(super) async fn delete_chat_attachment(
     headers: HeaderMap,
     Path(attachment_id): Path<Uuid>,
 ) -> AppResult<Json<serde_json::Value>> {
-    let session = require_chat_session(&state, &headers).await?;
+    let session =
+        require_attachment_session(&state, &headers, AuthorizationAction::DeleteAttachment).await?;
     let owner = OwnerScope::from_session(&session);
     let attachment = state
         .store
         .get_chat_attachment(owner, attachment_id)
         .await?
-        .ok_or(AppError::NotFound)?;
+        .ok_or_else(|| unavailable_attachment(AuthorizationAction::DeleteAttachment))?;
 
     if attachment.message_id.is_some() {
         return Err(AppError::BadRequest(
@@ -189,7 +287,9 @@ pub(super) async fn delete_chat_attachment(
         .delete_pending_chat_attachment(owner, attachment_id)
         .await?;
     if !deleted {
-        return Err(AppError::NotFound);
+        return Err(unavailable_attachment(
+            AuthorizationAction::DeleteAttachment,
+        ));
     }
 
     Ok(Json(json!({ "ok": true })))

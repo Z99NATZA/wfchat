@@ -21,6 +21,7 @@ tokio::task_local! {
 pub(crate) enum AuthorizationResource {
     Admin,
     Chat,
+    Attachment,
 }
 
 impl AuthorizationResource {
@@ -28,6 +29,7 @@ impl AuthorizationResource {
         match self {
             Self::Admin => "admin",
             Self::Chat => "chat",
+            Self::Attachment => "attachment",
         }
     }
 }
@@ -43,6 +45,9 @@ pub(crate) enum AuthorizationAction {
     ClearChatMessages,
     SendChatMessage,
     StreamChatMessage,
+    UploadAttachment,
+    PreviewAttachment,
+    DeleteAttachment,
 }
 
 impl AuthorizationAction {
@@ -57,6 +62,30 @@ impl AuthorizationAction {
             Self::ClearChatMessages => "clear_chat_messages",
             Self::SendChatMessage => "send_chat_message",
             Self::StreamChatMessage => "stream_chat_message",
+            Self::UploadAttachment => "upload_attachment",
+            Self::PreviewAttachment => "preview_attachment",
+            Self::DeleteAttachment => "delete_attachment",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub(crate) enum AttachmentUploadRejectionReason {
+    InvalidRequest,
+    ImageSizeLimit,
+    ImageUploadRate,
+    ImageProcessingCapacity,
+    ImageStorageLimit,
+}
+
+impl AttachmentUploadRejectionReason {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::InvalidRequest => "invalid_request",
+            Self::ImageSizeLimit => "image_size_limit",
+            Self::ImageUploadRate => "image_upload_rate",
+            Self::ImageProcessingCapacity => "image_processing_capacity",
+            Self::ImageStorageLimit => "image_storage_limit",
         }
     }
 }
@@ -126,6 +155,51 @@ pub(crate) fn rejected(
     }
 }
 
+pub(crate) fn attachment_upload_rejected(
+    status: StatusCode,
+    reason: AttachmentUploadRejectionReason,
+) {
+    let context = current_context();
+    if context.emitted.swap(true, Ordering::Relaxed) {
+        return;
+    }
+
+    match context.request_id {
+        Some(request_id) => tracing::warn!(
+            target: "wfchat::attachment_security",
+            event = "attachment_upload_rejected",
+            request_id = %request_id.value(),
+            resource = "attachment",
+            action = "upload_attachment",
+            outcome = "rejected",
+            status = status.as_u16(),
+            reason = reason.as_str(),
+            "attachment upload rejected"
+        ),
+        None => tracing::warn!(
+            target: "wfchat::attachment_security",
+            event = "attachment_upload_rejected",
+            resource = "attachment",
+            action = "upload_attachment",
+            outcome = "rejected",
+            status = status.as_u16(),
+            reason = reason.as_str(),
+            "attachment upload rejected"
+        ),
+    }
+}
+
+pub(crate) async fn attachment_body_limit_rejection(request: Request, next: Next) -> Response {
+    let response = next.run(request).await;
+    if response.status() == StatusCode::PAYLOAD_TOO_LARGE {
+        attachment_upload_rejected(
+            StatusCode::PAYLOAD_TOO_LARGE,
+            AttachmentUploadRejectionReason::ImageSizeLimit,
+        );
+    }
+    response
+}
+
 fn current_context() -> AuthorizationRequestContext {
     AUTHORIZATION_REQUEST_CONTEXT
         .try_with(Clone::clone)
@@ -181,7 +255,12 @@ mod tests {
                 .expect("captured logs should be UTF-8")
                 .lines()
                 .map(|line| serde_json::from_str(line).expect("captured log should be JSON"))
-                .filter(|event: &Value| event["target"] == "wfchat::authorization_security")
+                .filter(|event: &Value| {
+                    matches!(
+                        event["target"].as_str(),
+                        Some("wfchat::authorization_security" | "wfchat::attachment_security")
+                    )
+                })
                 .collect()
         }
     }
@@ -196,6 +275,20 @@ mod tests {
                     rejected(resource, action, status, reason);
                     status
                 }),
+            )
+            .route(
+                "/upload/{case}",
+                get(|Path(case): Path<String>| async move {
+                    let (status, reason) = upload_rejection_case(&case);
+                    attachment_upload_rejected(status, reason);
+                    attachment_upload_rejected(status, reason);
+                    status
+                }),
+            )
+            .route(
+                "/body-limit",
+                get(|| async { StatusCode::PAYLOAD_TOO_LARGE })
+                    .layer(middleware::from_fn(attachment_body_limit_rejection)),
             )
             .route("/ok", get(|| async { StatusCode::OK }))
             .route("/business-error", get(|| async { StatusCode::BAD_REQUEST }))
@@ -248,7 +341,60 @@ mod tests {
                 AuthorizationAction::StreamChatMessage,
                 StatusCode::NOT_FOUND,
             ),
+            "attachment_upload" => {
+                attachment_case(AuthorizationAction::UploadAttachment, StatusCode::FORBIDDEN)
+            }
+            "attachment_preview" => attachment_case(
+                AuthorizationAction::PreviewAttachment,
+                StatusCode::NOT_FOUND,
+            ),
+            "attachment_delete" => {
+                attachment_case(AuthorizationAction::DeleteAttachment, StatusCode::NOT_FOUND)
+            }
             _ => panic!("unknown rejection case"),
+        }
+    }
+
+    fn attachment_case(
+        action: AuthorizationAction,
+        status: StatusCode,
+    ) -> (
+        AuthorizationResource,
+        AuthorizationAction,
+        StatusCode,
+        AuthorizationRejectionReason,
+    ) {
+        let reason = if status == StatusCode::NOT_FOUND {
+            AuthorizationRejectionReason::ResourceUnavailable
+        } else {
+            AuthorizationRejectionReason::MissingSession
+        };
+        (AuthorizationResource::Attachment, action, status, reason)
+    }
+
+    fn upload_rejection_case(case: &str) -> (StatusCode, AttachmentUploadRejectionReason) {
+        match case {
+            "invalid" => (
+                StatusCode::BAD_REQUEST,
+                AttachmentUploadRejectionReason::InvalidRequest,
+            ),
+            "size" => (
+                StatusCode::PAYLOAD_TOO_LARGE,
+                AttachmentUploadRejectionReason::ImageSizeLimit,
+            ),
+            "rate" => (
+                StatusCode::TOO_MANY_REQUESTS,
+                AttachmentUploadRejectionReason::ImageUploadRate,
+            ),
+            "capacity" => (
+                StatusCode::TOO_MANY_REQUESTS,
+                AttachmentUploadRejectionReason::ImageProcessingCapacity,
+            ),
+            "storage" => (
+                StatusCode::CONFLICT,
+                AttachmentUploadRejectionReason::ImageStorageLimit,
+            ),
+            _ => panic!("unknown upload rejection case"),
         }
     }
 
@@ -372,6 +518,27 @@ mod tests {
                 404,
                 "resource_unavailable",
             ),
+            (
+                "/reject/attachment_upload",
+                "attachment",
+                "upload_attachment",
+                403,
+                "missing_session",
+            ),
+            (
+                "/reject/attachment_preview",
+                "attachment",
+                "preview_attachment",
+                404,
+                "resource_unavailable",
+            ),
+            (
+                "/reject/attachment_delete",
+                "attachment",
+                "delete_attachment",
+                404,
+                "resource_unavailable",
+            ),
         ];
 
         for (path, resource, action, expected_status, reason) in cases {
@@ -394,6 +561,44 @@ mod tests {
             assert!(!encoded.contains("secret-authorization-value"));
             assert!(!encoded.contains("secret-session-value"));
         }
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn emits_bounded_attachment_upload_rejections_and_body_limit_once() {
+        let cases = [
+            ("invalid", 400, "invalid_request"),
+            ("size", 413, "image_size_limit"),
+            ("rate", 429, "image_upload_rate"),
+            ("capacity", 429, "image_processing_capacity"),
+            ("storage", 409, "image_storage_limit"),
+        ];
+
+        for (case, expected_status, reason) in cases {
+            let request_id = Uuid::new_v4();
+            let (status, events) = capture(&format!("/upload/{case}"), Some(request_id)).await;
+            assert_eq!(status.as_u16(), expected_status);
+            assert_eq!(events.len(), 1);
+            let event = &events[0];
+            assert_eq!(event["level"], "WARN");
+            assert_eq!(event["target"], "wfchat::attachment_security");
+            assert_eq!(event["event"], "attachment_upload_rejected");
+            assert_eq!(event["request_id"], request_id.to_string());
+            assert_eq!(event["resource"], "attachment");
+            assert_eq!(event["action"], "upload_attachment");
+            assert_eq!(event["outcome"], "rejected");
+            assert_eq!(event["status"], expected_status);
+            assert_eq!(event["reason"], reason);
+
+            let encoded = serde_json::to_string(event).unwrap();
+            assert!(!encoded.contains("secret-authorization-value"));
+            assert!(!encoded.contains("secret-session-value"));
+        }
+
+        let (status, events) = capture("/body-limit", None).await;
+        assert_eq!(status, StatusCode::PAYLOAD_TOO_LARGE);
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0]["reason"], "image_size_limit");
+        assert!(events[0].get("request_id").is_none());
     }
 
     #[tokio::test(flavor = "current_thread")]

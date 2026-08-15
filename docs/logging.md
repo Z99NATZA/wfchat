@@ -129,3 +129,33 @@ authorization events. They additionally exclude persona, chat, message, and
 attachment identifiers and all chat text, prompts, AI output, and provider
 payloads. Attachment, speech, transcription, memory, follow-up, and public Chat
 configuration routes are outside this event scope.
+
+## Attachment Security Events
+
+Chat image upload, preview, and deletion extend `authorization_rejected` with
+resource `attachment`. Upload uses action `upload_attachment`, preview uses
+`preview_attachment`, and deletion uses `delete_attachment`. Missing or
+inactive sessions retain `403` with `missing_session` or `invalid_session`.
+Unavailable preview or deletion retains `404` with `resource_unavailable`
+without revealing whether an attachment exists for another owner.
+
+After upload authorization succeeds, validation and limit failures emit one
+`attachment_upload_rejected` event at level `WARN` with target
+`wfchat::attachment_security`, resource `attachment`, action
+`upload_attachment`, and outcome `rejected`.
+
+| Reason | Covered rejection |
+| --- | --- |
+| `invalid_request` | Missing/multiple file, malformed multipart, or invalid/unsupported image |
+| `image_size_limit` | Request, byte, dimension, pixel, or decoder-allocation limit |
+| `image_upload_rate` | Image-upload rate limit |
+| `image_processing_capacity` | Image-processing concurrency limit |
+| `image_storage_limit` | Per-owner attachment storage quota |
+
+Attachment security events follow the existing request-id correlation,
+missing-request-id behavior, and single-event limit. They exclude client IP,
+all identifiers, filenames, MIME claims, hashes, dimensions, byte counts,
+storage paths and keys, file bytes, multipart fields, headers, bodies, and raw
+errors. Successful uploads, disabled routes, sent-attachment deletion
+rejections, storage or database failures, and background attachment work do not
+emit `attachment_upload_rejected`.
