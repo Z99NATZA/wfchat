@@ -25,25 +25,31 @@ pub(super) async fn synthesize_message_speech(
     if !state.config.security.chat.tts_enabled {
         return Err(AppError::NotFound);
     }
-    let session = require_chat_session(&state, &headers).await?;
-    enforce_sensitive_rate_limit(
+    let action = AuthorizationAction::SynthesizeMessageSpeech;
+    let session = require_voice_session(&state, &headers, action).await?;
+    if let Err(error) = enforce_sensitive_rate_limit(
         &state,
         &headers,
         peer_addr,
         session.id,
         RateLimitFamily::AssistantSpeech,
-    )?;
+    ) {
+        if matches!(error, AppError::RateLimited) {
+            voice_rate_limit_rejected(action, VoiceSecurityRejectionReason::SpeechRate);
+        }
+        return Err(error);
+    }
     let owner = OwnerScope::from_session(&session);
     let chat = state
         .store
         .get_chat(owner, chat_id)
         .await?
-        .ok_or(AppError::NotFound)?;
+        .ok_or_else(|| unavailable_voice(action))?;
     let message = chat
         .messages
         .iter()
         .find(|message| message.id == message_id)
-        .ok_or(AppError::NotFound)?;
+        .ok_or_else(|| unavailable_voice(action))?;
 
     if message.role != AiRole::Assistant {
         return Err(AppError::BadRequest(
@@ -86,28 +92,56 @@ pub(super) async fn transcribe_user_speech(
     ConnectInfo(peer_addr): ConnectInfo<SocketAddr>,
     State(state): State<AppState>,
     headers: HeaderMap,
-    mut multipart: Multipart,
-) -> AppResult<impl IntoResponse> {
+    multipart: Result<Multipart, axum::extract::multipart::MultipartRejection>,
+) -> AppResult<Response> {
+    let action = AuthorizationAction::TranscribeUserSpeech;
+    let mut multipart = match multipart {
+        Ok(multipart) => multipart,
+        Err(rejection) => {
+            let status = rejection.status();
+            let reason = if status == StatusCode::PAYLOAD_TOO_LARGE {
+                VoiceSecurityRejectionReason::AudioSizeLimit
+            } else {
+                VoiceSecurityRejectionReason::InvalidAudioRequest
+            };
+            authorization_log::voice_request_rejected(action, status, reason);
+            return Ok(rejection.into_response());
+        }
+    };
     if !state.config.security.chat.transcription_enabled {
         return Err(AppError::NotFound);
     }
-    let session = require_chat_session(&state, &headers).await?;
-    enforce_sensitive_rate_limit(
+    let session = require_voice_session(&state, &headers, action).await?;
+    if let Err(error) = enforce_sensitive_rate_limit(
         &state,
         &headers,
         peer_addr,
         session.id,
         RateLimitFamily::UserTranscription,
-    )?;
+    ) {
+        if matches!(error, AppError::RateLimited) {
+            voice_rate_limit_rejected(action, VoiceSecurityRejectionReason::TranscriptionRate);
+        }
+        return Err(error);
+    }
     let mut audio_bytes = None;
     let mut content_type = None;
     let mut filename = None;
 
-    while let Some(field) = multipart
-        .next_field()
-        .await
-        .map_err(|error| AppError::BadRequest(error.to_string()))?
-    {
+    loop {
+        let field = match multipart.next_field().await {
+            Ok(Some(field)) => field,
+            Ok(None) => break,
+            Err(error) => {
+                let reason = if error.status() == StatusCode::PAYLOAD_TOO_LARGE {
+                    VoiceSecurityRejectionReason::AudioSizeLimit
+                } else {
+                    VoiceSecurityRejectionReason::InvalidAudioRequest
+                };
+                authorization_log::voice_request_rejected(action, StatusCode::BAD_REQUEST, reason);
+                return Err(AppError::BadRequest(error.to_string()));
+            }
+        };
         let Some(name) = field.name().map(str::to_owned) else {
             continue;
         };
@@ -118,18 +152,36 @@ pub(super) async fn transcribe_user_speech(
 
         content_type = field.content_type().map(str::to_owned);
         filename = field.file_name().map(str::to_owned);
-        let bytes = field
-            .bytes()
-            .await
-            .map_err(|error| AppError::BadRequest(error.to_string()))?;
+        let bytes = match field.bytes().await {
+            Ok(bytes) => bytes,
+            Err(error) => {
+                let reason = if error.status() == StatusCode::PAYLOAD_TOO_LARGE {
+                    VoiceSecurityRejectionReason::AudioSizeLimit
+                } else {
+                    VoiceSecurityRejectionReason::InvalidAudioRequest
+                };
+                authorization_log::voice_request_rejected(action, StatusCode::BAD_REQUEST, reason);
+                return Err(AppError::BadRequest(error.to_string()));
+            }
+        };
 
         if bytes.is_empty() {
+            authorization_log::voice_request_rejected(
+                action,
+                StatusCode::BAD_REQUEST,
+                VoiceSecurityRejectionReason::InvalidAudioRequest,
+            );
             return Err(AppError::BadRequest(
                 "speech transcription requires a non-empty audio file".to_owned(),
             ));
         }
 
         if bytes.len() > MAX_TRANSCRIPTION_AUDIO_BYTES {
+            authorization_log::voice_request_rejected(
+                action,
+                StatusCode::BAD_REQUEST,
+                VoiceSecurityRejectionReason::AudioSizeLimit,
+            );
             return Err(AppError::BadRequest(
                 "speech transcription audio is too large".to_owned(),
             ));
@@ -140,15 +192,13 @@ pub(super) async fn transcribe_user_speech(
     }
 
     let audio_bytes = audio_bytes.ok_or_else(|| {
+        authorization_log::voice_request_rejected(
+            action,
+            StatusCode::BAD_REQUEST,
+            VoiceSecurityRejectionReason::InvalidAudioRequest,
+        );
         AppError::BadRequest("speech transcription requires an audio file".to_owned())
     })?;
-    tracing::info!(
-        filename = filename.as_deref().unwrap_or(""),
-        content_type = content_type.as_deref().unwrap_or(""),
-        byte_len = audio_bytes.len(),
-        signature = audio_signature(&audio_bytes),
-        "received user speech transcription audio"
-    );
     let transcript = VoiceService::new(&state.config, &state.http)
         .transcribe_user_speech(audio_bytes, content_type.as_deref(), filename.as_deref())
         .await?;
@@ -158,14 +208,6 @@ pub(super) async fn transcribe_user_speech(
         Json(TranscribeUserSpeechResponse {
             text: transcript.text,
         }),
-    ))
-}
-
-fn audio_signature(bytes: &[u8]) -> String {
-    bytes
-        .iter()
-        .take(12)
-        .map(|byte| format!("{byte:02x}"))
-        .collect::<Vec<_>>()
-        .join("")
+    )
+        .into_response())
 }

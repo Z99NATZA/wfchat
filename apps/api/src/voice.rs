@@ -389,15 +389,7 @@ impl<'a> VoiceService<'a> {
             "{}/audio/transcriptions",
             self.config.openai_base_url.trim_end_matches('/')
         );
-        let audio_metadata = TranscriptionAudioMetadata::new(&audio_bytes, content_type, filename);
-        tracing::info!(
-            filename = audio_metadata.filename,
-            original_content_type = audio_metadata.original_content_type,
-            normalized_content_type = audio_metadata.normalized_content_type.unwrap_or(""),
-            byte_len = audio_metadata.byte_len,
-            signature = audio_metadata.signature.as_str(),
-            "sending user speech audio to transcription provider"
-        );
+        let audio_metadata = TranscriptionAudioMetadata::new(content_type, filename);
         let mut file_part =
             multipart::Part::bytes(audio_bytes).file_name(audio_metadata.filename.to_owned());
         if let Some(content_type) = audio_metadata.normalized_content_type {
@@ -429,7 +421,7 @@ impl<'a> VoiceService<'a> {
                 .await
                 .map_err(|error| AppError::Ai(error.to_string()))?;
             return Err(AppError::Ai(format!(
-                "transcription provider returned {status}: {body}; upload metadata: {audio_metadata}"
+                "transcription provider returned {status}: {body}"
             )));
         }
 
@@ -499,38 +491,17 @@ struct OpenAiTranscriptionResponse {
     text: String,
 }
 
-#[derive(Debug)]
 struct TranscriptionAudioMetadata<'a> {
-    byte_len: usize,
     filename: &'a str,
-    original_content_type: &'a str,
     normalized_content_type: Option<&'static str>,
-    signature: String,
 }
 
 impl<'a> TranscriptionAudioMetadata<'a> {
-    fn new(bytes: &[u8], content_type: Option<&'a str>, filename: Option<&'a str>) -> Self {
+    fn new(content_type: Option<&str>, filename: Option<&'a str>) -> Self {
         Self {
-            byte_len: bytes.len(),
             filename: filename.unwrap_or("speech.webm"),
-            original_content_type: content_type.unwrap_or(""),
             normalized_content_type: content_type.and_then(normalize_transcription_content_type),
-            signature: audio_signature(bytes),
         }
-    }
-}
-
-impl std::fmt::Display for TranscriptionAudioMetadata<'_> {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            formatter,
-            "filename={}, content_type={}, normalized_content_type={}, bytes={}, signature={}",
-            self.filename,
-            self.original_content_type,
-            self.normalized_content_type.unwrap_or(""),
-            self.byte_len,
-            self.signature
-        )
     }
 }
 
@@ -561,15 +532,6 @@ fn normalize_transcription_content_type(content_type: &str) -> Option<&'static s
         "audio/flac" => Some("audio/flac"),
         _ => None,
     }
-}
-
-fn audio_signature(bytes: &[u8]) -> String {
-    bytes
-        .iter()
-        .take(12)
-        .map(|byte| format!("{byte:02x}"))
-        .collect::<Vec<_>>()
-        .join("")
 }
 
 fn validate_voicevox_audio_query(audio_query: &Value) -> AppResult<()> {
@@ -1257,10 +1219,13 @@ mod tests {
             .join()
             .expect("mock provider server should capture request");
 
-        assert!(error
-            .to_string()
-            .contains("transcription provider returned 500 Internal Server Error"));
-        assert!(error.to_string().contains("transcription failed"));
+        let error = error.to_string();
+        assert!(error.contains("transcription provider returned 500 Internal Server Error"));
+        assert!(error.contains("transcription failed"));
+        assert!(!error.contains("fake-audio"));
+        assert!(!error.contains("voice.webm"));
+        assert!(!error.contains("audio/webm"));
+        assert!(!error.contains("upload metadata"));
     }
 
     struct CapturedRequest {

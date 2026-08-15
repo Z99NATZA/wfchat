@@ -22,6 +22,9 @@ Provider modes:
 The endpoint has 10-requests-per-minute session and resolved-IP buckets; it does
 not consume the chat global bucket. OpenAI responses may stream through the same
 endpoint; VOICEVOX and mock return complete audio bytes.
+Authorization and rate-limit rejections use the bounded events documented in
+[Logging](logging.md#voice-security-events); successful synthesis is not logged
+as a Voice security event.
 `CHAT_TTS_ENABLED=false` hides the capability and omits the endpoint. When the
 key is omitted, it defaults to disabled in production and enabled in
 development; the development `.env.example` explicitly enables it.
@@ -73,7 +76,10 @@ The route has 6-requests-per-minute session and resolved-IP buckets without the
 chat global bucket, plus a 25 MiB body limit. It rejects
 missing, empty, oversized, or unsupported audio and normalizes browser MIME
 values for WebM, WAV, MPEG/MP3, MP4/M4A, Ogg, and FLAC. Audio bytes are not
-persisted or logged.
+persisted or logged. Filenames, MIME claims, byte counts, and audio signatures
+are also excluded from diagnostics and provider error text. Bounded
+authorization, rate-limit, and input-rejection events are documented in
+[Logging](logging.md#voice-security-events).
 
 `CHAT_TRANSCRIPTION_ENABLED=false` hides the capability and omits the endpoint.
 When the key is omitted, it defaults to disabled in production and enabled in

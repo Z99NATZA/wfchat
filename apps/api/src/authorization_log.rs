@@ -23,6 +23,7 @@ pub(crate) enum AuthorizationResource {
     Chat,
     Attachment,
     Cafe,
+    Voice,
 }
 
 impl AuthorizationResource {
@@ -32,6 +33,7 @@ impl AuthorizationResource {
             Self::Chat => "chat",
             Self::Attachment => "attachment",
             Self::Cafe => "cafe",
+            Self::Voice => "voice",
         }
     }
 }
@@ -57,6 +59,8 @@ pub(crate) enum AuthorizationAction {
     ReadCafeProgress,
     EquipCafeCosmetic,
     ConnectCafeSocket,
+    SynthesizeMessageSpeech,
+    TranscribeUserSpeech,
 }
 
 impl AuthorizationAction {
@@ -81,6 +85,8 @@ impl AuthorizationAction {
             Self::ReadCafeProgress => "read_cafe_progress",
             Self::EquipCafeCosmetic => "equip_cafe_cosmetic",
             Self::ConnectCafeSocket => "connect_cafe_socket",
+            Self::SynthesizeMessageSpeech => "synthesize_message_speech",
+            Self::TranscribeUserSpeech => "transcribe_user_speech",
         }
     }
 }
@@ -140,6 +146,25 @@ impl CafeSecurityRejectionReason {
             Self::OriginRejected => "origin_rejected",
             Self::SocketCapacity => "socket_capacity",
             Self::RoomCreationRate => "room_creation_rate",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub(crate) enum VoiceSecurityRejectionReason {
+    SpeechRate,
+    TranscriptionRate,
+    InvalidAudioRequest,
+    AudioSizeLimit,
+}
+
+impl VoiceSecurityRejectionReason {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::SpeechRate => "speech_rate",
+            Self::TranscriptionRate => "transcription_rate",
+            Self::InvalidAudioRequest => "invalid_audio_request",
+            Self::AudioSizeLimit => "audio_size_limit",
         }
     }
 }
@@ -259,12 +284,59 @@ pub(crate) fn cafe_request_rejected(
     }
 }
 
+pub(crate) fn voice_request_rejected(
+    action: AuthorizationAction,
+    status: StatusCode,
+    reason: VoiceSecurityRejectionReason,
+) {
+    let context = current_context();
+    if context.emitted.swap(true, Ordering::Relaxed) {
+        return;
+    }
+
+    match context.request_id {
+        Some(request_id) => tracing::warn!(
+            target: "wfchat::voice_security",
+            event = "voice_request_rejected",
+            request_id = %request_id.value(),
+            resource = "voice",
+            action = action.as_str(),
+            outcome = "rejected",
+            status = status.as_u16(),
+            reason = reason.as_str(),
+            "voice request rejected"
+        ),
+        None => tracing::warn!(
+            target: "wfchat::voice_security",
+            event = "voice_request_rejected",
+            resource = "voice",
+            action = action.as_str(),
+            outcome = "rejected",
+            status = status.as_u16(),
+            reason = reason.as_str(),
+            "voice request rejected"
+        ),
+    }
+}
+
 pub(crate) async fn attachment_body_limit_rejection(request: Request, next: Next) -> Response {
     let response = next.run(request).await;
     if response.status() == StatusCode::PAYLOAD_TOO_LARGE {
         attachment_upload_rejected(
             StatusCode::PAYLOAD_TOO_LARGE,
             AttachmentUploadRejectionReason::ImageSizeLimit,
+        );
+    }
+    response
+}
+
+pub(crate) async fn transcription_body_limit_rejection(request: Request, next: Next) -> Response {
+    let response = next.run(request).await;
+    if response.status() == StatusCode::PAYLOAD_TOO_LARGE {
+        voice_request_rejected(
+            AuthorizationAction::TranscribeUserSpeech,
+            StatusCode::PAYLOAD_TOO_LARGE,
+            VoiceSecurityRejectionReason::AudioSizeLimit,
         );
     }
     response
@@ -332,6 +404,7 @@ mod tests {
                             "wfchat::authorization_security"
                                 | "wfchat::attachment_security"
                                 | "wfchat::cafe_security"
+                                | "wfchat::voice_security"
                         )
                     )
                 })
@@ -369,9 +442,23 @@ mod tests {
                 }),
             )
             .route(
+                "/voice/{case}",
+                get(|Path(case): Path<String>| async move {
+                    let (action, status, reason) = voice_rejection_case(&case);
+                    voice_request_rejected(action, status, reason);
+                    voice_request_rejected(action, status, reason);
+                    status
+                }),
+            )
+            .route(
                 "/body-limit",
                 get(|| async { StatusCode::PAYLOAD_TOO_LARGE })
                     .layer(middleware::from_fn(attachment_body_limit_rejection)),
+            )
+            .route(
+                "/transcription-body-limit",
+                get(|| async { StatusCode::PAYLOAD_TOO_LARGE })
+                    .layer(middleware::from_fn(transcription_body_limit_rejection)),
             )
             .route("/ok", get(|| async { StatusCode::OK }))
             .route("/business-error", get(|| async { StatusCode::BAD_REQUEST }))
@@ -451,6 +538,18 @@ mod tests {
                 AuthorizationRejectionReason::InsufficientEntitlement,
             ),
             "cafe_socket" => cafe_authorization_case(AuthorizationAction::ConnectCafeSocket),
+            "voice_speech" => (
+                AuthorizationResource::Voice,
+                AuthorizationAction::SynthesizeMessageSpeech,
+                StatusCode::NOT_FOUND,
+                AuthorizationRejectionReason::ResourceUnavailable,
+            ),
+            "voice_transcription" => (
+                AuthorizationResource::Voice,
+                AuthorizationAction::TranscribeUserSpeech,
+                StatusCode::FORBIDDEN,
+                AuthorizationRejectionReason::MissingSession,
+            ),
             _ => panic!("unknown rejection case"),
         }
     }
@@ -539,6 +638,38 @@ mod tests {
                 CafeSecurityRejectionReason::RoomCreationRate,
             ),
             _ => panic!("unknown Cafe rejection case"),
+        }
+    }
+
+    fn voice_rejection_case(
+        case: &str,
+    ) -> (
+        AuthorizationAction,
+        StatusCode,
+        VoiceSecurityRejectionReason,
+    ) {
+        match case {
+            "speech_rate" => (
+                AuthorizationAction::SynthesizeMessageSpeech,
+                StatusCode::TOO_MANY_REQUESTS,
+                VoiceSecurityRejectionReason::SpeechRate,
+            ),
+            "transcription_rate" => (
+                AuthorizationAction::TranscribeUserSpeech,
+                StatusCode::TOO_MANY_REQUESTS,
+                VoiceSecurityRejectionReason::TranscriptionRate,
+            ),
+            "invalid_audio" => (
+                AuthorizationAction::TranscribeUserSpeech,
+                StatusCode::BAD_REQUEST,
+                VoiceSecurityRejectionReason::InvalidAudioRequest,
+            ),
+            "audio_size" => (
+                AuthorizationAction::TranscribeUserSpeech,
+                StatusCode::BAD_REQUEST,
+                VoiceSecurityRejectionReason::AudioSizeLimit,
+            ),
+            _ => panic!("unknown Voice rejection case"),
         }
     }
 
@@ -732,6 +863,20 @@ mod tests {
                 403,
                 "missing_session",
             ),
+            (
+                "/reject/voice_speech",
+                "voice",
+                "synthesize_message_speech",
+                404,
+                "resource_unavailable",
+            ),
+            (
+                "/reject/voice_transcription",
+                "voice",
+                "transcribe_user_speech",
+                403,
+                "missing_session",
+            ),
         ];
 
         for (path, resource, action, expected_status, reason) in cases {
@@ -826,6 +971,64 @@ mod tests {
 
         let (status, events) = capture("/cafe/origin", None).await;
         assert_eq!(status, StatusCode::FORBIDDEN);
+        assert!(events[0].get("request_id").is_none());
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn emits_bounded_voice_security_rejections_once() {
+        let cases = [
+            (
+                "speech_rate",
+                "synthesize_message_speech",
+                429,
+                "speech_rate",
+            ),
+            (
+                "transcription_rate",
+                "transcribe_user_speech",
+                429,
+                "transcription_rate",
+            ),
+            (
+                "invalid_audio",
+                "transcribe_user_speech",
+                400,
+                "invalid_audio_request",
+            ),
+            (
+                "audio_size",
+                "transcribe_user_speech",
+                400,
+                "audio_size_limit",
+            ),
+        ];
+
+        for (case, action, expected_status, reason) in cases {
+            let request_id = Uuid::new_v4();
+            let (status, events) = capture(&format!("/voice/{case}"), Some(request_id)).await;
+            assert_eq!(status.as_u16(), expected_status);
+            assert_eq!(events.len(), 1);
+            let event = &events[0];
+            assert_eq!(event["level"], "WARN");
+            assert_eq!(event["target"], "wfchat::voice_security");
+            assert_eq!(event["event"], "voice_request_rejected");
+            assert_eq!(event["request_id"], request_id.to_string());
+            assert_eq!(event["resource"], "voice");
+            assert_eq!(event["action"], action);
+            assert_eq!(event["outcome"], "rejected");
+            assert_eq!(event["status"], expected_status);
+            assert_eq!(event["reason"], reason);
+
+            let encoded = serde_json::to_string(event).unwrap();
+            assert!(!encoded.contains("secret-authorization-value"));
+            assert!(!encoded.contains("secret-session-value"));
+        }
+
+        let (status, events) = capture("/transcription-body-limit", None).await;
+        assert_eq!(status, StatusCode::PAYLOAD_TOO_LARGE);
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0]["status"], 413);
+        assert_eq!(events[0]["reason"], "audio_size_limit");
         assert!(events[0].get("request_id").is_none());
     }
 

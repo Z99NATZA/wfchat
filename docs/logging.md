@@ -201,3 +201,36 @@ database details, and raw errors. Successful requests, malformed input,
 invalid nickname or cosmetic values, room-full conflicts, successful room
 reuse, missing WebSocket upgrade headers, database or operational failures,
 and all events after the WebSocket upgrade do not emit these security events.
+
+## Voice Security Events
+
+Assistant speech and user transcription extend `authorization_rejected` with
+resource `voice`. Speech uses action `synthesize_message_speech`, and
+transcription uses `transcribe_user_speech`. Missing or inactive sessions retain
+`403` with `missing_session` or `invalid_session`. An unavailable Chat or
+message for speech retains `404` with `resource_unavailable` without revealing
+whether it exists for another owner.
+
+Voice abuse-control and transcription-input failures emit
+`voice_request_rejected` at level `WARN`, target `wfchat::voice_security`,
+resource `voice`, and outcome `rejected`.
+
+| Reason | Status | Covered rejection |
+| --- | ---: | --- |
+| `speech_rate` | `429` | Assistant-speech session or resolved-IP rate limit |
+| `transcription_rate` | `429` | Transcription session or resolved-IP rate limit |
+| `invalid_audio_request` | `400` | Missing, empty, or malformed multipart/audio input |
+| `audio_size_limit` | `400` or `413` | Transcription file or request-body size limit |
+
+Voice events use the same request-id correlation, missing-request-id behavior,
+and single-event limit as other authorization events. Successful requests,
+disabled routes, invalid TTS message roles or content, provider/network and
+database failures, and other business or operational failures do not emit these
+events.
+
+Voice events and diagnostics exclude client IP, all identifiers, assistant
+text, transcripts, prompts, filenames, MIME claims, byte counts, audio hashes
+or signatures, audio bytes, provider/model/voice values, URLs, credentials,
+headers, multipart fields, bodies, raw paths, database details, and raw errors.
+Transcription requests preserve the metadata required for provider multipart
+submission without writing that metadata to logs or provider error text.

@@ -2,10 +2,10 @@ use axum::{
     body::Body,
     extract::DefaultBodyLimit,
     extract::{ConnectInfo, Multipart, Path, State},
-    http::{header, HeaderMap, HeaderName, HeaderValue},
+    http::{header, HeaderMap, HeaderName, HeaderValue, StatusCode},
     response::{
         sse::{Event, KeepAlive, Sse},
-        IntoResponse,
+        IntoResponse, Response,
     },
     routing::get,
     Json, Router,
@@ -28,13 +28,13 @@ use crate::{
     },
     authorization_log::{
         self, AttachmentUploadRejectionReason, AuthorizationAction, AuthorizationRejectionReason,
-        AuthorizationResource,
+        AuthorizationResource, VoiceSecurityRejectionReason,
     },
     characters,
     error::{AppError, AppResult, ErrorReason, LIMIT_RETRY_AFTER_SECONDS},
     memory::retrieve_memory_context_observed,
     rate_limit::{RateLimitFamily, RateLimitIdentity},
-    session::{require_session, session_id_from_headers},
+    session::session_id_from_headers,
     state::AppState,
     store::{
         AppendChatMessagesOutcome, ChatAttachmentRecord, ChatGenerationQuotaAdmission,
@@ -108,9 +108,13 @@ pub fn router(config: &crate::config::Config) -> Router<AppState> {
     let router = if config.security.chat.transcription_enabled {
         router.route(
             "/chat/transcription",
-            axum::routing::post(transcribe_user_speech).layer(DefaultBodyLimit::max(
-                MAX_TRANSCRIPTION_AUDIO_BYTES.saturating_add(64 * 1024),
-            )),
+            axum::routing::post(transcribe_user_speech)
+                .layer(DefaultBodyLimit::max(
+                    MAX_TRANSCRIPTION_AUDIO_BYTES.saturating_add(64 * 1024),
+                ))
+                .layer(axum::middleware::from_fn(
+                    authorization_log::transcription_body_limit_rejection,
+                )),
         )
     } else {
         router
@@ -143,10 +147,6 @@ pub(crate) async fn private_no_store(
     response
 }
 
-async fn require_chat_session(state: &AppState, headers: &HeaderMap) -> AppResult<SessionRecord> {
-    require_session(state, headers).await
-}
-
 async fn require_core_chat_session(
     state: &AppState,
     headers: &HeaderMap,
@@ -171,6 +171,50 @@ async fn require_core_chat_session(
         return Err(AppError::Forbidden);
     };
     Ok(session)
+}
+
+async fn require_voice_session(
+    state: &AppState,
+    headers: &HeaderMap,
+    action: AuthorizationAction,
+) -> AppResult<SessionRecord> {
+    let Some(session_id) = session_id_from_headers(&state.config, headers) else {
+        authorization_log::rejected(
+            AuthorizationResource::Voice,
+            action,
+            axum::http::StatusCode::FORBIDDEN,
+            AuthorizationRejectionReason::MissingSession,
+        );
+        return Err(AppError::Forbidden);
+    };
+    let Some(session) = state.store.get_session(session_id).await? else {
+        authorization_log::rejected(
+            AuthorizationResource::Voice,
+            action,
+            axum::http::StatusCode::FORBIDDEN,
+            AuthorizationRejectionReason::InvalidSession,
+        );
+        return Err(AppError::Forbidden);
+    };
+    Ok(session)
+}
+
+fn unavailable_voice(action: AuthorizationAction) -> AppError {
+    authorization_log::rejected(
+        AuthorizationResource::Voice,
+        action,
+        axum::http::StatusCode::NOT_FOUND,
+        AuthorizationRejectionReason::ResourceUnavailable,
+    );
+    AppError::NotFound
+}
+
+fn voice_rate_limit_rejected(action: AuthorizationAction, reason: VoiceSecurityRejectionReason) {
+    authorization_log::voice_request_rejected(
+        action,
+        axum::http::StatusCode::TOO_MANY_REQUESTS,
+        reason,
+    );
 }
 
 fn unavailable_chat(action: AuthorizationAction) -> AppError {
@@ -626,6 +670,29 @@ mod tests {
         state: AppState,
         request: Request<Body>,
     ) -> (axum::response::Response, Vec<Value>) {
+        let (response, output) = capture_request_logs(state, request).await;
+        let events = output
+            .lines()
+            .map(|line| serde_json::from_str(line).expect("captured log should be JSON"))
+            .filter(|event: &Value| {
+                matches!(
+                    event["target"].as_str(),
+                    Some(
+                        "wfchat::authorization_security"
+                            | "wfchat::attachment_security"
+                            | "wfchat::cafe_security"
+                            | "wfchat::voice_security"
+                    )
+                )
+            })
+            .collect();
+        (response, events)
+    }
+
+    async fn capture_request_logs(
+        state: AppState,
+        request: Request<Body>,
+    ) -> (axum::response::Response, String) {
         let writer = CapturedSecurityWriter::default();
         let subscriber = tracing_subscriber::fmt()
             .json()
@@ -641,22 +708,10 @@ mod tests {
             .await
             .expect("request should run");
         let output = writer.0.lock().expect("captured log lock").clone();
-        let events = String::from_utf8(output)
-            .expect("captured logs should be UTF-8")
-            .lines()
-            .map(|line| serde_json::from_str(line).expect("captured log should be JSON"))
-            .filter(|event: &Value| {
-                matches!(
-                    event["target"].as_str(),
-                    Some(
-                        "wfchat::authorization_security"
-                            | "wfchat::attachment_security"
-                            | "wfchat::cafe_security"
-                    )
-                )
-            })
-            .collect();
-        (response, events)
+        (
+            response,
+            String::from_utf8(output).expect("captured logs should be UTF-8"),
+        )
     }
 
     async fn capture_live_cafe_websocket_request(
@@ -1273,6 +1328,322 @@ mod tests {
             assert!(events.is_empty());
         }
 
+        state
+            .store
+            .delete_session_for_test(session.id)
+            .await
+            .unwrap();
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn voice_routes_emit_correlated_bounded_authorization_rejections() {
+        let Some(state) = test_state().await else {
+            return;
+        };
+        let chat_id = Uuid::new_v4();
+        let message_id = Uuid::new_v4();
+        let invalid_session_id = Uuid::new_v4();
+        let boundary = "secret-voice-auth-boundary";
+        let cases = [
+            (
+                speech_request(chat_id, message_id, None),
+                "synthesize_message_speech",
+                "missing_session",
+            ),
+            (
+                transcription_request_with_audio(
+                    boundary,
+                    None,
+                    "secret-recording.webm",
+                    "audio/webm",
+                    b"secret-audio-bytes",
+                ),
+                "transcribe_user_speech",
+                "missing_session",
+            ),
+            (
+                speech_request(chat_id, message_id, Some(invalid_session_id)),
+                "synthesize_message_speech",
+                "invalid_session",
+            ),
+            (
+                transcription_request_with_audio(
+                    boundary,
+                    Some(invalid_session_id),
+                    "secret-recording.webm",
+                    "audio/webm",
+                    b"secret-audio-bytes",
+                ),
+                "transcribe_user_speech",
+                "invalid_session",
+            ),
+        ];
+
+        for (request, action, reason) in cases {
+            let (response, events) = capture_security_request(state.clone(), request).await;
+            assert_voice_security_event(
+                &response,
+                &events,
+                "authorization_rejected",
+                action,
+                StatusCode::FORBIDDEN,
+                reason,
+            );
+            let encoded = serde_json::to_string(&events[0]).unwrap();
+            assert!(!encoded.contains(&chat_id.to_string()));
+            assert!(!encoded.contains(&message_id.to_string()));
+            assert!(!encoded.contains(&invalid_session_id.to_string()));
+            assert!(!encoded.contains(boundary));
+            assert!(!encoded.contains("secret-recording.webm"));
+            assert!(!encoded.contains("secret-audio-bytes"));
+        }
+
+        let session = create_test_session(&state).await;
+        let owner = OwnerScope::from_session(&session);
+        let owned_chat = create_test_chat(&state, owner).await;
+        for request in [
+            speech_request(chat_id, message_id, Some(session.id)),
+            speech_request(owned_chat.id, message_id, Some(session.id)),
+        ] {
+            let (response, events) = capture_security_request(state.clone(), request).await;
+            assert_voice_security_event(
+                &response,
+                &events,
+                "authorization_rejected",
+                "synthesize_message_speech",
+                StatusCode::NOT_FOUND,
+                "resource_unavailable",
+            );
+            let encoded = serde_json::to_string(&events[0]).unwrap();
+            assert!(!encoded.contains(&chat_id.to_string()));
+            assert!(!encoded.contains(&owned_chat.id.to_string()));
+            assert!(!encoded.contains(&message_id.to_string()));
+            assert!(!encoded.contains(&session.id.to_string()));
+        }
+
+        let _ = state.store.delete_chat(owner, owned_chat.id).await;
+        state
+            .store
+            .delete_session_for_test(session.id)
+            .await
+            .unwrap();
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn voice_rate_limits_emit_one_bounded_rejection_after_success() {
+        let Some(mut state) = test_state().await else {
+            return;
+        };
+        state.rate_limiter = RateLimiter::new(
+            RateLimitPolicies::default()
+                .with_family_limit(
+                    RateLimitFamily::AssistantSpeech,
+                    RateLimitPolicy::per_minute(1),
+                )
+                .with_family_limit(
+                    RateLimitFamily::UserTranscription,
+                    RateLimitPolicy::per_minute(1),
+                ),
+        );
+        let session = create_test_session(&state).await;
+        let owner = OwnerScope::from_session(&session);
+        let chat = create_test_chat(&state, owner).await;
+        let user_message =
+            StoredMessage::from_ai_message(AiMessage::user("secret user".to_owned()));
+        let assistant_message =
+            StoredMessage::from_ai_message(AiMessage::assistant("secret assistant".to_owned()));
+        state
+            .store
+            .append_chat_messages(owner, chat.id, user_message, assistant_message.clone())
+            .await
+            .expect("messages should append");
+
+        let (response, events) = capture_security_request(
+            state.clone(),
+            speech_request(chat.id, assistant_message.id, Some(session.id)),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        assert!(events.is_empty());
+        let (response, events) = capture_security_request(
+            state.clone(),
+            speech_request(chat.id, assistant_message.id, Some(session.id)),
+        )
+        .await;
+        assert_voice_security_event(
+            &response,
+            &events,
+            "voice_request_rejected",
+            "synthesize_message_speech",
+            StatusCode::TOO_MANY_REQUESTS,
+            "speech_rate",
+        );
+
+        let boundary = "secret-rate-boundary";
+        let (response, events) =
+            capture_security_request(state.clone(), transcription_request(boundary, session.id))
+                .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        assert!(events.is_empty());
+        let (response, events) =
+            capture_security_request(state.clone(), transcription_request(boundary, session.id))
+                .await;
+        assert_voice_security_event(
+            &response,
+            &events,
+            "voice_request_rejected",
+            "transcribe_user_speech",
+            StatusCode::TOO_MANY_REQUESTS,
+            "transcription_rate",
+        );
+
+        for event in events {
+            let encoded = serde_json::to_string(&event).unwrap();
+            assert!(!encoded.contains(&chat.id.to_string()));
+            assert!(!encoded.contains(&assistant_message.id.to_string()));
+            assert!(!encoded.contains(&session.id.to_string()));
+            assert!(!encoded.contains("secret assistant"));
+            assert!(!encoded.contains(boundary));
+        }
+
+        let _ = state.store.delete_chat(owner, chat.id).await;
+        state
+            .store
+            .delete_session_for_test(session.id)
+            .await
+            .unwrap();
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn transcription_validation_is_bounded_and_success_logs_no_audio_metadata() {
+        let Some(state) = test_state().await else {
+            return;
+        };
+        let session = create_test_session(&state).await;
+
+        let (response, output) = capture_request_logs(
+            state.clone(),
+            transcription_request_with_audio(
+                "secret-success-boundary",
+                Some(session.id),
+                "secret-recording.webm",
+                "audio/webm;codecs=opus",
+                b"secret-audio-bytes",
+            ),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        assert!(!output.contains("secret-success-boundary"));
+        assert!(!output.contains("secret-recording.webm"));
+        assert!(!output.contains("audio/webm"));
+        assert!(!output.contains("secret-audio-bytes"));
+        assert!(!output.contains("7365637265742d617564696f"));
+
+        let (response, events) = capture_security_request(
+            state.clone(),
+            transcription_request_without_file("secret-missing-file", session.id),
+        )
+        .await;
+        assert_voice_security_event(
+            &response,
+            &events,
+            "voice_request_rejected",
+            "transcribe_user_speech",
+            StatusCode::BAD_REQUEST,
+            "invalid_audio_request",
+        );
+
+        let (response, events) = capture_security_request(
+            state.clone(),
+            transcription_request_with_audio(
+                "secret-empty-audio",
+                Some(session.id),
+                "secret-empty.webm",
+                "audio/webm",
+                b"",
+            ),
+        )
+        .await;
+        assert_voice_security_event(
+            &response,
+            &events,
+            "voice_request_rejected",
+            "transcribe_user_speech",
+            StatusCode::BAD_REQUEST,
+            "invalid_audio_request",
+        );
+
+        let malformed = Request::builder()
+            .method("POST")
+            .uri("/api/chat/transcription")
+            .header("x-wfchat-session", session.id.to_string())
+            .body(Body::from("secret-malformed-multipart"))
+            .unwrap();
+        let (response, events) = capture_security_request(state.clone(), malformed).await;
+        assert_voice_security_event(
+            &response,
+            &events,
+            "voice_request_rejected",
+            "transcribe_user_speech",
+            StatusCode::BAD_REQUEST,
+            "invalid_audio_request",
+        );
+
+        let oversized_audio = vec![0_u8; MAX_TRANSCRIPTION_AUDIO_BYTES + 1];
+        let (response, events) = capture_security_request(
+            state.clone(),
+            transcription_request_with_audio(
+                "secret-oversized-audio",
+                Some(session.id),
+                "secret-large.webm",
+                "audio/webm",
+                &oversized_audio,
+            ),
+        )
+        .await;
+        assert_voice_security_event(
+            &response,
+            &events,
+            "voice_request_rejected",
+            "transcribe_user_speech",
+            StatusCode::BAD_REQUEST,
+            "audio_size_limit",
+        );
+
+        state
+            .store
+            .delete_session_for_test(session.id)
+            .await
+            .unwrap();
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn excluded_voice_business_rejections_do_not_emit_security_events() {
+        let Some(state) = test_state().await else {
+            return;
+        };
+        let session = create_test_session(&state).await;
+        let owner = OwnerScope::from_session(&session);
+        let chat = create_test_chat(&state, owner).await;
+        let user_message =
+            StoredMessage::from_ai_message(AiMessage::user("secret user message".to_owned()));
+        let assistant_message =
+            StoredMessage::from_ai_message(AiMessage::assistant("assistant".to_owned()));
+        state
+            .store
+            .append_chat_messages(owner, chat.id, user_message.clone(), assistant_message)
+            .await
+            .expect("messages should append");
+
+        let (response, events) = capture_security_request(
+            state.clone(),
+            speech_request(chat.id, user_message.id, Some(session.id)),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        assert!(events.is_empty());
+
+        let _ = state.store.delete_chat(owner, chat.id).await;
         state
             .store
             .delete_session_for_test(session.id)
@@ -3944,8 +4315,59 @@ mod tests {
     }
 
     fn transcription_request(boundary: &str, session_id: Uuid) -> Request<Body> {
+        transcription_request_with_audio(
+            boundary,
+            Some(session_id),
+            "voice.webm",
+            "audio/webm",
+            b"fake-audio",
+        )
+    }
+
+    fn transcription_request_with_audio(
+        boundary: &str,
+        session_id: Option<Uuid>,
+        filename: &str,
+        content_type: &str,
+        audio_bytes: &[u8],
+    ) -> Request<Body> {
+        let mut body = Vec::new();
+        body.extend_from_slice(format!("--{boundary}\r\n").as_bytes());
+        body.extend_from_slice(
+            format!("Content-Disposition: form-data; name=\"file\"; filename=\"{filename}\"\r\n")
+                .as_bytes(),
+        );
+        body.extend_from_slice(format!("Content-Type: {content_type}\r\n\r\n").as_bytes());
+        body.extend_from_slice(audio_bytes);
+        body.extend_from_slice(format!("\r\n--{boundary}--\r\n").as_bytes());
+        let mut request = Request::builder()
+            .method("POST")
+            .uri("/api/chat/transcription")
+            .header(
+                header::CONTENT_TYPE,
+                format!("multipart/form-data; boundary={boundary}"),
+            );
+        if let Some(session_id) = session_id {
+            request = request.header("x-wfchat-session", session_id.to_string());
+        }
+        request
+            .body(Body::from(body))
+            .expect("request should build")
+    }
+
+    fn speech_request(chat_id: Uuid, message_id: Uuid, session_id: Option<Uuid>) -> Request<Body> {
+        let mut request = Request::builder()
+            .method("POST")
+            .uri(format!("/api/chats/{chat_id}/messages/{message_id}/speech"));
+        if let Some(session_id) = session_id {
+            request = request.header("x-wfchat-session", session_id.to_string());
+        }
+        request.body(Body::empty()).expect("request should build")
+    }
+
+    fn transcription_request_without_file(boundary: &str, session_id: Uuid) -> Request<Body> {
         let body = format!(
-            "--{boundary}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"voice.webm\"\r\nContent-Type: audio/webm\r\n\r\nfake-audio\r\n--{boundary}--\r\n"
+            "--{boundary}\r\nContent-Disposition: form-data; name=\"ignored\"\r\n\r\nvalue\r\n--{boundary}--\r\n"
         );
         Request::builder()
             .method("POST")
@@ -3981,6 +4403,37 @@ mod tests {
         assert!(
             value.contains(expected),
             "expected header to contain {expected:?}, got {value:?}"
+        );
+    }
+
+    fn assert_voice_security_event(
+        response: &axum::response::Response,
+        events: &[Value],
+        event_name: &str,
+        action: &str,
+        status: StatusCode,
+        reason: &str,
+    ) {
+        assert_eq!(response.status(), status);
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0]["level"], "WARN");
+        assert_eq!(events[0]["event"], event_name);
+        assert_eq!(
+            events[0]["target"],
+            if event_name == "authorization_rejected" {
+                "wfchat::authorization_security"
+            } else {
+                "wfchat::voice_security"
+            }
+        );
+        assert_eq!(events[0]["resource"], "voice");
+        assert_eq!(events[0]["action"], action);
+        assert_eq!(events[0]["outcome"], "rejected");
+        assert_eq!(events[0]["status"], status.as_u16());
+        assert_eq!(events[0]["reason"], reason);
+        assert_eq!(
+            events[0]["request_id"],
+            response.headers()["x-request-id"].to_str().unwrap()
         );
     }
 
