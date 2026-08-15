@@ -107,8 +107,14 @@ message.
 - `DELETE /api/learned-context` deletes the owner's items, sources, follow-up
   state, and queued/processing extraction work while retaining chat history.
 - Expired items are excluded at query time even before physical cleanup.
-- Logs and in-process counters contain ids, reason codes, and counts—not source
-  messages, memory content, prompts, credentials, or provider bodies.
+- Missing or inactive sessions on the follow-up and reset routes emit a bounded
+  authorization event. A completed reset emits a bounded success audit even
+  when there was nothing to delete. These security events contain no owner or
+  memory identifiers, deletion counts, memory data, prompts, conversation text,
+  credentials, or provider data.
+- Existing background and aggregate diagnostics retain their operational ids,
+  reason codes, and counts without source messages, memory content, prompts,
+  credentials, or provider bodies.
 
 ## Ownership
 

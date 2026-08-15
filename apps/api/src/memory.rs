@@ -19,10 +19,13 @@ use serde_json::{json, Value};
 
 use crate::{
     ai::AiMessage,
+    authorization_log::{
+        self, AuthorizationAction, AuthorizationRejectionReason, AuthorizationResource,
+    },
     characters,
     config::Config,
     error::{AppError, AppResult},
-    session::require_session,
+    session::session_id_from_headers,
     state::AppState,
     store::{
         CapturedMemoryRecord, ChatStore, MemoryExtractionJobRecord, MemoryFollowUpClaim,
@@ -371,6 +374,9 @@ pub fn router() -> Router<AppState> {
                 )
                 .layer(axum::middleware::from_fn(crate::chat::private_no_store)),
         )
+        .layer(axum::middleware::from_fn(
+            authorization_log::request_context,
+        ))
 }
 
 #[derive(Deserialize)]
@@ -404,7 +410,8 @@ async fn claim_persona_follow_up(
 ) -> AppResult<Json<FollowUpClaimResponse>> {
     characters::character_by_id(&persona_id)
         .ok_or_else(|| AppError::BadRequest(format!("unknown character: {persona_id}")))?;
-    let session = require_session(&state, &headers).await?;
+    let session =
+        require_memory_session(&state, &headers, AuthorizationAction::ClaimMemoryFollowUp).await?;
     let owner = OwnerScope::from_session(&session);
     let now = now_unix_seconds();
     state.memory_telemetry.follow_up_attempted();
@@ -566,11 +573,38 @@ async fn reset_learned_context(
     State(state): State<AppState>,
     headers: HeaderMap,
 ) -> AppResult<StatusCode> {
-    let session = require_session(&state, &headers).await?;
+    let session =
+        require_memory_session(&state, &headers, AuthorizationAction::ResetLearnedContext).await?;
     let owner = OwnerScope::from_session(&session);
-    let deleted_count = state.store.reset_learned_context(owner).await?;
-    tracing::info!(deleted_count, "reset automatic learned context");
+    state.store.reset_learned_context(owner).await?;
+    authorization_log::memory_reset_succeeded();
     Ok(StatusCode::NO_CONTENT)
+}
+
+async fn require_memory_session(
+    state: &AppState,
+    headers: &HeaderMap,
+    action: AuthorizationAction,
+) -> AppResult<crate::store::SessionRecord> {
+    let Some(session_id) = session_id_from_headers(&state.config, headers) else {
+        authorization_log::rejected(
+            AuthorizationResource::Memory,
+            action,
+            StatusCode::FORBIDDEN,
+            AuthorizationRejectionReason::MissingSession,
+        );
+        return Err(AppError::Forbidden);
+    };
+    let Some(session) = state.store.get_session(session_id).await? else {
+        authorization_log::rejected(
+            AuthorizationResource::Memory,
+            action,
+            StatusCode::FORBIDDEN,
+            AuthorizationRejectionReason::InvalidSession,
+        );
+        return Err(AppError::Forbidden);
+    };
+    Ok(session)
 }
 
 pub async fn retrieve_memory_context(
@@ -1539,16 +1573,82 @@ fn contains_temporary_detail(value: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
+    use std::{
+        io::{self, Write},
+        sync::{Arc, Mutex},
+    };
+
     use super::*;
-    use axum::{body::Body, http::Request};
+    use axum::{body::Body, http::Request, response::Response};
     use reqwest::Client;
     use tower::ServiceExt;
+    use tracing_subscriber::fmt::MakeWriter;
 
     use crate::{
         app::build_router,
         rate_limit::RateLimiter,
         store::{ChatStore, NewMemoryItemRecord},
     };
+
+    #[derive(Clone, Default)]
+    struct CapturedWriter(Arc<Mutex<Vec<u8>>>);
+
+    impl Write for CapturedWriter {
+        fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+            self.0.lock().expect("captured log lock").extend(bytes);
+            Ok(bytes.len())
+        }
+
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
+
+    impl<'writer> MakeWriter<'writer> for CapturedWriter {
+        type Writer = CapturedWriter;
+
+        fn make_writer(&'writer self) -> Self::Writer {
+            self.clone()
+        }
+    }
+
+    impl CapturedWriter {
+        fn memory_security_events(&self) -> Vec<Value> {
+            let output = self.0.lock().expect("captured log lock").clone();
+            String::from_utf8(output)
+                .expect("captured logs should be UTF-8")
+                .lines()
+                .map(|line| serde_json::from_str(line).expect("captured log should be JSON"))
+                .filter(|event: &Value| {
+                    matches!(
+                        event["target"].as_str(),
+                        Some("wfchat::authorization_security" | "wfchat::memory_security")
+                    ) && event["resource"] == "memory"
+                })
+                .collect()
+        }
+    }
+
+    async fn capture_memory_request(
+        state: AppState,
+        request: Request<Body>,
+    ) -> (Response, Vec<Value>) {
+        let writer = CapturedWriter::default();
+        let subscriber = tracing_subscriber::fmt()
+            .json()
+            .flatten_event(true)
+            .with_current_span(false)
+            .with_span_list(false)
+            .with_writer(writer.clone())
+            .finish();
+        let _guard = tracing::subscriber::set_default(subscriber);
+
+        let response = build_router(state)
+            .oneshot(request)
+            .await
+            .expect("request should run");
+        (response, writer.memory_security_events())
+    }
 
     async fn test_state() -> Option<AppState> {
         let database_url = std::env::var("WFCHAT_TEST_DATABASE_URL").ok()?;
@@ -1673,7 +1773,7 @@ mod tests {
         );
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "current_thread")]
     async fn follow_up_route_is_private_no_store_on_success_and_error() {
         let Some(state) = test_state().await else {
             return;
@@ -1690,20 +1790,20 @@ mod tests {
             ))
         };
 
-        let success = build_router(state.clone())
-            .oneshot(
-                Request::post("/api/personas/aiko/follow-up")
-                    .header(axum::http::header::CONTENT_TYPE, "application/json")
-                    .header(
-                        axum::http::header::COOKIE,
-                        format!("wfchat_session={}", session.id),
-                    )
-                    .body(request_body())
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
+        let (success, success_events) = capture_memory_request(
+            state.clone(),
+            Request::post("/api/personas/aiko/follow-up")
+                .header(axum::http::header::CONTENT_TYPE, "application/json")
+                .header(
+                    axum::http::header::COOKIE,
+                    format!("wfchat_session={}", session.id),
+                )
+                .body(request_body())
+                .unwrap(),
+        )
+        .await;
         assert_eq!(success.status(), StatusCode::OK);
+        assert!(success_events.is_empty());
         assert_eq!(
             success
                 .headers()
@@ -1712,16 +1812,28 @@ mod tests {
             "private, no-store"
         );
 
-        let error = build_router(state.clone())
-            .oneshot(
-                Request::post("/api/personas/aiko/follow-up")
-                    .header(axum::http::header::CONTENT_TYPE, "application/json")
-                    .body(request_body())
-                    .unwrap(),
-            )
-            .await
-            .unwrap();
+        let (error, error_events) = capture_memory_request(
+            state.clone(),
+            Request::post("/api/personas/aiko/follow-up")
+                .header(axum::http::header::CONTENT_TYPE, "application/json")
+                .body(request_body())
+                .unwrap(),
+        )
+        .await;
         assert_eq!(error.status(), StatusCode::FORBIDDEN);
+        assert_eq!(error_events.len(), 1);
+        assert_eq!(error_events[0]["event"], "authorization_rejected");
+        assert_eq!(error_events[0]["action"], "claim_memory_follow_up");
+        assert_eq!(error_events[0]["reason"], "missing_session");
+        assert_eq!(
+            error_events[0]["request_id"],
+            error
+                .headers()
+                .get("x-request-id")
+                .expect("request id response header")
+                .to_str()
+                .expect("request id should be text")
+        );
         assert_eq!(
             error
                 .headers()
@@ -1735,6 +1847,105 @@ mod tests {
             .delete_session_for_test(session.id)
             .await
             .unwrap();
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn memory_routes_log_missing_and_invalid_sessions_without_sensitive_values() {
+        let Some(state) = test_state().await else {
+            return;
+        };
+        let invalid_session_id = uuid::Uuid::new_v4();
+        let claim_key = uuid::Uuid::new_v4();
+
+        for (method, uri, action) in [
+            (
+                "POST",
+                "/api/personas/aiko/follow-up",
+                "claim_memory_follow_up",
+            ),
+            ("DELETE", "/api/learned-context", "reset_learned_context"),
+        ] {
+            for (cookie, reason) in [
+                (None, "missing_session"),
+                (
+                    Some(format!("wfchat_session={invalid_session_id}")),
+                    "invalid_session",
+                ),
+            ] {
+                let mut builder = Request::builder().method(method).uri(uri);
+                if method == "POST" {
+                    builder = builder.header(axum::http::header::CONTENT_TYPE, "application/json");
+                }
+                if let Some(cookie) = cookie {
+                    builder = builder.header(axum::http::header::COOKIE, cookie);
+                }
+                let (response, events) = capture_memory_request(
+                    state.clone(),
+                    builder
+                        .body(if method == "POST" {
+                            Body::from(format!(r#"{{"claim_key":"{claim_key}","locale":"en"}}"#))
+                        } else {
+                            Body::empty()
+                        })
+                        .expect("request should build"),
+                )
+                .await;
+
+                assert_eq!(response.status(), StatusCode::FORBIDDEN);
+                assert_eq!(events.len(), 1);
+                let event = &events[0];
+                assert_eq!(event["level"], "WARN");
+                assert_eq!(event["event"], "authorization_rejected");
+                assert_eq!(event["resource"], "memory");
+                assert_eq!(event["action"], action);
+                assert_eq!(event["outcome"], "rejected");
+                assert_eq!(event["status"], 403);
+                assert_eq!(event["reason"], reason);
+                assert_eq!(
+                    event["request_id"],
+                    response
+                        .headers()
+                        .get("x-request-id")
+                        .expect("request id response header")
+                        .to_str()
+                        .expect("request id should be text")
+                );
+
+                let encoded = serde_json::to_string(event).expect("event should serialize");
+                for excluded in [
+                    invalid_session_id.to_string(),
+                    claim_key.to_string(),
+                    "aiko".to_owned(),
+                    "locale".to_owned(),
+                ] {
+                    assert!(!encoded.contains(&excluded));
+                }
+            }
+        }
+
+        let (unknown_persona, events) = capture_memory_request(
+            state.clone(),
+            Request::post("/api/personas/unknown-memory-persona/follow-up")
+                .header(axum::http::header::CONTENT_TYPE, "application/json")
+                .body(Body::from(format!(
+                    r#"{{"claim_key":"{claim_key}","locale":"en"}}"#
+                )))
+                .expect("request should build"),
+        )
+        .await;
+        assert_eq!(unknown_persona.status(), StatusCode::BAD_REQUEST);
+        assert!(events.is_empty());
+
+        let (malformed, events) = capture_memory_request(
+            state,
+            Request::post("/api/personas/aiko/follow-up")
+                .header(axum::http::header::CONTENT_TYPE, "application/json")
+                .body(Body::from("not-json"))
+                .expect("request should build"),
+        )
+        .await;
+        assert_eq!(malformed.status(), StatusCode::BAD_REQUEST);
+        assert!(events.is_empty());
     }
 
     fn candidate(content: &str, evidence: &str) -> ExtractorCandidate {
@@ -2038,7 +2249,7 @@ mod tests {
             .expect("other test session should clean up");
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "current_thread")]
     async fn reset_endpoint_clears_only_current_owner_memory_and_keeps_chat_history() {
         let Some(state) = test_state().await else {
             return;
@@ -2100,22 +2311,50 @@ mod tests {
                 .expect("memory should save");
         }
 
-        let response = build_router(state.clone())
-            .oneshot(
-                Request::builder()
-                    .method("DELETE")
-                    .uri("/api/learned-context")
-                    .header(
-                        axum::http::header::COOKIE,
-                        format!("wfchat_session={}", registered_session.id),
-                    )
-                    .body(Body::empty())
-                    .expect("request should build"),
-            )
-            .await
-            .expect("request should run");
+        let sensitive_content = "Likes spicy ramen";
+        let (response, events) = capture_memory_request(
+            state.clone(),
+            Request::builder()
+                .method("DELETE")
+                .uri("/api/learned-context")
+                .header(
+                    axum::http::header::COOKIE,
+                    format!("wfchat_session={}", registered_session.id),
+                )
+                .body(Body::empty())
+                .expect("request should build"),
+        )
+        .await;
 
         assert_eq!(response.status(), StatusCode::NO_CONTENT);
+        assert_eq!(events.len(), 1);
+        let event = &events[0];
+        assert_eq!(event["level"], "INFO");
+        assert_eq!(event["target"], "wfchat::memory_security");
+        assert_eq!(event["event"], "memory_reset_succeeded");
+        assert_eq!(event["resource"], "memory");
+        assert_eq!(event["action"], "reset_learned_context");
+        assert_eq!(event["outcome"], "success");
+        assert_eq!(event["status"], 204);
+        assert_eq!(
+            event["request_id"],
+            response
+                .headers()
+                .get("x-request-id")
+                .expect("request id response header")
+                .to_str()
+                .expect("request id should be text")
+        );
+        let encoded = serde_json::to_string(event).expect("event should serialize");
+        for excluded in [
+            registered_session.id.to_string(),
+            registered_user_id.to_string(),
+            chat.id.to_string(),
+            sensitive_content.to_owned(),
+            "deleted_count".to_owned(),
+        ] {
+            assert!(!encoded.contains(&excluded));
+        }
         assert!(state
             .store
             .list_memory_items(registered_owner, "aiko")
@@ -2139,6 +2378,45 @@ mod tests {
             .is_some());
 
         let _ = state.store.delete_chat(registered_owner, chat.id).await;
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn reset_endpoint_logs_success_when_owner_has_no_memory() {
+        let Some(state) = test_state().await else {
+            return;
+        };
+        let session = state
+            .store
+            .create_guest_session()
+            .await
+            .expect("guest session should create");
+
+        let (response, events) = capture_memory_request(
+            state.clone(),
+            Request::delete("/api/learned-context")
+                .header(
+                    axum::http::header::COOKIE,
+                    format!("wfchat_session={}", session.id),
+                )
+                .body(Body::empty())
+                .expect("request should build"),
+        )
+        .await;
+
+        assert_eq!(response.status(), StatusCode::NO_CONTENT);
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0]["event"], "memory_reset_succeeded");
+        assert_eq!(events[0]["status"], 204);
+        assert!(events[0].get("reason").is_none());
+        let encoded = serde_json::to_string(&events[0]).expect("event should serialize");
+        assert!(!encoded.contains(&session.id.to_string()));
+        assert!(!encoded.contains("deleted_count"));
+
+        state
+            .store
+            .delete_session_for_test(session.id)
+            .await
+            .expect("session cleanup should succeed");
     }
 
     #[test]

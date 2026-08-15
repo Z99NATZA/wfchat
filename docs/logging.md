@@ -234,3 +234,25 @@ or signatures, audio bytes, provider/model/voice values, URLs, credentials,
 headers, multipart fields, bodies, raw paths, database details, and raw errors.
 Transcription requests preserve the metadata required for provider multipart
 submission without writing that metadata to logs or provider error text.
+
+## Automatic Memory Security Events
+
+The follow-up and learned-context reset routes extend `authorization_rejected`
+with resource `memory`. Follow-up uses action `claim_memory_follow_up`, and
+reset uses `reset_learned_context`. Missing or inactive sessions retain `403`
+with `missing_session` or `invalid_session`.
+
+Every successful learned-context reset emits `memory_reset_succeeded` at level
+`INFO` with target `wfchat::memory_security`, resource `memory`, action
+`reset_learned_context`, outcome `success`, and status `204`. The event is
+emitted when the reset transaction succeeds even if no rows were deleted.
+
+These events use the same request-id correlation, missing-request-id behavior,
+and single-event limit as other authorization events. They exclude client IP,
+all owner, session, user, persona, character, chat, message, memory, follow-up,
+claim, source, and job identifiers; deletion and candidate counts; memory
+keys, kinds, tags, content, evidence, prompts and conversation text; locale,
+scores, expiration values, provider values, URLs, credentials, headers, bodies,
+raw paths, database details, and raw errors. Unknown personas, malformed
+follow-up input, successful follow-up requests, business outcomes, database
+failures, and background memory work do not emit these security events.

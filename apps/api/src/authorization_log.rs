@@ -24,6 +24,7 @@ pub(crate) enum AuthorizationResource {
     Attachment,
     Cafe,
     Voice,
+    Memory,
 }
 
 impl AuthorizationResource {
@@ -34,6 +35,7 @@ impl AuthorizationResource {
             Self::Attachment => "attachment",
             Self::Cafe => "cafe",
             Self::Voice => "voice",
+            Self::Memory => "memory",
         }
     }
 }
@@ -61,6 +63,8 @@ pub(crate) enum AuthorizationAction {
     ConnectCafeSocket,
     SynthesizeMessageSpeech,
     TranscribeUserSpeech,
+    ClaimMemoryFollowUp,
+    ResetLearnedContext,
 }
 
 impl AuthorizationAction {
@@ -87,6 +91,8 @@ impl AuthorizationAction {
             Self::ConnectCafeSocket => "connect_cafe_socket",
             Self::SynthesizeMessageSpeech => "synthesize_message_speech",
             Self::TranscribeUserSpeech => "transcribe_user_speech",
+            Self::ClaimMemoryFollowUp => "claim_memory_follow_up",
+            Self::ResetLearnedContext => "reset_learned_context",
         }
     }
 }
@@ -319,6 +325,35 @@ pub(crate) fn voice_request_rejected(
     }
 }
 
+pub(crate) fn memory_reset_succeeded() {
+    let context = current_context();
+    if context.emitted.swap(true, Ordering::Relaxed) {
+        return;
+    }
+
+    match context.request_id {
+        Some(request_id) => tracing::info!(
+            target: "wfchat::memory_security",
+            event = "memory_reset_succeeded",
+            request_id = %request_id.value(),
+            resource = "memory",
+            action = "reset_learned_context",
+            outcome = "success",
+            status = StatusCode::NO_CONTENT.as_u16(),
+            "automatic learned context reset succeeded"
+        ),
+        None => tracing::info!(
+            target: "wfchat::memory_security",
+            event = "memory_reset_succeeded",
+            resource = "memory",
+            action = "reset_learned_context",
+            outcome = "success",
+            status = StatusCode::NO_CONTENT.as_u16(),
+            "automatic learned context reset succeeded"
+        ),
+    }
+}
+
 pub(crate) async fn attachment_body_limit_rejection(request: Request, next: Next) -> Response {
     let response = next.run(request).await;
     if response.status() == StatusCode::PAYLOAD_TOO_LARGE {
@@ -405,6 +440,7 @@ mod tests {
                                 | "wfchat::attachment_security"
                                 | "wfchat::cafe_security"
                                 | "wfchat::voice_security"
+                                | "wfchat::memory_security"
                         )
                     )
                 })
@@ -448,6 +484,14 @@ mod tests {
                     voice_request_rejected(action, status, reason);
                     voice_request_rejected(action, status, reason);
                     status
+                }),
+            )
+            .route(
+                "/memory-reset",
+                get(|| async {
+                    memory_reset_succeeded();
+                    memory_reset_succeeded();
+                    StatusCode::NO_CONTENT
                 }),
             )
             .route(
@@ -549,6 +593,18 @@ mod tests {
                 AuthorizationAction::TranscribeUserSpeech,
                 StatusCode::FORBIDDEN,
                 AuthorizationRejectionReason::MissingSession,
+            ),
+            "memory_follow_up" => (
+                AuthorizationResource::Memory,
+                AuthorizationAction::ClaimMemoryFollowUp,
+                StatusCode::FORBIDDEN,
+                AuthorizationRejectionReason::MissingSession,
+            ),
+            "memory_reset" => (
+                AuthorizationResource::Memory,
+                AuthorizationAction::ResetLearnedContext,
+                StatusCode::FORBIDDEN,
+                AuthorizationRejectionReason::InvalidSession,
             ),
             _ => panic!("unknown rejection case"),
         }
@@ -877,6 +933,20 @@ mod tests {
                 403,
                 "missing_session",
             ),
+            (
+                "/reject/memory_follow_up",
+                "memory",
+                "claim_memory_follow_up",
+                403,
+                "missing_session",
+            ),
+            (
+                "/reject/memory_reset",
+                "memory",
+                "reset_learned_context",
+                403,
+                "invalid_session",
+            ),
         ];
 
         for (path, resource, action, expected_status, reason) in cases {
@@ -1039,6 +1109,12 @@ mod tests {
         assert_eq!(events.len(), 1);
         assert!(events[0].get("request_id").is_none());
 
+        let (status, events) = capture("/reject/memory_follow_up", None).await;
+        assert_eq!(status, StatusCode::FORBIDDEN);
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0]["resource"], "memory");
+        assert!(events[0].get("request_id").is_none());
+
         let (status, events) = capture("/ok", None).await;
         assert_eq!(status, StatusCode::OK);
         assert!(events.is_empty());
@@ -1046,5 +1122,39 @@ mod tests {
         let (status, events) = capture("/business-error", None).await;
         assert_eq!(status, StatusCode::BAD_REQUEST);
         assert!(events.is_empty());
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn emits_bounded_memory_reset_success_once_with_optional_request_id() {
+        let request_id = Uuid::new_v4();
+        let (status, events) = capture("/memory-reset", Some(request_id)).await;
+        assert_eq!(status, StatusCode::NO_CONTENT);
+        assert_eq!(events.len(), 1);
+        let event = &events[0];
+        assert_eq!(event["level"], "INFO");
+        assert_eq!(event["target"], "wfchat::memory_security");
+        assert_eq!(event["event"], "memory_reset_succeeded");
+        assert_eq!(event["request_id"], request_id.to_string());
+        assert_eq!(event["resource"], "memory");
+        assert_eq!(event["action"], "reset_learned_context");
+        assert_eq!(event["outcome"], "success");
+        assert_eq!(event["status"], 204);
+        assert!(event.get("reason").is_none());
+
+        let encoded = serde_json::to_string(event).expect("event should serialize");
+        for excluded in [
+            "secret-authorization-value",
+            "secret-session-value",
+            "deleted_count",
+            "memory_id",
+            "owner_user_id",
+        ] {
+            assert!(!encoded.contains(excluded));
+        }
+
+        let (status, events) = capture("/memory-reset", None).await;
+        assert_eq!(status, StatusCode::NO_CONTENT);
+        assert_eq!(events.len(), 1);
+        assert!(events[0].get("request_id").is_none());
     }
 }
