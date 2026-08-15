@@ -5,6 +5,7 @@ pub mod app;
 pub mod attachments;
 pub mod auth;
 pub mod auth_log;
+pub mod authorization_log;
 pub mod cafe;
 pub mod cafe_cosmetics;
 pub mod characters;

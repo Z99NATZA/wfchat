@@ -76,3 +76,26 @@ Guest admission rejection and `/api/auth/me` resolving an existing session do
 not emit authentication events. Authentication events exclude session and user
 ids, Google identity/profile values, tokens, cookies, headers, bodies, provider
 payloads, and raw error text.
+
+## Admin Authorization Rejection Events
+
+The admin AI-profile and provider-status endpoints emit one additional
+`authorization_rejected` event when their authorization check returns `403`.
+Successful authorization does not emit this event. The event uses level `WARN`,
+target `wfchat::authorization_security`, resource `admin`, outcome `rejected`,
+and status `403`.
+
+| Endpoint | Action |
+| --- | --- |
+| `GET /api/admin/ai-profiles` | `read_ai_profiles` |
+| `GET /api/admin/ai-providers/status` | `read_provider_status` |
+
+The reason is one of `missing_session`, `invalid_session`, or
+`insufficient_role`. The server-generated `request_id` correlates the event
+with its HTTP access event. If the request-id extension is unexpectedly absent,
+the authorization event omits it without changing the response.
+
+Authorization events do not record the client IP, session or user ids, roles,
+tokens, cookies, headers, bodies, query values, raw paths, database details, or
+raw error text. Unexpected `5xx` failures remain represented by HTTP access and
+existing error logs. Other authorization scopes do not emit this event.

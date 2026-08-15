@@ -1,7 +1,8 @@
-use axum::{extract::State, http::HeaderMap, routing::get, Json, Router};
+use axum::{extract::State, http::HeaderMap, middleware, routing::get, Json, Router};
 use serde::Serialize;
 
 use crate::{
+    authorization_log::{self, AuthorizationAction, AuthorizationRejectionReason},
     characters,
     error::{AppError, AppResult},
     session::session_id_from_headers,
@@ -13,6 +14,7 @@ pub fn router() -> Router<AppState> {
     Router::new()
         .route("/ai-profiles", get(list_ai_profiles))
         .route("/ai-providers/status", get(provider_status))
+        .layer(middleware::from_fn(authorization_log::request_context))
 }
 
 #[derive(Serialize)]
@@ -33,7 +35,7 @@ async fn list_ai_profiles(
     State(state): State<AppState>,
     headers: HeaderMap,
 ) -> AppResult<Json<Vec<AiProfileResponse>>> {
-    require_admin_session(&state, &headers).await?;
+    require_admin_session(&state, &headers, AuthorizationAction::ReadAiProfiles).await?;
 
     let character = characters::default_character();
 
@@ -49,7 +51,7 @@ async fn provider_status(
     State(state): State<AppState>,
     headers: HeaderMap,
 ) -> AppResult<Json<ProviderStatusResponse>> {
-    require_admin_session(&state, &headers).await?;
+    require_admin_session(&state, &headers, AuthorizationAction::ReadProviderStatus).await?;
 
     Ok(Json(ProviderStatusResponse {
         active_provider: state.config.ai_provider.clone(),
@@ -57,17 +59,24 @@ async fn provider_status(
     }))
 }
 
-async fn require_admin_session(state: &AppState, headers: &HeaderMap) -> AppResult<()> {
+async fn require_admin_session(
+    state: &AppState,
+    headers: &HeaderMap,
+    action: AuthorizationAction,
+) -> AppResult<()> {
     let Some(session_id) = session_id_from_headers(&state.config, headers) else {
+        authorization_log::rejected(action, AuthorizationRejectionReason::MissingSession);
         return Err(AppError::Forbidden);
     };
     let Some(session) = state.store.get_session(session_id).await? else {
+        authorization_log::rejected(action, AuthorizationRejectionReason::InvalidSession);
         return Err(AppError::Forbidden);
     };
 
     if matches!(session.kind, UserKind::Admin) {
         Ok(())
     } else {
+        authorization_log::rejected(action, AuthorizationRejectionReason::InsufficientRole);
         Err(AppError::Forbidden)
     }
 }
@@ -161,6 +170,17 @@ mod tests {
         };
 
         let response = get_admin_profiles(state, None).await;
+
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    }
+
+    #[tokio::test]
+    async fn admin_routes_reject_invalid_session() {
+        let Some(state) = test_state().await else {
+            return;
+        };
+
+        let response = get_admin_profiles(state, Some(Uuid::new_v4())).await;
 
         assert_eq!(response.status(), StatusCode::FORBIDDEN);
     }

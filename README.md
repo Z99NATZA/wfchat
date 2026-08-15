@@ -1,6 +1,10 @@
 # WaifuChat
 
-Project created: 2026-05-27 (Open Source)
+```text
+Project created: 2026-05-27
+- Open Source
+- Vibe coding
+```
 
 ![WaifuChat chat interface](docs/images/wfchat-chat-interface.png)
 ![Aiko Cafe interface](docs/images/aiko-cafe.png)
@@ -37,7 +41,7 @@ npm run init
 
 `WFCHAT_COMPOSE_VOICEVOX_BASE_URL=http://voicevox:50021`
 
-`VOICEVOX_SPEAKER_ID=23` OICEVOX speaker/style id used by the API container
+`VOICEVOX_SPEAKER_ID=23` VOICEVOX speaker/style id used by the API container
 
  - apps/api/.env
 
