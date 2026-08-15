@@ -62,6 +62,9 @@ code must not persist session ids or secrets in browser-readable storage.
 Google identity data and editable profiles are separate. Profile avatar URLs
 must be HTTPS, except localhost/loopback HTTP used during development.
 `data:`, `javascript:`, malformed, and public plain-HTTP values are rejected.
+Registered and admin profile updates emit a bounded success audit; missing,
+inactive, Guest, or invalid-input updates emit a bounded rejection event. These
+events contain no account identifiers or profile values.
 
 ## AI Boundary
 

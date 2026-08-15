@@ -14,7 +14,7 @@ use crate::{
     auth_log::{self, AuthRejectionReason},
     error::{AppError, AppResult},
     rate_limit::{RateLimitFamily, RateLimitIdentity},
-    session::{require_session, session_cookie, session_id_from_headers},
+    session::{session_cookie, session_id_from_headers},
     state::AppState,
     store::UserKind,
 };
@@ -282,8 +282,25 @@ async fn update_profile(
     headers: HeaderMap,
     Json(payload): Json<UpdateProfileRequest>,
 ) -> AppResult<Json<SessionResponse>> {
-    let session = require_session(&state, &headers).await?;
+    let Some(session_id) = session_id_from_headers(&state.config, &headers) else {
+        auth_log::profile_update_rejected(
+            StatusCode::FORBIDDEN,
+            AuthRejectionReason::MissingSession,
+        );
+        return Err(AppError::Forbidden);
+    };
+    let Some(session) = state.store.get_session(session_id).await? else {
+        auth_log::profile_update_rejected(
+            StatusCode::FORBIDDEN,
+            AuthRejectionReason::InvalidSession,
+        );
+        return Err(AppError::Forbidden);
+    };
     if matches!(&session.kind, UserKind::Guest) {
+        auth_log::profile_update_rejected(
+            StatusCode::FORBIDDEN,
+            AuthRejectionReason::WrongSessionKind,
+        );
         return Err(AppError::Forbidden);
     }
 
@@ -308,7 +325,9 @@ async fn update_profile(
         .await?
         .ok_or_else(|| AppError::BadRequest("could not update profile".to_owned()))?;
 
-    Ok(Json(session_response(&state, &session).await?))
+    let response = session_response(&state, &session).await?;
+    auth_log::profile_update_succeeded(StatusCode::OK);
+    Ok(Json(response))
 }
 
 fn validate_profile_avatar_url(avatar_url: Option<String>) -> AppResult<Option<String>> {
@@ -428,6 +447,11 @@ async fn session_response(
 
 #[cfg(test)]
 mod tests {
+    use std::{
+        io::{self, Write},
+        sync::{Arc, Mutex},
+    };
+
     use super::*;
     use crate::{
         app::build_router,
@@ -439,11 +463,73 @@ mod tests {
         body::{to_bytes, Body},
         extract::State,
         http::{header, Request, StatusCode},
+        response::Response,
     };
-    use serde_json::json;
-    use std::sync::Arc;
+    use serde_json::{json, Value};
     use tokio::sync::Notify;
     use tower::ServiceExt;
+    use tracing_subscriber::fmt::MakeWriter;
+
+    #[derive(Clone, Default)]
+    struct CapturedWriter(Arc<Mutex<Vec<u8>>>);
+
+    impl Write for CapturedWriter {
+        fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+            self.0.lock().expect("captured log lock").extend(bytes);
+            Ok(bytes.len())
+        }
+
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
+
+    impl<'writer> MakeWriter<'writer> for CapturedWriter {
+        type Writer = CapturedWriter;
+
+        fn make_writer(&'writer self) -> Self::Writer {
+            self.clone()
+        }
+    }
+
+    impl CapturedWriter {
+        fn profile_events(&self) -> Vec<Value> {
+            let output = self.0.lock().expect("captured log lock").clone();
+            String::from_utf8(output)
+                .expect("captured logs should be UTF-8")
+                .lines()
+                .map(|line| serde_json::from_str(line).expect("captured log should be JSON"))
+                .filter(|event: &Value| {
+                    event["target"] == "wfchat::auth_security"
+                        && matches!(
+                            event["event"].as_str(),
+                            Some("auth_profile_update_succeeded" | "auth_profile_update_rejected")
+                        )
+                })
+                .collect()
+        }
+    }
+
+    async fn capture_profile_request(
+        state: AppState,
+        request: Request<Body>,
+    ) -> (Response, Vec<Value>) {
+        let writer = CapturedWriter::default();
+        let subscriber = tracing_subscriber::fmt()
+            .json()
+            .flatten_event(true)
+            .with_current_span(false)
+            .with_span_list(false)
+            .with_writer(writer.clone())
+            .finish();
+        let _guard = tracing::subscriber::set_default(subscriber);
+
+        let response = build_router(state)
+            .oneshot(request)
+            .await
+            .expect("request should run");
+        (response, writer.profile_events())
+    }
 
     async fn test_state(google_client_id: Option<String>) -> Option<AppState> {
         let database_url = std::env::var("WFCHAT_TEST_DATABASE_URL").ok()?;
@@ -943,6 +1029,198 @@ mod tests {
             error.to_string(),
             "bad request: GOOGLE_CLIENT_ID is not configured"
         );
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn profile_route_logs_session_rejections_once_without_profile_values() {
+        let Some(state) = test_state(None).await else {
+            return;
+        };
+        let guest = state
+            .store
+            .create_guest_session()
+            .await
+            .expect("guest session should create");
+        let invalid_session_id = Uuid::new_v4();
+        let secret_name = "Secret Rejected Profile Name";
+        let secret_avatar = "https://private.example/rejected-avatar.png";
+        let body = format!(r#"{{"display_name":"{secret_name}","avatar_url":"{secret_avatar}"}}"#);
+
+        for (cookie, reason, excluded_session_id) in [
+            (None, "missing_session", None),
+            (
+                Some(format!("wfchat_session={invalid_session_id}")),
+                "invalid_session",
+                Some(invalid_session_id),
+            ),
+            (
+                Some(format!("wfchat_session={}", guest.id)),
+                "wrong_session_kind",
+                Some(guest.id),
+            ),
+        ] {
+            let mut builder = Request::patch("/api/auth/profile")
+                .header(header::CONTENT_TYPE, "application/json");
+            if let Some(cookie) = cookie {
+                builder = builder.header(header::COOKIE, cookie);
+            }
+            let (response, events) = capture_profile_request(
+                state.clone(),
+                builder
+                    .body(Body::from(body.clone()))
+                    .expect("request should build"),
+            )
+            .await;
+
+            assert_eq!(response.status(), StatusCode::FORBIDDEN);
+            assert_eq!(events.len(), 1);
+            let event = &events[0];
+            assert_eq!(event["level"], "WARN");
+            assert_eq!(event["event"], "auth_profile_update_rejected");
+            assert_eq!(event["outcome"], "rejected");
+            assert_eq!(event["status"], 403);
+            assert_eq!(event["reason"], reason);
+            assert_eq!(
+                event["request_id"],
+                response
+                    .headers()
+                    .get("x-request-id")
+                    .expect("request id response header")
+                    .to_str()
+                    .expect("request id should be text")
+            );
+
+            let encoded = serde_json::to_string(event).expect("event should serialize");
+            assert!(!encoded.contains(secret_name));
+            assert!(!encoded.contains(secret_avatar));
+            if let Some(session_id) = excluded_session_id {
+                assert!(!encoded.contains(&session_id.to_string()));
+            }
+        }
+
+        state
+            .store
+            .delete_session_for_test(guest.id)
+            .await
+            .expect("guest session cleanup should succeed");
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn profile_route_logs_success_and_input_rejections_without_sensitive_values() {
+        let Some(state) = test_state(None).await else {
+            return;
+        };
+        let guest = state
+            .store
+            .create_guest_session()
+            .await
+            .expect("guest session should create");
+        let user_id = Uuid::new_v4();
+        let session = state
+            .store
+            .promote_session_to_registered(guest.id, user_id)
+            .await
+            .expect("session should promote")
+            .expect("promoted session should exist");
+        let cookie = format!("wfchat_session={}", session.id);
+        let secret_name = "Secret Successful Profile Name";
+        let secret_avatar = "https://private.example/success-avatar.png";
+
+        let (response, events) = capture_profile_request(
+            state.clone(),
+            Request::patch("/api/auth/profile")
+                .header(header::CONTENT_TYPE, "application/json")
+                .header(header::COOKIE, &cookie)
+                .body(Body::from(format!(
+                    r#"{{"display_name":"{secret_name}","avatar_url":"{secret_avatar}"}}"#
+                )))
+                .expect("request should build"),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(events.len(), 1);
+        let event = &events[0];
+        assert_eq!(event["level"], "INFO");
+        assert_eq!(event["event"], "auth_profile_update_succeeded");
+        assert_eq!(event["outcome"], "success");
+        assert_eq!(event["status"], 200);
+        assert!(event.get("reason").is_none());
+        assert_eq!(
+            event["request_id"],
+            response
+                .headers()
+                .get("x-request-id")
+                .expect("request id response header")
+                .to_str()
+                .expect("request id should be text")
+        );
+        let encoded = serde_json::to_string(event).expect("event should serialize");
+        for excluded in [
+            session.id.to_string(),
+            user_id.to_string(),
+            secret_name.to_owned(),
+            secret_avatar.to_owned(),
+            "display_name".to_owned(),
+            "avatar_url".to_owned(),
+        ] {
+            assert!(!encoded.contains(&excluded));
+        }
+        let response_body = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("response body should read");
+        let response: SessionResponse =
+            serde_json::from_slice(&response_body).expect("response should decode");
+        assert_eq!(response.name.as_deref(), Some(secret_name));
+        assert_eq!(
+            response
+                .profile
+                .as_ref()
+                .and_then(|profile| profile.avatar_url.as_deref()),
+            Some(secret_avatar)
+        );
+
+        for body in [
+            r#"{"display_name":" ","avatar_url":null}"#,
+            r#"{"display_name":"Rejected Name","avatar_url":"javascript:secret-profile-value"}"#,
+            r#"{"display_name":"secret-profile-malformed""#,
+        ] {
+            let (response, events) = capture_profile_request(
+                state.clone(),
+                Request::patch("/api/auth/profile")
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .header(header::COOKIE, &cookie)
+                    .body(Body::from(body))
+                    .expect("request should build"),
+            )
+            .await;
+            assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+            assert_eq!(events.len(), 1);
+            let event = &events[0];
+            assert_eq!(event["level"], "WARN");
+            assert_eq!(event["event"], "auth_profile_update_rejected");
+            assert_eq!(event["outcome"], "rejected");
+            assert_eq!(event["status"], 400);
+            assert_eq!(event["reason"], "invalid_request");
+            assert_eq!(
+                event["request_id"],
+                response
+                    .headers()
+                    .get("x-request-id")
+                    .expect("request id response header")
+                    .to_str()
+                    .expect("request id should be text")
+            );
+            let encoded = serde_json::to_string(event).expect("event should serialize");
+            for excluded in ["Rejected Name", "javascript:", "secret-profile-malformed"] {
+                assert!(!encoded.contains(excluded));
+            }
+        }
+
+        state
+            .store
+            .delete_session_for_test(session.id)
+            .await
+            .expect("registered session cleanup should succeed");
     }
 
     #[tokio::test]

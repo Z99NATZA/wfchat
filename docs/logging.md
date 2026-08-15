@@ -63,6 +63,8 @@ the event is still emitted without that field and the response is unchanged.
 | `auth_login_rejected` | `WARN` | `rejected` | A Google login request is rejected with `4xx` |
 | `auth_logout_succeeded` | `INFO` | `success` | Registered or admin session rotation to Guest completes |
 | `auth_logout_rejected` | `WARN` | `rejected` | Logout lacks a session or cannot rotate it |
+| `auth_profile_update_succeeded` | `INFO` | `success` | Registered or admin profile update and response assembly complete |
+| `auth_profile_update_rejected` | `WARN` | `rejected` | Profile update is rejected for session, account kind, or input validation |
 
 Every event has `event`, `outcome`, and `status`; `request_id` is present when
 the access middleware supplied it. Successful events omit `reason`. Rejected
@@ -76,6 +78,13 @@ Guest admission rejection and `/api/auth/me` resolving an existing session do
 not emit authentication events. Authentication events exclude session and user
 ids, Google identity/profile values, tokens, cookies, headers, bodies, provider
 payloads, and raw error text.
+
+Profile update rejection uses `missing_session`, `invalid_session`, or
+`wrong_session_kind` with status `403`, and `invalid_request` with status `400`
+for malformed JSON, an empty display name, or an invalid avatar URL. Profile
+events additionally exclude user kind or role, display names, avatar URLs,
+emails, changed-field flags, and all profile input. Database and other `5xx`
+failures do not emit a profile event.
 
 ## Admin Authorization Rejection Events
 

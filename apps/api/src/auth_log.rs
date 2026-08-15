@@ -58,17 +58,22 @@ pub(crate) async fn request_context(request: Request, next: Next) -> Response {
         .scope(context.clone(), next.run(request))
         .await;
 
-    if !context.emitted.load(Ordering::Relaxed)
-        && method == Method::POST
-        && path == "/auth/google"
-        && response.status().is_client_error()
-    {
-        emit_rejected(
-            &context,
-            "auth_login_rejected",
-            response.status(),
-            AuthRejectionReason::InvalidRequest,
-        );
+    if !context.emitted.load(Ordering::Relaxed) && response.status().is_client_error() {
+        let event = if method == Method::POST && path == "/auth/google" {
+            Some("auth_login_rejected")
+        } else if method == Method::PATCH && path == "/auth/profile" {
+            Some("auth_profile_update_rejected")
+        } else {
+            None
+        };
+        if let Some(event) = event {
+            emit_rejected(
+                &context,
+                event,
+                response.status(),
+                AuthRejectionReason::InvalidRequest,
+            );
+        }
     }
 
     response
@@ -96,9 +101,20 @@ pub(crate) fn logout_rejected(status: StatusCode, reason: AuthRejectionReason) {
     emit_rejected(&context, "auth_logout_rejected", status, reason);
 }
 
+pub(crate) fn profile_update_succeeded(status: StatusCode) {
+    emit_success("auth_profile_update_succeeded", status);
+}
+
+pub(crate) fn profile_update_rejected(status: StatusCode, reason: AuthRejectionReason) {
+    let context = current_context();
+    emit_rejected(&context, "auth_profile_update_rejected", status, reason);
+}
+
 fn emit_success(event: &'static str, status: StatusCode) {
     let context = current_context();
-    context.emitted.store(true, Ordering::Relaxed);
+    if context.emitted.swap(true, Ordering::Relaxed) {
+        return;
+    }
     match context.request_id {
         Some(request_id) => tracing::info!(
             target: "wfchat::auth_security",
@@ -124,7 +140,9 @@ fn emit_rejected(
     status: StatusCode,
     reason: AuthRejectionReason,
 ) {
-    context.emitted.store(true, Ordering::Relaxed);
+    if context.emitted.swap(true, Ordering::Relaxed) {
+        return;
+    }
     match context.request_id {
         Some(request_id) => tracing::warn!(
             target: "wfchat::auth_security",
@@ -162,7 +180,13 @@ mod tests {
         sync::{Arc, Mutex},
     };
 
-    use axum::{body::Body, http::Request as HttpRequest, middleware, routing::post, Json, Router};
+    use axum::{
+        body::Body,
+        http::Request as HttpRequest,
+        middleware,
+        routing::{patch, post},
+        Json, Router,
+    };
     use serde::Deserialize;
     use serde_json::Value;
     use tower::ServiceExt;
@@ -245,6 +269,45 @@ mod tests {
                     } else {
                         logout_rejected(StatusCode::FORBIDDEN, AuthRejectionReason::MissingSession);
                         StatusCode::FORBIDDEN
+                    }
+                }),
+            )
+            .route(
+                "/auth/profile",
+                patch(|Json(payload): Json<LoginPayload>| async move {
+                    match payload.action.as_str() {
+                        "success" => {
+                            profile_update_succeeded(StatusCode::OK);
+                            profile_update_succeeded(StatusCode::OK);
+                            StatusCode::OK
+                        }
+                        "missing" => {
+                            profile_update_rejected(
+                                StatusCode::FORBIDDEN,
+                                AuthRejectionReason::MissingSession,
+                            );
+                            profile_update_rejected(
+                                StatusCode::FORBIDDEN,
+                                AuthRejectionReason::MissingSession,
+                            );
+                            StatusCode::FORBIDDEN
+                        }
+                        "invalid" => {
+                            profile_update_rejected(
+                                StatusCode::FORBIDDEN,
+                                AuthRejectionReason::InvalidSession,
+                            );
+                            StatusCode::FORBIDDEN
+                        }
+                        "guest" => {
+                            profile_update_rejected(
+                                StatusCode::FORBIDDEN,
+                                AuthRejectionReason::WrongSessionKind,
+                            );
+                            StatusCode::FORBIDDEN
+                        }
+                        "error" => StatusCode::INTERNAL_SERVER_ERROR,
+                        _ => StatusCode::BAD_REQUEST,
                     }
                 }),
             )
@@ -384,5 +447,107 @@ mod tests {
         assert!(!serde_json::to_string(event)
             .expect("event should serialize")
             .contains("secret-malformed"));
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn emits_bounded_profile_update_events_once() {
+        let cases = [
+            (
+                "success",
+                "auth_profile_update_succeeded",
+                200,
+                "success",
+                None,
+            ),
+            (
+                "missing",
+                "auth_profile_update_rejected",
+                403,
+                "rejected",
+                Some("missing_session"),
+            ),
+            (
+                "invalid",
+                "auth_profile_update_rejected",
+                403,
+                "rejected",
+                Some("invalid_session"),
+            ),
+            (
+                "guest",
+                "auth_profile_update_rejected",
+                403,
+                "rejected",
+                Some("wrong_session_kind"),
+            ),
+            (
+                "bad-profile-input",
+                "auth_profile_update_rejected",
+                400,
+                "rejected",
+                Some("invalid_request"),
+            ),
+        ];
+
+        for (action, event_name, status, outcome, reason) in cases {
+            let request_id = Uuid::new_v4();
+            let request = HttpRequest::patch("/auth/profile")
+                .header("content-type", "application/json")
+                .header("authorization", "Bearer secret-profile-token")
+                .header("cookie", "wfchat_session=secret-profile-session")
+                .body(Body::from(format!(
+                    r#"{{"action":"{action}","display_name":"secret-profile-name"}}"#
+                )))
+                .expect("request should build");
+            let mut request = request;
+            request
+                .extensions_mut()
+                .insert(RequestId::from_uuid(request_id));
+
+            let (actual_status, events) = capture_request(request).await;
+            assert_eq!(actual_status.as_u16(), status);
+            assert_eq!(events.len(), 1);
+            let event = &events[0];
+            assert_eq!(event["event"], event_name);
+            assert_eq!(event["request_id"], request_id.to_string());
+            assert_eq!(event["outcome"], outcome);
+            assert_eq!(event["status"], status);
+            assert_eq!(event.get("reason").and_then(Value::as_str), reason);
+            assert_eq!(event["level"], if status == 200 { "INFO" } else { "WARN" });
+
+            let encoded = serde_json::to_string(event).expect("event should serialize");
+            for secret in [
+                "secret-profile-token",
+                "secret-profile-session",
+                "secret-profile-name",
+            ] {
+                assert!(!encoded.contains(secret), "log leaked {secret}");
+            }
+        }
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn malformed_profile_is_rejected_without_request_id_and_server_error_is_not_logged() {
+        let malformed = HttpRequest::patch("/auth/profile")
+            .header("content-type", "application/json")
+            .body(Body::from(r#"{"action":"secret-profile-malformed""#))
+            .expect("request should build");
+        let (status, events) = capture_request(malformed).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0]["event"], "auth_profile_update_rejected");
+        assert_eq!(events[0]["reason"], "invalid_request");
+        assert!(events[0].get("request_id").is_none());
+        assert!(!serde_json::to_string(&events[0])
+            .expect("event should serialize")
+            .contains("secret-profile-malformed"));
+
+        let server_error = HttpRequest::patch("/auth/profile")
+            .header("content-type", "application/json")
+            .body(Body::from(r#"{"action":"error"}"#))
+            .expect("request should build");
+        let (status, events) = capture_request(server_error).await;
+        assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
+        assert!(events.is_empty());
     }
 }
