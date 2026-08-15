@@ -159,3 +159,45 @@ storage paths and keys, file bytes, multipart fields, headers, bodies, and raw
 errors. Successful uploads, disabled routes, sent-attachment deletion
 rejections, storage or database failures, and background attachment work do not
 emit `attachment_upload_rejected`.
+
+## Cafe Security Events
+
+Cafe HTTP routes and the WebSocket handshake extend `authorization_rejected`
+with resource `cafe`. Missing or inactive sessions retain `403` with
+`missing_session` or `invalid_session`. An unavailable invite code retains
+`404` with `resource_unavailable`, and an attempt to equip a locked cosmetic
+retains `403` with `insufficient_entitlement`.
+
+| Route | Action |
+| --- | --- |
+| `GET /api/cafe/rooms` | `list_cafe_rooms` |
+| `POST /api/cafe/rooms` | `create_cafe_room` |
+| `POST /api/cafe/rooms/quick-join` | `quick_join_cafe_room` |
+| `POST /api/cafe/rooms/join` | `join_cafe_room` |
+| `GET /api/cafe/progress` | `read_cafe_progress` |
+| `POST /api/cafe/cosmetics/equipped` | `equip_cafe_cosmetic` |
+| `GET /api/cafe/rooms/{room_id}/ws` | `connect_cafe_socket` |
+
+The handshake and room-admission security controls emit
+`cafe_request_rejected` at level `WARN`, target `wfchat::cafe_security`,
+resource `cafe`, and outcome `rejected`.
+
+| Reason | Status | Covered rejection |
+| --- | ---: | --- |
+| `origin_rejected` | `403` | WebSocket browser Origin is not allowlisted |
+| `socket_capacity` | `429` | WebSocket session, IP, or global capacity is exhausted |
+| `room_creation_rate` | `429` | Room creation admission limit is exhausted |
+
+Origin is checked before session authorization and produces only the Cafe
+security event. Room creation covers both explicit creation and quick join when
+quick join must create a room. These events use the same request-id correlation,
+missing-request-id behavior, and single-event limit as other authorization
+events.
+
+Cafe security events exclude client IP, all room, invite, session, user,
+player, and cosmetic identifiers, nicknames, messages, coordinates, Origin
+values, WebSocket frames, cookies, headers, bodies, query values, raw paths,
+database details, and raw errors. Successful requests, malformed input,
+invalid nickname or cosmetic values, room-full conflicts, successful room
+reuse, missing WebSocket upgrade headers, database or operational failures,
+and all events after the WebSocket upgrade do not emit these security events.

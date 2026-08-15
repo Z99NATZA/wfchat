@@ -22,6 +22,7 @@ pub(crate) enum AuthorizationResource {
     Admin,
     Chat,
     Attachment,
+    Cafe,
 }
 
 impl AuthorizationResource {
@@ -30,6 +31,7 @@ impl AuthorizationResource {
             Self::Admin => "admin",
             Self::Chat => "chat",
             Self::Attachment => "attachment",
+            Self::Cafe => "cafe",
         }
     }
 }
@@ -48,6 +50,13 @@ pub(crate) enum AuthorizationAction {
     UploadAttachment,
     PreviewAttachment,
     DeleteAttachment,
+    ListCafeRooms,
+    CreateCafeRoom,
+    QuickJoinCafeRoom,
+    JoinCafeRoom,
+    ReadCafeProgress,
+    EquipCafeCosmetic,
+    ConnectCafeSocket,
 }
 
 impl AuthorizationAction {
@@ -65,6 +74,13 @@ impl AuthorizationAction {
             Self::UploadAttachment => "upload_attachment",
             Self::PreviewAttachment => "preview_attachment",
             Self::DeleteAttachment => "delete_attachment",
+            Self::ListCafeRooms => "list_cafe_rooms",
+            Self::CreateCafeRoom => "create_cafe_room",
+            Self::QuickJoinCafeRoom => "quick_join_cafe_room",
+            Self::JoinCafeRoom => "join_cafe_room",
+            Self::ReadCafeProgress => "read_cafe_progress",
+            Self::EquipCafeCosmetic => "equip_cafe_cosmetic",
+            Self::ConnectCafeSocket => "connect_cafe_socket",
         }
     }
 }
@@ -96,6 +112,7 @@ pub(crate) enum AuthorizationRejectionReason {
     InvalidSession,
     InsufficientRole,
     ResourceUnavailable,
+    InsufficientEntitlement,
 }
 
 impl AuthorizationRejectionReason {
@@ -105,6 +122,24 @@ impl AuthorizationRejectionReason {
             Self::InvalidSession => "invalid_session",
             Self::InsufficientRole => "insufficient_role",
             Self::ResourceUnavailable => "resource_unavailable",
+            Self::InsufficientEntitlement => "insufficient_entitlement",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub(crate) enum CafeSecurityRejectionReason {
+    OriginRejected,
+    SocketCapacity,
+    RoomCreationRate,
+}
+
+impl CafeSecurityRejectionReason {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::OriginRejected => "origin_rejected",
+            Self::SocketCapacity => "socket_capacity",
+            Self::RoomCreationRate => "room_creation_rate",
         }
     }
 }
@@ -189,6 +224,41 @@ pub(crate) fn attachment_upload_rejected(
     }
 }
 
+pub(crate) fn cafe_request_rejected(
+    action: AuthorizationAction,
+    status: StatusCode,
+    reason: CafeSecurityRejectionReason,
+) {
+    let context = current_context();
+    if context.emitted.swap(true, Ordering::Relaxed) {
+        return;
+    }
+
+    match context.request_id {
+        Some(request_id) => tracing::warn!(
+            target: "wfchat::cafe_security",
+            event = "cafe_request_rejected",
+            request_id = %request_id.value(),
+            resource = "cafe",
+            action = action.as_str(),
+            outcome = "rejected",
+            status = status.as_u16(),
+            reason = reason.as_str(),
+            "Cafe request rejected"
+        ),
+        None => tracing::warn!(
+            target: "wfchat::cafe_security",
+            event = "cafe_request_rejected",
+            resource = "cafe",
+            action = action.as_str(),
+            outcome = "rejected",
+            status = status.as_u16(),
+            reason = reason.as_str(),
+            "Cafe request rejected"
+        ),
+    }
+}
+
 pub(crate) async fn attachment_body_limit_rejection(request: Request, next: Next) -> Response {
     let response = next.run(request).await;
     if response.status() == StatusCode::PAYLOAD_TOO_LARGE {
@@ -258,7 +328,11 @@ mod tests {
                 .filter(|event: &Value| {
                     matches!(
                         event["target"].as_str(),
-                        Some("wfchat::authorization_security" | "wfchat::attachment_security")
+                        Some(
+                            "wfchat::authorization_security"
+                                | "wfchat::attachment_security"
+                                | "wfchat::cafe_security"
+                        )
                     )
                 })
                 .collect()
@@ -282,6 +356,15 @@ mod tests {
                     let (status, reason) = upload_rejection_case(&case);
                     attachment_upload_rejected(status, reason);
                     attachment_upload_rejected(status, reason);
+                    status
+                }),
+            )
+            .route(
+                "/cafe/{case}",
+                get(|Path(case): Path<String>| async move {
+                    let (action, status, reason) = cafe_rejection_case(&case);
+                    cafe_request_rejected(action, status, reason);
+                    cafe_request_rejected(action, status, reason);
                     status
                 }),
             )
@@ -351,8 +434,41 @@ mod tests {
             "attachment_delete" => {
                 attachment_case(AuthorizationAction::DeleteAttachment, StatusCode::NOT_FOUND)
             }
+            "cafe_list" => cafe_authorization_case(AuthorizationAction::ListCafeRooms),
+            "cafe_create" => cafe_authorization_case(AuthorizationAction::CreateCafeRoom),
+            "cafe_quick_join" => cafe_authorization_case(AuthorizationAction::QuickJoinCafeRoom),
+            "cafe_join" => (
+                AuthorizationResource::Cafe,
+                AuthorizationAction::JoinCafeRoom,
+                StatusCode::NOT_FOUND,
+                AuthorizationRejectionReason::ResourceUnavailable,
+            ),
+            "cafe_progress" => cafe_authorization_case(AuthorizationAction::ReadCafeProgress),
+            "cafe_equip" => (
+                AuthorizationResource::Cafe,
+                AuthorizationAction::EquipCafeCosmetic,
+                StatusCode::FORBIDDEN,
+                AuthorizationRejectionReason::InsufficientEntitlement,
+            ),
+            "cafe_socket" => cafe_authorization_case(AuthorizationAction::ConnectCafeSocket),
             _ => panic!("unknown rejection case"),
         }
+    }
+
+    fn cafe_authorization_case(
+        action: AuthorizationAction,
+    ) -> (
+        AuthorizationResource,
+        AuthorizationAction,
+        StatusCode,
+        AuthorizationRejectionReason,
+    ) {
+        (
+            AuthorizationResource::Cafe,
+            action,
+            StatusCode::FORBIDDEN,
+            AuthorizationRejectionReason::MissingSession,
+        )
     }
 
     fn attachment_case(
@@ -395,6 +511,34 @@ mod tests {
                 AttachmentUploadRejectionReason::ImageStorageLimit,
             ),
             _ => panic!("unknown upload rejection case"),
+        }
+    }
+
+    fn cafe_rejection_case(
+        case: &str,
+    ) -> (AuthorizationAction, StatusCode, CafeSecurityRejectionReason) {
+        match case {
+            "origin" => (
+                AuthorizationAction::ConnectCafeSocket,
+                StatusCode::FORBIDDEN,
+                CafeSecurityRejectionReason::OriginRejected,
+            ),
+            "socket" => (
+                AuthorizationAction::ConnectCafeSocket,
+                StatusCode::TOO_MANY_REQUESTS,
+                CafeSecurityRejectionReason::SocketCapacity,
+            ),
+            "create" => (
+                AuthorizationAction::CreateCafeRoom,
+                StatusCode::TOO_MANY_REQUESTS,
+                CafeSecurityRejectionReason::RoomCreationRate,
+            ),
+            "quick" => (
+                AuthorizationAction::QuickJoinCafeRoom,
+                StatusCode::TOO_MANY_REQUESTS,
+                CafeSecurityRejectionReason::RoomCreationRate,
+            ),
+            _ => panic!("unknown Cafe rejection case"),
         }
     }
 
@@ -539,6 +683,55 @@ mod tests {
                 404,
                 "resource_unavailable",
             ),
+            (
+                "/reject/cafe_list",
+                "cafe",
+                "list_cafe_rooms",
+                403,
+                "missing_session",
+            ),
+            (
+                "/reject/cafe_create",
+                "cafe",
+                "create_cafe_room",
+                403,
+                "missing_session",
+            ),
+            (
+                "/reject/cafe_quick_join",
+                "cafe",
+                "quick_join_cafe_room",
+                403,
+                "missing_session",
+            ),
+            (
+                "/reject/cafe_join",
+                "cafe",
+                "join_cafe_room",
+                404,
+                "resource_unavailable",
+            ),
+            (
+                "/reject/cafe_progress",
+                "cafe",
+                "read_cafe_progress",
+                403,
+                "missing_session",
+            ),
+            (
+                "/reject/cafe_equip",
+                "cafe",
+                "equip_cafe_cosmetic",
+                403,
+                "insufficient_entitlement",
+            ),
+            (
+                "/reject/cafe_socket",
+                "cafe",
+                "connect_cafe_socket",
+                403,
+                "missing_session",
+            ),
         ];
 
         for (path, resource, action, expected_status, reason) in cases {
@@ -598,6 +791,41 @@ mod tests {
         assert_eq!(status, StatusCode::PAYLOAD_TOO_LARGE);
         assert_eq!(events.len(), 1);
         assert_eq!(events[0]["reason"], "image_size_limit");
+        assert!(events[0].get("request_id").is_none());
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn emits_bounded_cafe_security_rejections_once() {
+        let cases = [
+            ("origin", "connect_cafe_socket", 403, "origin_rejected"),
+            ("socket", "connect_cafe_socket", 429, "socket_capacity"),
+            ("create", "create_cafe_room", 429, "room_creation_rate"),
+            ("quick", "quick_join_cafe_room", 429, "room_creation_rate"),
+        ];
+
+        for (case, action, expected_status, reason) in cases {
+            let request_id = Uuid::new_v4();
+            let (status, events) = capture(&format!("/cafe/{case}"), Some(request_id)).await;
+            assert_eq!(status.as_u16(), expected_status);
+            assert_eq!(events.len(), 1);
+            let event = &events[0];
+            assert_eq!(event["level"], "WARN");
+            assert_eq!(event["target"], "wfchat::cafe_security");
+            assert_eq!(event["event"], "cafe_request_rejected");
+            assert_eq!(event["request_id"], request_id.to_string());
+            assert_eq!(event["resource"], "cafe");
+            assert_eq!(event["action"], action);
+            assert_eq!(event["outcome"], "rejected");
+            assert_eq!(event["status"], expected_status);
+            assert_eq!(event["reason"], reason);
+
+            let encoded = serde_json::to_string(event).unwrap();
+            assert!(!encoded.contains("secret-authorization-value"));
+            assert!(!encoded.contains("secret-session-value"));
+        }
+
+        let (status, events) = capture("/cafe/origin", None).await;
+        assert_eq!(status, StatusCode::FORBIDDEN);
         assert!(events[0].get("request_id").is_none());
     }
 

@@ -578,6 +578,7 @@ mod tests {
     use crate::{
         app::build_router,
         attachments::cleanup_stale_pending_chat_attachments,
+        cafe::CafeHub,
         config::{AppEnvironment, Config},
         rate_limit::{RateLimitPolicies, RateLimitPolicy, RateLimiter},
         store::{ChatStore, MemoryFollowUpClaim, NewMemoryItemRecord, SessionRecord},
@@ -647,11 +648,80 @@ mod tests {
             .filter(|event: &Value| {
                 matches!(
                     event["target"].as_str(),
-                    Some("wfchat::authorization_security" | "wfchat::attachment_security")
+                    Some(
+                        "wfchat::authorization_security"
+                            | "wfchat::attachment_security"
+                            | "wfchat::cafe_security"
+                    )
                 )
             })
             .collect();
         (response, events)
+    }
+
+    async fn capture_live_cafe_websocket_request(
+        state: AppState,
+        uri: String,
+        session_id: Option<Uuid>,
+        origin: &str,
+    ) -> (StatusCode, String, Vec<Value>) {
+        let writer = CapturedSecurityWriter::default();
+        let subscriber = tracing_subscriber::fmt()
+            .json()
+            .flatten_event(true)
+            .with_current_span(false)
+            .with_span_list(false)
+            .with_writer(writer.clone())
+            .finish();
+        let _guard = tracing::subscriber::set_default(subscriber);
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("test listener should bind");
+        let address = listener.local_addr().expect("test address should resolve");
+        let server = tokio::spawn(async move {
+            axum::serve(listener, build_router(state))
+                .await
+                .expect("test server should run");
+        });
+
+        let mut request = Client::new()
+            .get(format!("http://{address}{uri}"))
+            .header(header::ORIGIN.as_str(), origin)
+            .header(header::CONNECTION.as_str(), "upgrade")
+            .header(header::UPGRADE.as_str(), "websocket")
+            .header("sec-websocket-version", "13")
+            .header("sec-websocket-key", "dGhlIHNhbXBsZSBub25jZQ==");
+        if let Some(session_id) = session_id {
+            request = request.header("x-wfchat-session", session_id.to_string());
+        }
+        let response = request.send().await.expect("WebSocket request should run");
+        let status = StatusCode::from_u16(response.status().as_u16()).unwrap();
+        let request_id = response
+            .headers()
+            .get("x-request-id")
+            .expect("request id should be returned")
+            .to_str()
+            .unwrap()
+            .to_owned();
+        let _ = response.bytes().await.expect("response body should read");
+        tokio::task::yield_now().await;
+        server.abort();
+        let _ = server.await;
+
+        let output = writer.0.lock().expect("captured log lock").clone();
+        let events = String::from_utf8(output)
+            .expect("captured logs should be UTF-8")
+            .lines()
+            .map(|line| serde_json::from_str(line).expect("captured log should be JSON"))
+            .filter(|event: &Value| {
+                matches!(
+                    event["target"].as_str(),
+                    Some("wfchat::authorization_security" | "wfchat::cafe_security")
+                )
+            })
+            .collect();
+        (status, request_id, events)
     }
 
     fn core_chat_request(method: &str, uri: String, session_id: Option<Uuid>) -> Request<Body> {
@@ -922,6 +992,292 @@ mod tests {
             .await
             .unwrap();
         let _ = tokio::fs::remove_dir_all(state.config.chat_attachment_upload_dir).await;
+    }
+
+    fn cafe_request(
+        method: &str,
+        uri: String,
+        session_id: Option<Uuid>,
+        body: &'static str,
+        origin: Option<&str>,
+        websocket_upgrade: bool,
+    ) -> Request<Body> {
+        let mut request = Request::builder()
+            .method(method)
+            .uri(uri)
+            .header(header::CONTENT_TYPE, "application/json");
+        if let Some(session_id) = session_id {
+            request = request.header("x-wfchat-session", session_id.to_string());
+        }
+        if let Some(origin) = origin {
+            request = request.header(header::ORIGIN, origin);
+        }
+        if websocket_upgrade {
+            request = request
+                .header(header::CONNECTION, "upgrade")
+                .header(header::UPGRADE, "websocket")
+                .header("sec-websocket-version", "13")
+                .header("sec-websocket-key", "dGhlIHNhbXBsZSBub25jZQ==");
+        }
+        request
+            .body(Body::from(body))
+            .expect("Cafe request should build")
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn cafe_routes_emit_bounded_authorization_and_handshake_rejections() {
+        let Some(mut state) = test_state().await else {
+            return;
+        };
+        let room_id = Uuid::new_v4();
+        let missing_session_cases = [
+            ("GET", "/api/cafe/rooms".to_owned(), "", "list_cafe_rooms"),
+            (
+                "POST",
+                "/api/cafe/rooms".to_owned(),
+                r#"{"is_private":false}"#,
+                "create_cafe_room",
+            ),
+            (
+                "POST",
+                "/api/cafe/rooms/quick-join".to_owned(),
+                "",
+                "quick_join_cafe_room",
+            ),
+            (
+                "POST",
+                "/api/cafe/rooms/join".to_owned(),
+                r#"{"invite_code":"SECRET"}"#,
+                "join_cafe_room",
+            ),
+            (
+                "GET",
+                "/api/cafe/progress".to_owned(),
+                "",
+                "read_cafe_progress",
+            ),
+            (
+                "POST",
+                "/api/cafe/cosmetics/equipped".to_owned(),
+                r#"{"cosmetic_id":"mint_scarf"}"#,
+                "equip_cafe_cosmetic",
+            ),
+        ];
+
+        for (method, uri, body, action) in missing_session_cases {
+            let (response, events) = capture_security_request(
+                state.clone(),
+                cafe_request(method, uri, None, body, None, false),
+            )
+            .await;
+            assert_eq!(response.status(), StatusCode::FORBIDDEN);
+            assert_eq!(events.len(), 1);
+            assert_eq!(events[0]["event"], "authorization_rejected");
+            assert_eq!(events[0]["resource"], "cafe");
+            assert_eq!(events[0]["action"], action);
+            assert_eq!(events[0]["status"], 403);
+            assert_eq!(events[0]["reason"], "missing_session");
+            assert_eq!(
+                events[0]["request_id"],
+                response.headers()["x-request-id"].to_str().unwrap()
+            );
+            let encoded = serde_json::to_string(&events[0]).unwrap();
+            assert!(!encoded.contains(&room_id.to_string()));
+            if !body.is_empty() {
+                assert!(!encoded.contains(body));
+            }
+        }
+
+        let (status, request_id, events) = capture_live_cafe_websocket_request(
+            state.clone(),
+            format!("/api/cafe/rooms/{room_id}/ws"),
+            None,
+            "http://localhost:5173",
+        )
+        .await;
+        assert_eq!(status, StatusCode::FORBIDDEN);
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0]["action"], "connect_cafe_socket");
+        assert_eq!(events[0]["reason"], "missing_session");
+        assert_eq!(events[0]["request_id"], request_id);
+
+        let invalid_session_id = Uuid::new_v4();
+        let (response, events) = capture_security_request(
+            state.clone(),
+            cafe_request(
+                "GET",
+                "/api/cafe/rooms".to_owned(),
+                Some(invalid_session_id),
+                "",
+                None,
+                false,
+            ),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0]["reason"], "invalid_session");
+        assert!(!serde_json::to_string(&events[0])
+            .unwrap()
+            .contains(&invalid_session_id.to_string()));
+
+        let session = create_test_session(&state).await;
+        let invite_code = "SECRET-NOT-FOUND";
+        let (response, events) = capture_security_request(
+            state.clone(),
+            cafe_request(
+                "POST",
+                "/api/cafe/rooms/join".to_owned(),
+                Some(session.id),
+                r#"{"invite_code":"SECRET-NOT-FOUND"}"#,
+                None,
+                false,
+            ),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0]["action"], "join_cafe_room");
+        assert_eq!(events[0]["reason"], "resource_unavailable");
+        assert!(!serde_json::to_string(&events[0])
+            .unwrap()
+            .contains(invite_code));
+
+        let (response, events) = capture_security_request(
+            state.clone(),
+            cafe_request(
+                "POST",
+                "/api/cafe/cosmetics/equipped".to_owned(),
+                Some(session.id),
+                r#"{"cosmetic_id":"mint_scarf"}"#,
+                None,
+                false,
+            ),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0]["action"], "equip_cafe_cosmetic");
+        assert_eq!(events[0]["reason"], "insufficient_entitlement");
+        assert!(!serde_json::to_string(&events[0])
+            .unwrap()
+            .contains("mint_scarf"));
+
+        let rejected_origin = "https://secret.invalid";
+        let (status, request_id, events) = capture_live_cafe_websocket_request(
+            state.clone(),
+            format!("/api/cafe/rooms/{room_id}/ws?nickname=SecretName"),
+            None,
+            rejected_origin,
+        )
+        .await;
+        assert_eq!(status, StatusCode::FORBIDDEN);
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0]["event"], "cafe_request_rejected");
+        assert_eq!(events[0]["action"], "connect_cafe_socket");
+        assert_eq!(events[0]["reason"], "origin_rejected");
+        assert_eq!(events[0]["request_id"], request_id);
+        let encoded = serde_json::to_string(&events[0]).unwrap();
+        assert!(!encoded.contains(&room_id.to_string()));
+        assert!(!encoded.contains(rejected_origin));
+        assert!(!encoded.contains("SecretName"));
+
+        let mut limits = state.config.security.cafe.clone();
+        limits.room_creations_per_session = 1;
+        limits.room_creations_per_ip = 1;
+        limits.room_creations_global = 1;
+        limits.max_sockets_per_session = 0;
+        state.cafe = CafeHub::new(limits);
+        state
+            .cafe
+            .create_room_limited(session.id, "127.0.0.1".to_owned(), true)
+            .await
+            .expect("first room creation should consume admission capacity");
+        for (uri, body, action) in [
+            (
+                "/api/cafe/rooms",
+                r#"{"is_private":false}"#,
+                "create_cafe_room",
+            ),
+            ("/api/cafe/rooms/quick-join", "", "quick_join_cafe_room"),
+        ] {
+            let (response, events) = capture_security_request(
+                state.clone(),
+                cafe_request("POST", uri.to_owned(), Some(session.id), body, None, false),
+            )
+            .await;
+            assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
+            assert_eq!(events.len(), 1);
+            assert_eq!(events[0]["event"], "cafe_request_rejected");
+            assert_eq!(events[0]["action"], action);
+            assert_eq!(events[0]["reason"], "room_creation_rate");
+        }
+
+        let (status, request_id, events) = capture_live_cafe_websocket_request(
+            state.clone(),
+            format!("/api/cafe/rooms/{room_id}/ws"),
+            Some(session.id),
+            "http://localhost:5173",
+        )
+        .await;
+        assert_eq!(status, StatusCode::TOO_MANY_REQUESTS);
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0]["event"], "cafe_request_rejected");
+        assert_eq!(events[0]["reason"], "socket_capacity");
+        assert_eq!(events[0]["request_id"], request_id);
+        let encoded = serde_json::to_string(&events[0]).unwrap();
+        assert!(!encoded.contains(&room_id.to_string()));
+        assert!(!encoded.contains(&session.id.to_string()));
+
+        state
+            .store
+            .delete_session_for_test(session.id)
+            .await
+            .unwrap();
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn cafe_success_and_excluded_rejections_do_not_emit_security_events() {
+        let Some(state) = test_state().await else {
+            return;
+        };
+        let session = create_test_session(&state).await;
+
+        for request in [
+            cafe_request(
+                "GET",
+                "/api/cafe/rooms".to_owned(),
+                Some(session.id),
+                "",
+                None,
+                false,
+            ),
+            cafe_request(
+                "POST",
+                "/api/cafe/cosmetics/equipped".to_owned(),
+                Some(session.id),
+                r#"{"cosmetic_id":"unknown"}"#,
+                None,
+                false,
+            ),
+            cafe_request(
+                "GET",
+                format!("/api/cafe/rooms/{}/ws", Uuid::new_v4()),
+                Some(session.id),
+                "",
+                Some("http://localhost:5173"),
+                false,
+            ),
+        ] {
+            let (_, events) = capture_security_request(state.clone(), request).await;
+            assert!(events.is_empty());
+        }
+
+        state
+            .store
+            .delete_session_for_test(session.id)
+            .await
+            .unwrap();
     }
 
     #[test]

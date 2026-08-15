@@ -35,11 +35,15 @@ use tokio::sync::{broadcast, oneshot, watch, Mutex};
 use uuid::Uuid;
 
 use crate::{
+    authorization_log::{
+        self, AuthorizationAction, AuthorizationRejectionReason, AuthorizationResource,
+        CafeSecurityRejectionReason,
+    },
     cafe_cosmetics::{cafe_cosmetic, CafeCosmeticDefinition, CAFE_COSMETICS},
     config::CafeSecurityConfig,
     error::{AppError, AppResult, ErrorReason},
     rate_limit::client_ip_from_request,
-    session::{require_session, session_cookie},
+    session::{session_cookie, session_id_from_headers},
     state::AppState,
     store::{OwnerScope, SessionRecord, UserKind},
 };
@@ -125,6 +129,9 @@ pub fn router() -> Router<AppState> {
         .route("/cafe/rooms/{room_id}/ws", get(cafe_socket))
         .route("/cafe/progress", get(cafe_progress))
         .route("/cafe/cosmetics/equipped", post(equip_cafe_cosmetic))
+        .layer(axum::middleware::from_fn(
+            authorization_log::request_context,
+        ))
 }
 
 #[derive(Clone)]
@@ -1876,7 +1883,8 @@ async fn list_rooms(
     State(state): State<AppState>,
     headers: HeaderMap,
 ) -> AppResult<(HeaderMap, Json<CafeRoomsResponse>)> {
-    let (session, response_headers) = ensure_cafe_session(&state, &headers).await?;
+    let (session, response_headers) =
+        ensure_cafe_session(&state, &headers, AuthorizationAction::ListCafeRooms).await?;
     let _ = session;
     Ok((
         response_headers,
@@ -1892,17 +1900,21 @@ async fn create_room(
     headers: HeaderMap,
     Json(payload): Json<CreateRoomRequest>,
 ) -> AppResult<(HeaderMap, Json<CafeRoomResponse>)> {
-    let (session, response_headers) = ensure_cafe_session(&state, &headers).await?;
+    let action = AuthorizationAction::CreateCafeRoom;
+    let (session, response_headers) = ensure_cafe_session(&state, &headers, action).await?;
     let resolved_ip = resolved_cafe_ip(&state, &headers, peer_addr);
-    Ok((
-        response_headers,
-        Json(CafeRoomResponse {
-            room: state
-                .cafe
-                .create_room_limited(session.id, resolved_ip, payload.is_private)
-                .await?,
-        }),
-    ))
+    let room = match state
+        .cafe
+        .create_room_limited(session.id, resolved_ip, payload.is_private)
+        .await
+    {
+        Ok(room) => room,
+        Err(error) => {
+            log_cafe_request_rejection(&error, action);
+            return Err(error);
+        }
+    };
+    Ok((response_headers, Json(CafeRoomResponse { room })))
 }
 
 async fn quick_join(
@@ -1910,17 +1922,17 @@ async fn quick_join(
     ConnectInfo(peer_addr): ConnectInfo<SocketAddr>,
     headers: HeaderMap,
 ) -> AppResult<(HeaderMap, Json<CafeRoomResponse>)> {
-    let (session, response_headers) = ensure_cafe_session(&state, &headers).await?;
+    let action = AuthorizationAction::QuickJoinCafeRoom;
+    let (session, response_headers) = ensure_cafe_session(&state, &headers, action).await?;
     let resolved_ip = resolved_cafe_ip(&state, &headers, peer_addr);
-    Ok((
-        response_headers,
-        Json(CafeRoomResponse {
-            room: state
-                .cafe
-                .quick_join_limited(session.id, resolved_ip)
-                .await?,
-        }),
-    ))
+    let room = match state.cafe.quick_join_limited(session.id, resolved_ip).await {
+        Ok(room) => room,
+        Err(error) => {
+            log_cafe_request_rejection(&error, action);
+            return Err(error);
+        }
+    };
+    Ok((response_headers, Json(CafeRoomResponse { room })))
 }
 
 async fn join_by_code(
@@ -1928,10 +1940,19 @@ async fn join_by_code(
     headers: HeaderMap,
     Json(payload): Json<JoinRoomRequest>,
 ) -> AppResult<(HeaderMap, Json<CafeRoomResponse>)> {
-    let (_, response_headers) = ensure_cafe_session(&state, &headers).await?;
+    let (_, response_headers) =
+        ensure_cafe_session(&state, &headers, AuthorizationAction::JoinCafeRoom).await?;
     let room = match state.cafe.find_by_invite_code(&payload.invite_code).await {
         Ok(room) => room,
-        Err(CafeJoinError::RoomNotFound) => return Err(AppError::NotFound),
+        Err(CafeJoinError::RoomNotFound) => {
+            authorization_log::rejected(
+                AuthorizationResource::Cafe,
+                AuthorizationAction::JoinCafeRoom,
+                StatusCode::NOT_FOUND,
+                AuthorizationRejectionReason::ResourceUnavailable,
+            );
+            return Err(AppError::NotFound);
+        }
         Err(CafeJoinError::RoomFull) => {
             return Err(AppError::Conflict("cafe room is full".to_owned()));
         }
@@ -1943,7 +1964,8 @@ async fn cafe_progress(
     State(state): State<AppState>,
     headers: HeaderMap,
 ) -> AppResult<(HeaderMap, Json<CafeProgressResponse>)> {
-    let (session, response_headers) = ensure_cafe_session(&state, &headers).await?;
+    let (session, response_headers) =
+        ensure_cafe_session(&state, &headers, AuthorizationAction::ReadCafeProgress).await?;
     let progress = state
         .store
         .get_cafe_progress(OwnerScope::from_session(&session))
@@ -1956,13 +1978,20 @@ async fn equip_cafe_cosmetic(
     headers: HeaderMap,
     Json(payload): Json<EquipCafeCosmeticRequest>,
 ) -> AppResult<(HeaderMap, Json<CafeProgressResponse>)> {
-    let (session, response_headers) = ensure_cafe_session(&state, &headers).await?;
+    let (session, response_headers) =
+        ensure_cafe_session(&state, &headers, AuthorizationAction::EquipCafeCosmetic).await?;
     let cosmetic_id = payload.cosmetic_id.as_deref();
     if cosmetic_id.is_some_and(|id| cafe_cosmetic(id).is_none()) {
         return Err(AppError::BadRequest("unknown cafe cosmetic".to_owned()));
     }
     let owner = OwnerScope::from_session(&session);
     if !state.store.equip_cafe_cosmetic(owner, cosmetic_id).await? {
+        authorization_log::rejected(
+            AuthorizationResource::Cafe,
+            AuthorizationAction::EquipCafeCosmetic,
+            StatusCode::FORBIDDEN,
+            AuthorizationRejectionReason::InsufficientEntitlement,
+        );
         return Err(AppError::Forbidden);
     }
     let progress = state.store.get_cafe_progress(owner).await?;
@@ -1982,11 +2011,23 @@ async fn cafe_socket(
     headers: HeaderMap,
 ) -> AppResult<Response> {
     if !is_allowed_websocket_origin(&headers, &state.config.frontend_origin) {
+        authorization_log::cafe_request_rejected(
+            AuthorizationAction::ConnectCafeSocket,
+            StatusCode::FORBIDDEN,
+            CafeSecurityRejectionReason::OriginRejected,
+        );
         return Err(AppError::Forbidden);
     }
-    let (session, response_headers) = ensure_cafe_session(&state, &headers).await?;
+    let action = AuthorizationAction::ConnectCafeSocket;
+    let (session, response_headers) = ensure_cafe_session(&state, &headers, action).await?;
     let resolved_ip = resolved_cafe_ip(&state, &headers, peer_addr);
-    let reservation = state.cafe.reserve_socket(session.id, resolved_ip)?;
+    let reservation = match state.cafe.reserve_socket(session.id, resolved_ip) {
+        Ok(reservation) => reservation,
+        Err(error) => {
+            log_cafe_request_rejection(&error, action);
+            return Err(error);
+        }
+    };
     let player_name = cafe_display_name(&state, &session, query.nickname.as_deref()).await?;
     let progress = state
         .store
@@ -2388,8 +2429,26 @@ fn push_left_event(room: &mut CafeRoom, player_id: Uuid, player_name: String) {
 async fn ensure_cafe_session(
     state: &AppState,
     headers: &HeaderMap,
+    action: AuthorizationAction,
 ) -> AppResult<(SessionRecord, HeaderMap)> {
-    let session = require_session(state, headers).await?;
+    let Some(session_id) = session_id_from_headers(&state.config, headers) else {
+        authorization_log::rejected(
+            AuthorizationResource::Cafe,
+            action,
+            StatusCode::FORBIDDEN,
+            AuthorizationRejectionReason::MissingSession,
+        );
+        return Err(AppError::Forbidden);
+    };
+    let Some(session) = state.store.get_session(session_id).await? else {
+        authorization_log::rejected(
+            AuthorizationResource::Cafe,
+            action,
+            StatusCode::FORBIDDEN,
+            AuthorizationRejectionReason::InvalidSession,
+        );
+        return Err(AppError::Forbidden);
+    };
     if !matches!(session.kind, UserKind::Guest) {
         state
             .store
@@ -2401,6 +2460,18 @@ async fn ensure_cafe_session(
         response_headers.insert(SET_COOKIE, cookie);
     }
     Ok((session, response_headers))
+}
+
+fn log_cafe_request_rejection(error: &AppError, action: AuthorizationAction) {
+    let AppError::Reasoned { status, reason, .. } = error else {
+        return;
+    };
+    let reason = match reason {
+        ErrorReason::CafeSocketCapacity => CafeSecurityRejectionReason::SocketCapacity,
+        ErrorReason::CafeRoomCreationRate => CafeSecurityRejectionReason::RoomCreationRate,
+        _ => return,
+    };
+    authorization_log::cafe_request_rejected(action, *status, reason);
 }
 
 async fn cafe_display_name(
