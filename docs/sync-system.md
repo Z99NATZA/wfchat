@@ -56,6 +56,13 @@ newer. There is no field-level merge or conflict payload. Commit currently
 returns `conflict_count: 0`; rejected/stale items are reflected only by a lower
 `merged_count`.
 
+Missing or inactive sessions on all three routes emit a bounded authorization
+event. A successful commit emits one bounded audit event, including when an
+idempotent operation returns its persisted result. Sync security events contain
+no owner, session, item, or operation identifiers; payloads or settings values;
+cursors, timestamps, deletion markers, or counts. Successful changes and
+preview requests and input/business rejections do not emit these events.
+
 ## Browser Flow
 
 Local settings and chat snapshots are compacted by `item_id` into a persisted

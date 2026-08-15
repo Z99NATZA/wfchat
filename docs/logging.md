@@ -256,3 +256,25 @@ scores, expiration values, provider values, URLs, credentials, headers, bodies,
 raw paths, database details, and raw errors. Unknown personas, malformed
 follow-up input, successful follow-up requests, business outcomes, database
 failures, and background memory work do not emit these security events.
+
+## Sync Security Events
+
+The Sync changes, preview, and commit routes extend `authorization_rejected`
+with resource `sync`. Changes uses action `read_sync_changes`, preview uses
+`preview_sync_changes`, and commit uses `commit_sync_changes`. Missing or
+inactive sessions retain `403` with `missing_session` or `invalid_session`.
+
+Every successful Sync commit emits `sync_commit_succeeded` at level `INFO` with
+target `wfchat::sync_security`, resource `sync`, action `commit_sync_changes`,
+outcome `success`, and status `200`. An idempotent repeated operation emits the
+same bounded success audit after its persisted result is resolved.
+
+These events use the same request-id correlation, missing-request-id behavior,
+and single-event limit as other authorization events. They exclude client IP;
+session, user, chat, message, item, and operation identifiers; item types,
+payloads, settings values, cursors, limits, timestamps, deletion markers, and
+counts; URLs, credentials, headers, bodies, query values, raw paths, database
+details, and raw errors. Successful changes and preview requests, malformed
+input, a blank operation id, preview conflicts, invalid or stale items,
+database failures, and browser queue behavior do not emit additional Sync
+security events.

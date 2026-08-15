@@ -25,6 +25,7 @@ pub(crate) enum AuthorizationResource {
     Cafe,
     Voice,
     Memory,
+    Sync,
 }
 
 impl AuthorizationResource {
@@ -36,6 +37,7 @@ impl AuthorizationResource {
             Self::Cafe => "cafe",
             Self::Voice => "voice",
             Self::Memory => "memory",
+            Self::Sync => "sync",
         }
     }
 }
@@ -65,6 +67,9 @@ pub(crate) enum AuthorizationAction {
     TranscribeUserSpeech,
     ClaimMemoryFollowUp,
     ResetLearnedContext,
+    ReadSyncChanges,
+    PreviewSyncChanges,
+    CommitSyncChanges,
 }
 
 impl AuthorizationAction {
@@ -93,6 +98,9 @@ impl AuthorizationAction {
             Self::TranscribeUserSpeech => "transcribe_user_speech",
             Self::ClaimMemoryFollowUp => "claim_memory_follow_up",
             Self::ResetLearnedContext => "reset_learned_context",
+            Self::ReadSyncChanges => "read_sync_changes",
+            Self::PreviewSyncChanges => "preview_sync_changes",
+            Self::CommitSyncChanges => "commit_sync_changes",
         }
     }
 }
@@ -354,6 +362,35 @@ pub(crate) fn memory_reset_succeeded() {
     }
 }
 
+pub(crate) fn sync_commit_succeeded() {
+    let context = current_context();
+    if context.emitted.swap(true, Ordering::Relaxed) {
+        return;
+    }
+
+    match context.request_id {
+        Some(request_id) => tracing::info!(
+            target: "wfchat::sync_security",
+            event = "sync_commit_succeeded",
+            request_id = %request_id.value(),
+            resource = "sync",
+            action = "commit_sync_changes",
+            outcome = "success",
+            status = StatusCode::OK.as_u16(),
+            "sync commit succeeded"
+        ),
+        None => tracing::info!(
+            target: "wfchat::sync_security",
+            event = "sync_commit_succeeded",
+            resource = "sync",
+            action = "commit_sync_changes",
+            outcome = "success",
+            status = StatusCode::OK.as_u16(),
+            "sync commit succeeded"
+        ),
+    }
+}
+
 pub(crate) async fn attachment_body_limit_rejection(request: Request, next: Next) -> Response {
     let response = next.run(request).await;
     if response.status() == StatusCode::PAYLOAD_TOO_LARGE {
@@ -441,6 +478,7 @@ mod tests {
                                 | "wfchat::cafe_security"
                                 | "wfchat::voice_security"
                                 | "wfchat::memory_security"
+                                | "wfchat::sync_security"
                         )
                     )
                 })
@@ -492,6 +530,14 @@ mod tests {
                     memory_reset_succeeded();
                     memory_reset_succeeded();
                     StatusCode::NO_CONTENT
+                }),
+            )
+            .route(
+                "/sync-commit",
+                get(|| async {
+                    sync_commit_succeeded();
+                    sync_commit_succeeded();
+                    StatusCode::OK
                 }),
             )
             .route(
@@ -605,6 +651,24 @@ mod tests {
                 AuthorizationAction::ResetLearnedContext,
                 StatusCode::FORBIDDEN,
                 AuthorizationRejectionReason::InvalidSession,
+            ),
+            "sync_read" => (
+                AuthorizationResource::Sync,
+                AuthorizationAction::ReadSyncChanges,
+                StatusCode::FORBIDDEN,
+                AuthorizationRejectionReason::MissingSession,
+            ),
+            "sync_preview" => (
+                AuthorizationResource::Sync,
+                AuthorizationAction::PreviewSyncChanges,
+                StatusCode::FORBIDDEN,
+                AuthorizationRejectionReason::InvalidSession,
+            ),
+            "sync_commit" => (
+                AuthorizationResource::Sync,
+                AuthorizationAction::CommitSyncChanges,
+                StatusCode::FORBIDDEN,
+                AuthorizationRejectionReason::MissingSession,
             ),
             _ => panic!("unknown rejection case"),
         }
@@ -947,6 +1011,27 @@ mod tests {
                 403,
                 "invalid_session",
             ),
+            (
+                "/reject/sync_read",
+                "sync",
+                "read_sync_changes",
+                403,
+                "missing_session",
+            ),
+            (
+                "/reject/sync_preview",
+                "sync",
+                "preview_sync_changes",
+                403,
+                "invalid_session",
+            ),
+            (
+                "/reject/sync_commit",
+                "sync",
+                "commit_sync_changes",
+                403,
+                "missing_session",
+            ),
         ];
 
         for (path, resource, action, expected_status, reason) in cases {
@@ -1115,6 +1200,12 @@ mod tests {
         assert_eq!(events[0]["resource"], "memory");
         assert!(events[0].get("request_id").is_none());
 
+        let (status, events) = capture("/reject/sync_read", None).await;
+        assert_eq!(status, StatusCode::FORBIDDEN);
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0]["resource"], "sync");
+        assert!(events[0].get("request_id").is_none());
+
         let (status, events) = capture("/ok", None).await;
         assert_eq!(status, StatusCode::OK);
         assert!(events.is_empty());
@@ -1154,6 +1245,41 @@ mod tests {
 
         let (status, events) = capture("/memory-reset", None).await;
         assert_eq!(status, StatusCode::NO_CONTENT);
+        assert_eq!(events.len(), 1);
+        assert!(events[0].get("request_id").is_none());
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn emits_bounded_sync_commit_success_once_with_optional_request_id() {
+        let request_id = Uuid::new_v4();
+        let (status, events) = capture("/sync-commit", Some(request_id)).await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(events.len(), 1);
+        let event = &events[0];
+        assert_eq!(event["level"], "INFO");
+        assert_eq!(event["target"], "wfchat::sync_security");
+        assert_eq!(event["event"], "sync_commit_succeeded");
+        assert_eq!(event["request_id"], request_id.to_string());
+        assert_eq!(event["resource"], "sync");
+        assert_eq!(event["action"], "commit_sync_changes");
+        assert_eq!(event["outcome"], "success");
+        assert_eq!(event["status"], 200);
+        assert!(event.get("reason").is_none());
+
+        let encoded = serde_json::to_string(event).expect("event should serialize");
+        for excluded in [
+            "secret-authorization-value",
+            "secret-session-value",
+            "operation_id",
+            "item_id",
+            "merged_count",
+            "conflict_count",
+        ] {
+            assert!(!encoded.contains(excluded));
+        }
+
+        let (status, events) = capture("/sync-commit", None).await;
+        assert_eq!(status, StatusCode::OK);
         assert_eq!(events.len(), 1);
         assert!(events[0].get("request_id").is_none());
     }

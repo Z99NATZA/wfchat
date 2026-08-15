@@ -8,10 +8,13 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::{
+    authorization_log::{
+        self, AuthorizationAction, AuthorizationRejectionReason, AuthorizationResource,
+    },
     error::{AppError, AppResult},
-    session::require_session,
+    session::session_id_from_headers,
     state::AppState,
-    store::{OwnerScope, SyncEntityRecord},
+    store::{OwnerScope, SessionRecord, SyncEntityRecord},
 };
 
 pub fn router() -> Router<AppState> {
@@ -19,6 +22,9 @@ pub fn router() -> Router<AppState> {
         .route("/sync/changes", get(sync_changes))
         .route("/sync/preview", post(sync_preview))
         .route("/sync/commit", post(sync_commit))
+        .layer(axum::middleware::from_fn(
+            authorization_log::request_context,
+        ))
 }
 
 #[derive(Deserialize)]
@@ -79,7 +85,8 @@ async fn sync_changes(
     headers: HeaderMap,
     Query(query): Query<SyncChangesQuery>,
 ) -> AppResult<Json<SyncChangesResponse>> {
-    let session = require_session(&state, &headers).await?;
+    let session =
+        require_sync_session(&state, &headers, AuthorizationAction::ReadSyncChanges).await?;
     let owner = OwnerScope::from_session(&session);
     let cursor = query.cursor.unwrap_or(0);
     let limit = query.limit.unwrap_or(100).clamp(1, 500);
@@ -110,7 +117,8 @@ async fn sync_preview(
     headers: HeaderMap,
     Json(payload): Json<SyncPreviewRequest>,
 ) -> AppResult<Json<SyncPreviewResponse>> {
-    let session = require_session(&state, &headers).await?;
+    let session =
+        require_sync_session(&state, &headers, AuthorizationAction::PreviewSyncChanges).await?;
     let owner = OwnerScope::from_session(&session);
     let mut to_create = 0_u32;
     let mut to_update = 0_u32;
@@ -152,7 +160,8 @@ async fn sync_commit(
         return Err(AppError::BadRequest("operation_id is required".to_owned()));
     }
 
-    let session = require_session(&state, &headers).await?;
+    let session =
+        require_sync_session(&state, &headers, AuthorizationAction::CommitSyncChanges).await?;
     let owner = OwnerScope::from_session(&session);
     let mut merged_count = 0_u32;
     for item in &payload.items {
@@ -187,6 +196,7 @@ async fn sync_commit(
             0,
         )
         .await?;
+    authorization_log::sync_commit_succeeded();
 
     Ok(Json(SyncCommitResponse {
         operation_id: commit.operation_id,
@@ -194,6 +204,32 @@ async fn sync_commit(
         conflict_count: commit.conflict_count,
         committed_at: commit.committed_at,
     }))
+}
+
+async fn require_sync_session(
+    state: &AppState,
+    headers: &HeaderMap,
+    action: AuthorizationAction,
+) -> AppResult<SessionRecord> {
+    let Some(session_id) = session_id_from_headers(&state.config, headers) else {
+        authorization_log::rejected(
+            AuthorizationResource::Sync,
+            action,
+            axum::http::StatusCode::FORBIDDEN,
+            AuthorizationRejectionReason::MissingSession,
+        );
+        return Err(AppError::Forbidden);
+    };
+    let Some(session) = state.store.get_session(session_id).await? else {
+        authorization_log::rejected(
+            AuthorizationResource::Sync,
+            action,
+            axum::http::StatusCode::FORBIDDEN,
+            AuthorizationRejectionReason::InvalidSession,
+        );
+        return Err(AppError::Forbidden);
+    };
+    Ok(session)
 }
 
 fn is_valid_item(item: &SyncItemInput) -> bool {
@@ -221,11 +257,83 @@ fn advance_cursor(cursor: u64, updated_at: u64) -> u64 {
 
 #[cfg(test)]
 mod tests {
+    use std::{
+        io::{self, Write},
+        sync::{Arc, Mutex},
+    };
+
     use super::*;
-    use crate::config::Config;
-    use axum::extract::State;
+    use crate::{app::build_router, config::Config};
+    use axum::{
+        body::Body,
+        extract::State,
+        http::{Request, StatusCode},
+        response::Response,
+    };
     use serde_json::json;
+    use tower::ServiceExt;
+    use tracing_subscriber::fmt::MakeWriter;
     use uuid::Uuid;
+
+    #[derive(Clone, Default)]
+    struct CapturedWriter(Arc<Mutex<Vec<u8>>>);
+
+    impl Write for CapturedWriter {
+        fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+            self.0.lock().expect("captured log lock").extend(bytes);
+            Ok(bytes.len())
+        }
+
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
+
+    impl<'writer> MakeWriter<'writer> for CapturedWriter {
+        type Writer = CapturedWriter;
+
+        fn make_writer(&'writer self) -> Self::Writer {
+            self.clone()
+        }
+    }
+
+    impl CapturedWriter {
+        fn sync_security_events(&self) -> Vec<Value> {
+            let output = self.0.lock().expect("captured log lock").clone();
+            String::from_utf8(output)
+                .expect("captured logs should be UTF-8")
+                .lines()
+                .map(|line| serde_json::from_str(line).expect("captured log should be JSON"))
+                .filter(|event: &Value| {
+                    matches!(
+                        event["target"].as_str(),
+                        Some("wfchat::authorization_security" | "wfchat::sync_security")
+                    ) && event["resource"] == "sync"
+                })
+                .collect()
+        }
+    }
+
+    async fn capture_sync_request(
+        state: AppState,
+        request: Request<Body>,
+    ) -> (Response, Vec<Value>) {
+        let writer = CapturedWriter::default();
+        let subscriber = tracing_subscriber::fmt()
+            .json()
+            .flatten_event(true)
+            .with_current_span(false)
+            .with_span_list(false)
+            .with_writer(writer.clone())
+            .finish();
+        let _guard = tracing::subscriber::set_default(subscriber);
+
+        let response = build_router(state)
+            .oneshot(request)
+            .await
+            .expect("request should run");
+        (response, writer.sync_security_events())
+    }
 
     fn item(updated_at: u64) -> SyncItemInput {
         SyncItemInput {
@@ -344,6 +452,221 @@ mod tests {
         let cursor = advance_cursor(cursor, 110);
         let cursor = advance_cursor(cursor, 105);
         assert_eq!(cursor, 110);
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn sync_routes_log_missing_and_invalid_sessions_without_sensitive_values() {
+        let Some(state) = test_state().await else {
+            return;
+        };
+        let invalid_session_id = Uuid::new_v4();
+        let operation_id = format!("secret-operation-{}", Uuid::new_v4());
+        let cases = [
+            (
+                "GET",
+                "/api/sync/changes?cursor=987654&limit=7",
+                None,
+                "read_sync_changes",
+            ),
+            (
+                "POST",
+                "/api/sync/preview",
+                Some(r#"{"items":[]}"#.to_owned()),
+                "preview_sync_changes",
+            ),
+            (
+                "POST",
+                "/api/sync/commit",
+                Some(format!(r#"{{"operation_id":"{operation_id}","items":[]}}"#)),
+                "commit_sync_changes",
+            ),
+        ];
+
+        for (method, uri, body, action) in cases {
+            for (cookie, reason) in [
+                (None, "missing_session"),
+                (
+                    Some(format!("wfchat_session={invalid_session_id}")),
+                    "invalid_session",
+                ),
+            ] {
+                let mut builder = Request::builder().method(method).uri(uri);
+                if body.is_some() {
+                    builder = builder.header(axum::http::header::CONTENT_TYPE, "application/json");
+                }
+                if let Some(cookie) = cookie {
+                    builder = builder.header(axum::http::header::COOKIE, cookie);
+                }
+                let (response, events) = capture_sync_request(
+                    state.clone(),
+                    builder
+                        .body(body.clone().map(Body::from).unwrap_or_else(Body::empty))
+                        .expect("request should build"),
+                )
+                .await;
+
+                assert_eq!(response.status(), StatusCode::FORBIDDEN);
+                assert_eq!(events.len(), 1);
+                let event = &events[0];
+                assert_eq!(event["level"], "WARN");
+                assert_eq!(event["event"], "authorization_rejected");
+                assert_eq!(event["resource"], "sync");
+                assert_eq!(event["action"], action);
+                assert_eq!(event["outcome"], "rejected");
+                assert_eq!(event["status"], 403);
+                assert_eq!(event["reason"], reason);
+                assert_eq!(
+                    event["request_id"],
+                    response
+                        .headers()
+                        .get("x-request-id")
+                        .expect("request id response header")
+                        .to_str()
+                        .expect("request id should be text")
+                );
+
+                let encoded = serde_json::to_string(event).expect("event should serialize");
+                for excluded in [
+                    invalid_session_id.to_string(),
+                    operation_id.clone(),
+                    "987654".to_owned(),
+                    "limit".to_owned(),
+                ] {
+                    assert!(!encoded.contains(&excluded));
+                }
+            }
+        }
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn sync_commit_logs_new_and_idempotent_success_without_payload_or_counts() {
+        let Some(state) = test_state().await else {
+            return;
+        };
+        let session = state
+            .store
+            .create_guest_session()
+            .await
+            .expect("guest session should create");
+        let operation_id = format!("secret-operation-{}", Uuid::new_v4());
+        let item_id = format!("secret-item-{}", Uuid::new_v4());
+        let secret_url = "https://private.example/sensitive-background.png";
+        let body = format!(
+            r#"{{"operation_id":"{operation_id}","items":[{{"item_id":"{item_id}","item_type":"setting","updated_at":123456,"deleted_at":null,"payload":{{"key":"background","value":"{secret_url}"}}}}]}}"#
+        );
+
+        for _ in 0..2 {
+            let (response, events) = capture_sync_request(
+                state.clone(),
+                Request::post("/api/sync/commit")
+                    .header(axum::http::header::CONTENT_TYPE, "application/json")
+                    .header(
+                        axum::http::header::COOKIE,
+                        format!("wfchat_session={}", session.id),
+                    )
+                    .body(Body::from(body.clone()))
+                    .expect("request should build"),
+            )
+            .await;
+
+            assert_eq!(response.status(), StatusCode::OK);
+            assert_eq!(events.len(), 1);
+            let event = &events[0];
+            assert_eq!(event["level"], "INFO");
+            assert_eq!(event["target"], "wfchat::sync_security");
+            assert_eq!(event["event"], "sync_commit_succeeded");
+            assert_eq!(event["resource"], "sync");
+            assert_eq!(event["action"], "commit_sync_changes");
+            assert_eq!(event["outcome"], "success");
+            assert_eq!(event["status"], 200);
+            assert!(event.get("reason").is_none());
+            assert_eq!(
+                event["request_id"],
+                response
+                    .headers()
+                    .get("x-request-id")
+                    .expect("request id response header")
+                    .to_str()
+                    .expect("request id should be text")
+            );
+
+            let encoded = serde_json::to_string(event).expect("event should serialize");
+            for excluded in [
+                session.id.to_string(),
+                operation_id.clone(),
+                item_id.clone(),
+                secret_url.to_owned(),
+                "item_type".to_owned(),
+                "merged_count".to_owned(),
+                "conflict_count".to_owned(),
+                "123456".to_owned(),
+            ] {
+                assert!(!encoded.contains(&excluded));
+            }
+        }
+
+        state
+            .store
+            .delete_session_for_test(session.id)
+            .await
+            .expect("session cleanup should succeed");
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn sync_successful_read_preview_and_excluded_inputs_emit_no_security_events() {
+        let Some(state) = test_state().await else {
+            return;
+        };
+        let session = state
+            .store
+            .create_guest_session()
+            .await
+            .expect("guest session should create");
+        let cookie = format!("wfchat_session={}", session.id);
+
+        let requests = [
+            Request::get("/api/sync/changes?cursor=0&limit=1")
+                .header(axum::http::header::COOKIE, &cookie)
+                .body(Body::empty())
+                .expect("request should build"),
+            Request::post("/api/sync/preview")
+                .header(axum::http::header::CONTENT_TYPE, "application/json")
+                .header(axum::http::header::COOKIE, &cookie)
+                .body(Body::from(
+                    r#"{"items":[{"item_id":"","item_type":"setting","updated_at":0,"deleted_at":null,"payload":{}}]}"#,
+                ))
+                .expect("request should build"),
+        ];
+        for request in requests {
+            let (response, events) = capture_sync_request(state.clone(), request).await;
+            assert_eq!(response.status(), StatusCode::OK);
+            assert!(events.is_empty());
+        }
+
+        let excluded_requests = [
+            Request::get("/api/sync/changes?cursor=not-a-number")
+                .body(Body::empty())
+                .expect("request should build"),
+            Request::post("/api/sync/preview")
+                .header(axum::http::header::CONTENT_TYPE, "application/json")
+                .body(Body::from("not-json"))
+                .expect("request should build"),
+            Request::post("/api/sync/commit")
+                .header(axum::http::header::CONTENT_TYPE, "application/json")
+                .body(Body::from(r#"{"operation_id":" ","items":[]}"#))
+                .expect("request should build"),
+        ];
+        for request in excluded_requests {
+            let (response, events) = capture_sync_request(state.clone(), request).await;
+            assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+            assert!(events.is_empty());
+        }
+
+        state
+            .store
+            .delete_session_for_test(session.id)
+            .await
+            .expect("session cleanup should succeed");
     }
 
     #[tokio::test]
