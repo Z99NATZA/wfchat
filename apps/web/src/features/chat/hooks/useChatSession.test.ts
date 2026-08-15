@@ -162,6 +162,7 @@ function installMicrophoneMocks() {
 describe("useChatSession streaming sendMessage", () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
+		mocks.getChat.mockReset();
 		audioInstances.length = 0;
 		mocks.location.pathname = "/chat";
 		mocks.location.search = "";

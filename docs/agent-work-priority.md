@@ -6,7 +6,7 @@ Use this file as the first document to read before starting a new scoped agent t
 
 No implementation scope is currently defined. Define the next concrete scope
 here before making repository changes; do not infer follow-up work from the
-completed v0.3.5 release.
+completed v0.3.6 release.
 
 ## Required Read Order
 

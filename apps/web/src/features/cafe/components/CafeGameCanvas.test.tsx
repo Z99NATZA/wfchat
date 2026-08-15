@@ -21,9 +21,11 @@ vi.mock("phaser", () => ({
 			RESIZE: 0,
 			CENTER_BOTH: 0
 		},
-		Game: vi.fn(() => ({
-			destroy: vi.fn()
-		}))
+		Game: vi.fn(function Game() {
+			return {
+				destroy: vi.fn()
+			};
+		})
 	}
 }));
 
