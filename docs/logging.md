@@ -99,3 +99,33 @@ Authorization events do not record the client IP, session or user ids, roles,
 tokens, cookies, headers, bodies, query values, raw paths, database details, or
 raw error text. Unexpected `5xx` failures remain represented by HTTP access and
 existing error logs. Other authorization scopes do not emit this event.
+
+## Chat Authorization Rejection Events
+
+Core Chat routes emit one `authorization_rejected` event for session or chat
+access failures. The event uses level `WARN`, target
+`wfchat::authorization_security`, resource `chat`, and outcome `rejected`.
+Successful requests and business or operational rejections do not emit this
+event.
+
+| Route | Action |
+| --- | --- |
+| `GET /api/personas/{persona_id}/chats` | `list_chats` |
+| `POST /api/personas/{persona_id}/chats` | `create_chat` |
+| `GET /api/chats/{chat_id}` | `read_chat` |
+| `DELETE /api/chats/{chat_id}` | `delete_chat` |
+| `DELETE /api/chats/{chat_id}/messages` | `clear_chat_messages` |
+| `POST /api/chats/{chat_id}/messages` | `send_chat_message` |
+| `POST /api/chats/{chat_id}/messages/stream` | `stream_chat_message` |
+
+Missing credentials and inactive sessions retain status `403` and use
+`missing_session` and `invalid_session`. An active session requesting an
+unavailable chat retains status `404` and uses `resource_unavailable`; this
+does not disclose whether the chat is absent or owned by someone else.
+
+These events follow the same request-id correlation, missing-request-id
+behavior, single-event limit, and sensitive-data boundary as Admin
+authorization events. They additionally exclude persona, chat, message, and
+attachment identifiers and all chat text, prompts, AI output, and provider
+payloads. Attachment, speech, transcription, memory, follow-up, and public Chat
+configuration routes are outside this event scope.

@@ -2,7 +2,9 @@ use axum::{extract::State, http::HeaderMap, middleware, routing::get, Json, Rout
 use serde::Serialize;
 
 use crate::{
-    authorization_log::{self, AuthorizationAction, AuthorizationRejectionReason},
+    authorization_log::{
+        self, AuthorizationAction, AuthorizationRejectionReason, AuthorizationResource,
+    },
     characters,
     error::{AppError, AppResult},
     session::session_id_from_headers,
@@ -65,18 +67,33 @@ async fn require_admin_session(
     action: AuthorizationAction,
 ) -> AppResult<()> {
     let Some(session_id) = session_id_from_headers(&state.config, headers) else {
-        authorization_log::rejected(action, AuthorizationRejectionReason::MissingSession);
+        authorization_log::rejected(
+            AuthorizationResource::Admin,
+            action,
+            axum::http::StatusCode::FORBIDDEN,
+            AuthorizationRejectionReason::MissingSession,
+        );
         return Err(AppError::Forbidden);
     };
     let Some(session) = state.store.get_session(session_id).await? else {
-        authorization_log::rejected(action, AuthorizationRejectionReason::InvalidSession);
+        authorization_log::rejected(
+            AuthorizationResource::Admin,
+            action,
+            axum::http::StatusCode::FORBIDDEN,
+            AuthorizationRejectionReason::InvalidSession,
+        );
         return Err(AppError::Forbidden);
     };
 
     if matches!(session.kind, UserKind::Admin) {
         Ok(())
     } else {
-        authorization_log::rejected(action, AuthorizationRejectionReason::InsufficientRole);
+        authorization_log::rejected(
+            AuthorizationResource::Admin,
+            action,
+            axum::http::StatusCode::FORBIDDEN,
+            AuthorizationRejectionReason::InsufficientRole,
+        );
         Err(AppError::Forbidden)
     }
 }

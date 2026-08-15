@@ -18,9 +18,31 @@ tokio::task_local! {
 }
 
 #[derive(Clone, Copy, Debug)]
+pub(crate) enum AuthorizationResource {
+    Admin,
+    Chat,
+}
+
+impl AuthorizationResource {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Admin => "admin",
+            Self::Chat => "chat",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
 pub(crate) enum AuthorizationAction {
     ReadAiProfiles,
     ReadProviderStatus,
+    ListChats,
+    CreateChat,
+    ReadChat,
+    DeleteChat,
+    ClearChatMessages,
+    SendChatMessage,
+    StreamChatMessage,
 }
 
 impl AuthorizationAction {
@@ -28,6 +50,13 @@ impl AuthorizationAction {
         match self {
             Self::ReadAiProfiles => "read_ai_profiles",
             Self::ReadProviderStatus => "read_provider_status",
+            Self::ListChats => "list_chats",
+            Self::CreateChat => "create_chat",
+            Self::ReadChat => "read_chat",
+            Self::DeleteChat => "delete_chat",
+            Self::ClearChatMessages => "clear_chat_messages",
+            Self::SendChatMessage => "send_chat_message",
+            Self::StreamChatMessage => "stream_chat_message",
         }
     }
 }
@@ -37,6 +66,7 @@ pub(crate) enum AuthorizationRejectionReason {
     MissingSession,
     InvalidSession,
     InsufficientRole,
+    ResourceUnavailable,
 }
 
 impl AuthorizationRejectionReason {
@@ -45,6 +75,7 @@ impl AuthorizationRejectionReason {
             Self::MissingSession => "missing_session",
             Self::InvalidSession => "invalid_session",
             Self::InsufficientRole => "insufficient_role",
+            Self::ResourceUnavailable => "resource_unavailable",
         }
     }
 }
@@ -59,7 +90,12 @@ pub(crate) async fn request_context(request: Request, next: Next) -> Response {
         .await
 }
 
-pub(crate) fn rejected(action: AuthorizationAction, reason: AuthorizationRejectionReason) {
+pub(crate) fn rejected(
+    resource: AuthorizationResource,
+    action: AuthorizationAction,
+    status: StatusCode,
+    reason: AuthorizationRejectionReason,
+) {
     let context = current_context();
     if context.emitted.swap(true, Ordering::Relaxed) {
         return;
@@ -70,20 +106,20 @@ pub(crate) fn rejected(action: AuthorizationAction, reason: AuthorizationRejecti
             target: "wfchat::authorization_security",
             event = "authorization_rejected",
             request_id = %request_id.value(),
-            resource = "admin",
+            resource = resource.as_str(),
             action = action.as_str(),
             outcome = "rejected",
-            status = StatusCode::FORBIDDEN.as_u16(),
+            status = status.as_u16(),
             reason = reason.as_str(),
             "authorization rejected"
         ),
         None => tracing::warn!(
             target: "wfchat::authorization_security",
             event = "authorization_rejected",
-            resource = "admin",
+            resource = resource.as_str(),
             action = action.as_str(),
             outcome = "rejected",
-            status = StatusCode::FORBIDDEN.as_u16(),
+            status = status.as_u16(),
             reason = reason.as_str(),
             "authorization rejected"
         ),
@@ -106,7 +142,9 @@ mod tests {
         sync::{Arc, Mutex},
     };
 
-    use axum::{body::Body, http::Request as HttpRequest, middleware, routing::get, Router};
+    use axum::{
+        body::Body, extract::Path, http::Request as HttpRequest, middleware, routing::get, Router,
+    };
     use serde_json::Value;
     use tower::ServiceExt;
     use tracing_subscriber::fmt::MakeWriter;
@@ -151,41 +189,84 @@ mod tests {
     fn test_app() -> Router {
         Router::new()
             .route(
-                "/profiles/missing",
-                get(|| async {
-                    rejected(
-                        AuthorizationAction::ReadAiProfiles,
-                        AuthorizationRejectionReason::MissingSession,
-                    );
-                    rejected(
-                        AuthorizationAction::ReadAiProfiles,
-                        AuthorizationRejectionReason::MissingSession,
-                    );
-                    StatusCode::FORBIDDEN
+                "/reject/{case}",
+                get(|Path(case): Path<String>| async move {
+                    let (resource, action, status, reason) = rejection_case(&case);
+                    rejected(resource, action, status, reason);
+                    rejected(resource, action, status, reason);
+                    status
                 }),
             )
-            .route(
-                "/provider/invalid",
-                get(|| async {
-                    rejected(
-                        AuthorizationAction::ReadProviderStatus,
-                        AuthorizationRejectionReason::InvalidSession,
-                    );
-                    StatusCode::FORBIDDEN
-                }),
-            )
-            .route(
-                "/profiles/role",
-                get(|| async {
-                    rejected(
-                        AuthorizationAction::ReadAiProfiles,
-                        AuthorizationRejectionReason::InsufficientRole,
-                    );
-                    StatusCode::FORBIDDEN
-                }),
-            )
-            .route("/provider/ok", get(|| async { StatusCode::OK }))
+            .route("/ok", get(|| async { StatusCode::OK }))
+            .route("/business-error", get(|| async { StatusCode::BAD_REQUEST }))
             .layer(middleware::from_fn(request_context))
+    }
+
+    fn rejection_case(
+        case: &str,
+    ) -> (
+        AuthorizationResource,
+        AuthorizationAction,
+        StatusCode,
+        AuthorizationRejectionReason,
+    ) {
+        match case {
+            "admin_profiles" => (
+                AuthorizationResource::Admin,
+                AuthorizationAction::ReadAiProfiles,
+                StatusCode::FORBIDDEN,
+                AuthorizationRejectionReason::MissingSession,
+            ),
+            "admin_provider" => (
+                AuthorizationResource::Admin,
+                AuthorizationAction::ReadProviderStatus,
+                StatusCode::FORBIDDEN,
+                AuthorizationRejectionReason::InvalidSession,
+            ),
+            "admin_role" => (
+                AuthorizationResource::Admin,
+                AuthorizationAction::ReadAiProfiles,
+                StatusCode::FORBIDDEN,
+                AuthorizationRejectionReason::InsufficientRole,
+            ),
+            "list" => chat_case(AuthorizationAction::ListChats, StatusCode::FORBIDDEN),
+            "list_missing" => (
+                AuthorizationResource::Chat,
+                AuthorizationAction::ListChats,
+                StatusCode::FORBIDDEN,
+                AuthorizationRejectionReason::MissingSession,
+            ),
+            "create" => chat_case(AuthorizationAction::CreateChat, StatusCode::FORBIDDEN),
+            "read" => chat_case(AuthorizationAction::ReadChat, StatusCode::NOT_FOUND),
+            "delete" => chat_case(AuthorizationAction::DeleteChat, StatusCode::NOT_FOUND),
+            "clear" => chat_case(
+                AuthorizationAction::ClearChatMessages,
+                StatusCode::NOT_FOUND,
+            ),
+            "send" => chat_case(AuthorizationAction::SendChatMessage, StatusCode::NOT_FOUND),
+            "stream" => chat_case(
+                AuthorizationAction::StreamChatMessage,
+                StatusCode::NOT_FOUND,
+            ),
+            _ => panic!("unknown rejection case"),
+        }
+    }
+
+    fn chat_case(
+        action: AuthorizationAction,
+        status: StatusCode,
+    ) -> (
+        AuthorizationResource,
+        AuthorizationAction,
+        StatusCode,
+        AuthorizationRejectionReason,
+    ) {
+        let reason = if status == StatusCode::NOT_FOUND {
+            AuthorizationRejectionReason::ResourceUnavailable
+        } else {
+            AuthorizationRejectionReason::InvalidSession
+        };
+        (AuthorizationResource::Chat, action, status, reason)
     }
 
     async fn capture(path: &str, request_id: Option<Uuid>) -> (StatusCode, Vec<Value>) {
@@ -220,29 +301,93 @@ mod tests {
     #[tokio::test(flavor = "current_thread")]
     async fn emits_bounded_correlated_rejections_once() {
         let cases = [
-            ("/profiles/missing", "read_ai_profiles", "missing_session"),
             (
-                "/provider/invalid",
+                "/reject/admin_profiles",
+                "admin",
+                "read_ai_profiles",
+                403,
+                "missing_session",
+            ),
+            (
+                "/reject/admin_provider",
+                "admin",
                 "read_provider_status",
+                403,
                 "invalid_session",
             ),
-            ("/profiles/role", "read_ai_profiles", "insufficient_role"),
+            (
+                "/reject/admin_role",
+                "admin",
+                "read_ai_profiles",
+                403,
+                "insufficient_role",
+            ),
+            ("/reject/list", "chat", "list_chats", 403, "invalid_session"),
+            (
+                "/reject/list_missing",
+                "chat",
+                "list_chats",
+                403,
+                "missing_session",
+            ),
+            (
+                "/reject/create",
+                "chat",
+                "create_chat",
+                403,
+                "invalid_session",
+            ),
+            (
+                "/reject/read",
+                "chat",
+                "read_chat",
+                404,
+                "resource_unavailable",
+            ),
+            (
+                "/reject/delete",
+                "chat",
+                "delete_chat",
+                404,
+                "resource_unavailable",
+            ),
+            (
+                "/reject/clear",
+                "chat",
+                "clear_chat_messages",
+                404,
+                "resource_unavailable",
+            ),
+            (
+                "/reject/send",
+                "chat",
+                "send_chat_message",
+                404,
+                "resource_unavailable",
+            ),
+            (
+                "/reject/stream",
+                "chat",
+                "stream_chat_message",
+                404,
+                "resource_unavailable",
+            ),
         ];
 
-        for (path, action, reason) in cases {
+        for (path, resource, action, expected_status, reason) in cases {
             let request_id = Uuid::new_v4();
             let (status, events) = capture(path, Some(request_id)).await;
 
-            assert_eq!(status, StatusCode::FORBIDDEN);
+            assert_eq!(status.as_u16(), expected_status);
             assert_eq!(events.len(), 1);
             let event = &events[0];
             assert_eq!(event["level"], "WARN");
             assert_eq!(event["event"], "authorization_rejected");
             assert_eq!(event["request_id"], request_id.to_string());
-            assert_eq!(event["resource"], "admin");
+            assert_eq!(event["resource"], resource);
             assert_eq!(event["action"], action);
             assert_eq!(event["outcome"], "rejected");
-            assert_eq!(event["status"], 403);
+            assert_eq!(event["status"], expected_status);
             assert_eq!(event["reason"], reason);
 
             let encoded = serde_json::to_string(event).expect("event should serialize");
@@ -253,13 +398,17 @@ mod tests {
 
     #[tokio::test(flavor = "current_thread")]
     async fn omits_missing_request_id_and_does_not_log_success() {
-        let (status, events) = capture("/profiles/missing", None).await;
+        let (status, events) = capture("/reject/admin_profiles", None).await;
         assert_eq!(status, StatusCode::FORBIDDEN);
         assert_eq!(events.len(), 1);
         assert!(events[0].get("request_id").is_none());
 
-        let (status, events) = capture("/provider/ok", None).await;
+        let (status, events) = capture("/ok", None).await;
         assert_eq!(status, StatusCode::OK);
+        assert!(events.is_empty());
+
+        let (status, events) = capture("/business-error", None).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
         assert!(events.is_empty());
     }
 }

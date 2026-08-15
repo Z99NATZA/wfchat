@@ -26,11 +26,14 @@ use crate::{
         validate_image_attachment, write_attachment_bytes, ATTACHMENT_MULTIPART_OVERHEAD_BYTES,
         CHAT_ATTACHMENT_KIND_IMAGE,
     },
+    authorization_log::{
+        self, AuthorizationAction, AuthorizationRejectionReason, AuthorizationResource,
+    },
     characters,
     error::{AppError, AppResult, ErrorReason, LIMIT_RETRY_AFTER_SECONDS},
     memory::retrieve_memory_context_observed,
     rate_limit::{RateLimitFamily, RateLimitIdentity},
-    session::require_session,
+    session::{require_session, session_id_from_headers},
     state::AppState,
     store::{
         AppendChatMessagesOutcome, ChatAttachmentRecord, ChatGenerationQuotaAdmission,
@@ -117,7 +120,11 @@ pub fn router(config: &crate::config::Config) -> Router<AppState> {
         router
     };
 
-    router.layer(axum::middleware::from_fn(private_no_store))
+    router
+        .layer(axum::middleware::from_fn(private_no_store))
+        .layer(axum::middleware::from_fn(
+            authorization_log::request_context,
+        ))
 }
 
 pub(crate) async fn private_no_store(
@@ -134,6 +141,42 @@ pub(crate) async fn private_no_store(
 
 async fn require_chat_session(state: &AppState, headers: &HeaderMap) -> AppResult<SessionRecord> {
     require_session(state, headers).await
+}
+
+async fn require_core_chat_session(
+    state: &AppState,
+    headers: &HeaderMap,
+    action: AuthorizationAction,
+) -> AppResult<SessionRecord> {
+    let Some(session_id) = session_id_from_headers(&state.config, headers) else {
+        authorization_log::rejected(
+            AuthorizationResource::Chat,
+            action,
+            axum::http::StatusCode::FORBIDDEN,
+            AuthorizationRejectionReason::MissingSession,
+        );
+        return Err(AppError::Forbidden);
+    };
+    let Some(session) = state.store.get_session(session_id).await? else {
+        authorization_log::rejected(
+            AuthorizationResource::Chat,
+            action,
+            axum::http::StatusCode::FORBIDDEN,
+            AuthorizationRejectionReason::InvalidSession,
+        );
+        return Err(AppError::Forbidden);
+    };
+    Ok(session)
+}
+
+fn unavailable_chat(action: AuthorizationAction) -> AppError {
+    authorization_log::rejected(
+        AuthorizationResource::Chat,
+        action,
+        axum::http::StatusCode::NOT_FOUND,
+        AuthorizationRejectionReason::ResourceUnavailable,
+    );
+    AppError::NotFound
 }
 
 #[derive(Serialize)]
@@ -261,7 +304,8 @@ async fn list_chats_for_persona(
     headers: HeaderMap,
     Path(persona_id): Path<String>,
 ) -> AppResult<Json<Vec<ChatSummaryResponse>>> {
-    let session = require_chat_session(&state, &headers).await?;
+    let session =
+        require_core_chat_session(&state, &headers, AuthorizationAction::ListChats).await?;
     let owner = OwnerScope::from_session(&session);
     let chats = state.store.list_chat_summaries(owner, &persona_id).await?;
 
@@ -295,7 +339,8 @@ async fn create_chat_for_persona(
     Path(persona_id): Path<String>,
     request: Option<Json<CreateChatRequest>>,
 ) -> AppResult<Json<ChatResponse>> {
-    let session = require_chat_session(&state, &headers).await?;
+    let session =
+        require_core_chat_session(&state, &headers, AuthorizationAction::CreateChat).await?;
     enforce_sensitive_rate_limit(
         &state,
         &headers,
@@ -342,13 +387,14 @@ async fn get_chat(
     headers: HeaderMap,
     Path(chat_id): Path<Uuid>,
 ) -> AppResult<Json<ChatResponse>> {
-    let session = require_chat_session(&state, &headers).await?;
+    let session =
+        require_core_chat_session(&state, &headers, AuthorizationAction::ReadChat).await?;
     let owner = OwnerScope::from_session(&session);
     let chat = state
         .store
         .get_chat(owner, chat_id)
         .await?
-        .ok_or(AppError::NotFound)?;
+        .ok_or_else(|| unavailable_chat(AuthorizationAction::ReadChat))?;
 
     Ok(Json(chat_response(chat)))
 }
@@ -357,14 +403,15 @@ async fn clear_messages(
     headers: HeaderMap,
     Path(chat_id): Path<Uuid>,
 ) -> AppResult<Json<ChatResponse>> {
-    let session = require_chat_session(&state, &headers).await?;
+    let session =
+        require_core_chat_session(&state, &headers, AuthorizationAction::ClearChatMessages).await?;
     let _clear_permit = state.generation_limiter.try_acquire_clear(chat_id)?;
     let owner = OwnerScope::from_session(&session);
     let chat = state
         .store
         .clear_chat_messages(owner, chat_id)
         .await?
-        .ok_or(AppError::NotFound)?;
+        .ok_or_else(|| unavailable_chat(AuthorizationAction::ClearChatMessages))?;
 
     Ok(Json(chat_response(chat)))
 }
@@ -374,11 +421,12 @@ async fn delete_chat(
     headers: HeaderMap,
     Path(chat_id): Path<Uuid>,
 ) -> AppResult<Json<serde_json::Value>> {
-    let session = require_chat_session(&state, &headers).await?;
+    let session =
+        require_core_chat_session(&state, &headers, AuthorizationAction::DeleteChat).await?;
     let owner = OwnerScope::from_session(&session);
 
     if !state.store.delete_chat(owner, chat_id).await? {
-        return Err(AppError::NotFound);
+        return Err(unavailable_chat(AuthorizationAction::DeleteChat));
     }
 
     Ok(Json(json!({ "ok": true })))
@@ -515,11 +563,13 @@ mod tests {
     use reqwest::Client;
     use serde_json::Value;
     use std::{
-        io::Cursor,
+        io::{self, Cursor, Write},
+        sync::{Arc, Mutex},
         time::{SystemTime, UNIX_EPOCH},
     };
     use tokio_stream::StreamExt;
     use tower::ServiceExt;
+    use tracing_subscriber::fmt::MakeWriter;
 
     use crate::{
         app::build_router,
@@ -543,6 +593,172 @@ mod tests {
             .create_chat(owner, "aiko".to_owned(), "aiko_default".to_owned())
             .await
             .expect("chat should create")
+    }
+
+    #[derive(Clone, Default)]
+    struct CapturedAuthorizationWriter(Arc<Mutex<Vec<u8>>>);
+
+    impl Write for CapturedAuthorizationWriter {
+        fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+            self.0.lock().expect("captured log lock").extend(bytes);
+            Ok(bytes.len())
+        }
+
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
+
+    impl<'writer> MakeWriter<'writer> for CapturedAuthorizationWriter {
+        type Writer = CapturedAuthorizationWriter;
+
+        fn make_writer(&'writer self) -> Self::Writer {
+            self.clone()
+        }
+    }
+
+    async fn capture_authorization_request(
+        state: AppState,
+        request: Request<Body>,
+    ) -> (axum::response::Response, Vec<Value>) {
+        let writer = CapturedAuthorizationWriter::default();
+        let subscriber = tracing_subscriber::fmt()
+            .json()
+            .flatten_event(true)
+            .with_current_span(false)
+            .with_span_list(false)
+            .with_writer(writer.clone())
+            .finish();
+        let _guard = tracing::subscriber::set_default(subscriber);
+
+        let response = build_router(state)
+            .oneshot(request)
+            .await
+            .expect("request should run");
+        let output = writer.0.lock().expect("captured log lock").clone();
+        let events = String::from_utf8(output)
+            .expect("captured logs should be UTF-8")
+            .lines()
+            .map(|line| serde_json::from_str(line).expect("captured log should be JSON"))
+            .filter(|event: &Value| event["target"] == "wfchat::authorization_security")
+            .collect();
+        (response, events)
+    }
+
+    fn core_chat_request(method: &str, uri: String, session_id: Option<Uuid>) -> Request<Body> {
+        let mut request = Request::builder()
+            .method(method)
+            .uri(uri)
+            .header(header::CONTENT_TYPE, "application/json");
+        if let Some(session_id) = session_id {
+            request = request.header("x-wfchat-session", session_id.to_string());
+        }
+        request
+            .body(Body::from(
+                r#"{"content":"secret chat text","timezone":"Asia/Bangkok"}"#,
+            ))
+            .expect("request should build")
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn core_chat_authorization_routes_emit_correlated_bounded_events() {
+        let Some(state) = test_state().await else {
+            return;
+        };
+        let chat_id = Uuid::new_v4();
+        let missing_session_cases = [
+            ("GET", "/api/personas/aiko/chats".to_owned(), "list_chats"),
+            ("POST", "/api/personas/aiko/chats".to_owned(), "create_chat"),
+            ("GET", format!("/api/chats/{chat_id}"), "read_chat"),
+            ("DELETE", format!("/api/chats/{chat_id}"), "delete_chat"),
+            (
+                "DELETE",
+                format!("/api/chats/{chat_id}/messages"),
+                "clear_chat_messages",
+            ),
+            (
+                "POST",
+                format!("/api/chats/{chat_id}/messages"),
+                "send_chat_message",
+            ),
+            (
+                "POST",
+                format!("/api/chats/{chat_id}/messages/stream"),
+                "stream_chat_message",
+            ),
+        ];
+
+        for (method, uri, action) in missing_session_cases {
+            let (response, events) =
+                capture_authorization_request(state.clone(), core_chat_request(method, uri, None))
+                    .await;
+            assert_eq!(response.status(), StatusCode::FORBIDDEN);
+            assert_eq!(events.len(), 1);
+            let event = &events[0];
+            assert_eq!(event["resource"], "chat");
+            assert_eq!(event["action"], action);
+            assert_eq!(event["status"], 403);
+            assert_eq!(event["reason"], "missing_session");
+            assert_eq!(
+                event["request_id"],
+                response.headers()["x-request-id"].to_str().unwrap()
+            );
+            let encoded = serde_json::to_string(event).unwrap();
+            assert!(!encoded.contains(&chat_id.to_string()));
+            assert!(!encoded.contains("secret chat text"));
+        }
+
+        let invalid_session_id = Uuid::new_v4();
+        let (response, events) = capture_authorization_request(
+            state.clone(),
+            core_chat_request(
+                "GET",
+                "/api/personas/aiko/chats".to_owned(),
+                Some(invalid_session_id),
+            ),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+        assert_eq!(events[0]["reason"], "invalid_session");
+        assert!(!serde_json::to_string(&events[0])
+            .unwrap()
+            .contains(&invalid_session_id.to_string()));
+
+        let session = create_test_session(&state).await;
+        let unavailable_chat_id = Uuid::new_v4();
+        let (response, events) = capture_authorization_request(
+            state.clone(),
+            core_chat_request(
+                "GET",
+                format!("/api/chats/{unavailable_chat_id}"),
+                Some(session.id),
+            ),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0]["reason"], "resource_unavailable");
+        assert!(!serde_json::to_string(&events[0])
+            .unwrap()
+            .contains(&unavailable_chat_id.to_string()));
+
+        let (response, events) = capture_authorization_request(
+            state.clone(),
+            core_chat_request(
+                "POST",
+                "/api/personas/unknown/chats".to_owned(),
+                Some(session.id),
+            ),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        assert!(events.is_empty());
+
+        state
+            .store
+            .delete_session_for_test(session.id)
+            .await
+            .unwrap();
     }
 
     #[test]
@@ -2892,10 +3108,10 @@ mod tests {
             timezone: None,
         };
 
-        let non_streaming = prepare_chat_completion_context(&state, owner, chat.id, &payload)
+        let non_streaming = prepare_chat_completion_context(&state, owner, chat.id, &payload, None)
             .await
             .expect("non-streaming context should prepare");
-        let streaming = prepare_chat_completion_context(&state, owner, chat.id, &payload)
+        let streaming = prepare_chat_completion_context(&state, owner, chat.id, &payload, None)
             .await
             .expect("streaming context should prepare");
         assert_eq!(

@@ -12,7 +12,8 @@ pub(super) async fn send_message(
     payload: Result<Json<SendMessageRequest>, axum::extract::rejection::JsonRejection>,
 ) -> AppResult<Json<SendMessageResponse>> {
     let payload = send_message_payload(payload)?;
-    let session = require_chat_session(&state, &headers).await?;
+    let action = AuthorizationAction::SendChatMessage;
+    let session = require_core_chat_session(&state, &headers, action).await?;
     enforce_sensitive_rate_limit(
         &state,
         &headers,
@@ -22,8 +23,10 @@ pub(super) async fn send_message(
     )?;
     let _generation_permit = state.generation_limiter.try_acquire(session.id, chat_id)?;
     let owner = OwnerScope::from_session(&session);
-    let context = prepare_chat_completion_context(&state, owner, chat_id, &payload).await?;
-    let quota_reservation = reserve_daily_generation_quota(&state, &session, chat_id).await?;
+    let context =
+        prepare_chat_completion_context(&state, owner, chat_id, &payload, Some(action)).await?;
+    let quota_reservation =
+        reserve_daily_generation_quota(&state, &session, chat_id, action).await?;
     let completed =
         complete_and_append_chat_message(state, owner, chat_id, context, quota_reservation).await?;
 
@@ -42,7 +45,8 @@ pub(super) async fn stream_message(
     payload: Result<Json<SendMessageRequest>, axum::extract::rejection::JsonRejection>,
 ) -> AppResult<impl IntoResponse> {
     let payload = send_message_payload(payload)?;
-    let session = require_chat_session(&state, &headers).await?;
+    let action = AuthorizationAction::StreamChatMessage;
+    let session = require_core_chat_session(&state, &headers, action).await?;
     enforce_sensitive_rate_limit(
         &state,
         &headers,
@@ -52,8 +56,10 @@ pub(super) async fn stream_message(
     )?;
     let generation_permit = state.generation_limiter.try_acquire(session.id, chat_id)?;
     let owner = OwnerScope::from_session(&session);
-    let context = prepare_chat_completion_context(&state, owner, chat_id, &payload).await?;
-    let quota_reservation = reserve_daily_generation_quota(&state, &session, chat_id).await?;
+    let context =
+        prepare_chat_completion_context(&state, owner, chat_id, &payload, Some(action)).await?;
+    let quota_reservation =
+        reserve_daily_generation_quota(&state, &session, chat_id, action).await?;
     let persona_id = context.chat.character_id.clone();
     let (sender, receiver) = mpsc::channel::<Result<Event, Infallible>>(16);
 
@@ -134,6 +140,7 @@ async fn reserve_daily_generation_quota(
     state: &AppState,
     session: &SessionRecord,
     chat_id: Uuid,
+    action: AuthorizationAction,
 ) -> AppResult<Option<ChatGenerationQuotaReservation>> {
     if !state.config.is_production() {
         return Ok(None);
@@ -156,7 +163,15 @@ async fn reserve_daily_generation_quota(
         .await?;
     match admission {
         ChatGenerationQuotaAdmission::Admitted(reservation) => Ok(Some(reservation)),
-        ChatGenerationQuotaAdmission::SessionUnavailable => Err(AppError::Forbidden),
+        ChatGenerationQuotaAdmission::SessionUnavailable => {
+            authorization_log::rejected(
+                AuthorizationResource::Chat,
+                action,
+                axum::http::StatusCode::FORBIDDEN,
+                AuthorizationRejectionReason::InvalidSession,
+            );
+            Err(AppError::Forbidden)
+        }
         ChatGenerationQuotaAdmission::OwnerLimitReached {
             retry_after_seconds,
         } => Err(AppError::reasoned(
@@ -247,6 +262,7 @@ pub(super) async fn prepare_chat_completion_context(
     owner: OwnerScope,
     chat_id: Uuid,
     payload: &SendMessageRequest,
+    authorization_action: Option<AuthorizationAction>,
 ) -> AppResult<ChatCompletionContext> {
     let content = payload.content.trim();
     let user_timezone = normalize_user_timezone(payload.timezone.as_deref());
@@ -266,11 +282,13 @@ pub(super) async fn prepare_chat_completion_context(
         return Err(AppError::NotFound);
     }
 
-    let chat = state
-        .store
-        .get_chat(owner, chat_id)
-        .await?
-        .ok_or(AppError::NotFound)?;
+    let chat = state.store.get_chat(owner, chat_id).await?;
+    let Some(chat) = chat else {
+        return Err(match authorization_action {
+            Some(action) => unavailable_chat(action),
+            None => AppError::NotFound,
+        });
+    };
     ensure_chat_has_turn_capacity(&chat, content, chat_storage_limits(state))?;
     let attachments =
         validate_message_attachment_requests(state, owner, &payload.attachments).await?;
@@ -350,7 +368,7 @@ pub(crate) async fn prepare_text_context_for_memory_evaluation(
         timezone: None,
     };
     Ok(
-        prepare_chat_completion_context(state, owner, chat_id, &payload)
+        prepare_chat_completion_context(state, owner, chat_id, &payload, None)
             .await?
             .ai_messages,
     )
