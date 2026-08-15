@@ -48,3 +48,31 @@ is never an authentication or authorization credential.
 Authentication lifecycle events and Chat, Cafe, attachment, sync, memory, and
 admin business events are outside the HTTP access event. Existing subsystem
 events continue through the same JSON stdout subscriber.
+
+## Authentication Lifecycle Events
+
+Authentication state changes emit a second event correlated to the HTTP access
+event by `request_id`. These events use target `wfchat::auth_security` and do
+not repeat the client IP. If the request-id extension is unexpectedly absent,
+the event is still emitted without that field and the response is unchanged.
+
+| Event | Level | Outcome | When emitted |
+| --- | --- | --- | --- |
+| `auth_guest_created` | `INFO` | `success` | Explicit Guest creation or `/api/auth/me` creating a Guest |
+| `auth_login_succeeded` | `INFO` | `success` | Google login and session rotation complete |
+| `auth_login_rejected` | `WARN` | `rejected` | A Google login request is rejected with `4xx` |
+| `auth_logout_succeeded` | `INFO` | `success` | Registered or admin session rotation to Guest completes |
+| `auth_logout_rejected` | `WARN` | `rejected` | Logout lacks a session or cannot rotate it |
+
+Every event has `event`, `outcome`, and `status`; `request_id` is present when
+the access middleware supplied it. Successful events omit `reason`. Rejected
+events use only `invalid_request`, `missing_session`, `invalid_session`,
+`wrong_session_kind`, `provider_rejected`, `not_configured`, or
+`state_transition_rejected`. Unexpected `5xx` results remain represented by
+the HTTP access and existing error logs rather than an authentication lifecycle
+event.
+
+Guest admission rejection and `/api/auth/me` resolving an existing session do
+not emit authentication events. Authentication events exclude session and user
+ids, Google identity/profile values, tokens, cookies, headers, bodies, provider
+payloads, and raw error text.

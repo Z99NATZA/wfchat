@@ -1,6 +1,7 @@
 use axum::{
     extract::{ConnectInfo, State},
-    http::{header::SET_COOKIE, HeaderMap, HeaderValue},
+    http::{header::SET_COOKIE, HeaderMap, HeaderValue, StatusCode},
+    middleware,
     routing::{get, patch, post},
     Json, Router,
 };
@@ -10,6 +11,7 @@ use std::net::SocketAddr;
 use uuid::Uuid;
 
 use crate::{
+    auth_log::{self, AuthRejectionReason},
     error::{AppError, AppResult},
     rate_limit::{RateLimitFamily, RateLimitIdentity},
     session::{require_session, session_cookie, session_id_from_headers},
@@ -24,6 +26,7 @@ pub fn router() -> Router<AppState> {
         .route("/auth/logout", post(logout))
         .route("/auth/me", get(current_user))
         .route("/auth/profile", patch(update_profile))
+        .layer(middleware::from_fn(auth_log::request_context))
 }
 
 #[derive(Deserialize, Serialize)]
@@ -56,6 +59,8 @@ async fn create_guest_session(
         headers.insert(SET_COOKIE, value);
     }
 
+    auth_log::guest_created(StatusCode::OK);
+
     Ok((
         headers,
         Json(SessionResponse {
@@ -78,11 +83,11 @@ async fn current_user(
         Some(session_id) => state.store.get_session(session_id).await?,
         None => None,
     };
-    let session = match session {
-        Some(session) => session,
+    let (session, created_guest) = match session {
+        Some(session) => (session, false),
         None => {
             enforce_guest_rate_limit(&state, &headers, peer_addr)?;
-            state.store.create_guest_session().await?
+            (state.store.create_guest_session().await?, true)
         }
     };
     if !matches!(&session.kind, UserKind::Guest) {
@@ -98,10 +103,14 @@ async fn current_user(
         response_headers.insert(SET_COOKIE, value);
     }
 
-    Ok((
+    let response = (
         response_headers,
         Json(session_response(&state, &session).await?),
-    ))
+    );
+    if created_guest {
+        auth_log::guest_created(StatusCode::OK);
+    }
+    Ok(response)
 }
 
 fn enforce_guest_rate_limit(
@@ -141,19 +150,41 @@ async fn login_with_google(
     Json(payload): Json<GoogleLoginRequest>,
 ) -> AppResult<(HeaderMap, Json<SessionResponse>)> {
     if payload.id_token.trim().is_empty() {
+        auth_log::login_rejected(StatusCode::BAD_REQUEST, AuthRejectionReason::InvalidRequest);
         return Err(AppError::BadRequest("id_token is required".to_owned()));
     }
-    let client_id = state
-        .config
-        .google_client_id
-        .as_deref()
-        .ok_or_else(|| AppError::BadRequest("GOOGLE_CLIENT_ID is not configured".to_owned()))?;
-    let session = require_session(&state, &headers).await?;
+    let Some(client_id) = state.config.google_client_id.as_deref() else {
+        auth_log::login_rejected(StatusCode::BAD_REQUEST, AuthRejectionReason::NotConfigured);
+        return Err(AppError::BadRequest(
+            "GOOGLE_CLIENT_ID is not configured".to_owned(),
+        ));
+    };
+    let Some(session_id) = session_id_from_headers(&state.config, &headers) else {
+        auth_log::login_rejected(StatusCode::FORBIDDEN, AuthRejectionReason::MissingSession);
+        return Err(AppError::Forbidden);
+    };
+    let Some(session) = state.store.get_session(session_id).await? else {
+        auth_log::login_rejected(StatusCode::FORBIDDEN, AuthRejectionReason::InvalidSession);
+        return Err(AppError::Forbidden);
+    };
     if !matches!(session.kind, UserKind::Guest) {
+        auth_log::login_rejected(StatusCode::FORBIDDEN, AuthRejectionReason::WrongSessionKind);
         return Err(AppError::Forbidden);
     }
 
-    let token_info = verify_google_id_token(&state, &payload.id_token, client_id).await?;
+    let token_info = match verify_google_id_token(&state, &payload.id_token, client_id).await {
+        Ok(token_info) => token_info,
+        Err(error @ (AppError::BadRequest(_) | AppError::Forbidden)) => {
+            let status = if matches!(error, AppError::Forbidden) {
+                StatusCode::FORBIDDEN
+            } else {
+                StatusCode::BAD_REQUEST
+            };
+            auth_log::login_rejected(status, AuthRejectionReason::ProviderRejected);
+            return Err(error);
+        }
+        Err(error) => return Err(error),
+    };
     promote_with_google_token_info(state, headers, token_info).await
 }
 
@@ -163,7 +194,10 @@ async fn promote_with_google_token_info(
     token_info: GoogleTokenInfoResponse,
 ) -> AppResult<(HeaderMap, Json<SessionResponse>)> {
     let promoted_user_id = Uuid::new_v5(&Uuid::NAMESPACE_OID, token_info.sub.as_bytes());
-    let session_id = session_id_from_headers(&state.config, &headers).ok_or(AppError::Forbidden)?;
+    let Some(session_id) = session_id_from_headers(&state.config, &headers) else {
+        auth_log::login_rejected(StatusCode::FORBIDDEN, AuthRejectionReason::MissingSession);
+        return Err(AppError::Forbidden);
+    };
     let rotated = state
         .store
         .promote_guest_session_with_google(
@@ -174,8 +208,14 @@ async fn promote_with_google_token_info(
             token_info.name,
             token_info.picture,
         )
-        .await?
-        .ok_or_else(|| AppError::BadRequest("could not promote session".to_owned()))?;
+        .await?;
+    let Some(rotated) = rotated else {
+        auth_log::login_rejected(
+            StatusCode::BAD_REQUEST,
+            AuthRejectionReason::StateTransitionRejected,
+        );
+        return Err(AppError::BadRequest("could not promote session".to_owned()));
+    };
 
     let mut response_headers = HeaderMap::new();
     let cookie = session_cookie(&state.config, rotated.id);
@@ -183,29 +223,40 @@ async fn promote_with_google_token_info(
         response_headers.insert(SET_COOKIE, value);
     }
 
-    Ok((
+    let response = (
         response_headers,
         Json(session_response(&state, &rotated).await?),
-    ))
+    );
+    auth_log::login_succeeded(StatusCode::OK);
+    Ok(response)
 }
 
 async fn logout(
     State(state): State<AppState>,
     headers: HeaderMap,
 ) -> AppResult<(HeaderMap, Json<SessionResponse>)> {
-    let session_id = session_id_from_headers(&state.config, &headers).ok_or(AppError::Forbidden)?;
+    let Some(session_id) = session_id_from_headers(&state.config, &headers) else {
+        auth_log::logout_rejected(StatusCode::FORBIDDEN, AuthRejectionReason::MissingSession);
+        return Err(AppError::Forbidden);
+    };
     let guest = state
         .store
         .logout_registered_session_to_guest(session_id)
-        .await?
-        .ok_or(AppError::Forbidden)?;
+        .await?;
+    let Some(guest) = guest else {
+        auth_log::logout_rejected(
+            StatusCode::FORBIDDEN,
+            AuthRejectionReason::StateTransitionRejected,
+        );
+        return Err(AppError::Forbidden);
+    };
     let mut headers = HeaderMap::new();
     let cookie = session_cookie(&state.config, guest.id);
     if let Ok(value) = HeaderValue::from_str(&cookie) {
         headers.insert(SET_COOKIE, value);
     }
 
-    Ok((
+    let response = (
         headers,
         Json(SessionResponse {
             user_id: guest.user_id,
@@ -215,7 +266,9 @@ async fn logout(
             name: None,
             profile: None,
         }),
-    ))
+    );
+    auth_log::logout_succeeded(StatusCode::OK);
+    Ok(response)
 }
 
 #[derive(Deserialize)]

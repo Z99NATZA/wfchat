@@ -36,6 +36,11 @@ impl RequestId {
     pub(crate) fn value(self) -> Uuid {
         self.0
     }
+
+    #[cfg(test)]
+    pub(crate) fn from_uuid(value: Uuid) -> Self {
+        Self(value)
+    }
 }
 
 pub(crate) async fn log_http_request(
