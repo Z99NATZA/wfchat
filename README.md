@@ -19,8 +19,6 @@ Database: PostgreSQL
 
 ## Development And LAN Quickstart
 
-The checked-in Docker Compose configuration is for private development and LAN
-use. It uses HTTP and is not a production-ready deployment.
 
 ```bash
 # clone the repository
@@ -70,24 +68,10 @@ docker compose down
 # default URLs
 # web: http://localhost:5173
 # api: http://localhost:8080
+# lan: http://<LAN_IP>:5173
 ```
 
-Open `http://<LAN_IP>:5173` from the other device. The Docker web container
-proxies `/api` to the API container internally, so the browser only needs to
-reach port `5173`.
-
-The Rust API writes structured JSON to standard output and Docker captures that
-stream. See [Logging](docs/logging.md) for the event and sensitive-data
-contracts.
-
-Assistant text-to-speech and push-to-talk microphone transcription are separate
-capabilities. See [Chat voice](docs/chat-voice.md) for provider behavior and
-the required capability flags.
-
 ## Production Boundaries
-
-The checked-in Compose stack is for private development and LAN use, not public
-production. A separately managed production deployment starts with:
 
 ```text
 APP_ENV=production
