@@ -70,25 +70,7 @@ docker compose down
 # api: http://localhost:8080
 # lan: http://<LAN_IP>:5173
 ```
-
-## Production Boundaries
-
-```text
-APP_ENV=production
-FRONTEND_ORIGINS=https://chat.example.com
-ALLOW_SESSION_HEADER=false
-TRUST_PROXY_HEADERS=false
-TRUSTED_PROXY_CIDRS=
-CHAT_IMAGE_UPLOAD_ENABLED=false
-CHAT_TRANSCRIPTION_ENABLED=false
-CHAT_TTS_ENABLED=false
-```
-
-`FRONTEND_ORIGINS` falls back to `FRONTEND_ORIGIN` when unset. Enable trusted
-proxy headers only with explicit `TRUSTED_PROXY_CIDRS`, and keep media
-capabilities disabled until their deployment boundaries are ready. See
-[the API environment example](apps/api/.env.example) and
-[Docker deployment boundaries](docs/docker.md) for exact limits and requirements.
+The included Docker Compose setup is intended for development. See [Docker](docs/docker.md)
 
 ## License
 
