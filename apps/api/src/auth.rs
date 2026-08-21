@@ -837,6 +837,11 @@ mod tests {
                 "/api/cafe/cosmetics/equipped",
                 r#"{"cosmetic_id":null}"#,
             ),
+            (
+                "POST",
+                "/api/cafe/avatars/equipped",
+                r#"{"avatar_id":"boy"}"#,
+            ),
         ];
 
         for (method, uri, body) in requests {

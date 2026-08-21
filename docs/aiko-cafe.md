@@ -14,17 +14,21 @@ chat and is available at `/cafe` without login.
   disclosed on demand on narrow viewports and remains visible at wider sizes so
   public rooms appear sooner without removing any entry path. At desktop widths,
   the name and room-code rows share aligned input and action columns.
-- The entry panel ends with a borderless cosmetics footer separated by one top
-  divider. It shows the current look and Cafe Stars without adding another card,
-  and opens an on-demand wardrobe as a bottom sheet on narrow viewports or a
-  compact dialog on wider viewports. Inside, unlocked tiles equip on click, the
-  current tile is selected, locked tiles show their star goal, and Reset look
-  removes the equipped cosmetic. Fine-pointer desktop users can drag the dialog
-  by its header; touch and narrow layouts cannot.
+- The entry panel ends with a borderless wardrobe footer separated by one top
+  divider. It shows the current character, cosmetic, and Cafe Stars without
+  adding another card, and opens an on-demand wardrobe as a bottom sheet on
+  narrow viewports or a compact dialog on wider viewports. Inside, either player
+  avatar is always available, unlocked cosmetic tiles equip on click, the current
+  selections are marked, locked cosmetics show their star goal, and Reset look
+  removes only the equipped cosmetic. Fine-pointer desktop users can drag the
+  dialog by its header; touch and narrow layouts cannot.
 - A room supports 1-8 players. Join selects the busiest public room with
   space; a created room also gets a six-character invite code.
 - The optional cafe name applies only to the current browser tab. If empty, the
   game uses the account display name or a stable `Guest XXXX` name.
+- In-world player names use compact plain white text without a background,
+  outline, or shadow. The label stays above the character and leaves additional
+  clearance when a cosmetic is equipped.
 - Desktop controls are WASD or arrow keys plus `E`. Mobile uses on-screen
   movement and interaction controls. The movement pad and action button share
   one bottom control zone, while reactions open vertically above the action
@@ -57,14 +61,21 @@ chat and is available at `/cafe` without login.
   round. Each connected player can receive one Cafe Star per completed round.
 - Cafe Stars unlock the server-owned Sakura Pin, Mint Scarf, Tea Hat, and Cafe
   Apron at 0, 3, 5, and 8 stars. Equipped items are visible to all room members
-  in real time.
+  in real time. Cosmetic placement follows the selected avatar and direction;
+  the Sakura Pin remains on the hair without covering the face.
 - The camera follows the local player with a dead zone and keeps the room at a
   readable scale. Small viewports show part of the room instead of shrinking
   the whole map.
-- Player avatars use a local four-direction chibi sprite sheet. The existing
-  authoritative `direction` and `moving` fields select idle and walk frames;
-  player colors remain visible through the foot ring while cosmetics and
-  carried items render as separate overlays.
+- Player avatars use one of two local four-direction chibi sprite v2 sheets.
+  Each direction has neutral idle, blink, and four walk frames. The existing
+  authoritative `direction` and `moving` fields select idle and walk states;
+  blink timing is client-only and staggered per player. Every pose remains
+  inside its 256-pixel atlas cell so direction changes do not clip the avatar.
+  Player colors remain visible through the foot ring while cosmetics and
+  carried items render as separate overlays. Sprite rendering does not change
+  the server-owned foot position or collision radius. Each immutable sheet URL
+  and Phaser texture key include that file's SHA-256 fingerprint, so replacing
+  sheet content cannot leave browsers or the game runtime on a stale texture.
 
 The Phaser game loads only on `/cafe/rooms/:roomId`, so it is excluded from the
 initial chat bundle. Active rooms and gameplay simulation live in the API
@@ -87,29 +98,31 @@ The temporary cafe name is stored in `sessionStorage`, limited to 24 Unicode
 characters, and sent again on reconnect. It is never written to the account
 profile or database.
 
-Cafe Stars, unlocks, equipped cosmetics, and reward records are stored in
-PostgreSQL. Guest progress moves to the registered owner after login. Rewards
-are idempotent per room, round, and session. Cafe progress does not use browser
-local storage or the generic sync queue; only first-visit guide dismissal is a
-local UI preference.
+Cafe Stars, unlocks, equipped avatar and cosmetic, and reward records are stored
+in PostgreSQL. Guest progress moves to the registered owner after login.
+Rewards are idempotent per room, round, and session. Cafe progress does not use
+browser local storage or the generic sync queue; only first-visit guide
+dismissal is a local UI preference.
 
 ## API And Realtime Contract
 
-Lobby, progress, and cosmetic operations use `/api/cafe/*`:
+Lobby, progress, and loadout operations use `/api/cafe/*`:
 
 - `GET /api/cafe/progress` returns stars, catalog thresholds, unlocks, and the
-  equipped item.
+  available avatar catalog and equipped loadout.
 - `POST /api/cafe/cosmetics/equipped` accepts an unlocked catalog id or `null`.
+- `POST /api/cafe/avatars/equipped` accepts a server-catalogued avatar id.
 - `GET /api/cafe/rooms/:roomId/ws?nickname=<temporary-name>` opens the
   authenticated room WebSocket. `nickname` is optional.
 
 WebSocket client messages are `move`, `interact`, `emote`, `chat`, and `ping`.
 Server messages are `welcome`, `snapshot`, `movement`, localized-key `dialogue`,
 `emote`, `chat_event`, `chat_error`, targeted `reward`, `pong`, and `error`.
-Welcome messages include the complete room, the versioned authoritative map,
-and up to 30 recent room chat and presence events. Subsequent snapshots include
-complete dynamic room, player, activity, and Aiko state without repeating the
-map; clients retain the map established by `welcome`. Movement messages contain
+Welcome messages include the complete room, each player's equipped avatar, the
+versioned authoritative map, and up to 30 recent room chat and presence events.
+Subsequent snapshots include complete dynamic room, player, activity, and Aiko
+state without repeating the map; clients retain the map established by
+`welcome`. Movement messages contain
 the latest position, direction, and moving state for every connected player.
 Welcome, snapshot, and movement messages share a monotonic room revision, and
 clients ignore equal or older state. Room snapshots identify `tea_delivery`,

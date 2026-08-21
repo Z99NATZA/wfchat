@@ -1117,6 +1117,12 @@ mod tests {
                 r#"{"cosmetic_id":"mint_scarf"}"#,
                 "equip_cafe_cosmetic",
             ),
+            (
+                "POST",
+                "/api/cafe/avatars/equipped".to_owned(),
+                r#"{"avatar_id":"girl"}"#,
+                "equip_cafe_avatar",
+            ),
         ];
 
         for (method, uri, body, action) in missing_session_cases {

@@ -1,6 +1,11 @@
 import { isAxiosError } from "axios";
 import { apiBaseUrl, apiClient } from "@/services/apiClient";
-import type { CafeActivityId, CafeProgress, CafeRoomSummary } from "@/features/cafe/types";
+import type {
+	CafeActivityId,
+	CafeAvatarId,
+	CafeProgress,
+	CafeRoomSummary
+} from "@/features/cafe/types";
 
 export type CafeLobbyErrorCode = "room_not_found" | "room_full" | "unavailable";
 
@@ -26,7 +31,9 @@ type ApiProgressResponse = {
 	cafe_stars: number;
 	unlocked_cosmetics: string[];
 	equipped_cosmetic: string | null;
+	equipped_avatar: CafeAvatarId;
 	cosmetics: Array<{ id: string; required_stars: number; unlocked: boolean }>;
+	avatars: Array<{ id: CafeAvatarId }>;
 };
 
 export async function listCafeRooms(): Promise<CafeRoomSummary[]> {
@@ -61,6 +68,13 @@ export async function getCafeProgress(): Promise<CafeProgress> {
 export async function equipCafeCosmetic(cosmeticId: string | null): Promise<CafeProgress> {
 	const response = await apiClient.post<ApiProgressResponse>("/api/cafe/cosmetics/equipped", {
 		cosmetic_id: cosmeticId
+	});
+	return toCafeProgress(response.data);
+}
+
+export async function equipCafeAvatar(avatarId: CafeAvatarId): Promise<CafeProgress> {
+	const response = await apiClient.post<ApiProgressResponse>("/api/cafe/avatars/equipped", {
+		avatar_id: avatarId
 	});
 	return toCafeProgress(response.data);
 }
@@ -108,10 +122,12 @@ function toCafeProgress(progress: ApiProgressResponse): CafeProgress {
 		cafeStars: progress.cafe_stars,
 		unlockedCosmetics: progress.unlocked_cosmetics,
 		equippedCosmetic: progress.equipped_cosmetic,
+		equippedAvatar: progress.equipped_avatar,
 		cosmetics: progress.cosmetics.map((cosmetic) => ({
 			id: cosmetic.id,
 			requiredStars: cosmetic.required_stars,
 			unlocked: cosmetic.unlocked
-		}))
+		})),
+		avatars: progress.avatars
 	};
 }

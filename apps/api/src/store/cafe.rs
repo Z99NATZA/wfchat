@@ -1,6 +1,7 @@
 use super::*;
 use std::collections::BTreeSet;
 
+use crate::cafe_avatars::{cafe_avatar, DEFAULT_CAFE_AVATAR_ID};
 use crate::cafe_cosmetics::{cafe_cosmetic, unlocked_cafe_cosmetic_ids};
 
 impl ChatStore {
@@ -42,8 +43,8 @@ impl ChatStore {
         .execute(self.db.as_ref())
         .await?;
 
-        let equipped_cosmetic = sqlx::query_scalar::<_, Option<String>>(
-            "select equipped_cosmetic
+        let loadout = sqlx::query(
+            "select equipped_cosmetic, equipped_avatar
              from cafe_cosmetic_loadouts
              where (($2::uuid is not null and owner_user_id = $2)
                     or ($2::uuid is null and owner_session_id = $1))
@@ -53,16 +54,24 @@ impl ChatStore {
         .bind(owner.session_id)
         .bind(owner.user_id)
         .fetch_optional(self.db.as_ref())
-        .await?
-        .flatten()
-        .filter(|cosmetic_id| {
-            cafe_cosmetic(cosmetic_id).is_some() && unlocked_cosmetics.contains(cosmetic_id)
-        });
+        .await?;
+        let equipped_cosmetic = loadout
+            .as_ref()
+            .and_then(|row| row.get::<Option<String>, _>("equipped_cosmetic"))
+            .filter(|cosmetic_id| {
+                cafe_cosmetic(cosmetic_id).is_some() && unlocked_cosmetics.contains(cosmetic_id)
+            });
+        let equipped_avatar = loadout
+            .as_ref()
+            .map(|row| row.get::<String, _>("equipped_avatar"))
+            .filter(|avatar_id| cafe_avatar(avatar_id).is_some())
+            .unwrap_or_else(|| DEFAULT_CAFE_AVATAR_ID.to_owned());
 
         Ok(CafeProgressRecord {
             cafe_stars,
             unlocked_cosmetics,
             equipped_cosmetic,
+            equipped_avatar,
         })
     }
 
@@ -81,17 +90,45 @@ impl ChatStore {
 
         sqlx::query(
             "insert into cafe_cosmetic_loadouts (
-                owner_session_id, owner_user_id, equipped_cosmetic, updated_at
-             ) values ($1, $2, $3, now())
+                owner_session_id, owner_user_id, equipped_cosmetic, equipped_avatar, updated_at
+             ) values ($1, $2, $3, $4, now())
              on conflict (owner_session_id)
              do update set
                 owner_user_id = coalesce(excluded.owner_user_id, cafe_cosmetic_loadouts.owner_user_id),
                 equipped_cosmetic = excluded.equipped_cosmetic,
+                equipped_avatar = excluded.equipped_avatar,
                 updated_at = now()",
         )
         .bind(owner.session_id)
         .bind(owner.user_id)
         .bind(cosmetic_id)
+        .bind(&progress.equipped_avatar)
+        .execute(self.db.as_ref())
+        .await?;
+
+        Ok(true)
+    }
+
+    pub async fn equip_cafe_avatar(&self, owner: OwnerScope, avatar_id: &str) -> StoreResult<bool> {
+        if cafe_avatar(avatar_id).is_none() {
+            return Ok(false);
+        }
+        let progress = self.get_cafe_progress(owner).await?;
+        sqlx::query(
+            "insert into cafe_cosmetic_loadouts (
+                owner_session_id, owner_user_id, equipped_cosmetic, equipped_avatar, updated_at
+             ) values ($1, $2, $3, $4, now())
+             on conflict (owner_session_id)
+             do update set
+                owner_user_id = coalesce(excluded.owner_user_id, cafe_cosmetic_loadouts.owner_user_id),
+                equipped_cosmetic = excluded.equipped_cosmetic,
+                equipped_avatar = excluded.equipped_avatar,
+                updated_at = now()",
+        )
+        .bind(owner.session_id)
+        .bind(owner.user_id)
+        .bind(progress.equipped_cosmetic.as_deref())
+        .bind(avatar_id)
         .execute(self.db.as_ref())
         .await?;
 
@@ -218,6 +255,10 @@ mod tests {
             .equip_cafe_cosmetic(guest_owner, Some("mint_scarf"))
             .await
             .expect("unlocked cosmetic should equip"));
+        assert!(store
+            .equip_cafe_avatar(guest_owner, "girl")
+            .await
+            .expect("catalogued avatar should equip"));
 
         let user_id = Uuid::new_v4();
         let registered = store
@@ -239,6 +280,7 @@ mod tests {
             account_progress.equipped_cosmetic.as_deref(),
             Some("mint_scarf")
         );
+        assert_eq!(account_progress.equipped_avatar, "girl");
 
         let second_guest = store
             .create_guest_session()
@@ -263,6 +305,7 @@ mod tests {
             shared_progress.equipped_cosmetic.as_deref(),
             Some("mint_scarf")
         );
+        assert_eq!(shared_progress.equipped_avatar, "girl");
 
         let shared_progress = store
             .add_cafe_stars(second_owner, 2)
@@ -277,6 +320,14 @@ mod tests {
             .equip_cafe_cosmetic(second_owner, Some("tea_hat"))
             .await
             .expect("new account cosmetic should equip"));
+        assert_eq!(
+            store
+                .get_cafe_progress(second_owner)
+                .await
+                .expect("cosmetic changes should preserve the avatar")
+                .equipped_avatar,
+            "girl"
+        );
         let shared_progress = store
             .add_cafe_stars(second_owner, 3)
             .await

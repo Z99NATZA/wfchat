@@ -7,3 +7,8 @@
 - Room-level reward idempotency is too broad for a replayable activity. The
   idempotency key must include the smallest repeatable reward unit, which is the
   activity round in Cafe.
+- Replacing a Cafe sprite behind the same year-long immutable URL and Phaser
+  texture key leaves clients rendering the old sheet, so repeated frame offset
+  or crop changes cannot correct what users see. Put the image content hash in
+  both the request URL and texture key, and verify the declared fingerprint
+  against the file bytes.

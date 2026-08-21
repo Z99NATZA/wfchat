@@ -39,6 +39,7 @@ use crate::{
         self, AuthorizationAction, AuthorizationRejectionReason, AuthorizationResource,
         CafeSecurityRejectionReason,
     },
+    cafe_avatars::{cafe_avatar, CafeAvatarDefinition, CAFE_AVATARS},
     cafe_cosmetics::{cafe_cosmetic, CafeCosmeticDefinition, CAFE_COSMETICS},
     config::CafeSecurityConfig,
     error::{AppError, AppResult, ErrorReason},
@@ -129,6 +130,7 @@ pub fn router() -> Router<AppState> {
         .route("/cafe/rooms/{room_id}/ws", get(cafe_socket))
         .route("/cafe/progress", get(cafe_progress))
         .route("/cafe/cosmetics/equipped", post(equip_cafe_cosmetic))
+        .route("/cafe/avatars/equipped", post(equip_cafe_avatar))
         .layer(axum::middleware::from_fn(
             authorization_log::request_context,
         ))
@@ -239,6 +241,7 @@ struct CafePlayer {
     carried_rush_ingredient_ids: Vec<String>,
     carried_order_id: Option<String>,
     equipped_cosmetic: Option<String>,
+    avatar_id: String,
     last_sequence: u64,
     last_move_at: Instant,
     connection_id: Uuid,
@@ -363,6 +366,7 @@ struct CafePlayerState {
     carried_tea: u8,
     carried_order_id: Option<String>,
     equipped_cosmetic: Option<String>,
+    avatar_id: String,
 }
 
 #[derive(Clone, Serialize)]
@@ -485,7 +489,9 @@ struct CafeProgressResponse {
     cafe_stars: u32,
     unlocked_cosmetics: Vec<String>,
     equipped_cosmetic: Option<String>,
+    equipped_avatar: String,
     cosmetics: Vec<CafeCosmeticResponse>,
+    avatars: Vec<CafeAvatarResponse>,
 }
 
 #[derive(Serialize)]
@@ -495,9 +501,19 @@ struct CafeCosmeticResponse {
     unlocked: bool,
 }
 
+#[derive(Serialize)]
+struct CafeAvatarResponse {
+    id: &'static str,
+}
+
 #[derive(Deserialize)]
 struct EquipCafeCosmeticRequest {
     cosmetic_id: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct EquipCafeAvatarRequest {
+    avatar_id: String,
 }
 
 #[derive(Deserialize)]
@@ -1637,6 +1653,22 @@ impl CafeHub {
             }
         }
     }
+
+    async fn equip_avatar(&self, owner: OwnerScope, avatar_id: String) {
+        let mut rooms = self.rooms.lock().await;
+        for room in rooms.values_mut() {
+            let mut changed = false;
+            for player in room.players.values_mut() {
+                if same_owner(player.owner, owner) && player.avatar_id != avatar_id {
+                    player.avatar_id.clone_from(&avatar_id);
+                    changed = true;
+                }
+            }
+            if changed {
+                broadcast_room_snapshot(room);
+            }
+        }
+    }
 }
 
 async fn run_cafe_rush_timer(cafe: CafeHub, room_id: Uuid, round_number: u32) {
@@ -2002,6 +2034,32 @@ async fn equip_cafe_cosmetic(
     Ok((response_headers, Json(progress_response(progress))))
 }
 
+async fn equip_cafe_avatar(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(payload): Json<EquipCafeAvatarRequest>,
+) -> AppResult<(HeaderMap, Json<CafeProgressResponse>)> {
+    let (session, response_headers) =
+        ensure_cafe_session(&state, &headers, AuthorizationAction::EquipCafeAvatar).await?;
+    if cafe_avatar(&payload.avatar_id).is_none() {
+        return Err(AppError::BadRequest("unknown cafe avatar".to_owned()));
+    }
+    let owner = OwnerScope::from_session(&session);
+    if !state
+        .store
+        .equip_cafe_avatar(owner, &payload.avatar_id)
+        .await?
+    {
+        return Err(AppError::BadRequest("unknown cafe avatar".to_owned()));
+    }
+    let progress = state.store.get_cafe_progress(owner).await?;
+    state
+        .cafe
+        .equip_avatar(owner, progress.equipped_avatar.clone())
+        .await;
+    Ok((response_headers, Json(progress_response(progress))))
+}
+
 async fn cafe_socket(
     ws: WebSocketUpgrade,
     Path(room_id): Path<Uuid>,
@@ -2033,7 +2091,12 @@ async fn cafe_socket(
         .store
         .get_cafe_progress(OwnerScope::from_session(&session))
         .await?;
-    let player = new_player(&session, player_name, progress.equipped_cosmetic);
+    let player = new_player_with_avatar(
+        &session,
+        player_name,
+        progress.equipped_cosmetic,
+        progress.equipped_avatar,
+    );
     let initial_stars = progress.cafe_stars;
     let max_bytes = state.config.security.cafe.websocket_max_bytes;
     let mut response = ws
@@ -2511,10 +2574,11 @@ fn normalize_cafe_player_name(value: &str) -> Option<String> {
     (length > 0 && length <= MAX_CAFE_PLAYER_NAME_CHARS).then_some(normalized)
 }
 
-fn new_player(
+fn new_player_with_avatar(
     session: &SessionRecord,
     name: String,
     equipped_cosmetic: Option<String>,
+    avatar_id: String,
 ) -> CafePlayer {
     let color_index = session.user_id.as_bytes()[0] as usize % PLAYER_COLORS.len();
     let spawn = CAFE_MAP_LAYOUT.player_spawn;
@@ -2531,10 +2595,25 @@ fn new_player(
         carried_rush_ingredient_ids: Vec::new(),
         carried_order_id: None,
         equipped_cosmetic,
+        avatar_id,
         last_sequence: 0,
         last_move_at: Instant::now(),
         connection_id: Uuid::new_v4(),
     }
+}
+
+#[cfg(test)]
+fn new_player(
+    session: &SessionRecord,
+    name: String,
+    equipped_cosmetic: Option<String>,
+) -> CafePlayer {
+    new_player_with_avatar(
+        session,
+        name,
+        equipped_cosmetic,
+        crate::cafe_avatars::DEFAULT_CAFE_AVATAR_ID.to_owned(),
+    )
 }
 
 const PLAYER_COLORS: &[&str] = &["#f48fb1", "#80cbc4", "#90caf9", "#ffcc80", "#ce93d8"];
@@ -2665,6 +2744,7 @@ fn player_states(room: &CafeRoom) -> Vec<CafePlayerState> {
             carried_tea: player.carried_tea,
             carried_order_id: player.carried_order_id.clone(),
             equipped_cosmetic: player.equipped_cosmetic.clone(),
+            avatar_id: player.avatar_id.clone(),
         })
         .collect::<Vec<_>>();
     players.sort_by_key(|player| player.id);
@@ -2728,8 +2808,14 @@ fn progress_response(progress: crate::store::CafeProgressRecord) -> CafeProgress
         cafe_stars: progress.cafe_stars,
         unlocked_cosmetics: progress.unlocked_cosmetics,
         equipped_cosmetic: progress.equipped_cosmetic,
+        equipped_avatar: progress.equipped_avatar,
         cosmetics,
+        avatars: CAFE_AVATARS.iter().copied().map(avatar_response).collect(),
     }
+}
+
+fn avatar_response(definition: CafeAvatarDefinition) -> CafeAvatarResponse {
+    CafeAvatarResponse { id: definition.id }
 }
 
 fn cosmetic_response(
@@ -3368,7 +3454,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn equipped_cosmetics_are_broadcast_to_connected_room_members() {
+    async fn equipped_loadout_is_broadcast_to_connected_room_members() {
         let hub = CafeHub::default();
         let room = hub.create_room(false).await;
         let session = guest();
@@ -3408,6 +3494,17 @@ mod tests {
             room.players[0].equipped_cosmetic.as_deref(),
             Some("sakura_pin")
         );
+
+        hub.equip_avatar(owner, "girl".to_owned()).await;
+        let updated = join
+            .receiver
+            .recv()
+            .await
+            .expect("avatar snapshot should send");
+        let CafeServerMessage::Snapshot { room, .. } = updated else {
+            panic!("expected a room snapshot");
+        };
+        assert_eq!(room.players[0].avatar_id, "girl");
     }
 
     #[tokio::test]

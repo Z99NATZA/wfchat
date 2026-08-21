@@ -10,20 +10,21 @@ import type {
 import { calculateCafeCameraFraming } from "@/features/cafe/engine/cafeCamera";
 import { resolveCafeMovement } from "@/features/cafe/engine/cafeCollision";
 import { CafeMovementCadence } from "@/features/cafe/engine/cafeMovementCadence";
+import { CAFE_PLAYER_LABEL_STYLE, cafePlayerLabelY } from "@/features/cafe/engine/cafePlayerLabel";
+import { cafeSakuraPinLayout } from "@/features/cafe/engine/cafePlayerCosmetics";
 import {
 	CAFE_PLAYER_DISPLAY_SIZE,
 	CAFE_PLAYER_FRAME_SIZE,
 	CAFE_PLAYER_ORIGIN_Y,
-	CAFE_PLAYER_SPRITE_KEY,
-	CAFE_PLAYER_SPRITE_URL,
+	CAFE_PLAYER_SPRITES,
 	cafePlayerFrame,
-	cafePlayerFrameOffsetX
+	cafePlayerFrameTransform,
+	cafePlayerIdlePhase,
+	cafePlayerTextureKey
 } from "@/features/cafe/engine/cafePlayerAnimation";
 
 const PLAYER_SPEED = 210;
-const PLAYER_LABEL_Y = -101;
-const PLAYER_LABEL_WITH_COSMETIC_Y = -119;
-const PLAYER_EMOTE_Y = -132;
+const PLAYER_EMOTE_Y = -154;
 const CAMERA_FOLLOW_LERP = 0.1;
 
 type CafeSceneCallbacks = {
@@ -53,6 +54,8 @@ type PlayerVisual = {
 	carriedTea: number;
 	carriedOrderId: string | null;
 	equippedCosmetic: string | null;
+	avatarId: CafePlayerState["avatarId"];
+	idlePhaseMs: number;
 };
 
 type DirectionInput = { x: number; y: number };
@@ -89,10 +92,12 @@ export class CafeScene extends Phaser.Scene {
 	preload() {
 		this.load.image("cafe-room", "/images/aiko-cafe/cafe-room-v1.png");
 		this.load.image("aiko-host", "/images/aiko-cafe/aiko-host-v1.png");
-		this.load.spritesheet(CAFE_PLAYER_SPRITE_KEY, CAFE_PLAYER_SPRITE_URL, {
-			frameWidth: CAFE_PLAYER_FRAME_SIZE,
-			frameHeight: CAFE_PLAYER_FRAME_SIZE
-		});
+		for (const sprite of Object.values(CAFE_PLAYER_SPRITES)) {
+			this.load.spritesheet(sprite.key, sprite.url, {
+				frameWidth: CAFE_PLAYER_FRAME_SIZE,
+				frameHeight: CAFE_PLAYER_FRAME_SIZE
+			});
+		}
 	}
 
 	create() {
@@ -274,7 +279,7 @@ export class CafeScene extends Phaser.Scene {
 		const bubbleText =
 			event.text.length > 90 ? `${event.text.slice(0, 89).trimEnd()}…` : event.text;
 		const bubble = this.add
-			.text(0, playerLabelY(visual.equippedCosmetic) - 14, bubbleText, {
+			.text(0, cafePlayerLabelY(visual.equippedCosmetic) - 14, bubbleText, {
 				fontFamily: "sans-serif",
 				fontSize: "14px",
 				fontStyle: "bold",
@@ -320,7 +325,11 @@ export class CafeScene extends Phaser.Scene {
 			visual.carriedTea = player.carriedTea;
 			visual.carriedOrderId = player.carriedOrderId;
 			visual.equippedCosmetic = player.equippedCosmetic;
-			visual.label.setText(player.name).setY(playerLabelY(player.equippedCosmetic));
+			if (visual.avatarId !== player.avatarId) {
+				visual.avatarId = player.avatarId;
+				visual.sprite.setTexture(cafePlayerTextureKey(player.avatarId));
+			}
+			visual.label.setText(player.name).setY(cafePlayerLabelY(player.equippedCosmetic));
 			if (player.id === this.selfPlayerId) {
 				this.localVisual = visual;
 				if (!this.hasLocalPosition) {
@@ -394,19 +403,22 @@ export class CafeScene extends Phaser.Scene {
 	private createPlayer(player: CafePlayerState): PlayerVisual {
 		const accent = this.add.graphics();
 		const sprite = this.add
-			.sprite(0, 0, CAFE_PLAYER_SPRITE_KEY, cafePlayerFrame(player.direction, false, 0))
+			.sprite(
+				0,
+				0,
+				cafePlayerTextureKey(player.avatarId),
+				cafePlayerFrame(player.direction, false, 0)
+			)
 			.setOrigin(0.5, CAFE_PLAYER_ORIGIN_Y)
 			.setDisplaySize(CAFE_PLAYER_DISPLAY_SIZE, CAFE_PLAYER_DISPLAY_SIZE);
 		const accessories = this.add.graphics();
 		const label = this.add
-			.text(0, playerLabelY(player.equippedCosmetic), player.name, {
-				fontFamily: "sans-serif",
-				fontSize: "14px",
-				fontStyle: "bold",
-				color: "#2f2430",
-				backgroundColor: "rgba(255,255,255,0.86)",
-				padding: { x: 7, y: 3 }
-			})
+			.text(
+				0,
+				cafePlayerLabelY(player.equippedCosmetic),
+				player.name,
+				CAFE_PLAYER_LABEL_STYLE
+			)
 			.setOrigin(0.5);
 		const container = this.add.container(player.x, player.y, [
 			accent,
@@ -428,7 +440,9 @@ export class CafeScene extends Phaser.Scene {
 			color: player.color,
 			carriedTea: player.carriedTea,
 			carriedOrderId: player.carriedOrderId,
-			equippedCosmetic: player.equippedCosmetic
+			equippedCosmetic: player.equippedCosmetic,
+			avatarId: player.avatarId,
+			idlePhaseMs: cafePlayerIdlePhase(player.id)
 		};
 		this.playerVisuals.set(player.id, visual);
 		redrawPlayer(visual, 0);
@@ -705,13 +719,19 @@ function directionFromVector(x: number, y: number, fallback: CafeDirection): Caf
 
 function redrawPlayer(visual: PlayerVisual, time: number) {
 	const color = Phaser.Display.Color.HexStringToColor(visual.color).color;
-	const frame = cafePlayerFrame(visual.direction, visual.moving, time);
-	visual.sprite.setFrame(frame).setX(cafePlayerFrameOffsetX(frame));
+	const frame = cafePlayerFrame(visual.direction, visual.moving, time, visual.idlePhaseMs);
+	const transform = cafePlayerFrameTransform(visual.avatarId, frame);
+	visual.sprite.setFrame(frame).setPosition(transform.x, transform.y).setScale(transform.scale);
 	visual.accent.clear();
 	visual.accent.fillStyle(0x3b2b34, 0.18).fillEllipse(0, 3, 52, 16);
 	visual.accent.lineStyle(4, color, 0.9).strokeEllipse(0, 3, 47, 13);
 	visual.accessories.clear();
-	drawEquippedCosmetic(visual.accessories, visual.equippedCosmetic, visual.direction);
+	drawEquippedCosmetic(
+		visual.accessories,
+		visual.equippedCosmetic,
+		visual.avatarId,
+		visual.direction
+	);
 	if (visual.carriedOrderId) {
 		drawCarriedDrink(visual.accessories);
 	} else if (visual.carriedTea > 0) {
@@ -722,18 +742,21 @@ function redrawPlayer(visual: PlayerVisual, time: number) {
 function drawEquippedCosmetic(
 	graphics: Phaser.GameObjects.Graphics,
 	cosmeticId: string | null,
+	avatarId: CafePlayerState["avatarId"],
 	direction: CafeDirection
 ) {
 	switch (cosmeticId) {
-		case "sakura_pin":
+		case "sakura_pin": {
+			const { x, y, petalRadius, centerRadius } = cafeSakuraPinLayout(avatarId, direction);
 			graphics.fillStyle(0xff9eb5, 1);
 			graphics
-				.fillCircle(cosmeticSide(direction) + 5, -78, 5)
-				.fillCircle(cosmeticSide(direction), -83, 5)
-				.fillCircle(cosmeticSide(direction) - 5, -78, 5)
-				.fillCircle(cosmeticSide(direction), -73, 5);
-			graphics.fillStyle(0xffe4a8, 1).fillCircle(cosmeticSide(direction), -78, 3.5);
+				.fillCircle(x + petalRadius, y, petalRadius)
+				.fillCircle(x, y - petalRadius, petalRadius)
+				.fillCircle(x - petalRadius, y, petalRadius)
+				.fillCircle(x, y + petalRadius, petalRadius);
+			graphics.fillStyle(0xffe4a8, 1).fillCircle(x, y, centerRadius);
 			break;
+		}
 		case "mint_scarf":
 			drawMintScarf(graphics, direction);
 			break;
@@ -859,16 +882,6 @@ function drawCarriedTea(graphics: Phaser.GameObjects.Graphics, count: number) {
 		graphics.fillEllipse(x, y, 14, 23);
 		graphics.lineStyle(2, 0x315c39, 1).lineBetween(x, y + 10, x, y - 10);
 	}
-}
-
-function cosmeticSide(direction: CafeDirection) {
-	if (direction === "left") return -19;
-	if (direction === "right") return 19;
-	return 17;
-}
-
-function playerLabelY(cosmeticId: string | null) {
-	return cosmeticId ? PLAYER_LABEL_WITH_COSMETIC_Y : PLAYER_LABEL_Y;
 }
 
 function emoteGlyph(emote: string) {

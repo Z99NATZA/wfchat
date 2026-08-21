@@ -4,6 +4,7 @@ import { readCafePlayerName } from "@/features/cafe/services/cafePlayerName";
 import type {
 	CafeChatErrorCode,
 	CafeChatEvent,
+	CafeAvatarId,
 	CafeConnectionState,
 	CafeDialogue,
 	CafeDirection,
@@ -36,6 +37,7 @@ type ApiPlayer = {
 	carried_tea: number;
 	carried_order_id: string | null;
 	equipped_cosmetic: string | null;
+	avatar_id?: CafeAvatarId;
 };
 
 type ApiRoom = {
@@ -467,7 +469,8 @@ function toDynamicRoomState(room: ApiDynamicRoom, mapLayout: CafeMapLayout): Caf
 			moving: player.moving,
 			carriedTea: player.carried_tea,
 			carriedOrderId: player.carried_order_id,
-			equippedCosmetic: player.equipped_cosmetic
+			equippedCosmetic: player.equipped_cosmetic,
+			avatarId: player.avatar_id ?? "boy"
 		})),
 		activity: {
 			id: room.activity.id,

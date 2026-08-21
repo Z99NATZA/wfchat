@@ -62,6 +62,7 @@ pub(crate) enum AuthorizationAction {
     JoinCafeRoom,
     ReadCafeProgress,
     EquipCafeCosmetic,
+    EquipCafeAvatar,
     ConnectCafeSocket,
     SynthesizeMessageSpeech,
     TranscribeUserSpeech,
@@ -93,6 +94,7 @@ impl AuthorizationAction {
             Self::JoinCafeRoom => "join_cafe_room",
             Self::ReadCafeProgress => "read_cafe_progress",
             Self::EquipCafeCosmetic => "equip_cafe_cosmetic",
+            Self::EquipCafeAvatar => "equip_cafe_avatar",
             Self::ConnectCafeSocket => "connect_cafe_socket",
             Self::SynthesizeMessageSpeech => "synthesize_message_speech",
             Self::TranscribeUserSpeech => "transcribe_user_speech",
@@ -627,6 +629,7 @@ mod tests {
                 StatusCode::FORBIDDEN,
                 AuthorizationRejectionReason::InsufficientEntitlement,
             ),
+            "cafe_equip_avatar" => cafe_authorization_case(AuthorizationAction::EquipCafeAvatar),
             "cafe_socket" => cafe_authorization_case(AuthorizationAction::ConnectCafeSocket),
             "voice_speech" => (
                 AuthorizationResource::Voice,

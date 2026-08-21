@@ -80,7 +80,8 @@ const room = {
 			moving: false,
 			carried_tea: 0,
 			carried_order_id: null,
-			equipped_cosmetic: "sakura_pin"
+			equipped_cosmetic: "sakura_pin",
+			avatar_id: "girl"
 		}
 	],
 	activity: {
@@ -148,6 +149,7 @@ describe("useCafeRoom", () => {
 		expect(result.current.cafeStars).toBe(3);
 		expect(result.current.room?.activity.teaLeaves[0].id).toBe("tea-1");
 		expect(result.current.room?.players[0].equippedCosmetic).toBe("sakura_pin");
+		expect(result.current.room?.players[0].avatarId).toBe("girl");
 		expect(result.current.room?.mapLayout).toMatchObject({
 			version: "cafe-room-v1",
 			playerCollisionRadius: 10,

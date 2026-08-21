@@ -4,6 +4,7 @@ import {
 	cafeSocketUrl,
 	cafeLobbyErrorCode,
 	createCafeRoom,
+	equipCafeAvatar,
 	equipCafeCosmetic,
 	getCafeProgress,
 	joinCafeByCode,
@@ -40,10 +41,12 @@ describe("cafeApiService", () => {
 					cafe_stars: 4,
 					unlocked_cosmetics: ["sakura_pin", "mint_scarf"],
 					equipped_cosmetic: "mint_scarf",
+					equipped_avatar: "girl",
 					cosmetics: [
 						{ id: "sakura_pin", required_stars: 0, unlocked: true },
 						{ id: "tea_hat", required_stars: 5, unlocked: false }
-					]
+					],
+					avatars: [{ id: "boy" }, { id: "girl" }]
 				}
 			});
 
@@ -62,10 +65,12 @@ describe("cafeApiService", () => {
 			cafeStars: 4,
 			unlockedCosmetics: ["sakura_pin", "mint_scarf"],
 			equippedCosmetic: "mint_scarf",
+			equippedAvatar: "girl",
 			cosmetics: [
 				{ id: "sakura_pin", requiredStars: 0, unlocked: true },
 				{ id: "tea_hat", requiredStars: 5, unlocked: false }
-			]
+			],
+			avatars: [{ id: "boy" }, { id: "girl" }]
 		});
 	});
 
@@ -75,7 +80,9 @@ describe("cafeApiService", () => {
 				cafe_stars: 0,
 				unlocked_cosmetics: ["sakura_pin"],
 				equipped_cosmetic: "sakura_pin",
-				cosmetics: [{ id: "sakura_pin", required_stars: 0, unlocked: true }]
+				equipped_avatar: "boy",
+				cosmetics: [{ id: "sakura_pin", required_stars: 0, unlocked: true }],
+				avatars: [{ id: "boy" }, { id: "girl" }]
 			}
 		});
 
@@ -84,6 +91,24 @@ describe("cafeApiService", () => {
 		});
 		expect(apiClient.post).toHaveBeenCalledWith("/api/cafe/cosmetics/equipped", {
 			cosmetic_id: "sakura_pin"
+		});
+	});
+
+	it("sends the selected avatar id when changing character", async () => {
+		vi.mocked(apiClient.post).mockResolvedValue({
+			data: {
+				cafe_stars: 0,
+				unlocked_cosmetics: ["sakura_pin"],
+				equipped_cosmetic: null,
+				equipped_avatar: "girl",
+				cosmetics: [{ id: "sakura_pin", required_stars: 0, unlocked: true }],
+				avatars: [{ id: "boy" }, { id: "girl" }]
+			}
+		});
+
+		await expect(equipCafeAvatar("girl")).resolves.toMatchObject({ equippedAvatar: "girl" });
+		expect(apiClient.post).toHaveBeenCalledWith("/api/cafe/avatars/equipped", {
+			avatar_id: "girl"
 		});
 	});
 

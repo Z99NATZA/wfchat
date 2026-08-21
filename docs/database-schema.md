@@ -52,7 +52,7 @@ profile edits.
 | `memory_extraction_jobs`      | Durable, retryable capture outbox                               |
 | `memory_follow_up_deliveries` | Idempotent New Chat follow-up claims                            |
 | `cafe_progress`               | Per-session stars and unlocked cosmetics                        |
-| `cafe_cosmetic_loadouts`      | Per-session equipped cosmetic                                   |
+| `cafe_cosmetic_loadouts`      | Per-session equipped Cafe avatar and cosmetic                   |
 | `cafe_room_rewards`           | One reward per room, round, and session                         |
 | `sync_entities`               | Latest generic sync value or tombstone per item                 |
 | `sync_commits`                | Per-session sync operation idempotency record                   |

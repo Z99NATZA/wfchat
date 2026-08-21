@@ -1,5 +1,6 @@
 export type CafeDirection = "up" | "down" | "left" | "right";
 export type CafeActivityId = "tea_delivery" | "table_service" | "cafe_rush";
+export type CafeAvatarId = "boy" | "girl";
 
 export type CafeConnectionState =
 	"connecting" | "connected" | "offline" | "reconnecting" | "closed";
@@ -33,6 +34,7 @@ export type CafePlayerState = {
 	carriedTea: number;
 	carriedOrderId: string | null;
 	equippedCosmetic: string | null;
+	avatarId: CafeAvatarId;
 };
 
 export type CafeTeaLeaf = {
@@ -116,13 +118,19 @@ export type CafeProgress = {
 	cafeStars: number;
 	unlockedCosmetics: string[];
 	equippedCosmetic: string | null;
+	equippedAvatar: CafeAvatarId;
 	cosmetics: CafeCosmetic[];
+	avatars: CafeAvatar[];
 };
 
 export type CafeCosmetic = {
 	id: string;
 	requiredStars: number;
 	unlocked: boolean;
+};
+
+export type CafeAvatar = {
+	id: CafeAvatarId;
 };
 
 export type CafeDialogue = {

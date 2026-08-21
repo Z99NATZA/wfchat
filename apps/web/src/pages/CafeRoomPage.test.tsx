@@ -795,7 +795,8 @@ function roomFixture(): CafeRoomState {
 				moving: false,
 				carriedTea: 2,
 				carriedOrderId: null,
-				equippedCosmetic: "mint_scarf"
+				equippedCosmetic: "mint_scarf",
+				avatarId: "boy"
 			}
 		],
 		activity: {

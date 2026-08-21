@@ -7,6 +7,7 @@ pub mod auth;
 pub mod auth_log;
 pub mod authorization_log;
 pub mod cafe;
+pub mod cafe_avatars;
 pub mod cafe_cosmetics;
 pub mod characters;
 pub mod chat;

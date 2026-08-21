@@ -9,7 +9,6 @@ import {
 	Lock,
 	Plus,
 	RefreshCw,
-	Sparkles,
 	Star,
 	Users
 } from "lucide-react";
@@ -26,6 +25,7 @@ import { useI18n } from "@/i18n/i18nContext";
 import {
 	cafeLobbyErrorCode,
 	createCafeRoom,
+	equipCafeAvatar,
 	equipCafeCosmetic,
 	getCafeProgress,
 	joinCafeByCode,
@@ -38,7 +38,13 @@ import {
 	readCafePlayerName,
 	saveCafePlayerName
 } from "@/features/cafe/services/cafePlayerName";
-import type { CafeCosmetic, CafeProgress, CafeRoomSummary } from "@/features/cafe/types";
+import type {
+	CafeAvatar,
+	CafeAvatarId,
+	CafeCosmetic,
+	CafeProgress,
+	CafeRoomSummary
+} from "@/features/cafe/types";
 
 type CafePageProps = {
 	activityBar: ReactNode;
@@ -54,7 +60,9 @@ function CafePage({ activityBar, backgroundImageUrl, headerControls }: CafePageP
 		cafeStars: 0,
 		unlockedCosmetics: [],
 		equippedCosmetic: null,
-		cosmetics: []
+		equippedAvatar: "boy",
+		cosmetics: [],
+		avatars: []
 	});
 	const [inviteCode, setInviteCode] = useState("");
 	const [playerName, setPlayerName] = useState(readCafePlayerName);
@@ -62,7 +70,9 @@ function CafePage({ activityBar, backgroundImageUrl, headerControls }: CafePageP
 	const [pendingAction, setPendingAction] = useState<string | null>(null);
 	const [error, setError] = useState<CafeLobbyErrorCode | "load_failed" | null>(null);
 	const [pendingCosmetic, setPendingCosmetic] = useState<string | null | undefined>();
+	const [pendingAvatar, setPendingAvatar] = useState<CafeAvatarId | undefined>();
 	const [cosmeticError, setCosmeticError] = useState(false);
+	const [avatarError, setAvatarError] = useState(false);
 	const [isWardrobeOpen, setIsWardrobeOpen] = useState(false);
 	const [isJoinCodeOpen, setIsJoinCodeOpen] = useState(false);
 
@@ -122,6 +132,18 @@ function CafePage({ activityBar, backgroundImageUrl, headerControls }: CafePageP
 			setCosmeticError(true);
 		} finally {
 			setPendingCosmetic(undefined);
+		}
+	}
+
+	async function handleEquipAvatar(avatarId: CafeAvatarId) {
+		setPendingAvatar(avatarId);
+		setAvatarError(false);
+		try {
+			setProgress(await equipCafeAvatar(avatarId));
+		} catch {
+			setAvatarError(true);
+		} finally {
+			setPendingAvatar(undefined);
 		}
 	}
 
@@ -411,8 +433,11 @@ function CafePage({ activityBar, backgroundImageUrl, headerControls }: CafePageP
 						progress={progress}
 						isLoading={isLoading}
 						pendingCosmetic={pendingCosmetic}
+						pendingAvatar={pendingAvatar}
 						hasError={cosmeticError}
+						hasAvatarError={avatarError}
 						onEquip={handleEquipCosmetic}
+						onEquipAvatar={handleEquipAvatar}
 					/>
 				}
 			/>
@@ -435,9 +460,9 @@ function CafeCosmeticSummary({
 	const equippedCosmetic = progress.cosmetics.find(
 		(cosmetic) => cosmetic.id === progress.equippedCosmetic
 	);
-	const equippedName = equippedCosmetic
-		? t(`cafe.cosmetics.${equippedCosmetic.id}.name`)
-		: t("cafe.cosmetics.defaultLook");
+	const equippedName = equippedCosmetic ? t(`cafe.cosmetics.${equippedCosmetic.id}.name`) : null;
+	const avatarName = t(`cafe.avatars.${progress.equippedAvatar}.name`);
+	const appearanceName = equippedName ? `${avatarName} · ${equippedName}` : avatarName;
 
 	return (
 		<div className="border-t border-app-border" data-testid="cafe-cosmetic-footer">
@@ -453,17 +478,11 @@ function CafeCosmeticSummary({
 				onClick={onOpen}
 			>
 				<span className="flex min-w-0 items-center gap-3">
-					{equippedCosmetic ? (
-						<CosmeticPreview
-							cosmeticId={equippedCosmetic.id}
-							muted={false}
-							testId={`cafe-cosmetic-summary-preview-${equippedCosmetic.id}`}
-						/>
-					) : (
-						<span className="flex size-10 shrink-0 items-center justify-center rounded-md border border-app-border bg-app-panel/70 text-muted">
-							<Sparkles size={18} aria-hidden="true" />
-						</span>
-					)}
+					<AvatarPreview
+						avatarId={progress.equippedAvatar}
+						surface="app"
+						testId={`cafe-avatar-summary-preview-${progress.equippedAvatar}`}
+					/>
 					<span className="min-w-0">
 						<span
 							id="cafe-cosmetics-summary-title"
@@ -472,7 +491,7 @@ function CafeCosmeticSummary({
 							{t("cafe.cosmetics.title")}
 						</span>
 						<span className="mt-0.5 block truncate text-xs font-normal text-muted">
-							{isLoading ? t("cafe.cosmetics.loading") : equippedName}
+							{isLoading ? t("cafe.cosmetics.loading") : appearanceName}
 						</span>
 					</span>
 				</span>
@@ -492,17 +511,23 @@ function CafeCosmeticWardrobe({
 	progress,
 	isLoading,
 	pendingCosmetic,
+	pendingAvatar,
 	hasError,
-	onEquip
+	hasAvatarError,
+	onEquip,
+	onEquipAvatar
 }: {
 	progress: CafeProgress;
 	isLoading: boolean;
 	pendingCosmetic: string | null | undefined;
+	pendingAvatar: CafeAvatarId | undefined;
 	hasError: boolean;
+	hasAvatarError: boolean;
 	onEquip: (cosmeticId: string | null) => void;
+	onEquipAvatar: (avatarId: CafeAvatarId) => void;
 }) {
 	const { t } = useI18n();
-	const isSaving = pendingCosmetic !== undefined;
+	const isSaving = pendingCosmetic !== undefined || pendingAvatar !== undefined;
 	return (
 		<div className="pb-12" data-testid="cafe-cosmetic-wardrobe">
 			<div className="flex items-center justify-between gap-2">
@@ -534,8 +559,36 @@ function CafeCosmeticWardrobe({
 					{t("cafe.cosmetics.equipError")}
 				</p>
 			)}
+			{hasAvatarError && (
+				<p
+					className="mt-3 rounded-lg border border-red-400/25 bg-red-500/10 p-3 text-sm text-red-500"
+					role="alert"
+				>
+					{t("cafe.avatars.equipError")}
+				</p>
+			)}
+			<section className="mt-4" aria-labelledby="cafe-avatar-heading">
+				<h3 id="cafe-avatar-heading" className="text-sm font-semibold text-app-text">
+					{t("cafe.avatars.title")}
+				</h3>
+				<div className="mt-2 grid grid-cols-2 gap-2" data-testid="cafe-avatar-track">
+					{progress.avatars.map((avatar) => (
+						<CafeAvatarCard
+							key={avatar.id}
+							avatar={avatar}
+							equipped={progress.equippedAvatar === avatar.id}
+							isSaving={isSaving}
+							pending={pendingAvatar === avatar.id}
+							onEquip={() => onEquipAvatar(avatar.id)}
+						/>
+					))}
+				</div>
+			</section>
+			<h3 className="mt-5 text-sm font-semibold text-app-text">
+				{t("cafe.cosmetics.title")}
+			</h3>
 			<div
-				className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4"
+				className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4"
 				data-testid="cafe-cosmetic-track"
 			>
 				{progress.cosmetics.map((cosmetic) => (
@@ -563,6 +616,53 @@ function CafeCosmeticWardrobe({
 				</p>
 			)}
 		</div>
+	);
+}
+
+function CafeAvatarCard({
+	avatar,
+	equipped,
+	isSaving,
+	pending,
+	onEquip
+}: {
+	avatar: CafeAvatar;
+	equipped: boolean;
+	isSaving: boolean;
+	pending: boolean;
+	onEquip: () => void;
+}) {
+	const { t } = useI18n();
+	const avatarName = t(`cafe.avatars.${avatar.id}.name`);
+	return (
+		<Button
+			align="start"
+			fullWidth
+			size="row"
+			variant={equipped ? "primary" : "secondary"}
+			className="min-w-0 rounded-lg p-2.5"
+			surface="dialog"
+			data-testid={`cafe-avatar-tile-${avatar.id}`}
+			disabled={isSaving}
+			aria-pressed={equipped}
+			onClick={() => {
+				if (!equipped) onEquip();
+			}}
+		>
+			<AvatarPreview avatarId={avatar.id} surface="dialog" />
+			<span className="min-w-0 flex-1">
+				<span className="block truncate text-sm font-semibold leading-tight">
+					{avatarName}
+				</span>
+				<span className="mt-1 block text-[11px] text-muted">
+					{pending
+						? t("cafe.cosmetics.saving")
+						: equipped
+							? t("cafe.cosmetics.equipped")
+							: t("cafe.cosmetics.equip")}
+				</span>
+			</span>
+		</Button>
 	);
 }
 
@@ -672,6 +772,33 @@ function CosmeticPreview({
 		>
 			{glyph}
 		</div>
+	);
+}
+
+function AvatarPreview({
+	avatarId,
+	surface,
+	testId
+}: {
+	avatarId: CafeAvatarId;
+	surface: "app" | "dialog";
+	testId?: string;
+}) {
+	return (
+		<span
+			className={`size-10 shrink-0 rounded-md border bg-contain bg-no-repeat ${
+				surface === "dialog"
+					? "border-dialog-border bg-dialog-panel"
+					: "border-app-border bg-app-panel/70"
+			}`}
+			style={{
+				backgroundImage: `url(/images/aiko-cafe/cafe-player-${avatarId}-v2.png)`,
+				backgroundPosition: "2% 95%",
+				backgroundSize: "600% 400%"
+			}}
+			data-testid={testId ?? `cafe-avatar-preview-${avatarId}`}
+			aria-hidden="true"
+		/>
 	);
 }
 

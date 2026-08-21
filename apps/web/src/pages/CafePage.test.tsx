@@ -13,6 +13,7 @@ import th from "@/i18n/locales/th.json";
 const serviceMocks = vi.hoisted(() => ({
 	listCafeRooms: vi.fn(),
 	getCafeProgress: vi.fn(),
+	equipCafeAvatar: vi.fn(),
 	equipCafeCosmetic: vi.fn(),
 	quickJoinCafe: vi.fn(),
 	createCafeRoom: vi.fn(),
@@ -70,11 +71,13 @@ const progress = {
 	cafeStars: 3,
 	unlockedCosmetics: ["sakura_pin", "mint_scarf"],
 	equippedCosmetic: null,
+	equippedAvatar: "boy" as const,
 	cosmetics: [
 		{ id: "sakura_pin", requiredStars: 0, unlocked: true },
 		{ id: "mint_scarf", requiredStars: 3, unlocked: true },
 		{ id: "tea_hat", requiredStars: 5, unlocked: false }
-	]
+	],
+	avatars: [{ id: "boy" as const }, { id: "girl" as const }]
 };
 
 describe("CafePage", () => {
@@ -339,6 +342,34 @@ describe("CafePage", () => {
 		expect(screen.queryByText("cafe.cosmetics.unlocked")).toBeNull();
 		expect(screen.queryByText("cafe.cosmetics.sakura_pin.description")).toBeNull();
 		expect(screen.getByLabelText("cafe.cosmetics.needStars").textContent).toContain("5");
+	});
+
+	it("selects a sprite v2 avatar from the wardrobe", async () => {
+		serviceMocks.listCafeRooms.mockResolvedValue([]);
+		serviceMocks.getCafeProgress.mockResolvedValue(progress);
+		serviceMocks.equipCafeAvatar.mockResolvedValue({
+			...progress,
+			equippedAvatar: "girl"
+		});
+
+		render(
+			<MemoryRouter initialEntries={["/cafe"]}>
+				<CafePage
+					activityBar={null}
+					backgroundImageUrl=""
+					headerControls={headerControls}
+				/>
+			</MemoryRouter>
+		);
+
+		fireEvent.click(await screen.findByTestId("cafe-cosmetic-summary"));
+		const girlTile = screen.getByTestId("cafe-avatar-tile-girl");
+		fireEvent.click(girlTile);
+
+		await waitFor(() => expect(serviceMocks.equipCafeAvatar).toHaveBeenCalledWith("girl"));
+		expect(girlTile.getAttribute("aria-pressed")).toBe("true");
+		expect(girlTile.className).toContain("button--primary");
+		expect(screen.getByTestId("cafe-avatar-summary-preview-girl")).toBeTruthy();
 	});
 
 	it("equips the Cafe Apron after eight server-owned stars", async () => {
