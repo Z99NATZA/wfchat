@@ -22,6 +22,7 @@ import {
 import Button from "@/components/ui/Button";
 import AppLayout from "@/layouts/AppLayout";
 import { useI18n } from "@/i18n/i18nContext";
+import { CAFE_PLAYER_SPRITES } from "@/features/cafe/engine/cafePlayerAnimation";
 import {
 	cafeLobbyErrorCode,
 	createCafeRoom,
@@ -792,7 +793,7 @@ function AvatarPreview({
 					: "border-app-border bg-app-panel/70"
 			}`}
 			style={{
-				backgroundImage: `url(/images/aiko-cafe/cafe-player-${avatarId}-v2.png)`,
+				backgroundImage: `url(${CAFE_PLAYER_SPRITES[avatarId].url})`,
 				backgroundPosition: "2% 95%",
 				backgroundSize: "600% 400%"
 			}}

@@ -11,8 +11,8 @@ export const CAFE_PLAYER_SPRITES: Record<CafeAvatarId, { key: string; url: strin
 		url: "/images/aiko-cafe/cafe-player-boy-v2.png?v=acb196a07c0e678911b7537fc7a60eccf439c4ae47b5d9fb8da7064ea863a179"
 	},
 	girl: {
-		key: "cafe-player-girl-v2-3cf05aea712f16afb151d7f71f4dc61410e75681f634712804d2578ccb47c675",
-		url: "/images/aiko-cafe/cafe-player-girl-v2.png?v=3cf05aea712f16afb151d7f71f4dc61410e75681f634712804d2578ccb47c675"
+		key: "cafe-player-girl-v3-1930e7bf3d9e219b10fff237a63efe6d818fe166a37e3012589e9c22c2876eb0",
+		url: "/images/aiko-cafe/cafe-player-girl-v3.png?v=1930e7bf3d9e219b10fff237a63efe6d818fe166a37e3012589e9c22c2876eb0"
 	}
 };
 
@@ -41,8 +41,8 @@ const FRAME_VISUAL_CENTER_X: Record<CafeAvatarId, readonly number[]> = {
 		102.5, 94, 150, 138, 127, 116, 105.5, 99
 	],
 	girl: [
-		150, 142, 132.5, 122.5, 112.5, 103, 150.5, 145, 131.5, 120.5, 112, 102, 149, 141, 132, 122,
-		111, 102.5, 150.5, 141.5, 132.5, 122, 113, 104
+		153, 143, 133, 120.5, 96.5, 86, 154, 145.5, 134.5, 118, 96.5, 84.5, 146, 137, 128.5, 114,
+		93, 80.5, 152, 142, 131, 117.5, 95.5, 83.5
 	]
 };
 
@@ -52,14 +52,14 @@ const FRAME_VISUAL_BOTTOM_Y: Record<CafeAvatarId, readonly number[]> = {
 		237, 237, 239, 239, 239, 239
 	],
 	girl: [
-		237, 237, 239, 239, 240, 241, 206, 207, 205, 206, 206, 206, 208, 209, 209, 208, 209, 209,
-		239, 239, 241, 241, 241, 240
+		240, 240, 241, 241, 242, 242, 215, 215, 211, 212, 212, 212, 208, 208, 206, 206, 206, 207,
+		239, 239, 240, 241, 240, 240
 	]
 };
 
 const DIRECTION_VISUAL_HEIGHT: Record<CafeAvatarId, readonly number[]> = {
 	boy: [206, 200, 204, 207],
-	girl: [197, 198, 201, 203]
+	girl: [211, 192, 194, 198]
 };
 
 export function normalizeCafeAvatarId(value: string): CafeAvatarId {

@@ -66,7 +66,9 @@ chat and is available at `/cafe` without login.
 - The camera follows the local player with a dead zone and keeps the room at a
   readable scale. Small viewports show part of the room instead of shrinking
   the whole map.
-- Player avatars use one of two local four-direction chibi sprite v2 sheets.
+- Player avatars use separate local four-direction chibi sprite sheets. The
+  girl avatar uses a long-haired pink design while the boy avatar retains its
+  short-haired navy design.
   Each direction has neutral idle, blink, and four walk frames. The existing
   authoritative `direction` and `moving` fields select idle and walk states;
   blink timing is client-only and staggered per player. Every pose remains

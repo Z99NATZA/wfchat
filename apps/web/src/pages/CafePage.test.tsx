@@ -6,6 +6,7 @@ import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import CafePage from "@/pages/CafePage";
+import { CAFE_PLAYER_SPRITES } from "@/features/cafe/engine/cafePlayerAnimation";
 import { CAFE_PLAYER_NAME_STORAGE_KEY } from "@/features/cafe/services/cafePlayerName";
 import en from "@/i18n/locales/en.json";
 import th from "@/i18n/locales/th.json";
@@ -369,7 +370,8 @@ describe("CafePage", () => {
 		await waitFor(() => expect(serviceMocks.equipCafeAvatar).toHaveBeenCalledWith("girl"));
 		expect(girlTile.getAttribute("aria-pressed")).toBe("true");
 		expect(girlTile.className).toContain("button--primary");
-		expect(screen.getByTestId("cafe-avatar-summary-preview-girl")).toBeTruthy();
+		const summaryPreview = screen.getByTestId("cafe-avatar-summary-preview-girl");
+		expect(summaryPreview.style.backgroundImage).toContain(CAFE_PLAYER_SPRITES.girl.url);
 	});
 
 	it("equips the Cafe Apron after eight server-owned stars", async () => {
