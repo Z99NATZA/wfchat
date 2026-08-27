@@ -1,7 +1,7 @@
 # WaifuChat
 
 ```text
-Project created: 2026-05-27
+- Project created: 2026-05-27
 - Open Source
 - Vibe coding
 ```

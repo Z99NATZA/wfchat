@@ -424,7 +424,7 @@
 	"privacy.google.notReceived": "WFChat does not receive your Google password or access to your Gmail or Google Drive.",
 	"privacy.google.token": "The Google ID token is used to verify the sign-in with Google and is not saved as part of your account data.",
 	"privacy.data.title": "Data WFChat keeps",
-	"privacy.data.session": "Session and account data: an essential HTTP-only session cookie, server session state, and—after Google Login—your identity and editable profile.",
+	"privacy.data.session": "Session and account data: an essential session cookie that browser JavaScript cannot read, server session state, and—after Google Login—your identity and editable profile.",
 	"privacy.data.chat": "Chat data: chat rooms, messages, image attachments, and selected learned context derived from conversations to keep later chats consistent.",
 	"privacy.data.sync": "Sync data: selected settings such as theme, font, language, and background image URL, plus supported chat summaries and cached messages.",
 	"privacy.data.cafe": "Aiko Cafe data: stars, unlocked items, equipped appearance, and reward records. A temporary Cafe name stays in the current browser tab.",
