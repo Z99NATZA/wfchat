@@ -9,6 +9,7 @@ impl ChatStore {
             auth_sessions_created: Arc::new(std::sync::atomic::AtomicUsize::new(0)),
         };
         store.run_migrations().await?;
+        store.cleanup_past_chat_generation_quotas().await?;
         Ok(store)
     }
 
@@ -102,6 +103,206 @@ impl ChatStore {
 
         tx.commit().await?;
         Ok(Some(guest))
+    }
+
+    pub async fn delete_registered_account(
+        &self,
+        session_id: Uuid,
+    ) -> StoreResult<Option<AccountDeletionResult>> {
+        let mut tx = self.db.begin().await?;
+        let candidate = sqlx::query(
+            "select user_id
+             from auth_sessions
+             where id = $1 and kind = 'registered'
+               and revoked_at is null and expires_at > now()",
+        )
+        .bind(session_id)
+        .fetch_optional(&mut *tx)
+        .await?;
+        let Some(candidate) = candidate else {
+            tx.rollback().await?;
+            return Ok(None);
+        };
+        let user_id: Uuid = candidate.get("user_id");
+
+        sqlx::query("select pg_advisory_xact_lock(hashtextextended($1, 0))")
+            .bind(format!("account:{user_id}"))
+            .execute(&mut *tx)
+            .await?;
+
+        let caller_still_active: bool = sqlx::query_scalar(
+            "select exists(
+               select 1 from auth_sessions
+               where id = $1 and user_id = $2 and kind = 'registered'
+                 and revoked_at is null and expires_at > now()
+               for update
+             )",
+        )
+        .bind(session_id)
+        .bind(user_id)
+        .fetch_one(&mut *tx)
+        .await?;
+        if !caller_still_active {
+            tx.rollback().await?;
+            return Ok(None);
+        }
+
+        let account_session_ids: Vec<Uuid> = sqlx::query_scalar(
+            "select id from auth_sessions where user_id = $1 and kind = 'registered' for update",
+        )
+        .bind(user_id)
+        .fetch_all(&mut *tx)
+        .await?;
+
+        // Reservations contain request/chat identifiers. Release only unstarted global
+        // reservations, then remove every account-scoped reservation while retaining the
+        // conservative current-day owner counter used to prevent quota reset by re-signup.
+        sqlx::query(
+            "with removed as (
+               delete from chat_generation_quota_reservations
+               where owner_kind = 'account' and owner_id = $1
+               returning quota_date, global_state
+             ), released as (
+               select quota_date, count(*)::integer as released_count
+               from removed where global_state = 'reserved'
+               group by quota_date
+             )
+             update chat_daily_global_quotas quota
+             set reserved_count = greatest(0, quota.reserved_count - released.released_count),
+                 updated_at = now()
+             from released
+             where quota.quota_date = released.quota_date",
+        )
+        .bind(user_id)
+        .execute(&mut *tx)
+        .await?;
+
+        sqlx::query(
+            "delete from chat_daily_owner_quotas
+             where owner_kind = 'account' and owner_id = $1
+               and quota_date <> (now() at time zone 'Asia/Bangkok')::date",
+        )
+        .bind(user_id)
+        .execute(&mut *tx)
+        .await?;
+
+        sqlx::query(
+            "delete from chat_attachments
+             where owner_user_id = $1 or owner_session_id = any($2)",
+        )
+        .bind(user_id)
+        .bind(&account_session_ids)
+        .execute(&mut *tx)
+        .await?;
+        for table in [
+            "memory_follow_up_deliveries",
+            "memory_extraction_jobs",
+            "memory_items",
+            "chats",
+            "cafe_room_rewards",
+            "cafe_cosmetic_loadouts",
+            "cafe_progress",
+        ] {
+            let query = format!(
+                "delete from {table} where owner_user_id = $1 or owner_session_id = any($2)"
+            );
+            sqlx::query(&query)
+                .bind(user_id)
+                .bind(&account_session_ids)
+                .execute(&mut *tx)
+                .await?;
+        }
+        let account_sync_session_ids: Vec<Uuid> = sqlx::query_scalar(
+            "select distinct session_id from sync_entities where owner_user_id = $1",
+        )
+        .bind(user_id)
+        .fetch_all(&mut *tx)
+        .await?;
+        sqlx::query(
+            "delete from sync_entities
+             where owner_user_id = $1 or session_id = any($2)",
+        )
+        .bind(user_id)
+        .bind(&account_session_ids)
+        .execute(&mut *tx)
+        .await?;
+        sqlx::query(
+            "delete from sync_commits
+             where user_id = $1 or session_id = any($2) or session_id = any($3)",
+        )
+        .bind(user_id)
+        .bind(&account_session_ids)
+        .bind(&account_sync_session_ids)
+        .execute(&mut *tx)
+        .await?;
+
+        sqlx::query("delete from auth_identities where user_id = $1")
+            .bind(user_id)
+            .execute(&mut *tx)
+            .await?;
+        sqlx::query("delete from user_profiles where user_id = $1")
+            .bind(user_id)
+            .execute(&mut *tx)
+            .await?;
+
+        sqlx::query(
+            "update auth_sessions
+             set quota_carryover_user_id = null, quota_carryover_date = null
+             where kind = 'guest' and quota_carryover_user_id = $1",
+        )
+        .bind(user_id)
+        .execute(&mut *tx)
+        .await?;
+
+        let attachment_storage_keys: Vec<String> = sqlx::query_scalar(
+            "update chat_attachment_file_deletions
+             set owner_session_id = null, owner_user_id = null, next_attempt_at = now(),
+                 claim_token = null, claim_expires_at = null
+             where owner_user_id = $1 or owner_session_id = any($2)
+             returning storage_key",
+        )
+        .bind(user_id)
+        .bind(&account_session_ids)
+        .fetch_all(&mut *tx)
+        .await?;
+
+        sqlx::query("delete from auth_sessions where id = any($1)")
+            .bind(&account_session_ids)
+            .execute(&mut *tx)
+            .await?;
+
+        let guest = SessionRecord {
+            id: Uuid::new_v4(),
+            user_id: Uuid::new_v4(),
+            kind: UserKind::Guest,
+            created_at: now_unix_seconds(),
+        };
+        sqlx::query(
+            "insert into auth_sessions (
+               id, user_id, kind, created_at,
+               quota_carryover_user_id, quota_carryover_date
+             ) values (
+               $1, $2, 'guest', to_timestamp($3), $4,
+               (now() at time zone 'Asia/Bangkok')::date
+             )",
+        )
+        .bind(guest.id)
+        .bind(guest.user_id)
+        .bind(guest.created_at as i64)
+        .bind(user_id)
+        .execute(&mut *tx)
+        .await?;
+
+        #[cfg(test)]
+        self.auth_sessions_created
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+
+        tx.commit().await?;
+        Ok(Some(AccountDeletionResult {
+            guest,
+            attachment_storage_keys,
+            revoked_session_ids: account_session_ids,
+        }))
     }
 
     pub async fn cleanup_inactive_guest_sessions(&self) -> StoreResult<u64> {
@@ -475,6 +676,10 @@ impl ChatStore {
         test_control: Option<GooglePromotionTestControl>,
     ) -> StoreResult<Option<SessionRecord>> {
         let mut tx = self.db.begin().await?;
+        sqlx::query("select pg_advisory_xact_lock(hashtextextended($1, 0))")
+            .bind(format!("account:{user_id}"))
+            .execute(&mut *tx)
+            .await?;
         let locked = sqlx::query(
             "select kind from auth_sessions
              where id = $1 and revoked_at is null and expires_at > now()

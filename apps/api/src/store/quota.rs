@@ -36,6 +36,27 @@ struct QuotaOwnerKey {
 }
 
 impl ChatStore {
+    pub(super) async fn cleanup_past_chat_generation_quotas(&self) -> StoreResult<u64> {
+        let mut total = 0_u64;
+        loop {
+            let mut tx = self.db.begin().await?;
+            let counts = Self::cleanup_past_chat_generation_quotas_in_tx(&mut tx).await?;
+            tx.commit().await?;
+            total = total.saturating_add(
+                u64::try_from(counts.reservations.max(0)).unwrap_or_default()
+                    + u64::try_from(counts.owner_counters.max(0)).unwrap_or_default()
+                    + u64::try_from(counts.global_counters.max(0)).unwrap_or_default(),
+            );
+            if counts.reservations < RETENTION_CLEANUP_BATCH_SIZE
+                && counts.owner_counters < RETENTION_CLEANUP_BATCH_SIZE
+                && counts.global_counters < RETENTION_CLEANUP_BATCH_SIZE
+            {
+                break;
+            }
+        }
+        Ok(total)
+    }
+
     #[cfg(test)]
     pub(crate) async fn isolate_daily_chat_quota_test(
         &self,

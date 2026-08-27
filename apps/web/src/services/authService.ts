@@ -10,6 +10,10 @@ type ApiSessionResponse = {
 	profile?: ApiProfileResponse | null;
 };
 
+type ApiAccountDeletionResponse = ApiSessionResponse & {
+	cleanup_pending: boolean;
+};
+
 type ApiProfileResponse = {
 	display_name: string;
 	avatar_url?: string | null;
@@ -48,6 +52,19 @@ export async function logoutSession(): Promise<AuthSession> {
 	const response = await apiClient.post<ApiSessionResponse>("/api/auth/logout");
 	markCookieSessionReady();
 	return toAuthSession(response.data);
+}
+
+export async function deleteAccount(): Promise<{
+	session: AuthSession;
+	cleanupPending: boolean;
+}> {
+	await ensureCookieSession();
+	const response = await apiClient.delete<ApiAccountDeletionResponse>("/api/auth/account");
+	markCookieSessionReady();
+	return {
+		session: toAuthSession(response.data),
+		cleanupPending: response.data.cleanup_pending
+	};
 }
 
 export async function updateProfile(displayName: string, avatarUrl: string): Promise<AuthSession> {

@@ -26,6 +26,11 @@ Cafe and automatic memory use their own owner-scoped PostgreSQL tables.
 Guests own sync rows by session id. Google login promotes current guest rows to
 `owner_user_id`; registered sessions read and write by that account id.
 Browsers authenticate with the HTTP-only `wfchat_session` cookie.
+
+Account deletion removes the account's `sync_entities` and `sync_commits` in
+the deletion transaction. After the API returns the replacement Guest, the web
+app clears its sync queue, cursor, delete cache, and chat caches. It also clears
+the synced background image, while device-only theme, font, and locale remain.
 `X-WFChat-Session` remains a compatibility path for non-browser callers.
 
 `sync_entities` stores the latest value for an item. `sync_commits` records

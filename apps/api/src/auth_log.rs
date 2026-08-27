@@ -63,6 +63,8 @@ pub(crate) async fn request_context(request: Request, next: Next) -> Response {
             Some("auth_login_rejected")
         } else if method == Method::PATCH && path == "/auth/profile" {
             Some("auth_profile_update_rejected")
+        } else if method == Method::DELETE && path == "/auth/account" {
+            Some("auth_account_delete_rejected")
         } else {
             None
         };
@@ -108,6 +110,54 @@ pub(crate) fn profile_update_succeeded(status: StatusCode) {
 pub(crate) fn profile_update_rejected(status: StatusCode, reason: AuthRejectionReason) {
     let context = current_context();
     emit_rejected(&context, "auth_profile_update_rejected", status, reason);
+}
+
+pub(crate) fn account_delete_succeeded(status: StatusCode, cleanup_pending: bool) {
+    let context = current_context();
+    if context.emitted.swap(true, Ordering::Relaxed) {
+        return;
+    }
+    match context.request_id {
+        Some(request_id) => tracing::info!(
+            target: "wfchat::auth_security",
+            event = "auth_account_delete_succeeded",
+            request_id = %request_id.value(),
+            status = status.as_u16(),
+            cleanup_pending,
+            "account deletion event"
+        ),
+        None => tracing::info!(
+            target: "wfchat::auth_security",
+            event = "auth_account_delete_succeeded",
+            status = status.as_u16(),
+            cleanup_pending,
+            "account deletion event"
+        ),
+    }
+}
+
+pub(crate) fn account_delete_rejected(status: StatusCode, reason: AuthRejectionReason) {
+    let context = current_context();
+    if context.emitted.swap(true, Ordering::Relaxed) {
+        return;
+    }
+    match context.request_id {
+        Some(request_id) => tracing::warn!(
+            target: "wfchat::auth_security",
+            event = "auth_account_delete_rejected",
+            request_id = %request_id.value(),
+            status = status.as_u16(),
+            reason = reason.as_str(),
+            "account deletion event"
+        ),
+        None => tracing::warn!(
+            target: "wfchat::auth_security",
+            event = "auth_account_delete_rejected",
+            status = status.as_u16(),
+            reason = reason.as_str(),
+            "account deletion event"
+        ),
+    }
 }
 
 fn emit_success(event: &'static str, status: StatusCode) {
@@ -184,7 +234,7 @@ mod tests {
         body::Body,
         http::Request as HttpRequest,
         middleware,
-        routing::{patch, post},
+        routing::{delete, patch, post},
         Json, Router,
     };
     use serde::Deserialize;
@@ -308,6 +358,21 @@ mod tests {
                         }
                         "error" => StatusCode::INTERNAL_SERVER_ERROR,
                         _ => StatusCode::BAD_REQUEST,
+                    }
+                }),
+            )
+            .route(
+                "/auth/account",
+                delete(|request: Request| async move {
+                    if request.headers().contains_key("x-test-success") {
+                        account_delete_succeeded(StatusCode::OK, true);
+                        StatusCode::OK
+                    } else {
+                        account_delete_rejected(
+                            StatusCode::FORBIDDEN,
+                            AuthRejectionReason::WrongSessionKind,
+                        );
+                        StatusCode::FORBIDDEN
                     }
                 }),
             )
@@ -549,5 +614,73 @@ mod tests {
         let (status, events) = capture_request(server_error).await;
         assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
         assert!(events.is_empty());
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn account_deletion_logs_use_the_exact_allowlist_without_request_secrets() {
+        for (succeeds, expected_event, expected_status) in [
+            (true, "auth_account_delete_succeeded", 200),
+            (false, "auth_account_delete_rejected", 403),
+        ] {
+            let request_id = Uuid::new_v4();
+            let mut request = HttpRequest::delete("/auth/account")
+                .header("authorization", "Bearer secret-account-credential")
+                .header("cookie", "wfchat_session=secret-account-session")
+                .body(Body::from("secret-account-request-body"))
+                .unwrap();
+            request
+                .extensions_mut()
+                .insert(RequestId::from_uuid(request_id));
+            if succeeds {
+                request
+                    .headers_mut()
+                    .insert("x-test-success", "1".parse().unwrap());
+            }
+
+            let (status, events) = capture_request(request).await;
+            assert_eq!(status.as_u16(), expected_status);
+            assert_eq!(events.len(), 1);
+            let event = &events[0];
+            assert_eq!(event["event"], expected_event);
+            let allowed = if succeeds {
+                [
+                    "timestamp",
+                    "level",
+                    "target",
+                    "event",
+                    "request_id",
+                    "status",
+                    "cleanup_pending",
+                    "message",
+                ]
+                .as_slice()
+            } else {
+                [
+                    "timestamp",
+                    "level",
+                    "target",
+                    "event",
+                    "request_id",
+                    "status",
+                    "reason",
+                    "message",
+                ]
+                .as_slice()
+            };
+            for key in event.as_object().unwrap().keys() {
+                assert!(
+                    allowed.contains(&key.as_str()),
+                    "unexpected log field: {key}"
+                );
+            }
+            let encoded = serde_json::to_string(event).unwrap();
+            for secret in [
+                "secret-account-credential",
+                "secret-account-session",
+                "secret-account-request-body",
+            ] {
+                assert!(!encoded.contains(secret));
+            }
+        }
     }
 }

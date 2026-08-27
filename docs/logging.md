@@ -65,10 +65,13 @@ the event is still emitted without that field and the response is unchanged.
 | `auth_logout_rejected` | `WARN` | `rejected` | Logout lacks a session or cannot rotate it |
 | `auth_profile_update_succeeded` | `INFO` | `success` | Registered or admin profile update and response assembly complete |
 | `auth_profile_update_rejected` | `WARN` | `rejected` | Profile update is rejected for session, account kind, or input validation |
+| `auth_account_delete_succeeded` | `INFO` | n/a | Registered account deletion committed |
+| `auth_account_delete_rejected` | `WARN` | n/a | Account deletion lacks an eligible active registered session |
 
-Every event has `event`, `outcome`, and `status`; `request_id` is present when
-the access middleware supplied it. Successful events omit `reason`. Rejected
-events use only `invalid_request`, `missing_session`, `invalid_session`,
+Every event has `event` and `status`; `request_id` is present when the access
+middleware supplied it. Authentication events other than account deletion also
+have `outcome`. Successful events omit `reason`. Rejected events use only
+`invalid_request`, `missing_session`, `invalid_session`,
 `wrong_session_kind`, `provider_rejected`, `not_configured`, or
 `state_transition_rejected`. Unexpected `5xx` results remain represented by
 the HTTP access and existing error logs rather than an authentication lifecycle
@@ -85,6 +88,16 @@ for malformed JSON, an empty display name, or an invalid avatar URL. Profile
 events additionally exclude user kind or role, display names, avatar URLs,
 emails, changed-field flags, and all profile input. Database and other `5xx`
 failures do not emit a profile event.
+
+Account-deletion success contains only `status`, `cleanup_pending`, and optional
+`request_id`; rejection contains only `status`, an allowlisted `reason`, and
+optional `request_id`. Neither event contains identity, profile, session/user
+ids, request values, or deletion counts. Attachment byte cleanup emits the
+aggregate `account_file_cleanup_batch` only for non-empty or abnormal work with
+`claimed_count`, `deleted_count`, `retried_count`, `failed_count`, and an
+optional bounded `error_category` (`permission_denied`, `io_error`,
+`database_error`, or `multiple`). It excludes storage keys, paths, owner ids,
+credentials, request data, and raw errors.
 
 ## Admin Authorization Rejection Events
 

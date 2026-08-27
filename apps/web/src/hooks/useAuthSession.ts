@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { readStorageItem, writeStorageItem } from "@/services/storageService";
 import {
+	deleteAccount,
 	fetchCurrentSession,
 	loginWithGoogle,
 	logoutSession,
@@ -95,6 +96,17 @@ export function useAuthSession() {
 		persistState(nextState);
 	}, []);
 
+	const deleteRegisteredAccount = useCallback(async () => {
+		const result = await deleteAccount();
+		const nextState: AuthState = {
+			user: null,
+			hasPendingGuestSync: false
+		};
+		setState(nextState);
+		persistState(nextState);
+		return result.cleanupPending;
+	}, []);
+
 	const updateUserProfile = useCallback(async (displayName: string, avatarUrl: string) => {
 		const session = await updateProfile(displayName, avatarUrl);
 		setState((current) => {
@@ -134,6 +146,7 @@ export function useAuthSession() {
 		profileLabel,
 		loginGoogleWithIdToken,
 		logout,
+		deleteAccount: deleteRegisteredAccount,
 		updateProfile: updateUserProfile,
 		markGuestSyncDone
 	};

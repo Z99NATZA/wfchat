@@ -401,5 +401,13 @@
 	"auth.profile.syncSection": "Your data",
 	"auth.profile.syncReady": "Chats and settings stay updated with this account.",
 	"auth.profile.accountSection": "Account",
-	"auth.profile.emailLabel": "Email"
+	"auth.profile.emailLabel": "Email",
+	"auth.profile.accountManagementSection": "Account management",
+	"auth.profile.deleteAccountDescription": "Permanently delete this account, its chats, synced data, and saved profile. Device theme, font, and language stay unchanged.",
+	"auth.profile.deleteAccount": "Delete account",
+	"auth.profile.deletingAccount": "Deleting account...",
+	"auth.profile.deleteAccountConfirmTitle": "Delete this account permanently?",
+	"auth.profile.deleteAccountConfirmDescription": "This cannot be undone. Your profile, chats, attachments, learned context, synced data, and Cafe progress will be deleted immediately.",
+	"auth.profile.deleteAccountConfirmLabel": "Delete account",
+	"auth.profile.deleteAccountError": "The account could not be deleted right now. Please try again."
 }

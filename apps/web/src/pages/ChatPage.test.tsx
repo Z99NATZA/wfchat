@@ -126,6 +126,7 @@ const auth = {
 	profileLabel: "Guest",
 	loginGoogleWithIdToken: vi.fn(),
 	logout: vi.fn(),
+	deleteAccount: vi.fn(),
 	markGuestSyncDone: vi.fn(),
 	updateProfile: vi.fn()
 };

@@ -229,6 +229,15 @@ function App() {
 		setIsProfileOpen(false);
 	}
 
+	async function handleDeleteAccount() {
+		await auth.deleteAccount();
+		clearLocalSyncState();
+		settings.applyPulledBackgroundImageUrl("");
+		chatSyncSnapshotRef.current?.resetToDraft();
+		setSyncError(null);
+		setIsProfileOpen(false);
+	}
+
 	function handleUpdateBackgroundImageUrl(url: string) {
 		settings.setBackgroundImageUrl(url);
 		if (auth.isAuthenticated) {
@@ -369,6 +378,7 @@ function App() {
 				onLogout={handleLogout}
 				onSyncNow={handleSyncNow}
 				onUpdateProfile={auth.updateProfile}
+				onDeleteAccount={handleDeleteAccount}
 				isSyncing={isSyncing}
 				syncError={syncError}
 			/>

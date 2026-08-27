@@ -16,6 +16,7 @@ vi.mock("@/services/apiClient", () => ({
 import {
 	compactItems,
 	compactQueue,
+	clearLocalSyncState,
 	computeNextRetryAt,
 	enqueueGuestSyncWithChat,
 	flushGuestSyncQueue,
@@ -39,6 +40,7 @@ const themeStorageKey = "wfchat-theme";
 const fontStorageKey = "wfchat-font";
 const localeStorageKey = "wfchat.locale";
 const backgroundImageUrlStorageKey = "wfchat.backgroundImageUrl";
+const deletesCacheKey = "wfchat-deletes-cache";
 const chatSessionsCacheKey = "wfchat-chat-sessions-cache";
 const chatMessagesCacheKey = "wfchat-chat-messages-cache";
 
@@ -94,6 +96,38 @@ afterEach(() => {
 });
 
 describe("syncService queue helpers", () => {
+	it("clears account sync/cache state while preserving device preferences", () => {
+		for (const key of [
+			syncQueueStorageKey,
+			syncCursorStorageKey,
+			syncMetaStorageKey,
+			deletesCacheKey,
+			chatSessionsCacheKey,
+			chatMessagesCacheKey
+		]) {
+			window.localStorage.setItem(key, "account-data");
+		}
+		window.localStorage.setItem(themeStorageKey, "dark");
+		window.localStorage.setItem(fontStorageKey, "sarabun");
+		window.localStorage.setItem(localeStorageKey, "th");
+
+		clearLocalSyncState();
+
+		for (const key of [
+			syncQueueStorageKey,
+			syncCursorStorageKey,
+			syncMetaStorageKey,
+			deletesCacheKey,
+			chatSessionsCacheKey,
+			chatMessagesCacheKey
+		]) {
+			expect(window.localStorage.getItem(key)).toBeNull();
+		}
+		expect(window.localStorage.getItem(themeStorageKey)).toBe("dark");
+		expect(window.localStorage.getItem(fontStorageKey)).toBe("sarabun");
+		expect(window.localStorage.getItem(localeStorageKey)).toBe("th");
+	});
+
 	it("keeps newest item per item_id", () => {
 		const items: SyncItem[] = [
 			{

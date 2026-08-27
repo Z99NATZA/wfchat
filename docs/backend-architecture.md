@@ -22,7 +22,7 @@ request, generation, and image-decode limiters, Cafe hub, and automatic-memory t
 
 | Module           | Responsibility                                                             |
 | ---------------- | -------------------------------------------------------------------------- |
-| `auth.rs`        | Guest cookie sessions, Google login, logout, current user, profile updates |
+| `auth.rs`        | Guest cookie sessions, Google login/logout, account deletion, current user, profile updates |
 | `characters.rs`  | Static character registry, UI metadata, and prompts                        |
 | `chat/`          | Chat CRUD, message preparation, JSON/SSE sends, attachments, speech        |
 | `memory.rs`      | Background extraction, structured retrieval, follow-ups, reset             |
@@ -65,6 +65,15 @@ must be HTTPS, except localhost/loopback HTTP used during development.
 Registered and admin profile updates emit a bounded success audit; missing,
 inactive, Guest, or invalid-input updates emit a bounded rejection event. These
 events contain no account identifiers or profile values.
+
+`DELETE /api/auth/account` is available only to an active registered Google
+session. It permanently removes the identity, profile, account-owned feature
+data, and every registered session in one database transaction, then issues a
+new Guest cookie. The replacement Guest carries only the current Bangkok-day
+account quota identity, so deleting and recreating an account cannot reset that
+day's allowance. The handler disconnects matching Cafe sockets and attempts
+queued attachment-byte deletion before responding; inaccessible files remain
+in the durable retry queue and set `cleanup_pending` in the response.
 
 ## AI Boundary
 
@@ -161,7 +170,8 @@ same send path with daily admission disabled.
 Chat creation, TTS, transcription, and automatic-memory provider work do not
 enter either daily chat-generation counter.
 
-Each quota admission transaction also runs one bounded retention pass. A pass
+API startup drains eligible past quota rows, and each quota admission
+transaction also runs one bounded retention pass. A pass
 deletes at most 500 terminal reservation rows from Bangkok dates before the
 current date, then deletes at most 500 eligible owner counters and 500 eligible
 global counters. Reserved owner/global states keep the corresponding past-day

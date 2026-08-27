@@ -64,6 +64,7 @@ const CAFE_RUSH_COMBO_WINDOW: Duration = Duration::from_secs(15);
 const MAX_CAFE_PLAYER_NAME_CHARS: usize = 24;
 const CAFE_RESYNC_CLOSE_CODE: u16 = 1013;
 const CAFE_MESSAGE_TOO_BIG_CLOSE_CODE: u16 = 1009;
+const CAFE_ACCOUNT_DELETED_CLOSE_CODE: u16 = 1008;
 const SERVICE_COUNTER_TARGET_ID: &str = "service-counter";
 const CAFE_MAP_LAYOUT: CafeMapLayout = CafeMapLayout {
     version: "cafe-room-v1",
@@ -143,6 +144,7 @@ pub struct CafeHub {
     limits: Arc<CafeSecurityConfig>,
     abuse: Arc<StdMutex<CafeAbuseState>>,
     telemetry: Arc<CafeTelemetry>,
+    session_revocations: broadcast::Sender<Uuid>,
     #[cfg(test)]
     active_movement_ticks: Arc<AtomicUsize>,
 }
@@ -780,14 +782,22 @@ impl Default for CafeHub {
 
 impl CafeHub {
     pub fn new(limits: CafeSecurityConfig) -> Self {
+        let (session_revocations, _) = broadcast::channel(64);
         Self {
             rooms: Arc::new(Mutex::new(HashMap::new())),
             creation_gate: Arc::new(Mutex::new(())),
             limits: Arc::new(limits),
             abuse: Arc::new(StdMutex::new(CafeAbuseState::default())),
             telemetry: Arc::new(CafeTelemetry::default()),
+            session_revocations,
             #[cfg(test)]
             active_movement_ticks: Arc::new(AtomicUsize::new(0)),
+        }
+    }
+
+    pub fn disconnect_sessions(&self, session_ids: &[Uuid]) {
+        for session_id in session_ids {
+            let _ = self.session_revocations.send(*session_id);
         }
     }
 
@@ -2144,6 +2154,7 @@ async fn handle_cafe_socket(
 ) {
     let player_id = player.id;
     let connection_id = player.connection_id;
+    let mut session_revocations = state.cafe.session_revocations.subscribe();
     let mut joined = match state.cafe.join(room_id, player).await {
         Ok(joined) => joined,
         Err(error) => {
@@ -2191,6 +2202,23 @@ async fn handle_cafe_socket(
     loop {
         tokio::select! {
             biased;
+            revoked = session_revocations.recv() => {
+                match revoked {
+                    Ok(session_id) if session_id == player_id => {
+                        let _ = socket
+                            .send(Message::Close(Some(cafe_account_deleted_close_frame())))
+                            .await;
+                        break;
+                    }
+                    Ok(_) => continue,
+                    Err(broadcast::error::RecvError::Lagged(_)) => {
+                        if state.store.get_session(player_id).await.ok().flatten().is_none() {
+                            break;
+                        }
+                    }
+                    Err(broadcast::error::RecvError::Closed) => {}
+                }
+            }
             event = receive_outbound_room_message(
                 &mut joined.receiver,
                 &mut joined.movement_receiver,
@@ -2358,6 +2386,13 @@ fn cafe_message_too_big_close_frame() -> CloseFrame {
     CloseFrame {
         code: CAFE_MESSAGE_TOO_BIG_CLOSE_CODE,
         reason: "cafe message exceeds configured size".into(),
+    }
+}
+
+fn cafe_account_deleted_close_frame() -> CloseFrame {
+    CloseFrame {
+        code: CAFE_ACCOUNT_DELETED_CLOSE_CODE,
+        reason: "account deleted".into(),
     }
 }
 
@@ -2869,6 +2904,18 @@ fn now_unix_seconds() -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn account_deletion_notifies_each_registered_cafe_session() {
+        let hub = CafeHub::default();
+        let mut receiver = hub.session_revocations.subscribe();
+        let session_ids = [Uuid::new_v4(), Uuid::new_v4()];
+
+        hub.disconnect_sessions(&session_ids);
+
+        assert_eq!(receiver.recv().await.unwrap(), session_ids[0]);
+        assert_eq!(receiver.recv().await.unwrap(), session_ids[1]);
+    }
 
     #[test]
     fn normalizes_optional_cafe_player_names() {

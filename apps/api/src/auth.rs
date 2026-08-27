@@ -2,7 +2,7 @@ use axum::{
     extract::{ConnectInfo, State},
     http::{header::SET_COOKIE, HeaderMap, HeaderValue, StatusCode},
     middleware,
-    routing::{get, patch, post},
+    routing::{delete, get, patch, post},
     Json, Router,
 };
 use reqwest::Url;
@@ -11,6 +11,7 @@ use std::net::SocketAddr;
 use uuid::Uuid;
 
 use crate::{
+    attachments::process_chat_attachment_file_deletions_for_keys,
     auth_log::{self, AuthRejectionReason},
     error::{AppError, AppResult},
     rate_limit::{RateLimitFamily, RateLimitIdentity},
@@ -26,6 +27,7 @@ pub fn router() -> Router<AppState> {
         .route("/auth/logout", post(logout))
         .route("/auth/me", get(current_user))
         .route("/auth/profile", patch(update_profile))
+        .route("/auth/account", delete(delete_account))
         .layer(middleware::from_fn(auth_log::request_context))
 }
 
@@ -43,6 +45,13 @@ struct SessionResponse {
 struct UserProfileResponse {
     display_name: String,
     avatar_url: Option<String>,
+}
+
+#[derive(Serialize)]
+struct AccountDeletionResponse {
+    #[serde(flatten)]
+    session: SessionResponse,
+    cleanup_pending: bool,
 }
 
 async fn create_guest_session(
@@ -269,6 +278,69 @@ async fn logout(
     );
     auth_log::logout_succeeded(StatusCode::OK);
     Ok(response)
+}
+
+async fn delete_account(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> AppResult<(HeaderMap, Json<AccountDeletionResponse>)> {
+    let Some(session_id) = session_id_from_headers(&state.config, &headers) else {
+        auth_log::account_delete_rejected(
+            StatusCode::FORBIDDEN,
+            AuthRejectionReason::MissingSession,
+        );
+        return Err(AppError::Forbidden);
+    };
+    let Some(session) = state.store.get_session(session_id).await? else {
+        auth_log::account_delete_rejected(
+            StatusCode::FORBIDDEN,
+            AuthRejectionReason::InvalidSession,
+        );
+        return Err(AppError::Forbidden);
+    };
+    if !matches!(session.kind, UserKind::Registered) {
+        auth_log::account_delete_rejected(
+            StatusCode::FORBIDDEN,
+            AuthRejectionReason::WrongSessionKind,
+        );
+        return Err(AppError::Forbidden);
+    }
+
+    let Some(deleted) = state.store.delete_registered_account(session_id).await? else {
+        auth_log::account_delete_rejected(
+            StatusCode::FORBIDDEN,
+            AuthRejectionReason::StateTransitionRejected,
+        );
+        return Err(AppError::Forbidden);
+    };
+    state.cafe.disconnect_sessions(&deleted.revoked_session_ids);
+    let cleanup_pending = process_chat_attachment_file_deletions_for_keys(
+        &state.config,
+        &state.store,
+        &deleted.attachment_storage_keys,
+    )
+    .await;
+
+    let mut response_headers = HeaderMap::new();
+    let cookie = session_cookie(&state.config, deleted.guest.id);
+    if let Ok(value) = HeaderValue::from_str(&cookie) {
+        response_headers.insert(SET_COOKIE, value);
+    }
+    auth_log::account_delete_succeeded(StatusCode::OK, cleanup_pending);
+    Ok((
+        response_headers,
+        Json(AccountDeletionResponse {
+            session: SessionResponse {
+                user_id: deleted.guest.user_id,
+                session_id: deleted.guest.id,
+                kind: user_kind_label(&deleted.guest.kind).to_owned(),
+                email: None,
+                name: None,
+                profile: None,
+            },
+            cleanup_pending,
+        }),
+    ))
 }
 
 #[derive(Deserialize)]
@@ -810,6 +882,7 @@ mod tests {
         let before = state.store.auth_session_creation_count_for_test();
         let requests = [
             ("PATCH", "/api/auth/profile", r#"{}"#),
+            ("DELETE", "/api/auth/account", ""),
             (
                 "POST",
                 "/api/personas/aiko/follow-up",
@@ -947,6 +1020,67 @@ mod tests {
         state
             .store
             .delete_session_for_test(old_session.id)
+            .await
+            .unwrap();
+    }
+
+    #[tokio::test]
+    async fn registered_account_deletion_returns_guest_and_rejects_reuse() {
+        let Some(state) = test_state(None).await else {
+            return;
+        };
+        let guest = state.store.create_guest_session().await.unwrap();
+        let user_id = Uuid::new_v4();
+        let subject = format!("delete-handler-{user_id}");
+        let registered = state
+            .store
+            .promote_guest_session_with_google(
+                guest.id,
+                user_id,
+                &subject,
+                Some(format!("{subject}@example.com")),
+                Some("Delete Handler".to_owned()),
+                None,
+            )
+            .await
+            .unwrap()
+            .unwrap();
+
+        let (headers, Json(response)) =
+            delete_account(State(state.clone()), cookie_headers(registered.id))
+                .await
+                .expect("registered account deletion should succeed");
+
+        assert_eq!(response.session.kind, "guest");
+        assert!(!response.cleanup_pending);
+        assert!(headers
+            .get(SET_COOKIE)
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .contains(&format!("wfchat_session={}", response.session.session_id)));
+        assert!(state
+            .store
+            .get_session(registered.id)
+            .await
+            .unwrap()
+            .is_none());
+        assert!(matches!(
+            delete_account(State(state.clone()), cookie_headers(registered.id)).await,
+            Err(AppError::Forbidden)
+        ));
+        assert!(matches!(
+            delete_account(
+                State(state.clone()),
+                cookie_headers(response.session.session_id)
+            )
+            .await,
+            Err(AppError::Forbidden)
+        ));
+
+        state
+            .store
+            .delete_session_for_test(response.session.session_id)
             .await
             .unwrap();
     }

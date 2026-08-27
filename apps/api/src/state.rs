@@ -176,10 +176,7 @@ fn spawn_attachment_maintenance(config: Config, store: ChatStore) {
                     "enqueued orphaned chat image files for deletion"
                 );
             }
-            let deleted_count = process_chat_attachment_file_deletions(&config, &store).await;
-            if deleted_count > 0 {
-                tracing::info!(deleted_count, "deleted chat attachment files");
-            }
+            process_chat_attachment_file_deletions(&config, &store).await;
 
             sleep(Duration::from_secs(
                 PENDING_ATTACHMENT_CLEANUP_INTERVAL_SECONDS,

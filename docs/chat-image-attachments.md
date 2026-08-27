@@ -107,6 +107,13 @@ cascades caused by clearing messages, deleting chats, or deleting guest
 sessions. Pending attachments older than 24 hours are hard-deleted in batches;
 linked attachments are not targeted by pending cleanup.
 
+Account deletion hard-deletes all owned attachment metadata, so the same
+database trigger queues the bytes. Queue ownership is removed with the account.
+The request tries one bounded batch immediately; missing files count as
+success, while inaccessible files remain durable for hourly and next-startup
+retry. `cleanup_pending: true` means server cleanup remains and requires no
+user action.
+
 At API startup and hourly, each replica claims at most 100 deletion records with
 a 15-minute PostgreSQL lease before filesystem I/O. Successful deletion and an
 already-missing file both remove the record. Other filesystem failures retain

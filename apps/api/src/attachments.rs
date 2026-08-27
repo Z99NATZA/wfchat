@@ -266,23 +266,158 @@ pub async fn cleanup_stale_pending_chat_attachments(store: &ChatStore) -> usize 
 }
 
 pub async fn process_chat_attachment_file_deletions(config: &Config, store: &ChatStore) -> usize {
-    process_chat_attachment_file_deletions_batch(config, store, ATTACHMENT_FILE_DELETION_BATCH_SIZE)
+    let stats = process_chat_attachment_file_deletions_batch(
+        config,
+        store,
+        None,
+        ATTACHMENT_FILE_DELETION_BATCH_SIZE,
+    )
+    .await;
+    emit_attachment_file_cleanup_batch(stats);
+    stats.deleted_count
+}
+
+pub async fn process_chat_attachment_file_deletions_for_keys(
+    config: &Config,
+    store: &ChatStore,
+    storage_keys: &[String],
+) -> bool {
+    if storage_keys.is_empty() {
+        return false;
+    }
+    let mut stats = process_chat_attachment_file_deletions_batch(
+        config,
+        store,
+        Some(storage_keys),
+        ATTACHMENT_FILE_DELETION_BATCH_SIZE,
+    )
+    .await;
+    let cleanup_pending = match store
+        .count_chat_attachment_file_deletions_for_keys(storage_keys)
         .await
+    {
+        Ok(count) => count > 0,
+        Err(_) => {
+            stats.failed_count += 1;
+            record_cleanup_error(
+                &mut stats,
+                AttachmentFileCleanupErrorCategory::DatabaseError,
+            );
+            true
+        }
+    };
+    emit_attachment_file_cleanup_batch(stats);
+    cleanup_pending
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+struct AttachmentFileCleanupStats {
+    claimed_count: usize,
+    deleted_count: usize,
+    retried_count: usize,
+    failed_count: usize,
+    error_category: Option<AttachmentFileCleanupErrorCategory>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum AttachmentFileCleanupErrorCategory {
+    PermissionDenied,
+    IoError,
+    DatabaseError,
+    Multiple,
+}
+
+impl AttachmentFileCleanupErrorCategory {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::PermissionDenied => "permission_denied",
+            Self::IoError => "io_error",
+            Self::DatabaseError => "database_error",
+            Self::Multiple => "multiple",
+        }
+    }
+}
+
+fn record_cleanup_error(
+    stats: &mut AttachmentFileCleanupStats,
+    category: AttachmentFileCleanupErrorCategory,
+) {
+    stats.error_category = match stats.error_category {
+        None => Some(category),
+        Some(existing) if existing == category => Some(existing),
+        Some(_) => Some(AttachmentFileCleanupErrorCategory::Multiple),
+    };
+}
+
+fn emit_attachment_file_cleanup_batch(stats: AttachmentFileCleanupStats) {
+    if stats.claimed_count == 0 && stats.failed_count == 0 {
+        return;
+    }
+    let error_category = stats.error_category.map(|category| category.as_str());
+    if stats.failed_count > 0 {
+        tracing::error!(
+            target: "wfchat::attachment_cleanup",
+            event = "account_file_cleanup_batch",
+            claimed_count = stats.claimed_count,
+            deleted_count = stats.deleted_count,
+            retried_count = stats.retried_count,
+            failed_count = stats.failed_count,
+            error_category,
+            "attachment cleanup batch"
+        );
+    } else if stats.retried_count > 0 {
+        tracing::warn!(
+            target: "wfchat::attachment_cleanup",
+            event = "account_file_cleanup_batch",
+            claimed_count = stats.claimed_count,
+            deleted_count = stats.deleted_count,
+            retried_count = stats.retried_count,
+            failed_count = stats.failed_count,
+            error_category,
+            "attachment cleanup batch"
+        );
+    } else {
+        tracing::info!(
+            target: "wfchat::attachment_cleanup",
+            event = "account_file_cleanup_batch",
+            claimed_count = stats.claimed_count,
+            deleted_count = stats.deleted_count,
+            retried_count = stats.retried_count,
+            failed_count = stats.failed_count,
+            error_category,
+            "attachment cleanup batch"
+        );
+    }
 }
 
 async fn process_chat_attachment_file_deletions_batch(
     config: &Config,
     store: &ChatStore,
+    storage_keys: Option<&[String]>,
     limit: i64,
-) -> usize {
-    let deletions = match store.claim_chat_attachment_file_deletions(limit).await {
+) -> AttachmentFileCleanupStats {
+    let claimed = match storage_keys {
+        Some(storage_keys) => {
+            store
+                .claim_chat_attachment_file_deletions_for_keys(storage_keys, limit)
+                .await
+        }
+        None => store.claim_chat_attachment_file_deletions(limit).await,
+    };
+    let deletions = match claimed {
         Ok(deletions) => deletions,
-        Err(error) => {
-            tracing::error!(%error, "failed to claim chat attachment file deletions");
-            return 0;
+        Err(_) => {
+            return AttachmentFileCleanupStats {
+                failed_count: 1,
+                error_category: Some(AttachmentFileCleanupErrorCategory::DatabaseError),
+                ..AttachmentFileCleanupStats::default()
+            };
         }
     };
-    let mut completed = 0;
+    let mut stats = AttachmentFileCleanupStats {
+        claimed_count: deletions.len(),
+        ..AttachmentFileCleanupStats::default()
+    };
 
     for deletion in deletions {
         match delete_attachment_file(&config.chat_attachment_upload_dir, &deletion.storage_key)
@@ -292,49 +427,52 @@ async fn process_chat_attachment_file_deletions_batch(
                 .complete_chat_attachment_file_deletion(&deletion.storage_key, deletion.claim_token)
                 .await
             {
-                Ok(true) => completed += 1,
+                Ok(true) => stats.deleted_count += 1,
                 Ok(false) => {
-                    tracing::warn!(
-                        storage_key = %deletion.storage_key,
-                        "attachment file deletion claim changed before completion"
+                    stats.failed_count += 1;
+                    record_cleanup_error(
+                        &mut stats,
+                        AttachmentFileCleanupErrorCategory::DatabaseError,
                     );
                 }
-                Err(error) => {
-                    tracing::error!(
-                        %error,
-                        storage_key = %deletion.storage_key,
-                        "failed to complete chat attachment file deletion"
+                Err(_) => {
+                    stats.failed_count += 1;
+                    record_cleanup_error(
+                        &mut stats,
+                        AttachmentFileCleanupErrorCategory::DatabaseError,
                     );
                 }
             },
             Err(error) => {
-                tracing::warn!(
-                    %error,
-                    storage_key = %deletion.storage_key,
-                    attempt_count = deletion.attempt_count,
-                    byte_size = deletion.byte_size,
-                    owner_session_id = ?deletion.owner_session_id,
-                    owner_user_id = ?deletion.owner_user_id,
-                    "failed to delete chat attachment file"
+                record_cleanup_error(
+                    &mut stats,
+                    if error.kind() == std::io::ErrorKind::PermissionDenied {
+                        AttachmentFileCleanupErrorCategory::PermissionDenied
+                    } else {
+                        AttachmentFileCleanupErrorCategory::IoError
+                    },
                 );
-                if let Err(retry_error) = store
+                match store
                     .retry_chat_attachment_file_deletion(
                         &deletion.storage_key,
                         deletion.claim_token,
                     )
                     .await
                 {
-                    tracing::error!(
-                        error = %retry_error,
-                        storage_key = %deletion.storage_key,
-                        "failed to retain chat attachment file deletion for retry"
-                    );
+                    Ok(true) => stats.retried_count += 1,
+                    Ok(false) | Err(_) => {
+                        stats.failed_count += 1;
+                        record_cleanup_error(
+                            &mut stats,
+                            AttachmentFileCleanupErrorCategory::DatabaseError,
+                        );
+                    }
                 }
             }
         }
     }
 
-    completed
+    stats
 }
 
 impl AttachmentOrphanScan {
@@ -531,11 +669,90 @@ fn image_validation_error(error: ImageError) -> AppError {
 
 #[cfg(test)]
 mod tests {
-    use std::io::Cursor;
+    use std::{
+        io::{self, Cursor, Write},
+        sync::{Arc, Mutex},
+    };
 
     use image::{DynamicImage, ImageBuffer, ImageFormat, Rgb};
+    use serde_json::Value;
+    use tracing_subscriber::fmt::MakeWriter;
 
     use super::*;
+
+    #[derive(Clone, Default)]
+    struct CapturedWriter(Arc<Mutex<Vec<u8>>>);
+
+    impl Write for CapturedWriter {
+        fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+            self.0.lock().expect("captured log lock").extend(bytes);
+            Ok(bytes.len())
+        }
+
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
+
+    impl<'writer> MakeWriter<'writer> for CapturedWriter {
+        type Writer = CapturedWriter;
+
+        fn make_writer(&'writer self) -> Self::Writer {
+            self.clone()
+        }
+    }
+
+    #[test]
+    fn attachment_cleanup_batch_log_uses_only_aggregate_allowlisted_fields() {
+        let writer = CapturedWriter::default();
+        let subscriber = tracing_subscriber::fmt()
+            .json()
+            .flatten_event(true)
+            .with_current_span(false)
+            .with_span_list(false)
+            .with_writer(writer.clone())
+            .finish();
+        let _guard = tracing::subscriber::set_default(subscriber);
+        emit_attachment_file_cleanup_batch(AttachmentFileCleanupStats {
+            claimed_count: 4,
+            deleted_count: 2,
+            retried_count: 1,
+            failed_count: 1,
+            error_category: Some(AttachmentFileCleanupErrorCategory::Multiple),
+        });
+
+        let output = writer.0.lock().unwrap().clone();
+        let event: Value = serde_json::from_slice(&output).expect("cleanup log should be JSON");
+        assert_eq!(event["event"], "account_file_cleanup_batch");
+        assert_eq!(event["error_category"], "multiple");
+        let allowed = [
+            "timestamp",
+            "level",
+            "target",
+            "event",
+            "claimed_count",
+            "deleted_count",
+            "retried_count",
+            "failed_count",
+            "error_category",
+            "message",
+        ];
+        for key in event.as_object().unwrap().keys() {
+            assert!(
+                allowed.contains(&key.as_str()),
+                "unexpected log field: {key}"
+            );
+        }
+        let encoded = serde_json::to_string(&event).unwrap();
+        for secret in [
+            "chat-images/secret-file.png",
+            "secret-user-id",
+            "secret-session-id",
+            "secret raw filesystem error",
+        ] {
+            assert!(!encoded.contains(secret));
+        }
+    }
 
     async fn test_store() -> Option<ChatStore> {
         let database_url = std::env::var("WFCHAT_TEST_DATABASE_URL").ok()?;
@@ -831,7 +1048,9 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(
-            process_chat_attachment_file_deletions_batch(&config, &store, 1).await,
+            process_chat_attachment_file_deletions_batch(&config, &store, None, 1)
+                .await
+                .deleted_count,
             1
         );
         assert_eq!(
@@ -853,7 +1072,7 @@ mod tests {
             .set_attachment_file_deletions_ready_for_test(std::slice::from_ref(&retry_key))
             .await
             .unwrap();
-        process_chat_attachment_file_deletions_batch(&config, &store, 1).await;
+        process_chat_attachment_file_deletions_batch(&config, &store, None, 1).await;
         assert_eq!(
             store
                 .count_attachment_file_deletions_for_test(std::slice::from_ref(&retry_key))
@@ -873,7 +1092,7 @@ mod tests {
             .set_attachment_file_deletions_ready_for_test(std::slice::from_ref(&retry_key))
             .await
             .unwrap();
-        process_chat_attachment_file_deletions_batch(&config, &store, 1).await;
+        process_chat_attachment_file_deletions_batch(&config, &store, None, 1).await;
         assert_eq!(
             store
                 .count_attachment_file_deletions_for_test(std::slice::from_ref(&retry_key))
@@ -895,7 +1114,7 @@ mod tests {
             .set_attachment_file_deletions_ready_for_test(&bounded_keys)
             .await
             .unwrap();
-        process_chat_attachment_file_deletions_batch(&config, &store, 100).await;
+        process_chat_attachment_file_deletions_batch(&config, &store, None, 100).await;
         assert_eq!(
             store
                 .count_attachment_file_deletions_for_test(&bounded_keys)

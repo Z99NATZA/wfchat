@@ -15,6 +15,7 @@ import type { Theme } from "@/types/theme";
 
 const syncQueueStorageKey = "wfchat-sync-queue";
 const syncCursorStorageKey = "wfchat-sync-cursor";
+const syncMetaStorageKey = "wfchat-sync-meta";
 const localeStorageKey = "wfchat.locale";
 const themeStorageKey = "wfchat-theme";
 const fontStorageKey = "wfchat-font";
@@ -210,6 +211,7 @@ export function hasPendingSyncQueue(): boolean {
 export function clearLocalSyncState(): void {
 	removeStorageItem(syncQueueStorageKey);
 	removeStorageItem(syncCursorStorageKey);
+	removeStorageItem(syncMetaStorageKey);
 	removeStorageItem(deletesCacheKey);
 	removeStorageItem(chatSessionsCacheKey);
 	removeStorageItem(chatMessagesCacheKey);

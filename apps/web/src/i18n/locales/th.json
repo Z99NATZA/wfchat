@@ -401,5 +401,13 @@
 	"auth.profile.syncSection": "ข้อมูลของคุณ",
 	"auth.profile.syncReady": "แชทและการตั้งค่าจะอัปเดตตามบัญชีนี้",
 	"auth.profile.accountSection": "บัญชี",
-	"auth.profile.emailLabel": "อีเมล"
+	"auth.profile.emailLabel": "อีเมล",
+	"auth.profile.accountManagementSection": "จัดการบัญชี",
+	"auth.profile.deleteAccountDescription": "ลบบัญชี แชท ข้อมูลที่ซิงก์ และโปรไฟล์อย่างถาวร โดยธีม ฟอนต์ และภาษาของอุปกรณ์นี้จะยังคงอยู่",
+	"auth.profile.deleteAccount": "ลบบัญชี",
+	"auth.profile.deletingAccount": "กำลังลบบัญชี...",
+	"auth.profile.deleteAccountConfirmTitle": "ลบบัญชีนี้อย่างถาวรใช่ไหม?",
+	"auth.profile.deleteAccountConfirmDescription": "ย้อนกลับไม่ได้ ระบบจะลบโปรไฟล์ แชท ไฟล์แนบ ข้อมูลที่เรียนรู้ ข้อมูลซิงก์ และความคืบหน้าใน Cafe ทันที",
+	"auth.profile.deleteAccountConfirmLabel": "ลบบัญชี",
+	"auth.profile.deleteAccountError": "ตอนนี้ลบบัญชีไม่สำเร็จ กรุณาลองใหม่"
 }

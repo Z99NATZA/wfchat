@@ -236,6 +236,75 @@ impl ChatStore {
             .collect())
     }
 
+    pub async fn claim_chat_attachment_file_deletions_for_keys(
+        &self,
+        storage_keys: &[String],
+        limit: i64,
+    ) -> StoreResult<Vec<ChatAttachmentFileDeletionRecord>> {
+        if storage_keys.is_empty() || limit <= 0 {
+            return Ok(Vec::new());
+        }
+
+        let claim_token = Uuid::new_v4();
+        let rows = sqlx::query(
+            "with eligible as (
+                select storage_key
+                from chat_attachment_file_deletions
+                where storage_key = any($1)
+                  and next_attempt_at <= now()
+                  and (claim_token is null or claim_expires_at <= now())
+                order by next_attempt_at, created_at, storage_key
+                for update skip locked
+                limit $2
+             )
+             update chat_attachment_file_deletions deletion
+             set claim_token = $3,
+                 claim_expires_at = now() + interval '15 minutes',
+                 attempt_count = attempt_count + 1
+             from eligible
+             where deletion.storage_key = eligible.storage_key
+             returning deletion.storage_key,
+                       deletion.byte_size,
+                       deletion.owner_session_id,
+                       deletion.owner_user_id,
+                       deletion.attempt_count",
+        )
+        .bind(storage_keys)
+        .bind(limit)
+        .bind(claim_token)
+        .fetch_all(self.db.as_ref())
+        .await?;
+
+        Ok(rows
+            .into_iter()
+            .map(|row| ChatAttachmentFileDeletionRecord {
+                storage_key: row.get("storage_key"),
+                byte_size: row.get("byte_size"),
+                owner_session_id: row.get("owner_session_id"),
+                owner_user_id: row.get("owner_user_id"),
+                attempt_count: row.get("attempt_count"),
+                claim_token,
+            })
+            .collect())
+    }
+
+    pub async fn count_chat_attachment_file_deletions_for_keys(
+        &self,
+        storage_keys: &[String],
+    ) -> StoreResult<i64> {
+        if storage_keys.is_empty() {
+            return Ok(0);
+        }
+        sqlx::query_scalar(
+            "select count(*)::bigint
+             from chat_attachment_file_deletions
+             where storage_key = any($1)",
+        )
+        .bind(storage_keys)
+        .fetch_one(self.db.as_ref())
+        .await
+    }
+
     pub async fn complete_chat_attachment_file_deletion(
         &self,
         storage_key: &str,

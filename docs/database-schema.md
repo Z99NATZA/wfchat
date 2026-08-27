@@ -37,6 +37,16 @@ session rows are excluded.
 editable display name and avatar URL; a later provider login does not overwrite
 profile edits.
 
+Registered account deletion locks the account and removes all registered
+sessions, Google identity/profile rows, chats and attachments, automatic-memory
+rows/jobs/follow-ups, sync rows/commits, and Cafe persistence in one
+transaction. Attachment triggers preserve only storage cleanup work and its
+ownership columns are nulled. Existing carryover Guests are unlinked; the new
+replacement Guest alone retains `quota_carryover_user_id` for the current
+Bangkok date. Only today's account owner counter remains. Account-scoped quota
+reservations and older owner counters are removed, while any unstarted global
+reservation is released from the independent global counter.
+
 ## Tables
 
 | Table                         | Role                                                            |
@@ -88,7 +98,8 @@ global use remains durable after later failure. Admission recovers stale
 pre-provider reservations by releasing both counters and stale
 provider-started reservations by releasing only their owner counter.
 
-Past quota ledger retention is driven by chat quota admission. Each admission
+Past quota ledger retention runs at API startup and during chat quota
+admission. Each admission
 deletes one indexed batch of at most 500 terminal reservations whose
 `quota_date` is earlier than the current Bangkok date. It then independently
 deletes at most 500 past owner counters that have no matching reserved owner

@@ -106,6 +106,11 @@ Rewards are idempotent per room, round, and session. Cafe progress does not use
 browser local storage or the generic sync queue; only first-visit guide
 dismissal is a local UI preference.
 
+Permanent account deletion removes account-owned progress, loadouts, and reward
+rows. All Cafe WebSockets belonging to the deleted registered sessions receive
+a policy close and their room players leave; the replacement Guest starts with
+empty Cafe persistence.
+
 ## API And Realtime Contract
 
 Lobby, progress, and loadout operations use `/api/cafe/*`:

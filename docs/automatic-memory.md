@@ -107,6 +107,10 @@ message.
 - `DELETE /api/learned-context` deletes the owner's items, sources, follow-up
   state, and queued/processing extraction work while retaining chat history.
 - Expired items are excluded at query time even before physical cleanup.
+- Permanent account deletion removes the account's memory items, evidence,
+  extraction jobs, and follow-up deliveries in the same transaction as the
+  account. No learned context is carried into the replacement Guest or a later
+  Google signup.
 - Missing or inactive sessions on the follow-up and reset routes emit a bounded
   authorization event. A completed reset emits a bounded success audit even
   when there was nothing to delete. These security events contain no owner or

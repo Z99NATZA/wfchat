@@ -29,6 +29,13 @@ ActivityBar -> page sidebar -> page header/content/details
 
 The activity bar uses route links instead of page state, so the URL is the source of truth for reload, back, and forward navigation.
 
+The authenticated Profile sheet ends with a separate destructive account
+management card after the Account card. Account deletion uses one destructive
+confirmation dialog, closes the sheet after success, resets Chat to a draft,
+and returns the browser to Guest state. Theme, font, and locale stay as
+device-level preferences; account-derived chat/sync caches and the synced
+background image are cleared.
+
 ## Layout Contract
 
 `apps/web/src/layouts/AppLayout.tsx` owns the shared shell:

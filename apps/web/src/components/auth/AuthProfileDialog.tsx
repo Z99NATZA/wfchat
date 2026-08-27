@@ -1,9 +1,10 @@
 import GoogleSignInButton from "@/components/auth/GoogleSignInButton";
+import { useDialog } from "@/components/dialog/DialogContext";
 import { useDialogBackgroundSurface } from "@/components/dialog/useDialogBackgroundSurface";
 import Button from "@/components/ui/Button";
 import IconButton from "@/components/ui/IconButton";
 import { useI18n } from "@/i18n/i18nContext";
-import { CheckCircle2, LogOut, Mail, User, X } from "lucide-react";
+import { CheckCircle2, LogOut, Mail, Trash2, User, X } from "lucide-react";
 import { type FormEvent, useEffect, useMemo, useState } from "react";
 
 type AuthProfileDialogProps = {
@@ -19,6 +20,7 @@ type AuthProfileDialogProps = {
 	onLogout: () => void;
 	onSyncNow: () => void;
 	onUpdateProfile: (displayName: string, avatarUrl: string) => Promise<void>;
+	onDeleteAccount: () => Promise<void>;
 	isSyncing?: boolean;
 	syncError?: string | null;
 };
@@ -36,15 +38,19 @@ function AuthProfileDialog({
 	onLogout,
 	onSyncNow,
 	onUpdateProfile,
+	onDeleteAccount,
 	isSyncing = false,
 	syncError = null
 }: AuthProfileDialogProps) {
 	const { t } = useI18n();
+	const { confirm } = useDialog();
 	const [displayNameDraft, setDisplayNameDraft] = useState(profileLabel);
 	const [avatarUrlDraft, setAvatarUrlDraft] = useState(avatarUrl ?? "");
 	const [isSavingProfile, setIsSavingProfile] = useState(false);
 	const [profileMessage, setProfileMessage] = useState<string | null>(null);
 	const [profileError, setProfileError] = useState<string | null>(null);
+	const [isDeletingAccount, setIsDeletingAccount] = useState(false);
+	const [accountDeleteError, setAccountDeleteError] = useState<string | null>(null);
 	const profileSurface = useDialogBackgroundSurface(backgroundImageUrl, isOpen);
 
 	useEffect(() => {
@@ -56,6 +62,7 @@ function AuthProfileDialog({
 		setAvatarUrlDraft(avatarUrl ?? "");
 		setProfileMessage(null);
 		setProfileError(null);
+		setAccountDeleteError(null);
 	}, [avatarUrl, isOpen, profileLabel]);
 
 	const initials = useMemo(() => {
@@ -89,6 +96,31 @@ function AuthProfileDialog({
 			setProfileError(t("auth.profile.profileSaveError"));
 		} finally {
 			setIsSavingProfile(false);
+		}
+	}
+
+	async function handleDeleteAccount() {
+		if (isDeletingAccount) {
+			return;
+		}
+		const shouldDelete = await confirm({
+			title: t("auth.profile.deleteAccountConfirmTitle"),
+			description: t("auth.profile.deleteAccountConfirmDescription"),
+			confirmLabel: t("auth.profile.deleteAccountConfirmLabel"),
+			tone: "destructive"
+		});
+		if (!shouldDelete) {
+			return;
+		}
+
+		setIsDeletingAccount(true);
+		setAccountDeleteError(null);
+		try {
+			await onDeleteAccount();
+		} catch {
+			setAccountDeleteError(t("auth.profile.deleteAccountError"));
+		} finally {
+			setIsDeletingAccount(false);
 		}
 	}
 
@@ -279,6 +311,36 @@ function AuthProfileDialog({
 									</div>
 									<p className="mt-1 truncate text-app-text">{email}</p>
 								</div>
+							</section>
+
+							<section
+								className="rounded-2xl border border-red-500/35 bg-dialog-panel p-4"
+								data-testid="account-management-section"
+							>
+								<h3 className="text-sm font-semibold text-app-text">
+									{t("auth.profile.accountManagementSection")}
+								</h3>
+								<p className="mt-1 text-sm text-muted">
+									{t("auth.profile.deleteAccountDescription")}
+								</p>
+								<Button
+									variant="destructive"
+									size="lg"
+									fullWidth
+									className="mt-4"
+									onClick={handleDeleteAccount}
+									disabled={isDeletingAccount}
+								>
+									<Trash2 size={16} aria-hidden="true" />
+									{isDeletingAccount
+										? t("auth.profile.deletingAccount")
+										: t("auth.profile.deleteAccount")}
+								</Button>
+								{accountDeleteError && (
+									<p className="mt-2 text-xs text-red-500">
+										{accountDeleteError}
+									</p>
+								)}
 							</section>
 						</>
 					)}

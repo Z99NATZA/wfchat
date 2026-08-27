@@ -36,6 +36,13 @@ pub struct SessionRecord {
     pub created_at: u64,
 }
 
+#[derive(Clone, Debug)]
+pub struct AccountDeletionResult {
+    pub guest: SessionRecord,
+    pub attachment_storage_keys: Vec<String>,
+    pub revoked_session_ids: Vec<Uuid>,
+}
+
 #[derive(Clone, Copy, Debug)]
 pub struct OwnerScope {
     pub session_id: Uuid,
@@ -420,6 +427,250 @@ mod integration_tests {
             .create_chat(owner, "aiko".to_owned(), "aiko_default".to_owned())
             .await
             .expect("chat should create")
+    }
+
+    #[tokio::test]
+    async fn account_deletion_removes_owned_data_and_identity_but_keeps_only_today_quota() {
+        let Some(store) = test_store().await else {
+            return;
+        };
+        let guest = create_test_session(&store).await;
+        let user_id = Uuid::new_v4();
+        let subject = format!("delete-account-{user_id}");
+        let registered = store
+            .promote_guest_session_with_google(
+                guest.id,
+                user_id,
+                &subject,
+                Some(format!("{subject}@example.com")),
+                Some("Delete Me".to_owned()),
+                Some("https://example.com/delete-me.png".to_owned()),
+            )
+            .await
+            .expect("promotion should query")
+            .expect("promotion should succeed");
+        let second_guest = create_test_session(&store).await;
+        let second_registered = store
+            .promote_session_to_registered(second_guest.id, user_id)
+            .await
+            .expect("second promotion should query")
+            .expect("second promotion should succeed");
+        let carryover_guest = store
+            .logout_registered_session_to_guest(second_registered.id)
+            .await
+            .expect("logout should query")
+            .expect("logout should create carryover guest");
+        let owner = OwnerScope::from_session(&registered);
+        create_test_chat(&store, owner).await;
+        let storage_key = format!("chat-images/{user_id}.png");
+        store
+            .create_chat_attachment(
+                owner,
+                NewChatAttachmentRecord {
+                    id: Uuid::new_v4(),
+                    kind: "image".to_owned(),
+                    mime_type: "image/png".to_owned(),
+                    byte_size: 12,
+                    width: Some(1),
+                    height: Some(1),
+                    sha256: "test".to_owned(),
+                    storage_key: storage_key.clone(),
+                },
+            )
+            .await
+            .expect("attachment should create");
+        store
+            .upsert_sync_entity(&SyncEntityRecord {
+                session_id: registered.id,
+                owner_user_id: Some(user_id),
+                item_id: format!("delete-account-{user_id}"),
+                item_type: "setting".to_owned(),
+                updated_at: now_unix_seconds(),
+                deleted_at: None,
+                payload: serde_json::json!({"secret": "remove me"}),
+            })
+            .await
+            .expect("sync entity should create");
+        let legacy_sync_guest = create_test_session(&store).await;
+        store
+            .upsert_sync_entity(&SyncEntityRecord {
+                session_id: legacy_sync_guest.id,
+                owner_user_id: Some(user_id),
+                item_id: format!("legacy-delete-account-{user_id}"),
+                item_type: "setting".to_owned(),
+                updated_at: now_unix_seconds(),
+                deleted_at: None,
+                payload: serde_json::json!({"secret": "remove legacy sync"}),
+            })
+            .await
+            .expect("legacy sync entity should create");
+        sqlx::query(
+            "insert into sync_commits
+               (operation_id, session_id, user_id, merged_count, conflict_count)
+             values ($1, $2, $3, 1, 0)",
+        )
+        .bind(format!("legacy-delete-{user_id}"))
+        .bind(legacy_sync_guest.id)
+        .bind(legacy_sync_guest.user_id)
+        .execute(store.db.as_ref())
+        .await
+        .expect("legacy sync commit should create");
+
+        sqlx::query(
+            "insert into chat_daily_owner_quotas (quota_date, owner_kind, owner_id, usage_count)
+             values
+               ((now() at time zone 'Asia/Bangkok')::date, 'account', $1, 3),
+               ((now() at time zone 'Asia/Bangkok')::date - 1, 'account', $1, 9)
+             on conflict (quota_date, owner_kind, owner_id)
+             do update set usage_count = excluded.usage_count",
+        )
+        .bind(user_id)
+        .execute(store.db.as_ref())
+        .await
+        .expect("quota fixtures should create");
+
+        let result = store
+            .delete_registered_account(registered.id)
+            .await
+            .expect("account deletion should query")
+            .expect("registered account should delete");
+
+        assert!(matches!(result.guest.kind, UserKind::Guest));
+        assert!(result.attachment_storage_keys.contains(&storage_key));
+        assert!(store.get_session(registered.id).await.unwrap().is_none());
+        assert!(store
+            .get_session(second_registered.id)
+            .await
+            .unwrap()
+            .is_none());
+        let identity_count: i64 =
+            sqlx::query_scalar("select count(*)::bigint from auth_identities where user_id = $1")
+                .bind(user_id)
+                .fetch_one(store.db.as_ref())
+                .await
+                .unwrap();
+        let profile_count: i64 =
+            sqlx::query_scalar("select count(*)::bigint from user_profiles where user_id = $1")
+                .bind(user_id)
+                .fetch_one(store.db.as_ref())
+                .await
+                .unwrap();
+        let chat_count: i64 =
+            sqlx::query_scalar("select count(*)::bigint from chats where owner_user_id = $1")
+                .bind(user_id)
+                .fetch_one(store.db.as_ref())
+                .await
+                .unwrap();
+        let sync_count: i64 = sqlx::query_scalar(
+            "select count(*)::bigint from sync_entities where owner_user_id = $1",
+        )
+        .bind(user_id)
+        .fetch_one(store.db.as_ref())
+        .await
+        .unwrap();
+        assert_eq!(
+            (identity_count, profile_count, chat_count, sync_count),
+            (0, 0, 0, 0)
+        );
+        let legacy_sync_commit_count: i64 =
+            sqlx::query_scalar("select count(*)::bigint from sync_commits where session_id = $1")
+                .bind(legacy_sync_guest.id)
+                .fetch_one(store.db.as_ref())
+                .await
+                .unwrap();
+        assert_eq!(legacy_sync_commit_count, 0);
+
+        let queue_owner: (Option<Uuid>, Option<Uuid>) = sqlx::query_as(
+            "select owner_session_id, owner_user_id
+             from chat_attachment_file_deletions where storage_key = $1",
+        )
+        .bind(&storage_key)
+        .fetch_one(store.db.as_ref())
+        .await
+        .expect("attachment deletion should stay durable");
+        assert_eq!(queue_owner, (None, None));
+
+        let quotas: Vec<(i32, bool)> = sqlx::query_as(
+            "select usage_count,
+                    quota_date = (now() at time zone 'Asia/Bangkok')::date as is_today
+             from chat_daily_owner_quotas
+             where owner_kind = 'account' and owner_id = $1",
+        )
+        .bind(user_id)
+        .fetch_all(store.db.as_ref())
+        .await
+        .unwrap();
+        assert_eq!(quotas, vec![(3, true)]);
+        let old_carryover: Option<Uuid> =
+            sqlx::query_scalar("select quota_carryover_user_id from auth_sessions where id = $1")
+                .bind(carryover_guest.id)
+                .fetch_one(store.db.as_ref())
+                .await
+                .unwrap();
+        let replacement_carryover: Option<Uuid> =
+            sqlx::query_scalar("select quota_carryover_user_id from auth_sessions where id = $1")
+                .bind(result.guest.id)
+                .fetch_one(store.db.as_ref())
+                .await
+                .unwrap();
+        assert_eq!(old_carryover, None);
+        assert_eq!(replacement_carryover, Some(user_id));
+
+        let recreated = store
+            .promote_guest_session_with_google(
+                result.guest.id,
+                user_id,
+                &subject,
+                Some(format!("{subject}@example.com")),
+                Some("Fresh Account".to_owned()),
+                None,
+            )
+            .await
+            .expect("repeat Google login should query")
+            .expect("repeat Google login should create a fresh account");
+        let recreated_chat_count: i64 =
+            sqlx::query_scalar("select count(*)::bigint from chats where owner_user_id = $1")
+                .bind(user_id)
+                .fetch_one(store.db.as_ref())
+                .await
+                .unwrap();
+        let recreated_quota: i32 = sqlx::query_scalar(
+            "select usage_count from chat_daily_owner_quotas
+             where quota_date = (now() at time zone 'Asia/Bangkok')::date
+               and owner_kind = 'account' and owner_id = $1",
+        )
+        .bind(user_id)
+        .fetch_one(store.db.as_ref())
+        .await
+        .unwrap();
+        assert_eq!(recreated_chat_count, 0);
+        assert_eq!(recreated_quota, 3);
+        let second_deletion = store
+            .delete_registered_account(recreated.id)
+            .await
+            .unwrap()
+            .expect("recreated account should delete for cleanup");
+
+        store
+            .delete_attachment_file_deletions_for_test(&[storage_key])
+            .await
+            .unwrap();
+        for session_id in [
+            carryover_guest.id,
+            second_deletion.guest.id,
+            guest.id,
+            second_guest.id,
+            legacy_sync_guest.id,
+        ] {
+            store.delete_session_for_test(session_id).await.unwrap();
+        }
+        sqlx::query(
+            "delete from chat_daily_owner_quotas where owner_kind = 'account' and owner_id = $1",
+        )
+        .bind(user_id)
+        .execute(store.db.as_ref())
+        .await
+        .unwrap();
     }
 
     fn follow_up_memory(memory_key: &str, content: &str) -> NewMemoryItemRecord {
