@@ -16,6 +16,11 @@ struct QuotaRetentionCleanupCounts {
 static DAILY_CHAT_QUOTA_TEST_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
 #[cfg(test)]
+pub(super) async fn lock_daily_chat_quota_test() -> tokio::sync::MutexGuard<'static, ()> {
+    DAILY_CHAT_QUOTA_TEST_LOCK.lock().await
+}
+
+#[cfg(test)]
 #[must_use = "the isolation guard must be held for the complete quota test"]
 pub(crate) struct DailyChatQuotaTestIsolation {
     store: ChatStore,
@@ -61,7 +66,7 @@ impl ChatStore {
     pub(crate) async fn isolate_daily_chat_quota_test(
         &self,
     ) -> StoreResult<DailyChatQuotaTestIsolation> {
-        let guard = DAILY_CHAT_QUOTA_TEST_LOCK.lock().await;
+        let guard = lock_daily_chat_quota_test().await;
         self.clear_chat_generation_quotas_for_test().await?;
         Ok(DailyChatQuotaTestIsolation {
             store: self.clone(),

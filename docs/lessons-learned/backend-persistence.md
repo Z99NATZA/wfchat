@@ -1,5 +1,27 @@
 # Backend Persistence Lessons Learned
 
+## 2026-08-28 - Test startup cleanup raced with shared quota fixtures
+
+Context:
+- PostgreSQL-backed tests shared one database and protected quota fixtures with
+  a process-wide test mutex.
+
+Failed approach:
+- `ChatStore::connect()` ran quota retention cleanup before a test acquired the
+  same fixture mutex.
+
+Problem observed:
+- Parallel API tests could delete one 500-row retention batch from another
+  test, while the affected test passed when run alone.
+
+Root cause:
+- Test-only startup maintenance and fixture mutation touched the same shared
+  tables through different isolation boundaries.
+
+Lesson:
+- Every test path that runs maintenance against shared tables must acquire the
+  same isolation guard before it can observe or mutate protected fixtures.
+
 ## 2026-07-12 - Migration line-ending changes broke SQLx checksums
 
 Context:

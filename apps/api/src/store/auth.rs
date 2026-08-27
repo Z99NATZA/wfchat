@@ -9,7 +9,11 @@ impl ChatStore {
             auth_sessions_created: Arc::new(std::sync::atomic::AtomicUsize::new(0)),
         };
         store.run_migrations().await?;
+        #[cfg(test)]
+        let quota_test_guard = super::quota::lock_daily_chat_quota_test().await;
         store.cleanup_past_chat_generation_quotas().await?;
+        #[cfg(test)]
+        drop(quota_test_guard);
         Ok(store)
     }
 
