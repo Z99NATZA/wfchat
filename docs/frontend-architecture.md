@@ -9,12 +9,18 @@ WebSocket.
 ```text
 main.tsx
   -> AppSettingsProvider + i18n + router
-  -> App.tsx
-      -> DialogProvider + AvatarRuntimeProvider
-      -> route page
-      -> AppLayout
-      -> feature hooks, services, and components
+  -> AppRouter.tsx
+      -> /privacy: public PrivacyPage
+      -> all other paths: lazy App.tsx
+          -> DialogProvider + AvatarRuntimeProvider
+          -> route page
+          -> AppLayout
+          -> feature hooks, services, and components
 ```
+
+Keep informational public routes outside `App.tsx`. This prevents those pages
+from running authenticated application bootstrap such as session resolution,
+Sync, Chat configuration, asset preloading, or third-party login SDK setup.
 
 `apiClient.ts` is the shared Axios boundary. Chat streaming, authenticated
 image/audio fetches, uploads, and WebSocket use the browser primitives needed by
@@ -30,7 +36,7 @@ requests.
 | Path                        | Role                                                 |
 | --------------------------- | ---------------------------------------------------- |
 | `app/`                      | Application providers and cross-route orchestration  |
-| `pages/`                    | Route composition                                    |
+| `pages/`                    | Route composition and public informational pages     |
 | `layouts/`                  | Shared page shells                                   |
 | `features/`                 | Chat, avatar, and Cafe behavior                      |
 | `components/`               | Reusable app UI, dialogs, auth, settings, navigation |

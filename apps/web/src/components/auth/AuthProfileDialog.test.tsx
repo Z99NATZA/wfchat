@@ -80,6 +80,11 @@ describe("AuthProfileDialog", () => {
 
 		expect(screen.queryByTestId("profile-summary")).toBeNull();
 		expect(screen.getByText("auth.profile.beforeLoginTitle")).toBeTruthy();
+		const privacyLink = screen.getByRole("link", {
+			name: "auth.profile.privacyPolicy"
+		});
+		expect(privacyLink.getAttribute("href")).toBe("/privacy");
+		expect(privacyLink.getAttribute("target")).toBeNull();
 	});
 
 	it("places destructive account management after Account and requires confirmation", async () => {
@@ -104,11 +109,16 @@ describe("AuthProfileDialog", () => {
 
 		const accountHeading = screen.getByText("auth.profile.accountSection");
 		const management = screen.getByTestId("account-management-section");
+		const privacyLink = screen.getByRole("link", { name: "auth.profile.privacyPolicy" });
 		const accountSection = accountHeading.closest("section");
 		expect(accountSection).not.toBeNull();
 		expect(
 			accountSection!.compareDocumentPosition(management) & Node.DOCUMENT_POSITION_FOLLOWING
 		).toBeTruthy();
+		expect(
+			management.compareDocumentPosition(privacyLink) & Node.DOCUMENT_POSITION_FOLLOWING
+		).toBeTruthy();
+		expect(privacyLink.getAttribute("href")).toBe("/privacy");
 
 		fireEvent.click(screen.getByText("auth.profile.deleteAccount"));
 		await waitFor(() => expect(dialogMocks.confirm).toHaveBeenCalledTimes(1));

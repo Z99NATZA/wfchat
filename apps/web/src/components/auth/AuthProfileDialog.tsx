@@ -52,6 +52,16 @@ function AuthProfileDialog({
 	const [isDeletingAccount, setIsDeletingAccount] = useState(false);
 	const [accountDeleteError, setAccountDeleteError] = useState<string | null>(null);
 	const profileSurface = useDialogBackgroundSurface(backgroundImageUrl, isOpen);
+	const privacyPolicyLink = (
+		<p className="text-center text-xs text-muted">
+			<a
+				href="/privacy"
+				className="font-semibold underline decoration-muted underline-offset-4 hover:text-app-text"
+			>
+				{t("auth.profile.privacyPolicy")}
+			</a>
+		</p>
+	);
 
 	useEffect(() => {
 		if (!isOpen) {
@@ -208,6 +218,7 @@ function AuthProfileDialog({
 								</ul>
 							</div>
 							<GoogleSignInButton onCredential={onLoginWithGoogleIdToken} />
+							{privacyPolicyLink}
 						</section>
 					) : (
 						<>
@@ -342,6 +353,7 @@ function AuthProfileDialog({
 									</p>
 								)}
 							</section>
+							{privacyPolicyLink}
 						</>
 					)}
 				</div>

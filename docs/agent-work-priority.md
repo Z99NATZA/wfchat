@@ -62,3 +62,4 @@ until a new scoped priority and applicable standalone authorization are added.
 - `docs/architecture.md` is an architecture index, not the source of detailed behavior.
 - Read `docs/lessons-learned/*` only for the subsystem being changed, when debugging
   a regression, or before reworking behavior with a known failure mode.
+- Alias of agent-work-priority.md = priority | pri

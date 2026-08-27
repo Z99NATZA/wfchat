@@ -13,7 +13,11 @@ ActivityBar -> page sidebar -> page header/content/details
 - `pngtuber`: the PNGTuber workspace used for the current PNG-based visual performer.
 - `model2d`: a Live2D workspace shell with no model runtime.
 
-`apps/web/src/app/App.tsx` owns the top-level route map through `react-router-dom`:
+`apps/web/src/app/AppRouter.tsx` owns the public route boundary. `/privacy`
+renders the localized whole-product Privacy Policy without loading
+`App.tsx`, creating or resolving a session, or initializing Google Login. All
+other paths lazy-load `App.tsx`, which owns the interactive route map through
+`react-router-dom`:
 
 - `/` redirects to `/chat`.
 - `/chat` opens the chat workspace without an active chat.
@@ -26,6 +30,12 @@ ActivityBar -> page sidebar -> page header/content/details
 - `/model` redirects to `/model/live2d`.
 - `/model/live2d` opens the Live2D workspace shell.
 - `/model3d` redirects to `/model/live2d`.
+
+The Guest Profile sheet places a same-tab `/privacy` link with the Google Login
+UI. The authenticated Profile sheet repeats the same link at the bottom, after
+account management, so the policy remains available after login. The policy
+includes the public contact address `z99natza@gmail.com`, a Thai/English
+selector, and a back link to `/chat`.
 
 The activity bar uses route links instead of page state, so the URL is the source of truth for reload, back, and forward navigation.
 
