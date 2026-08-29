@@ -17,61 +17,66 @@ Backend: Rust + Axum
 Database: PostgreSQL
 ```
 
-## Development And LAN Quickstart
+## Installation
 
 
 ```bash
-# clone
+# Clone
 git clone https://github.com/Z99NATZA/wfchat.git
 cd wfchat
 
-# sync env
+# Sync env
 npm run init
 ```
 
-- .env
+## .env
 
-`VITE_GOOGLE_CLIENT_ID=` optional Google sign-in
+```text
+# (Optional) Google sign-in
+VITE_GOOGLE_CLIENT_ID=
 
-`VITE_ENABLE_STREAMING_SPEECH_PLAYBACK=false`
+# LAN IP
+WFCHAT_PUBLIC_HOST=localhost
 
-`WFCHAT_PUBLIC_HOST=localhost` LAN IP
+# VOICEVOX speaker/style id
+VOICEVOX_SPEAKER_ID=23
+```
 
-`WFCHAT_COMPOSE_VOICEVOX_BASE_URL=http://voicevox:50021`
+## apps/api/.env
 
-`VOICEVOX_SPEAKER_ID=23` VOICEVOX speaker/style id
+```text
+# (Required)
+OPENAI_API_KEY=
 
- - apps/api/.env
+# Same VITE_GOOGLE_CLIENT_ID
+GOOGLE_CLIENT_ID=
 
-`OPENAI_API_KEY=` required
+# If use Openai
+AI_PROVIDER=openai
 
-`GOOGLE_CLIENT_ID=` use the same VITE_GOOGLE_CLIENT_ID
+# User microphone audio -> text
+# mock is for dev mode
+AI_TRANSCRIPTION_PROVIDER=mock
+```
 
-`AI_PROVIDER=openai` if use openai
-
-`AI_VOICE_PROVIDER=voicevox` assistant text -> spoken audio
-
-`AI_TRANSCRIPTION_PROVIDER=mock` user microphone audio -> text; mock is for dev mode
-
-`CHAT_ATTACHMENT_UPLOAD_DIR=data/uploads`
+## Run | [Docker](docs/docker.md)
 
 ```bash
-# start
+# Start
 docker compose up -d --build
 
-# follow logs
+# Follow logs
 docker compose logs --follow api
 
-# stop
+# Stop
 docker compose down
 
-# default URLs
-# web: http://localhost:5173
-# api: http://localhost:8080
-# lan: http://<LAN_IP>:5173
+# Default URLs
+# Web: http://localhost:5173
+# API: http://localhost:8080
+# LAN: http://<LAN_IP>:5173
 ```
-More [Docker](docs/docker.md)
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
+MIT [LICENSE](LICENSE)
