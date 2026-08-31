@@ -3,6 +3,7 @@ import { apiBaseUrl, apiClient } from "@/services/apiClient";
 import type {
 	CafeActivityId,
 	CafeAvatarId,
+	CafeMapId,
 	CafeProgress,
 	CafeRoomSummary
 } from "@/features/cafe/types";
@@ -15,6 +16,7 @@ type ApiRoomSummary = {
 	is_private: boolean;
 	player_count: number;
 	capacity: number;
+	map_id?: CafeMapId;
 	activity_id: CafeActivityId;
 	activity_completed: boolean;
 };
@@ -46,9 +48,13 @@ export async function quickJoinCafe(): Promise<CafeRoomSummary> {
 	return toRoomSummary(response.data.room);
 }
 
-export async function createCafeRoom(isPrivate = true): Promise<CafeRoomSummary> {
+export async function createCafeRoom(
+	isPrivate = true,
+	mapId: CafeMapId = "cafe"
+): Promise<CafeRoomSummary> {
 	const response = await apiClient.post<ApiRoomResponse>("/api/cafe/rooms", {
-		is_private: isPrivate
+		is_private: isPrivate,
+		map_id: mapId
 	});
 	return toRoomSummary(response.data.room);
 }
@@ -112,6 +118,7 @@ function toRoomSummary(room: ApiRoomSummary): CafeRoomSummary {
 		isPrivate: room.is_private,
 		playerCount: room.player_count,
 		capacity: room.capacity,
+		mapId: room.map_id ?? "cafe",
 		activityId: room.activity_id,
 		activityCompleted: room.activity_completed
 	};

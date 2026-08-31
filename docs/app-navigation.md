@@ -9,7 +9,8 @@ ActivityBar -> page sidebar -> page header/content/details
 ## Current Pages
 
 - `chat`: the main chat workspace.
-- `cafe`: the guest-first Aiko Cafe lobby and joinable top-down rooms.
+- `cafe`: the guest-first Aiko World lobby with joinable Aiko Cafe and
+  Greenwood Retreat rooms.
 - `pngtuber`: the PNGTuber workspace used for the current PNG-based visual performer.
 - `model2d`: a Live2D workspace shell with no model runtime.
 
@@ -22,8 +23,8 @@ other paths lazy-load `App.tsx`, which owns the interactive route map through
 - `/` redirects to `/chat`.
 - `/chat` opens the chat workspace without an active chat.
 - `/chat/:chatId` opens the chat workspace and lets the chat feature load the active chat. `:chatId` must be a UUID; invalid chat path segments are treated as draft chat paths and must not call the backend chat detail endpoint.
-- `/cafe` opens the Cafe lobby. It does not require login.
-- `/cafe/rooms/:roomId` opens a Cafe room. `:roomId` must be a UUID; invalid
+- `/cafe` opens the Aiko World lobby. It does not require login.
+- `/cafe/rooms/:roomId` opens an Aiko World room. `:roomId` must be a UUID; invalid
   values return to the lobby without opening a WebSocket.
 - `/avatar` redirects to `/avatar/pngtuber`.
 - `/avatar/pngtuber` opens the PNGTuber workspace.

@@ -65,6 +65,7 @@ const room = {
 	isPrivate: false,
 	playerCount: 1,
 	capacity: 8,
+	mapId: "cafe" as const,
 	activityId: "tea_delivery" as const,
 	activityCompleted: false
 };
@@ -257,6 +258,38 @@ describe("CafePage", () => {
 		expect(window.sessionStorage.getItem(CAFE_PLAYER_NAME_STORAGE_KEY)).toBe("Tea Friend");
 		fireEvent.change(playerName, { target: { value: "   " } });
 		expect(window.sessionStorage.getItem(CAFE_PLAYER_NAME_STORAGE_KEY)).toBeNull();
+	});
+
+	it("defaults to Aiko Cafe and creates the selected Greenwood map", async () => {
+		serviceMocks.listCafeRooms.mockResolvedValue([]);
+		serviceMocks.getCafeProgress.mockResolvedValue(progress);
+		serviceMocks.createCafeRoom.mockResolvedValue({
+			...room,
+			mapId: "nature_retreat",
+			activityId: "nature_retreat"
+		});
+
+		render(
+			<MemoryRouter initialEntries={["/cafe"]}>
+				<CafePage
+					activityBar={null}
+					backgroundImageUrl=""
+					headerControls={headerControls}
+				/>
+			</MemoryRouter>
+		);
+
+		await screen.findByTestId("cafe-map-selector");
+		expect(
+			screen
+				.getByRole("button", { name: /cafe\.map\.cafeTitle/ })
+				.getAttribute("aria-pressed")
+		).toBe("true");
+		fireEvent.click(screen.getByRole("button", { name: /cafe\.nature\.title/ }));
+		fireEvent.click(screen.getByRole("button", { name: "cafe.lobby.createRoom" }));
+		await waitFor(() =>
+			expect(serviceMocks.createCafeRoom).toHaveBeenCalledWith(true, "nature_retreat")
+		);
 	});
 
 	it("shows a specific message when an invite room is full", async () => {

@@ -10,6 +10,7 @@ import {
 	Plus,
 	RefreshCw,
 	Star,
+	Trees,
 	Users
 } from "lucide-react";
 import Dialog from "@/components/dialog/Dialog";
@@ -44,6 +45,7 @@ import type {
 	CafeAvatarId,
 	CafeCosmetic,
 	CafeProgress,
+	CafeMapId,
 	CafeRoomSummary
 } from "@/features/cafe/types";
 
@@ -76,6 +78,7 @@ function CafePage({ activityBar, backgroundImageUrl, headerControls }: CafePageP
 	const [avatarError, setAvatarError] = useState(false);
 	const [isWardrobeOpen, setIsWardrobeOpen] = useState(false);
 	const [isJoinCodeOpen, setIsJoinCodeOpen] = useState(false);
+	const [selectedMap, setSelectedMap] = useState<CafeMapId>("cafe");
 
 	const refresh = useCallback(async () => {
 		setIsLoading(true);
@@ -182,12 +185,35 @@ function CafePage({ activityBar, backgroundImageUrl, headerControls }: CafePageP
 									aria-hidden="true"
 								/>
 								<img
-									src="/images/aiko-cafe/aiko-host-v1.png"
+									src={
+										selectedMap === "nature_retreat"
+											? "/images/aiko-cafe/aiko-nature-v1.png?v=2ca34b35538d4c3b"
+											: "/images/aiko-cafe/aiko-host-v1.png"
+									}
 									alt={t("cafe.lobby.aikoAlt")}
 									className="cafe-lobby-aiko-idle h-full w-auto object-contain"
 								/>
 							</div>
 							<div className="col-span-2 row-start-2 min-w-0 md:col-span-1 md:col-start-1">
+								<div
+									className="mb-4 grid gap-2 sm:grid-cols-2"
+									data-testid="cafe-map-selector"
+								>
+									<MapChoice
+										active={selectedMap === "nature_retreat"}
+										icon={<Trees size={18} aria-hidden="true" />}
+										title={t("cafe.nature.title")}
+										description={t("cafe.nature.lobbyDescription")}
+										onClick={() => setSelectedMap("nature_retreat")}
+									/>
+									<MapChoice
+										active={selectedMap === "cafe"}
+										icon={<Coffee size={18} aria-hidden="true" />}
+										title={t("cafe.map.cafeTitle")}
+										description={t("cafe.map.cafeDescription")}
+										onClick={() => setSelectedMap("cafe")}
+									/>
+								</div>
 								<div
 									className="max-w-3xl lg:grid lg:grid-cols-[minmax(0,1fr)_10rem_10rem] lg:items-end lg:gap-3"
 									data-testid="cafe-primary-entry-row"
@@ -269,7 +295,9 @@ function CafePage({ activityBar, backgroundImageUrl, headerControls }: CafePageP
 											className="w-full gap-1.5 rounded-lg px-2 min-[360px]:px-4"
 											disabled={pendingAction !== null}
 											onClick={() =>
-												void openRoom("create", () => createCafeRoom(true))
+												void openRoom("create", () =>
+													createCafeRoom(true, selectedMap)
+												)
 											}
 										>
 											<Plus
@@ -388,12 +416,24 @@ function CafePage({ activityBar, backgroundImageUrl, headerControls }: CafePageP
 									<div className="w-full">
 										<div className="flex items-center justify-between gap-3">
 											<span className="flex items-center gap-2 font-semibold text-app-text">
-												<Coffee
-													size={17}
-													className="text-muted"
-													aria-hidden="true"
-												/>
-												{t("cafe.lobby.publicCafe")}
+												{room.mapId === "nature_retreat" ? (
+													<Trees
+														size={17}
+														className="text-muted"
+														aria-hidden="true"
+													/>
+												) : (
+													<Coffee
+														size={17}
+														className="text-muted"
+														aria-hidden="true"
+													/>
+												)}
+												{t(
+													room.mapId === "nature_retreat"
+														? "cafe.nature.title"
+														: "cafe.lobby.publicCafe"
+												)}
 											</span>
 											<span className="flex items-center gap-1 text-xs text-muted">
 												<Users size={14} aria-hidden="true" />
@@ -405,9 +445,11 @@ function CafePage({ activityBar, backgroundImageUrl, headerControls }: CafePageP
 										</p>
 										<p className="mt-2 text-xs font-semibold text-muted">
 											{t(
-												room.activityId === "table_service"
-													? "cafe.tableService.title"
-													: "cafe.activity.title"
+												room.activityId === "nature_retreat"
+													? "cafe.nature.subtitle"
+													: room.activityId === "table_service"
+														? "cafe.tableService.title"
+														: "cafe.activity.title"
 											)}
 										</p>
 									</div>
@@ -443,6 +485,39 @@ function CafePage({ activityBar, backgroundImageUrl, headerControls }: CafePageP
 				}
 			/>
 		</AppLayout>
+	);
+}
+
+function MapChoice({
+	active,
+	icon,
+	title,
+	description,
+	onClick
+}: {
+	active: boolean;
+	icon: ReactNode;
+	title: string;
+	description: string;
+	onClick: () => void;
+}) {
+	return (
+		<button
+			type="button"
+			className={`flex min-w-0 items-start gap-3 rounded-xl border p-3 text-left transition focus:outline-none ${
+				active
+					? "border-control-focus-border bg-app-soft shadow-sm"
+					: "border-app-border bg-app-panel/55 hover:bg-app-soft/70"
+			}`}
+			aria-pressed={active}
+			onClick={onClick}
+		>
+			<span className="mt-0.5 text-muted">{icon}</span>
+			<span className="min-w-0">
+				<span className="block text-sm font-semibold text-app-text">{title}</span>
+				<span className="mt-0.5 block text-xs leading-5 text-muted">{description}</span>
+			</span>
+		</button>
 	);
 }
 

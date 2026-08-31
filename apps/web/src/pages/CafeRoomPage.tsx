@@ -66,6 +66,7 @@ function CafeRoomContent({
 	const carriedTea = selfPlayer?.carriedTea ?? 0;
 	const isTableService = cafe.room?.activity.id === "table_service";
 	const isCafeRush = cafe.room?.activity.id === "cafe_rush";
+	const isNatureRetreat = cafe.room?.mapId === "nature_retreat";
 	const carriedOrder = cafe.room?.activity.tableOrders.find(
 		(order) => order.id === selfPlayer?.carriedOrderId
 	);
@@ -156,7 +157,7 @@ function CafeRoomContent({
 							<ArrowLeft size={18} aria-hidden="true" />
 						</IconButton>
 					}
-					title={t("cafe.room.title")}
+					title={t(isNatureRetreat ? "cafe.nature.title" : "cafe.room.title")}
 					titleAccessory={<ConnectionBadge state={cafe.connectionState} />}
 					desktopActions={<AppHeaderDesktopControls {...headerControls} />}
 					mobileMenuContent={<AppHeaderMobileControls {...headerControls} />}
@@ -188,6 +189,12 @@ function CafeRoomContent({
 						prepareOrder: t("cafe.rush.prepareOrder"),
 						findIngredient: t("cafe.rush.findIngredient"),
 						returnIngredient: t("cafe.rush.returnIngredient"),
+						enjoyPicnic: t("cafe.nature.interaction.picnic"),
+						viewScenery: t("cafe.nature.interaction.overlook"),
+						feedFish: t("cafe.nature.interaction.fish"),
+						watchButterflies: t("cafe.nature.interaction.butterflies"),
+						skipStones: t("cafe.nature.interaction.stones"),
+						waterFlowers: t("cafe.nature.interaction.flowers"),
 						idle: t("cafe.room.moveCloser")
 					}}
 					loadingLabel={t("cafe.room.connecting")}
@@ -247,7 +254,7 @@ function CafeRoomContent({
 						</span>
 					)}
 				</button>
-				{cafe.room && showGuide && (
+				{cafe.room && !isNatureRetreat && showGuide && (
 					<CafeWelcomeGuide activityId={cafe.room.activity.id} onDismiss={dismissGuide} />
 				)}
 				<div
@@ -255,145 +262,158 @@ function CafeRoomContent({
 					className={`pointer-events-none absolute left-3 right-3 top-3 z-30 flex items-start gap-2 sm:gap-3 ${showRoomHud ? (showChat ? "max-sm:hidden" : "") : "hidden"}`}
 					data-testid="cafe-room-hud"
 				>
-					<div
-						className="cafe-world-overlay cafe-world-overlay-status min-w-0 max-w-96 flex-1 rounded-lg px-2 py-1.5 sm:rounded-xl sm:px-3 sm:py-2"
-						data-testid="cafe-activity-hud"
-					>
-						<div className="flex items-center justify-between gap-1.5 sm:gap-3">
-							<div className="flex min-w-0 items-center gap-1 sm:gap-2">
-								<p className="cafe-world-muted truncate text-[10px] font-semibold uppercase leading-4 tracking-wide sm:text-[11px]">
-									{t(activityTitleKey(cafe.room?.activity.id))}
-								</p>
-								{cafe.room && (
+					{!isNatureRetreat && (
+						<div
+							className="cafe-world-overlay cafe-world-overlay-status min-w-0 max-w-96 flex-1 rounded-lg px-2 py-1.5 sm:rounded-xl sm:px-3 sm:py-2"
+							data-testid="cafe-activity-hud"
+						>
+							<div className="flex items-center justify-between gap-1.5 sm:gap-3">
+								<div className="flex min-w-0 items-center gap-1 sm:gap-2">
+									<p className="cafe-world-muted truncate text-[10px] font-semibold uppercase leading-4 tracking-wide sm:text-[11px]">
+										{t(activityTitleKey(cafe.room?.activity.id))}
+									</p>
+									{cafe.room && (
+										<span
+											className="cafe-world-panel shrink-0 rounded-full px-1.5 text-[9px] font-bold leading-4 sm:px-2 sm:py-0.5 sm:text-[10px] sm:leading-normal"
+											data-testid="cafe-round-number"
+										>
+											{t("cafe.activity.round", {
+												round: cafe.room.activity.roundNumber
+											})}
+										</span>
+									)}
+								</div>
+								<button
+									type="button"
+									className="cafe-world-control cafe-world-muted pointer-events-auto -mr-1 flex size-8 shrink-0 items-center justify-center rounded-full border transition focus:outline-none sm:-m-1 sm:size-auto sm:p-1"
+									onClick={() => setShowGuide(true)}
+									aria-label={t("cafe.guide.open")}
+								>
+									<CircleHelp
+										className="size-[15px] sm:size-4"
+										aria-hidden="true"
+									/>
+								</button>
+							</div>
+							<p className="text-[13px] font-semibold leading-5 sm:mt-1 sm:text-sm">
+								{isIntermission
+									? t(
+											isCafeRush
+												? cafe.room?.activity.completed
+													? "cafe.rush.complete"
+													: "cafe.rush.timeUp"
+												: isTableService
+													? "cafe.tableService.complete"
+													: "cafe.activity.complete"
+										)
+									: t(
+											isCafeRush
+												? "cafe.rush.progress"
+												: isTableService
+													? "cafe.tableService.progress"
+													: "cafe.activity.progress",
+											{
+												current: cafe.room?.activity.delivered ?? 0,
+												target: cafe.room?.activity.target ?? 3
+											}
+										)}
+							</p>
+							{isCafeRush && !isIntermission && (
+								<div className="mt-1 flex flex-wrap gap-1 sm:mt-2 sm:gap-2">
 									<span
-										className="cafe-world-panel shrink-0 rounded-full px-1.5 text-[9px] font-bold leading-4 sm:px-2 sm:py-0.5 sm:text-[10px] sm:leading-normal"
-										data-testid="cafe-round-number"
+										className="cafe-world-panel inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-bold sm:gap-1.5 sm:px-2 sm:py-1 sm:text-xs"
+										data-testid="cafe-rush-timer"
 									>
-										{t("cafe.activity.round", {
-											round: cafe.room.activity.roundNumber
+										<Clock3
+											className="size-3 sm:size-[13px]"
+											aria-hidden="true"
+										/>
+										{t("cafe.rush.timer", { seconds: rushCountdown })}
+									</span>
+									<span
+										className="cafe-world-panel inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-bold sm:gap-1.5 sm:px-2 sm:py-1 sm:text-xs"
+										data-testid="cafe-rush-combo"
+									>
+										<Flame
+											className="size-3 sm:size-[13px]"
+											aria-hidden="true"
+										/>
+										{t("cafe.rush.combo", {
+											combo: rushCombo
 										})}
 									</span>
-								)}
-							</div>
-							<button
-								type="button"
-								className="cafe-world-control cafe-world-muted pointer-events-auto -mr-1 flex size-8 shrink-0 items-center justify-center rounded-full border transition focus:outline-none sm:-m-1 sm:size-auto sm:p-1"
-								onClick={() => setShowGuide(true)}
-								aria-label={t("cafe.guide.open")}
-							>
-								<CircleHelp className="size-[15px] sm:size-4" aria-hidden="true" />
-							</button>
-						</div>
-						<p className="text-[13px] font-semibold leading-5 sm:mt-1 sm:text-sm">
-							{isIntermission
-								? t(
-										isCafeRush
-											? cafe.room?.activity.completed
-												? "cafe.rush.complete"
-												: "cafe.rush.timeUp"
-											: isTableService
-												? "cafe.tableService.complete"
-												: "cafe.activity.complete"
-									)
-								: t(
-										isCafeRush
-											? "cafe.rush.progress"
-											: isTableService
-												? "cafe.tableService.progress"
-												: "cafe.activity.progress",
-										{
-											current: cafe.room?.activity.delivered ?? 0,
-											target: cafe.room?.activity.target ?? 3
-										}
-									)}
-						</p>
-						{isCafeRush && !isIntermission && (
-							<div className="mt-1 flex flex-wrap gap-1 sm:mt-2 sm:gap-2">
-								<span
-									className="cafe-world-panel inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-bold sm:gap-1.5 sm:px-2 sm:py-1 sm:text-xs"
-									data-testid="cafe-rush-timer"
-								>
-									<Clock3 className="size-3 sm:size-[13px]" aria-hidden="true" />
-									{t("cafe.rush.timer", { seconds: rushCountdown })}
-								</span>
-								<span
-									className="cafe-world-panel inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-bold sm:gap-1.5 sm:px-2 sm:py-1 sm:text-xs"
-									data-testid="cafe-rush-combo"
-								>
-									<Flame className="size-3 sm:size-[13px]" aria-hidden="true" />
-									{t("cafe.rush.combo", {
-										combo: rushCombo
-									})}
-								</span>
-							</div>
-						)}
-						{!isIntermission && carriedTea > 0 && (
-							<p
-								className="cafe-world-panel mt-1 inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-semibold sm:mt-2 sm:gap-1.5 sm:px-2 sm:py-1 sm:text-xs"
-								data-testid="cafe-carried-tea"
-							>
-								<Leaf className="size-3 sm:size-[13px]" aria-hidden="true" />
-								{t(
-									isCafeRush
-										? "cafe.rush.carryingIngredient"
-										: "cafe.activity.carried",
-									{ count: carriedTea }
-								)}
-							</p>
-						)}
-						{!isIntermission && carriedOrder && (
-							<p
-								className="cafe-world-panel mt-1 inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-semibold sm:mt-2 sm:gap-1.5 sm:px-2 sm:py-1 sm:text-xs"
-								data-testid="cafe-carried-order"
-							>
-								<Coffee className="size-3 sm:size-[13px]" aria-hidden="true" />
-								{t("cafe.tableService.carrying", {
-									drink: carriedDrink,
-									table: carriedTable
-								})}
-							</p>
-						)}
-						<p
-							className={
-								isIntermission
-									? "cafe-world-divider cafe-world-muted mt-1 border-t pt-1 text-[10px] leading-4 sm:mt-2 sm:pt-2 sm:text-xs sm:leading-5"
-									: "cafe-world-divider cafe-world-muted hidden border-t text-xs leading-5 sm:mt-2 sm:block sm:pt-2"
-							}
-							data-testid="cafe-quest-hint"
-						>
-							{isIntermission ? (
-								roundCountdown > 0 ? (
-									t("cafe.activity.nextRound", { seconds: roundCountdown })
-								) : (
-									t("cafe.activity.startingRound")
-								)
-							) : (
-								<span data-testid="cafe-quest-hint-desktop">
-									{t(
-										cafeQuestHintKey(
-											cafe.room,
-											carriedTea,
-											Boolean(carriedOrder)
-										),
-										{ table: carriedTable }
-									)}
-								</span>
+								</div>
 							)}
-						</p>
-					</div>
+							{!isIntermission && carriedTea > 0 && (
+								<p
+									className="cafe-world-panel mt-1 inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-semibold sm:mt-2 sm:gap-1.5 sm:px-2 sm:py-1 sm:text-xs"
+									data-testid="cafe-carried-tea"
+								>
+									<Leaf className="size-3 sm:size-[13px]" aria-hidden="true" />
+									{t(
+										isCafeRush
+											? "cafe.rush.carryingIngredient"
+											: "cafe.activity.carried",
+										{ count: carriedTea }
+									)}
+								</p>
+							)}
+							{!isIntermission && carriedOrder && (
+								<p
+									className="cafe-world-panel mt-1 inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-semibold sm:mt-2 sm:gap-1.5 sm:px-2 sm:py-1 sm:text-xs"
+									data-testid="cafe-carried-order"
+								>
+									<Coffee className="size-3 sm:size-[13px]" aria-hidden="true" />
+									{t("cafe.tableService.carrying", {
+										drink: carriedDrink,
+										table: carriedTable
+									})}
+								</p>
+							)}
+							<p
+								className={
+									isIntermission
+										? "cafe-world-divider cafe-world-muted mt-1 border-t pt-1 text-[10px] leading-4 sm:mt-2 sm:pt-2 sm:text-xs sm:leading-5"
+										: "cafe-world-divider cafe-world-muted hidden border-t text-xs leading-5 sm:mt-2 sm:block sm:pt-2"
+								}
+								data-testid="cafe-quest-hint"
+							>
+								{isIntermission ? (
+									roundCountdown > 0 ? (
+										t("cafe.activity.nextRound", { seconds: roundCountdown })
+									) : (
+										t("cafe.activity.startingRound")
+									)
+								) : (
+									<span data-testid="cafe-quest-hint-desktop">
+										{t(
+											cafeQuestHintKey(
+												cafe.room,
+												carriedTea,
+												Boolean(carriedOrder)
+											),
+											{ table: carriedTable }
+										)}
+									</span>
+								)}
+							</p>
+						</div>
+					)}
 					<div
 						className="pointer-events-auto ml-auto flex shrink-0 flex-col items-end gap-2"
 						data-testid="cafe-room-status"
 					>
-						<div
-							className="cafe-world-overlay cafe-world-overlay-status rounded-xl px-3 py-2"
-							data-testid="cafe-stars"
-						>
-							<p className="flex items-center gap-2 text-sm font-semibold">
-								<Star size={16} className="text-amber-300" aria-hidden="true" />
-								{cafe.cafeStars}
-							</p>
-						</div>
+						{!isNatureRetreat && (
+							<div
+								className="cafe-world-overlay cafe-world-overlay-status rounded-xl px-3 py-2"
+								data-testid="cafe-stars"
+							>
+								<p className="flex items-center gap-2 text-sm font-semibold">
+									<Star size={16} className="text-amber-300" aria-hidden="true" />
+									{cafe.cafeStars}
+								</p>
+							</div>
+						)}
 						{cafe.room && (
 							<button
 								type="button"
@@ -452,6 +472,22 @@ function CafeRoomContent({
 								{t(cafe.dialogue.messageKey)}
 							</p>
 						</div>
+					</div>
+				)}
+				{isNatureRetreat && cafe.rewardNotice && (
+					<div
+						key={cafe.rewardNotice.key}
+						className="cafe-world-overlay cafe-world-overlay-strong absolute left-1/2 top-20 z-50 -translate-x-1/2 rounded-2xl px-5 py-3 text-center shadow-xl"
+						data-testid="cafe-nature-reward-notice"
+						role="status"
+						aria-live="polite"
+					>
+						<p className="text-2xl" aria-hidden="true">
+							{cafe.rewardNotice.earnedStars > 1 ? "✨ ⭐ ✨" : "⭐"}
+						</p>
+						<p className="mt-1 text-sm font-bold">
+							{t("cafe.nature.reward", { count: cafe.rewardNotice.earnedStars })}
+						</p>
 					</div>
 				)}
 				{cafe.connectionState === "reconnecting" && (
@@ -709,6 +745,21 @@ function CafeRoomActivityDetails({
 	compact?: boolean;
 }) {
 	const { t } = useI18n();
+	if (room?.mapId === "nature_retreat") {
+		return (
+			<section data-testid="cafe-room-activity-details">
+				<div className={`border-b border-app-border ${compact ? "p-3" : "p-4"}`}>
+					<p className="font-semibold text-app-text">{t("cafe.nature.title")}</p>
+					<p className="mt-1 text-xs text-muted">{t("cafe.nature.subtitle")}</p>
+				</div>
+				<div className={compact ? "p-3" : "p-4"}>
+					<p className="rounded-xl border border-app-border bg-app-soft p-4 text-sm leading-6 text-muted">
+						{t("cafe.nature.roomDescription")}
+					</p>
+				</div>
+			</section>
+		);
+	}
 	return (
 		<section data-testid="cafe-room-activity-details">
 			<div className={`border-b border-app-border ${compact ? "p-3" : "p-4"}`}>

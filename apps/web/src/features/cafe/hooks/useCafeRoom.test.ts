@@ -108,6 +108,10 @@ describe("useCafeRoom", () => {
 		window.sessionStorage.clear();
 		vi.stubGlobal("WebSocket", FakeWebSocket);
 		vi.useFakeTimers();
+		Object.defineProperty(document, "visibilityState", {
+			configurable: true,
+			value: "visible"
+		});
 	});
 
 	afterEach(() => {
@@ -148,6 +152,7 @@ describe("useCafeRoom", () => {
 		expect(result.current.connectionEpoch).toBe(1);
 		expect(result.current.cafeStars).toBe(3);
 		expect(result.current.room?.activity.teaLeaves[0].id).toBe("tea-1");
+		expect(result.current.room?.mapId).toBe("cafe");
 		expect(result.current.room?.players[0].equippedCosmetic).toBe("sakura_pin");
 		expect(result.current.room?.players[0].avatarId).toBe("girl");
 		expect(result.current.room?.mapLayout).toMatchObject({
@@ -174,6 +179,7 @@ describe("useCafeRoom", () => {
 			result.current.sendChat("Hello cafe");
 		});
 		expect(first.sent.map((value) => JSON.parse(value))).toEqual([
+			{ type: "presence", visible: true },
 			{ type: "move", x: 650, y: 700, direction: "right", moving: true, sequence: 1 },
 			{ type: "interact", target_id: "tea-1" },
 			{ type: "emote", emote: "wave" },
@@ -243,6 +249,39 @@ describe("useCafeRoom", () => {
 		expect(result.current.chatEvents.at(-1)?.playerName).toBe("Guest TEST");
 		expect(result.current.chatError).toBe("rate_limited");
 		expect(result.current.cafeStars).toBe(2);
+		expect(result.current.rewardNotice?.earnedStars).toBe(1);
+	});
+
+	it("reports hidden and visible presence after the room is ready", () => {
+		renderHook(() => useCafeRoom(room.id));
+		const socket = FakeWebSocket.instances[0];
+		act(() => {
+			socket.open();
+			socket.message({
+				type: "welcome",
+				self_player_id: room.players[0].id,
+				cafe_stars: 0,
+				revision: 1,
+				room: { ...room, map_id: "nature_retreat" }
+			});
+		});
+
+		Object.defineProperty(document, "visibilityState", {
+			configurable: true,
+			value: "hidden"
+		});
+		act(() => document.dispatchEvent(new Event("visibilitychange")));
+		Object.defineProperty(document, "visibilityState", {
+			configurable: true,
+			value: "visible"
+		});
+		act(() => document.dispatchEvent(new Event("visibilitychange")));
+
+		expect(socket.sent.map((value) => JSON.parse(value))).toEqual([
+			{ type: "presence", visible: true },
+			{ type: "presence", visible: false },
+			{ type: "presence", visible: true }
+		]);
 	});
 
 	it("maps claimed table service orders from authoritative snapshots", () => {
@@ -469,7 +508,9 @@ describe("useCafeRoom", () => {
 		act(() => window.dispatchEvent(new Event("offline")));
 		expect(result.current.connectionState).toBe("offline");
 		act(() => result.current.interact("tea-1"));
-		expect(first.sent).toEqual([]);
+		expect(first.sent.map((value) => JSON.parse(value))).toEqual([
+			{ type: "presence", visible: true }
+		]);
 
 		act(() => window.dispatchEvent(new Event("online")));
 		expect(result.current.connectionState).toBe("reconnecting");

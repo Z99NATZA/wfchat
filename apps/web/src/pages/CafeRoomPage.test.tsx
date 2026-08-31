@@ -24,6 +24,7 @@ const roomHook = vi.hoisted(() => ({
 		connectionState: "closed" as CafeConnectionState,
 		dialogue: null as CafeDialogue | null,
 		emote: null,
+		rewardNotice: null as { earnedStars: number; key: number } | null,
 		chatEvents: [] as CafeChatEvent[],
 		latestChatMessage: null as CafeChatEvent | null,
 		chatError: null,
@@ -134,6 +135,7 @@ describe("CafeRoomPage", () => {
 			connectionState: "closed",
 			dialogue: null,
 			emote: null,
+			rewardNotice: null,
 			chatEvents: [],
 			latestChatMessage: null,
 			chatError: null,
@@ -238,6 +240,39 @@ describe("CafeRoomPage", () => {
 		expect(dialogue.className).toContain("cafe-world-overlay-strong");
 		expect(dialogue.className).not.toContain("bg-dialog-soft");
 		expect(screen.getByAltText("Aiko").getAttribute("draggable")).toBe("false");
+	});
+
+	it("keeps Greenwood Retreat free of task and persistent reward HUDs", () => {
+		const room = roomFixture();
+		room.mapId = "nature_retreat";
+		room.activity = {
+			...room.activity,
+			id: "nature_retreat",
+			roundNumber: 0,
+			delivered: 0,
+			target: 0,
+			teaLeaves: [],
+			tableOrders: []
+		};
+		Object.assign(roomHook.value, {
+			room,
+			selfPlayerId: room.players[0].id,
+			connectionState: "connected",
+			rewardNotice: { earnedStars: 2, key: 1 },
+			error: null
+		});
+
+		renderRoomPage();
+
+		expect(screen.queryByRole("dialog")).toBeNull();
+		expect(screen.queryByTestId("cafe-activity-hud")).toBeNull();
+		expect(screen.queryByTestId("cafe-stars")).toBeNull();
+		expect(screen.getByTestId("cafe-nature-reward-notice").textContent).toContain(
+			"cafe.nature.reward"
+		);
+		expect(screen.getByTestId("cafe-room-activity-details").textContent).toContain(
+			"cafe.nature.roomDescription"
+		);
 	});
 
 	it("keeps detailed activity guidance behind Help on mobile", () => {
@@ -773,6 +808,7 @@ function roomFixture(): CafeRoomState {
 		inviteCode: "ABC123",
 		isPrivate: true,
 		capacity: 8,
+		mapId: "cafe",
 		mapLayout: {
 			version: "cafe-room-v1",
 			width: 1280,

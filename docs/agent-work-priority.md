@@ -4,19 +4,16 @@ Use this file as the first document to read before starting a new scoped agent t
 
 ## Active Scope
 
-No implementation scope is currently defined. Define the next concrete scope
-here before making repository changes; do not infer follow-up work from the
-completed v0.3.7 release.
+No active implementation scope.
 
 ## Required Read Order
 
 1. `docs/agent-work-priority.md`
-2. The owning current-behavior documents named by the next scope.
+2. Add the owning current-behavior documents for the next active scope.
 
 ## Required Outcome
 
-No implementation outcome is currently authorized. Preserve current behavior
-until a new scoped priority and applicable standalone authorization are added.
+- Define the required outcome for the next active scope.
 
 ## Authorization And Verification
 

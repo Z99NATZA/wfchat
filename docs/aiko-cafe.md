@@ -1,11 +1,16 @@
-# Aiko Cafe
+# Aiko World
 
-Aiko Cafe is WFChat's guest-first social co-op game. It runs separately from
-chat and is available at `/cafe` without login.
+Aiko World is WFChat's guest-first top-down social space. It runs separately
+from chat and remains available at the compatibility route `/cafe` without
+login. Aiko Cafe is its activity map; Greenwood Retreat is its relaxed social
+map.
 
 ## Player Experience
 
 - `/cafe` supports Join, Create Room, and Join by Code.
+- Create Room selects Aiko Cafe or Greenwood Retreat. The selected map remains
+  fixed for the room lifetime. Quick Join can enter a public room on either map;
+  requests that omit `map_id` continue to create Aiko Cafe rooms.
 - The lobby entry panel is mobile-first: Aiko sits beside the welcome heading
   instead of occupying a separate tall hero area, while the optional name and
   primary room actions remain the visual priority.
@@ -15,7 +20,7 @@ chat and is available at `/cafe` without login.
   public rooms appear sooner without removing any entry path. At desktop widths,
   the name and room-code rows share aligned input and action columns.
 - The entry panel ends with a borderless wardrobe footer separated by one top
-  divider. It shows the current character, cosmetic, and Cafe Stars without
+  divider. It shows the current character, cosmetic, and Aiko Stars without
   adding another card, and opens an on-demand wardrobe as a bottom sheet on
   narrow viewports or a compact dialog on wider viewports. Inside, either player
   avatar is always available, unlocked cosmetic tiles equip on click, the current
@@ -24,7 +29,7 @@ chat and is available at `/cafe` without login.
   dialog by its header; touch and narrow layouts cannot.
 - A room supports 1-8 players. Join selects the busiest public room with
   space; a created room also gets a six-character invite code.
-- The optional cafe name applies only to the current browser tab. If empty, the
+- The optional display name applies only to the current browser tab. If empty, the
   game uses the account display name or a stable `Guest XXXX` name.
 - In-world player names use compact plain white text without a background,
   outline, or shadow. The label stays above the character and leaves additional
@@ -35,7 +40,7 @@ chat and is available at `/cafe` without login.
   button so the controls do not overlap. When the player changes direction,
   release events from the previous direction cannot cancel the currently held
   direction.
-- First-time guidance and nearby prompts explain the current activity. Help
+- In Aiko Cafe, first-time guidance and nearby prompts explain the current activity. Help
   remains available from the activity HUD, which players can show or hide at
   every viewport size.
 - Room members can exchange short text messages in a collapsible panel. New
@@ -43,7 +48,7 @@ chat and is available at `/cafe` without login.
   notices and unread counts make other visitors visible without interrupting
   play. The chat icon remains in place and toggles the panel at every viewport
   size; the panel close button provides the same close action.
-- Activities rotate through Tea Delivery, Table Service, and Cafe Rush. Tea
+- Aiko Cafe activities rotate through Tea Delivery, Table Service, and Cafe Rush. Tea
   Delivery places three leaves around the Cafe for players to collect and return
   to Aiko. Table Service lets players collect one prepared drink at a time from
   Aiko and deliver it to the matching marked table.
@@ -57,9 +62,9 @@ chat and is available at `/cafe` without login.
   shared combo. Disconnecting returns carried Rush ingredients and claimed
   drinks so another player can continue. A timed-out Rush moves to intermission
   without awarding a star and never blocks later rounds.
-- Completing an activity starts an eight-second intermission before the next
-  round. Each connected player can receive one Cafe Star per completed round.
-- Cafe Stars unlock the server-owned Sakura Pin, Mint Scarf, Tea Hat, and Cafe
+- Completing a Cafe activity starts an eight-second intermission before the next
+  round. Each connected player can receive one Aiko Star per completed round.
+- Aiko Stars unlock the server-owned Sakura Pin, Mint Scarf, Tea Hat, and Cafe
   Apron at 0, 3, 5, and 8 stars. Equipped items are visible to all room members
   in real time. Cosmetic placement follows the selected avatar and direction;
   the Sakura Pin remains on the hair without covering the face.
@@ -84,12 +89,36 @@ initial chat bundle. Active rooms and gameplay simulation live in the API
 process. Rooms that were never joined expire after 10 minutes; rooms remain
 available for reconnect for 2 minutes after the last player leaves.
 
-The Cafe uses `cafe-room-v1.png` as one background image in a fixed 1280x800
+Aiko Cafe uses `cafe-room-v1.png` as one background image in a fixed 1280x800
 world. The API-owned `cafe-room-v1` map layout defines the world bounds,
 10-pixel player foot radius, interaction distances and positions, and
 rectangular footprints for the service counter and all five tables. Camera
 scaling, viewport size, device pixel ratio, and browser zoom affect rendering
 only and do not change this world geometry.
+
+Greenwood Retreat uses the internal map id `nature_retreat`, displayed as
+`Greenwood Retreat` in English and `ลานพักใจสีเขียว` in Thai. Its
+`nature-retreat-v1` layout is a 1920x1200 bright green overlook with a pond,
+picnic deck, healthy flower garden, rocks, paths, and open central gathering
+space. Aiko appears near that gathering space in a hiking/picnic outfit.
+
+Greenwood has no objective, round, score, intermission, failure state, or
+activity progress. Players may simply stay, move, chat, and react. Optional
+interactions at Aiko, the picnic, overlook, pond, butterflies, stepping stones,
+and flowers return only personal ambient dialogue. They never affect rewards.
+The room UI omits the activity card, guide, round display, progress, countdown,
+and persistent star HUD on this map.
+
+While Greenwood is visible and its WebSocket is connected, one reward clock per
+account or Guest session accumulates time even when the player stands still.
+The first reward is eligible after one accumulated minute; later rewards are
+eligible every five additional minutes with no daily cap. A reward grants one
+Aiko Star 90% of the time, two 9% of the time, and three 1% of the time. Hidden,
+offline, and disconnected time does not count. Partial connected-visible time
+survives reconnects and room changes in the running API process. Multiple tabs
+and rooms share one active clock. Claims use a durable monotonic sequence and
+an atomic transaction, so concurrent API processes cannot grant the same
+sequence twice. The client shows only a short reward notice when a claim wins.
 
 ## Identity And Persistence
 
@@ -100,9 +129,10 @@ The temporary cafe name is stored in `sessionStorage`, limited to 24 Unicode
 characters, and sent again on reconnect. It is never written to the account
 profile or database.
 
-Cafe Stars, unlocks, equipped avatar and cosmetic, and reward records are stored
+Aiko Stars, unlocks, equipped avatar and cosmetic, and reward records are stored
 in PostgreSQL. Guest progress moves to the registered owner after login.
-Rewards are idempotent per room, round, and session. Cafe progress does not use
+Cafe activity rewards are idempotent per room, round, and session. Greenwood
+timed rewards are idempotent per account or Guest sequence. Progress does not use
 browser local storage or the generic sync queue; only first-visit guide
 dismissal is a local UI preference.
 
@@ -115,6 +145,9 @@ empty Cafe persistence.
 
 Lobby, progress, and loadout operations use `/api/cafe/*`:
 
+- `POST /api/cafe/rooms` accepts `is_private` and `map_id`; supported map ids are
+  `cafe` and `nature_retreat`, and the default is `cafe`.
+- Room summaries and `welcome.room` include `map_id`.
 - `GET /api/cafe/progress` returns stars, catalog thresholds, unlocks, and the
   available avatar catalog and equipped loadout.
 - `POST /api/cafe/cosmetics/equipped` accepts an unlocked catalog id or `null`.
@@ -122,7 +155,9 @@ Lobby, progress, and loadout operations use `/api/cafe/*`:
 - `GET /api/cafe/rooms/:roomId/ws?nickname=<temporary-name>` opens the
   authenticated room WebSocket. `nickname` is optional.
 
-WebSocket client messages are `move`, `interact`, `emote`, `chat`, and `ping`.
+WebSocket client messages are `move`, `interact`, `emote`, `chat`, `presence`,
+and `ping`. `presence.visible` follows page visibility and controls Greenwood
+reward eligibility.
 Server messages are `welcome`, `snapshot`, `movement`, localized-key `dialogue`,
 `emote`, `chat_event`, `chat_error`, targeted `reward`, `pong`, and `error`.
 Welcome messages include the complete room, each player's equipped avatar, the
@@ -133,14 +168,15 @@ state without repeating the map; clients retain the map established by
 the latest position, direction, and moving state for every connected player.
 Welcome, snapshot, and movement messages share a monotonic room revision, and
 clients ignore equal or older state. Room snapshots identify `tea_delivery`,
-`table_service`, or `cafe_rush`. Service snapshots include order table, drink,
+`table_service`, `cafe_rush`, or the non-scored `nature_retreat` state. Service snapshots include order table, drink,
 preparation, claim, and delivery state; Rush snapshots also include its deadline
 and current and best combo. Stable terminal error codes are `room_not_found`,
 `room_full`, and `rate_limited`.
 
-The API is authoritative for room capacity, collision, coordinates, movement
-speed, activity rotation, inventory, Table Service claims, completion, rewards,
-Cafe Rush deadlines, order preparation, combo windows, player-count scaling,
+The API is authoritative for map selection, room capacity, per-map collision,
+coordinates, movement speed, interaction distance, activity rotation,
+inventory, Table Service claims, completion, eligible presence, timed reward
+cadence and amount, rewards, Cafe Rush deadlines, order preparation, combo windows, player-count scaling,
 cosmetics, and allowed emotes. It validates browser origins, message rate, JSON
 shape, interaction distance, target ownership, and monotonic movement sequence
 numbers. The client sends movement immediately when walking starts, stops, or
@@ -185,18 +221,18 @@ to lobby actions.
 
 ## UI And Privacy Rules
 
-All React UI rendered inside the game surface—including the activity HUD, room
+All React UI rendered inside the game surface—including the Cafe activity HUD, room
 status, movement and interaction controls, room chat, Aiko dialogue, reactions,
 activity guide, loading, connection notices, errors, and recovery—uses the Cafe
 game palette. Connection state remains distinguishable through restrained
 semantic accents such as amber for reconnecting and muted red for offline or
 error states. Surrounding application chrome—including the header, sidebar, and
 details—uses the shared application theme. The Phaser map, characters, items,
-and in-world markers also use the Cafe game palette. Full-surface Cafe backdrops
+and in-world markers also use the game palette. Full-surface game backdrops
 use a dark translucent game-palette fill without blur, following the
 large-surface rule in [Theme](theme.md).
 
-On narrow viewports, the activity HUD and room status share a top row without
+On Aiko Cafe's narrow viewports, the activity HUD and room status share a top row without
 overlap. A control above the chat button toggles that row at every viewport
 size and is hidden while chat is open. Opening chat also temporarily hides the
 row on narrow viewports without changing the player's chosen visibility. The
@@ -227,11 +263,14 @@ memory.
 - Durable store: `apps/api/src/store/cafe.rs`
 - Migrations: `apps/api/migrations/202607180001_aiko_cafe_mvp.sql`,
   `202607190001_aiko_cafe_round_rewards.sql`, and
-  `202607190002_aiko_cafe_cosmetic_loadouts.sql`
+  `202607190002_aiko_cafe_cosmetic_loadouts.sql`, plus
+  `202608310001_aiko_world_timed_rewards.sql`
 
 ## Current Limits
 
-Rooms do not survive an API restart and are not shared across API instances.
-The game has one map, three rotating activities, and four cosmetics. It has no
+Rooms and in-memory partial Greenwood timers do not survive an API restart and
+rooms are not shared across API instances. Durable reward sequences and Aiko
+Stars do survive. The game has two maps, three rotating Cafe activities, and
+four cosmetics. It has no
 regional matchmaking, moderation UI, global chat, AI room dialogue, or spectator
 mode.

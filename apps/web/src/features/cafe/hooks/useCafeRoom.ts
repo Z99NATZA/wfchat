@@ -9,7 +9,9 @@ import type {
 	CafeDialogue,
 	CafeDirection,
 	CafeEmote,
+	CafeMapId,
 	CafeMapLayout,
+	CafeRewardNotice,
 	CafeRoomErrorCode,
 	CafeRoomState
 } from "@/features/cafe/types";
@@ -45,6 +47,7 @@ type ApiRoom = {
 	invite_code: string;
 	is_private: boolean;
 	capacity: number;
+	map_id?: CafeMapId;
 	map_layout: {
 		version: string;
 		width: number;
@@ -64,7 +67,7 @@ type ApiRoom = {
 	};
 	players: ApiPlayer[];
 	activity: {
-		id: "tea_delivery" | "table_service" | "cafe_rush";
+		id: "tea_delivery" | "table_service" | "cafe_rush" | "nature_retreat";
 		round_number: number;
 		phase: "active" | "intermission";
 		next_round_at: number | null;
@@ -89,7 +92,7 @@ type ApiRoom = {
 	aiko: CafeRoomState["aiko"];
 };
 
-type ApiDynamicRoom = Omit<ApiRoom, "map_layout">;
+type ApiDynamicRoom = Omit<ApiRoom, "map_layout" | "map_id">;
 
 type ApiMovementPlayer = Pick<ApiPlayer, "id" | "x" | "y" | "direction" | "moving">;
 
@@ -120,6 +123,7 @@ export function useCafeRoom(roomId: string) {
 	const [connectionEpoch, setConnectionEpoch] = useState(0);
 	const [dialogue, setDialogue] = useState<CafeDialogue | null>(null);
 	const [emote, setEmote] = useState<CafeEmote | null>(null);
+	const [rewardNotice, setRewardNotice] = useState<CafeRewardNotice | null>(null);
 	const [chatEvents, setChatEvents] = useState<CafeChatEvent[]>([]);
 	const [latestChatMessage, setLatestChatMessage] = useState<CafeChatEvent | null>(null);
 	const [chatError, setChatError] = useState<CafeChatErrorCode | null>(null);
@@ -137,6 +141,8 @@ export function useCafeRoom(roomId: string) {
 	const lastPongAtRef = useRef(Date.now());
 	const dialogueTimerRef = useRef<number | null>(null);
 	const emoteKeyRef = useRef(0);
+	const rewardKeyRef = useRef(0);
+	const rewardTimerRef = useRef<number | null>(null);
 
 	useEffect(() => {
 		shouldReconnectRef.current = true;
@@ -150,6 +156,7 @@ export function useCafeRoom(roomId: string) {
 		setChatEvents([]);
 		setLatestChatMessage(null);
 		setChatError(null);
+		setRewardNotice(null);
 		let disposed = false;
 
 		function clearReconnectTimer() {
@@ -245,6 +252,18 @@ export function useCafeRoom(roomId: string) {
 			connect(true);
 		}
 
+		function handleVisibilityChange() {
+			const socket = socketRef.current;
+			if (readyRef.current && socket?.readyState === WebSocket.OPEN) {
+				socket.send(
+					JSON.stringify({
+						type: "presence",
+						visible: document.visibilityState === "visible"
+					})
+				);
+			}
+		}
+
 		function requestResynchronization(socket: WebSocket) {
 			if (socketRef.current !== socket) return;
 			readyRef.current = false;
@@ -269,6 +288,12 @@ export function useCafeRoom(roomId: string) {
 					setConnectionEpoch((current) => current + 1);
 					setConnectionState("connected");
 					setError(null);
+					socket.send(
+						JSON.stringify({
+							type: "presence",
+							visible: document.visibilityState === "visible"
+						})
+					);
 					break;
 				case "snapshot": {
 					if (!readyRef.current || roomRef.current === null) {
@@ -277,7 +302,11 @@ export function useCafeRoom(roomId: string) {
 					}
 					if (message.revision <= lastRevisionRef.current) break;
 					lastRevisionRef.current = message.revision;
-					roomRef.current = toDynamicRoomState(message.room, roomRef.current.mapLayout);
+					roomRef.current = toDynamicRoomState(
+						message.room,
+						roomRef.current.mapId,
+						roomRef.current.mapLayout
+					);
 					setRoom(roomRef.current);
 					break;
 				}
@@ -336,6 +365,18 @@ export function useCafeRoom(roomId: string) {
 				case "reward":
 					if (message.player_id === selfPlayerIdRef.current) {
 						setCafeStars((current) => current + message.earned_stars);
+						rewardKeyRef.current += 1;
+						setRewardNotice({
+							earnedStars: message.earned_stars,
+							key: rewardKeyRef.current
+						});
+						if (rewardTimerRef.current !== null) {
+							window.clearTimeout(rewardTimerRef.current);
+						}
+						rewardTimerRef.current = window.setTimeout(
+							() => setRewardNotice(null),
+							4200
+						);
 					}
 					break;
 				case "error":
@@ -353,6 +394,7 @@ export function useCafeRoom(roomId: string) {
 
 		window.addEventListener("offline", handleOffline);
 		window.addEventListener("online", handleOnline);
+		document.addEventListener("visibilitychange", handleVisibilityChange);
 		if (onlineRef.current) {
 			connect();
 		}
@@ -375,9 +417,13 @@ export function useCafeRoom(roomId: string) {
 			if (dialogueTimerRef.current !== null) {
 				window.clearTimeout(dialogueTimerRef.current);
 			}
+			if (rewardTimerRef.current !== null) {
+				window.clearTimeout(rewardTimerRef.current);
+			}
 			window.clearInterval(heartbeatTimer);
 			window.removeEventListener("offline", handleOffline);
 			window.removeEventListener("online", handleOnline);
+			document.removeEventListener("visibilitychange", handleVisibilityChange);
 			socketRef.current?.close(1000, "leaving cafe");
 			socketRef.current = null;
 		};
@@ -425,6 +471,7 @@ export function useCafeRoom(roomId: string) {
 		connectionState,
 		dialogue,
 		emote,
+		rewardNotice,
 		chatEvents,
 		latestChatMessage,
 		chatError,
@@ -449,15 +496,20 @@ function toRoomErrorCode(code: string | undefined): CafeRoomErrorCode {
 }
 
 function toRoomState(room: ApiRoom): CafeRoomState {
-	return toDynamicRoomState(room, toMapLayout(room.map_layout));
+	return toDynamicRoomState(room, room.map_id ?? "cafe", toMapLayout(room.map_layout));
 }
 
-function toDynamicRoomState(room: ApiDynamicRoom, mapLayout: CafeMapLayout): CafeRoomState {
+function toDynamicRoomState(
+	room: ApiDynamicRoom,
+	mapId: CafeMapId,
+	mapLayout: CafeMapLayout
+): CafeRoomState {
 	return {
 		id: room.id,
 		inviteCode: room.invite_code,
 		isPrivate: room.is_private,
 		capacity: room.capacity,
+		mapId,
 		mapLayout,
 		players: room.players.map((player) => ({
 			id: player.id,

@@ -5,6 +5,93 @@ use crate::cafe_avatars::{cafe_avatar, DEFAULT_CAFE_AVATAR_ID};
 use crate::cafe_cosmetics::{cafe_cosmetic, unlocked_cafe_cosmetic_ids};
 
 impl ChatStore {
+    pub async fn get_cafe_timed_reward_sequence(&self, owner: OwnerScope) -> StoreResult<u64> {
+        let (owner_kind, owner_id) = timed_reward_owner(owner);
+        let sequence = sqlx::query_scalar::<_, i64>(
+            "insert into cafe_timed_reward_progress (
+                owner_kind, owner_id, owner_session_id, owner_user_id, reward_sequence, updated_at
+             ) values ($1, $2, $3, $4, 0, now())
+             on conflict (owner_kind, owner_id)
+             do update set
+                owner_session_id = excluded.owner_session_id,
+                owner_user_id = coalesce(excluded.owner_user_id, cafe_timed_reward_progress.owner_user_id),
+                updated_at = now()
+             returning reward_sequence",
+        )
+        .bind(owner_kind)
+        .bind(owner_id)
+        .bind(owner.session_id)
+        .bind(owner.user_id)
+        .fetch_one(self.db.as_ref())
+        .await?;
+        Ok(u64::try_from(sequence).unwrap_or_default())
+    }
+
+    pub async fn award_cafe_timed_reward(
+        &self,
+        owner: OwnerScope,
+        reward_sequence: u64,
+        amount: u32,
+    ) -> StoreResult<bool> {
+        let Ok(reward_sequence) = i64::try_from(reward_sequence) else {
+            return Ok(false);
+        };
+        let previous_sequence = reward_sequence.saturating_sub(1);
+        let (owner_kind, owner_id) = timed_reward_owner(owner);
+        let mut tx = self.db.begin().await?;
+        sqlx::query(
+            "insert into cafe_timed_reward_progress (
+                owner_kind, owner_id, owner_session_id, owner_user_id, reward_sequence, updated_at
+             ) values ($1, $2, $3, $4, 0, now())
+             on conflict (owner_kind, owner_id) do nothing",
+        )
+        .bind(owner_kind)
+        .bind(owner_id)
+        .bind(owner.session_id)
+        .bind(owner.user_id)
+        .execute(&mut *tx)
+        .await?;
+        let claimed = sqlx::query_scalar::<_, i64>(
+            "update cafe_timed_reward_progress
+             set reward_sequence = $3,
+                 owner_session_id = $4,
+                 owner_user_id = coalesce($5, owner_user_id),
+                 updated_at = now()
+             where owner_kind = $1 and owner_id = $2 and reward_sequence = $6
+             returning reward_sequence",
+        )
+        .bind(owner_kind)
+        .bind(owner_id)
+        .bind(reward_sequence)
+        .bind(owner.session_id)
+        .bind(owner.user_id)
+        .bind(previous_sequence)
+        .fetch_optional(&mut *tx)
+        .await?
+        .is_some();
+        if !claimed {
+            tx.rollback().await?;
+            return Ok(false);
+        }
+        sqlx::query(
+            "insert into cafe_progress (
+                owner_session_id, owner_user_id, cafe_stars, unlocked_cosmetics, updated_at
+             ) values ($1, $2, $3, '{}', now())
+             on conflict (owner_session_id)
+             do update set
+                owner_user_id = coalesce(excluded.owner_user_id, cafe_progress.owner_user_id),
+                cafe_stars = cafe_progress.cafe_stars + excluded.cafe_stars,
+                updated_at = now()",
+        )
+        .bind(owner.session_id)
+        .bind(owner.user_id)
+        .bind(i32::try_from(amount).unwrap_or(i32::MAX))
+        .execute(&mut *tx)
+        .await?;
+        tx.commit().await?;
+        Ok(true)
+    }
+
     pub async fn get_cafe_progress(&self, owner: OwnerScope) -> StoreResult<CafeProgressRecord> {
         let rows = sqlx::query(
             "select cafe_stars, unlocked_cosmetics
@@ -207,6 +294,13 @@ impl ChatStore {
     }
 }
 
+fn timed_reward_owner(owner: OwnerScope) -> (&'static str, Uuid) {
+    match owner.user_id {
+        Some(user_id) => ("account", user_id),
+        None => ("guest", owner.session_id),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -396,6 +490,63 @@ mod tests {
         assert!(duplicate.is_empty());
         assert_eq!(second, vec![session.id]);
         assert_eq!(progress.cafe_stars, 2);
+
+        sqlx::query("delete from auth_sessions where id = $1")
+            .bind(session.id)
+            .execute(store.db.as_ref())
+            .await
+            .expect("test session should clean up");
+    }
+
+    #[tokio::test]
+    async fn cafe_timed_rewards_are_atomic_and_sequence_bound() {
+        let Some(store) = test_store().await else {
+            return;
+        };
+        let session = store
+            .create_guest_session()
+            .await
+            .expect("guest session should create");
+        let owner = OwnerScope::from_session(&session);
+
+        assert_eq!(
+            store
+                .get_cafe_timed_reward_sequence(owner)
+                .await
+                .expect("initial sequence should load"),
+            0
+        );
+        assert!(store
+            .award_cafe_timed_reward(owner, 1, 2)
+            .await
+            .expect("first timed reward should claim"));
+        assert!(!store
+            .award_cafe_timed_reward(owner, 1, 3)
+            .await
+            .expect("duplicate sequence should be ignored"));
+        assert!(!store
+            .award_cafe_timed_reward(owner, 3, 3)
+            .await
+            .expect("skipped sequence should be ignored"));
+        assert!(store
+            .award_cafe_timed_reward(owner, 2, 1)
+            .await
+            .expect("next sequence should claim"));
+        assert_eq!(
+            store
+                .get_cafe_timed_reward_sequence(owner)
+                .await
+                .expect("latest sequence should load"),
+            2
+        );
+        assert_eq!(
+            store
+                .get_cafe_progress(owner)
+                .await
+                .expect("timed stars should update progress")
+                .cafe_stars,
+            3
+        );
 
         sqlx::query("delete from auth_sessions where id = $1")
             .bind(session.id)
