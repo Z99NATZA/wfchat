@@ -3,14 +3,23 @@ import { removeStorageItem } from "@/services/storageService";
 
 const sessionCookieReadyKey = "wfchat.sessionCookieReady";
 const legacySessionStorageKey = "wfchat.sessionId";
+let sessionBootstrapPromise: Promise<void> | null = null;
 
-export async function ensureCookieSession(): Promise<void> {
+export function ensureCookieSession(): Promise<void> {
 	if (readSessionMarker(sessionCookieReadyKey) === "true") {
-		return;
+		return Promise.resolve();
 	}
 
-	await apiClient.get("/api/auth/me");
-	markCookieSessionReady();
+	if (!sessionBootstrapPromise) {
+		sessionBootstrapPromise = apiClient
+			.get("/api/auth/me")
+			.then(() => markCookieSessionReady())
+			.finally(() => {
+				sessionBootstrapPromise = null;
+			});
+	}
+
+	return sessionBootstrapPromise;
 }
 
 export function markCookieSessionReady(): void {

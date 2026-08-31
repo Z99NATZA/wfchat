@@ -66,4 +66,34 @@ describe("sessionService", () => {
 
 		expect(apiClientMock.get).not.toHaveBeenCalled();
 	});
+
+	it("shares one bootstrap request across concurrent session consumers", async () => {
+		let resolveRequest: ((value: { data: { session_id: string } }) => void) | undefined;
+		apiClientMock.get.mockImplementationOnce(
+			() =>
+				new Promise((resolve) => {
+					resolveRequest = resolve;
+				})
+		);
+
+		const first = ensureCookieSession();
+		const second = ensureCookieSession();
+
+		expect(apiClientMock.get).toHaveBeenCalledTimes(1);
+		resolveRequest?.({ data: { session_id: "shared-session" } });
+		await Promise.all([first, second]);
+		expect(window.sessionStorage.getItem(sessionCookieReadyKey)).toBe("true");
+	});
+
+	it("allows bootstrap to retry after a failed request", async () => {
+		apiClientMock.get
+			.mockRejectedValueOnce(new Error("temporary failure"))
+			.mockResolvedValueOnce({ data: { session_id: "session-after-retry" } });
+
+		await expect(ensureCookieSession()).rejects.toThrow("temporary failure");
+		await ensureCookieSession();
+
+		expect(apiClientMock.get).toHaveBeenCalledTimes(2);
+		expect(window.sessionStorage.getItem(sessionCookieReadyKey)).toBe("true");
+	});
 });

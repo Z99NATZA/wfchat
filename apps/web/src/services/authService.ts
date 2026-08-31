@@ -34,6 +34,7 @@ export type AuthProfile = {
 };
 
 export async function fetchCurrentSession(): Promise<AuthSession> {
+	await ensureCookieSession();
 	const response = await apiClient.get<ApiSessionResponse>("/api/auth/me");
 	markCookieSessionReady();
 	return toAuthSession(response.data);

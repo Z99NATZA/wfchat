@@ -2404,13 +2404,15 @@ async fn cafe_socket(
         .on_upgrade(move |socket| {
             handle_cafe_socket(
                 socket,
-                state,
-                room_id,
-                player,
-                owner,
-                nature_reward_sequence,
-                initial_stars,
-                reservation,
+                CafeSocketContext {
+                    state,
+                    room_id,
+                    player,
+                    owner,
+                    nature_reward_sequence,
+                    initial_stars,
+                    _reservation: reservation,
+                },
             )
         });
     if let Some(cookie) = response_headers.get(SET_COOKIE).cloned() {
@@ -2442,8 +2444,7 @@ fn is_allowed_websocket_origin(headers: &HeaderMap, configured_origins: &str) ->
         .any(|configured| !configured.is_empty() && configured == origin)
 }
 
-async fn handle_cafe_socket(
-    mut socket: WebSocket,
+struct CafeSocketContext {
     state: AppState,
     room_id: Uuid,
     player: CafePlayer,
@@ -2451,7 +2452,18 @@ async fn handle_cafe_socket(
     nature_reward_sequence: u64,
     initial_stars: u32,
     _reservation: CafeSocketReservation,
-) {
+}
+
+async fn handle_cafe_socket(mut socket: WebSocket, context: CafeSocketContext) {
+    let CafeSocketContext {
+        state,
+        room_id,
+        player,
+        owner,
+        nature_reward_sequence,
+        initial_stars,
+        _reservation,
+    } = context;
     let player_id = player.id;
     let connection_id = player.connection_id;
     let mut session_revocations = state.cafe.session_revocations.subscribe();

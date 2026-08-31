@@ -578,6 +578,9 @@ fn chat_attachment_from_row(row: sqlx::postgres::PgRow) -> ChatAttachmentRecord 
 mod tests {
     use super::*;
 
+    static STALE_PENDING_CLEANUP_TEST_LOCK: tokio::sync::Mutex<()> =
+        tokio::sync::Mutex::const_new(());
+
     fn attachment(id: Uuid, byte_size: i64) -> NewChatAttachmentRecord {
         NewChatAttachmentRecord {
             id,
@@ -864,6 +867,7 @@ mod tests {
 
     #[tokio::test]
     async fn hard_deletion_entry_points_enqueue_owner_and_byte_snapshots() {
+        let _cleanup_guard = STALE_PENDING_CLEANUP_TEST_LOCK.lock().await;
         let Some(store) = test_store().await else {
             return;
         };
@@ -1075,6 +1079,7 @@ mod tests {
 
     #[tokio::test]
     async fn stale_pending_hard_deletion_is_bounded_to_one_hundred_rows() {
+        let _cleanup_guard = STALE_PENDING_CLEANUP_TEST_LOCK.lock().await;
         let Some(store) = test_store().await else {
             return;
         };
