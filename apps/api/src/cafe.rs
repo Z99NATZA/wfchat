@@ -625,6 +625,12 @@ struct CreateRoomRequest {
     map_id: CafeMapId,
 }
 
+#[derive(Deserialize)]
+struct QuickJoinRoomRequest {
+    #[serde(default)]
+    map_id: CafeMapId,
+}
+
 fn default_private_room() -> bool {
     true
 }
@@ -1152,17 +1158,20 @@ impl CafeHub {
         Ok(self.create_room_for_map(is_private, map_id).await)
     }
 
-    pub async fn quick_join_limited(
+    async fn quick_join_limited(
         &self,
         session_id: Uuid,
         resolved_ip: String,
+        map_id: CafeMapId,
     ) -> AppResult<CafeRoomSummary> {
         let _gate = self.creation_gate.lock().await;
         {
             let rooms = self.rooms.lock().await;
             if let Some(room) = rooms
                 .values()
-                .filter(|room| !room.is_private && room.players.len() < ROOM_CAPACITY)
+                .filter(|room| {
+                    !room.is_private && room.map_id == map_id && room.players.len() < ROOM_CAPACITY
+                })
                 .max_by_key(|room| room.players.len())
             {
                 return Ok(room_summary(room));
@@ -1170,7 +1179,7 @@ impl CafeHub {
         }
         self.consume_room_creation(session_id, resolved_ip, Instant::now())
             .await?;
-        Ok(self.create_room(false).await)
+        Ok(self.create_room_for_map(false, map_id).await)
     }
 
     pub async fn list_public_rooms(&self) -> Vec<CafeRoomSummary> {
@@ -1197,6 +1206,7 @@ impl CafeHub {
             .map(|room| room.map_id)
     }
 
+    #[cfg(test)]
     async fn create_room(&self, is_private: bool) -> CafeRoomSummary {
         self.create_room_for_map(is_private, CafeMapId::Cafe).await
     }
@@ -2248,11 +2258,19 @@ async fn quick_join(
     State(state): State<AppState>,
     ConnectInfo(peer_addr): ConnectInfo<SocketAddr>,
     headers: HeaderMap,
+    request: Option<Json<QuickJoinRoomRequest>>,
 ) -> AppResult<(HeaderMap, Json<CafeRoomResponse>)> {
     let action = AuthorizationAction::QuickJoinCafeRoom;
     let (session, response_headers) = ensure_cafe_session(&state, &headers, action).await?;
     let resolved_ip = resolved_cafe_ip(&state, &headers, peer_addr);
-    let room = match state.cafe.quick_join_limited(session.id, resolved_ip).await {
+    let map_id = request
+        .map(|Json(request)| request.map_id)
+        .unwrap_or_default();
+    let room = match state
+        .cafe
+        .quick_join_limited(session.id, resolved_ip, map_id)
+        .await
+    {
         Ok(room) => room,
         Err(error) => {
             log_cafe_request_rejection(&error, action);
@@ -3524,6 +3542,14 @@ mod tests {
         }))
         .expect("nature map id should deserialize");
         assert_eq!(request.map_id, CafeMapId::NatureRetreat);
+        let quick_join: QuickJoinRoomRequest =
+            serde_json::from_value(serde_json::json!({ "map_id": "nature_retreat" }))
+                .expect("Quick Join nature map id should deserialize");
+        assert_eq!(quick_join.map_id, CafeMapId::NatureRetreat);
+        let default_quick_join: QuickJoinRoomRequest =
+            serde_json::from_value(serde_json::json!({}))
+                .expect("Quick Join should default to Cafe when map id is omitted");
+        assert_eq!(default_quick_join.map_id, CafeMapId::Cafe);
         assert!(
             serde_json::from_value::<CreateRoomRequest>(serde_json::json!({
                 "map_id": "unknown"
@@ -4608,9 +4634,12 @@ mod tests {
         let hub = CafeHub::new(limits);
         let session = Uuid::new_v4();
         let ip = "198.51.100.9".to_owned();
-        let created = hub.quick_join_limited(session, ip.clone()).await.unwrap();
+        let created = hub
+            .quick_join_limited(session, ip.clone(), CafeMapId::Cafe)
+            .await
+            .unwrap();
         let reused = hub
-            .quick_join_limited(session, ip.clone())
+            .quick_join_limited(session, ip.clone(), CafeMapId::Cafe)
             .await
             .expect("reusing an existing public room must not consume quota");
         assert_eq!(reused.id, created.id);
@@ -4621,6 +4650,33 @@ mod tests {
             .expect("a subsequent actual creation must hit the consumed quota");
         assert_eq!(rejected.reason(), Some(ErrorReason::CafeRoomCreationRate));
         assert_eq!(rejected.retry_after_seconds(), Some(600));
+    }
+
+    #[tokio::test]
+    async fn quick_join_reuses_or_creates_only_the_requested_map() {
+        let hub = CafeHub::default();
+        let cafe = hub.create_room(false).await;
+        let session = Uuid::new_v4();
+        let ip = "198.51.100.10".to_owned();
+
+        let nature = hub
+            .quick_join_limited(session, ip.clone(), CafeMapId::NatureRetreat)
+            .await
+            .expect("Greenwood Quick Join should create a public Greenwood room");
+        assert_eq!(nature.map_id, CafeMapId::NatureRetreat);
+        assert_ne!(nature.id, cafe.id);
+
+        let reused_nature = hub
+            .quick_join_limited(session, ip.clone(), CafeMapId::NatureRetreat)
+            .await
+            .expect("Greenwood Quick Join should reuse its public room");
+        assert_eq!(reused_nature.id, nature.id);
+
+        let reused_cafe = hub
+            .quick_join_limited(session, ip, CafeMapId::Cafe)
+            .await
+            .expect("Cafe Quick Join should not cross into Greenwood");
+        assert_eq!(reused_cafe.id, cafe.id);
     }
 
     #[tokio::test]

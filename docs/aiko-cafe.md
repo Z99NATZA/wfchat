@@ -8,9 +8,10 @@ map.
 ## Player Experience
 
 - `/cafe` supports Join, Create Room, and Join by Code.
-- Create Room selects Aiko Cafe or Greenwood Retreat. The selected map remains
-  fixed for the room lifetime. Quick Join can enter a public room on either map;
-  requests that omit `map_id` continue to create Aiko Cafe rooms.
+- Create Room and Quick Join use the selected Aiko Cafe or Greenwood Retreat
+  map. The selected map remains fixed for the room lifetime. Quick Join reuses
+  the busiest public room with space on that map or creates one when none is
+  available; requests that omit `map_id` continue to use Aiko Cafe.
 - The lobby entry panel is mobile-first: Aiko sits beside the welcome heading
   instead of occupying a separate tall hero area, while the optional name and
   primary room actions remain the visual priority.
@@ -147,6 +148,9 @@ Lobby, progress, and loadout operations use `/api/cafe/*`:
 
 - `POST /api/cafe/rooms` accepts `is_private` and `map_id`; supported map ids are
   `cafe` and `nature_retreat`, and the default is `cafe`.
+- `POST /api/cafe/rooms/quick-join` accepts an optional `map_id`, reuses only a
+  public room on that map, and defaults to `cafe` when the request body or field
+  is omitted.
 - Room summaries and `welcome.room` include `map_id`.
 - `GET /api/cafe/progress` returns stars, catalog thresholds, unlocks, and the
   available avatar catalog and equipped loadout.

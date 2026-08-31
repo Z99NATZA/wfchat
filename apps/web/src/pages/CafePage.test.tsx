@@ -231,7 +231,7 @@ describe("CafePage", () => {
 		expect(inviteCodeInput.parentElement?.className).toContain("lg:col-start-1");
 		fireEvent.click(quickJoin);
 
-		await waitFor(() => expect(serviceMocks.quickJoinCafe).toHaveBeenCalledTimes(1));
+		await waitFor(() => expect(serviceMocks.quickJoinCafe).toHaveBeenCalledWith("cafe"));
 		expect(screen.queryByText(/login required/i)).toBeNull();
 	});
 
@@ -260,14 +260,16 @@ describe("CafePage", () => {
 		expect(window.sessionStorage.getItem(CAFE_PLAYER_NAME_STORAGE_KEY)).toBeNull();
 	});
 
-	it("defaults to Aiko Cafe and creates the selected Greenwood map", async () => {
+	it("defaults to Aiko Cafe and uses the selected Greenwood map for room entry", async () => {
 		serviceMocks.listCafeRooms.mockResolvedValue([]);
 		serviceMocks.getCafeProgress.mockResolvedValue(progress);
-		serviceMocks.createCafeRoom.mockResolvedValue({
+		const natureRoom = {
 			...room,
-			mapId: "nature_retreat",
-			activityId: "nature_retreat"
-		});
+			mapId: "nature_retreat" as const,
+			activityId: "nature_retreat" as const
+		};
+		serviceMocks.quickJoinCafe.mockResolvedValue(natureRoom);
+		serviceMocks.createCafeRoom.mockResolvedValue(natureRoom);
 
 		render(
 			<MemoryRouter initialEntries={["/cafe"]}>
@@ -286,6 +288,10 @@ describe("CafePage", () => {
 				.getAttribute("aria-pressed")
 		).toBe("true");
 		fireEvent.click(screen.getByRole("button", { name: /cafe\.nature\.title/ }));
+		fireEvent.click(screen.getByRole("button", { name: "cafe.lobby.quickJoin" }));
+		await waitFor(() =>
+			expect(serviceMocks.quickJoinCafe).toHaveBeenCalledWith("nature_retreat")
+		);
 		fireEvent.click(screen.getByRole("button", { name: "cafe.lobby.createRoom" }));
 		await waitFor(() =>
 			expect(serviceMocks.createCafeRoom).toHaveBeenCalledWith(true, "nature_retreat")

@@ -43,8 +43,10 @@ export async function listCafeRooms(): Promise<CafeRoomSummary[]> {
 	return response.data.rooms.map(toRoomSummary);
 }
 
-export async function quickJoinCafe(): Promise<CafeRoomSummary> {
-	const response = await apiClient.post<ApiRoomResponse>("/api/cafe/rooms/quick-join");
+export async function quickJoinCafe(mapId: CafeMapId = "cafe"): Promise<CafeRoomSummary> {
+	const response = await apiClient.post<ApiRoomResponse>("/api/cafe/rooms/quick-join", {
+		map_id: mapId
+	});
 	return toRoomSummary(response.data.room);
 }
 

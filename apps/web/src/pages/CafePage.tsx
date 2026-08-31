@@ -277,7 +277,9 @@ function CafePage({ activityBar, backgroundImageUrl, headerControls }: CafePageP
 												className="relative z-10 w-full gap-1.5 rounded-lg px-2 min-[360px]:px-4"
 												disabled={pendingAction !== null}
 												onClick={() =>
-													void openRoom("quick", quickJoinCafe)
+													void openRoom("quick", () =>
+														quickJoinCafe(selectedMap)
+													)
 												}
 											>
 												<DoorOpen
