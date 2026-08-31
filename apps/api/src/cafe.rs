@@ -17,9 +17,10 @@ use std::{
 };
 
 use axum::{
+    body::to_bytes,
     extract::{
         ws::{CloseFrame, Message, WebSocket, WebSocketUpgrade},
-        ConnectInfo, Path, Query, State,
+        ConnectInfo, Path, Query, Request, State,
     },
     http::{
         header::{ORIGIN, SET_COOKIE},
@@ -62,6 +63,7 @@ const ROUND_INTERMISSION: Duration = Duration::from_secs(8);
 const CAFE_RUSH_DURATION: Duration = Duration::from_secs(90);
 const CAFE_RUSH_COMBO_WINDOW: Duration = Duration::from_secs(15);
 const MAX_CAFE_PLAYER_NAME_CHARS: usize = 24;
+const MAX_QUICK_JOIN_REQUEST_BYTES: usize = 16 * 1024;
 const CAFE_RESYNC_CLOSE_CODE: u16 = 1013;
 const CAFE_MESSAGE_TOO_BIG_CLOSE_CODE: u16 = 1009;
 const CAFE_ACCOUNT_DELETED_CLOSE_CODE: u16 = 1008;
@@ -2258,14 +2260,15 @@ async fn quick_join(
     State(state): State<AppState>,
     ConnectInfo(peer_addr): ConnectInfo<SocketAddr>,
     headers: HeaderMap,
-    request: Option<Json<QuickJoinRoomRequest>>,
+    request: Request,
 ) -> AppResult<(HeaderMap, Json<CafeRoomResponse>)> {
     let action = AuthorizationAction::QuickJoinCafeRoom;
     let (session, response_headers) = ensure_cafe_session(&state, &headers, action).await?;
+    let body = to_bytes(request.into_body(), MAX_QUICK_JOIN_REQUEST_BYTES)
+        .await
+        .map_err(|_| AppError::PayloadTooLarge)?;
+    let map_id = quick_join_map_id(&body)?;
     let resolved_ip = resolved_cafe_ip(&state, &headers, peer_addr);
-    let map_id = request
-        .map(|Json(request)| request.map_id)
-        .unwrap_or_default();
     let room = match state
         .cafe
         .quick_join_limited(session.id, resolved_ip, map_id)
@@ -2278,6 +2281,16 @@ async fn quick_join(
         }
     };
     Ok((response_headers, Json(CafeRoomResponse { room })))
+}
+
+fn quick_join_map_id(body: &[u8]) -> AppResult<CafeMapId> {
+    if body.is_empty() {
+        return Ok(CafeMapId::default());
+    }
+
+    serde_json::from_slice::<QuickJoinRoomRequest>(body)
+        .map(|request| request.map_id)
+        .map_err(|_| AppError::BadRequest("invalid cafe quick join request".to_owned()))
 }
 
 async fn join_by_code(
@@ -3542,14 +3555,28 @@ mod tests {
         }))
         .expect("nature map id should deserialize");
         assert_eq!(request.map_id, CafeMapId::NatureRetreat);
-        let quick_join: QuickJoinRoomRequest =
-            serde_json::from_value(serde_json::json!({ "map_id": "nature_retreat" }))
-                .expect("Quick Join nature map id should deserialize");
-        assert_eq!(quick_join.map_id, CafeMapId::NatureRetreat);
-        let default_quick_join: QuickJoinRoomRequest =
-            serde_json::from_value(serde_json::json!({}))
-                .expect("Quick Join should default to Cafe when map id is omitted");
-        assert_eq!(default_quick_join.map_id, CafeMapId::Cafe);
+        assert_eq!(
+            quick_join_map_id(br#"{"map_id":"nature_retreat"}"#)
+                .expect("Quick Join nature map id should deserialize"),
+            CafeMapId::NatureRetreat
+        );
+        assert_eq!(
+            quick_join_map_id(br#"{}"#)
+                .expect("Quick Join should default to Cafe when map id is omitted"),
+            CafeMapId::Cafe
+        );
+        assert_eq!(
+            quick_join_map_id(b"").expect("empty Quick Join should default to Cafe"),
+            CafeMapId::Cafe
+        );
+        assert!(matches!(
+            quick_join_map_id(br#"{"map_id":"unknown"}"#),
+            Err(AppError::BadRequest(_))
+        ));
+        assert!(matches!(
+            quick_join_map_id(b"{"),
+            Err(AppError::BadRequest(_))
+        ));
         assert!(
             serde_json::from_value::<CreateRoomRequest>(serde_json::json!({
                 "map_id": "unknown"

@@ -898,7 +898,7 @@ mod tests {
             ),
             ("GET", "/api/cafe/rooms", ""),
             ("POST", "/api/cafe/rooms", r#"{"is_private":false}"#),
-            ("POST", "/api/cafe/rooms/quick-join", ""),
+            ("POST", "/api/cafe/rooms/quick-join", "{"),
             (
                 "POST",
                 "/api/cafe/rooms/join",

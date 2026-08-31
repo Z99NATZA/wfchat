@@ -150,7 +150,8 @@ Lobby, progress, and loadout operations use `/api/cafe/*`:
   `cafe` and `nature_retreat`, and the default is `cafe`.
 - `POST /api/cafe/rooms/quick-join` accepts an optional `map_id`, reuses only a
   public room on that map, and defaults to `cafe` when the request body or field
-  is omitted.
+  is omitted. Session authorization runs before body validation, and the body is
+  limited to 16 KiB.
 - Room summaries and `welcome.room` include `map_id`.
 - `GET /api/cafe/progress` returns stars, catalog thresholds, unlocks, and the
   available avatar catalog and equipped loadout.

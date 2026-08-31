@@ -1166,10 +1166,10 @@ mod tests {
         let (response, events) = capture_security_request(
             state.clone(),
             cafe_request(
-                "GET",
-                "/api/cafe/rooms".to_owned(),
+                "POST",
+                "/api/cafe/rooms/quick-join".to_owned(),
                 Some(invalid_session_id),
-                "",
+                "{",
                 None,
                 false,
             ),
