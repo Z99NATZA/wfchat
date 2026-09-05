@@ -1,6 +1,5 @@
 export type CafeDirection = "up" | "down" | "left" | "right";
-export type CafeActivityId = "tea_delivery" | "table_service" | "cafe_rush" | "nature_retreat";
-export type CafeMapId = "cafe" | "nature_retreat";
+export type CafeActivityId = "tea_delivery" | "table_service" | "cafe_rush";
 export type CafeAvatarId = "boy" | "girl";
 
 export type CafeConnectionState =
@@ -20,7 +19,6 @@ export type CafeRoomSummary = {
 	isPrivate: boolean;
 	playerCount: number;
 	capacity: number;
-	mapId: CafeMapId;
 	activityId: CafeActivityId;
 	activityCompleted: boolean;
 };
@@ -106,7 +104,6 @@ export type CafeRoomState = {
 	inviteCode: string;
 	isPrivate: boolean;
 	capacity: number;
-	mapId: CafeMapId;
 	mapLayout: CafeMapLayout;
 	players: CafePlayerState[];
 	activity: CafeActivityState;
@@ -144,11 +141,6 @@ export type CafeDialogue = {
 export type CafeEmote = {
 	playerId: string;
 	emote: string;
-	key: number;
-};
-
-export type CafeRewardNotice = {
-	earnedStars: number;
 	key: number;
 };
 

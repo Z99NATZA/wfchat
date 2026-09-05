@@ -26,8 +26,6 @@ import {
 const PLAYER_SPEED = 210;
 const PLAYER_EMOTE_Y = -154;
 const CAMERA_FOLLOW_LERP = 0.1;
-const NATURE_RETREAT_BACKGROUND_URL = "/images/aiko-cafe/nature-retreat-v1.png?v=0bbd774a8ca83420";
-const AIKO_NATURE_URL = "/images/aiko-cafe/aiko-nature-v1.png?v=2ca34b35538d4c3b";
 
 type CafeSceneCallbacks = {
 	onMovement: (
@@ -94,8 +92,6 @@ export class CafeScene extends Phaser.Scene {
 	preload() {
 		this.load.image("cafe-room", "/images/aiko-cafe/cafe-room-v1.png");
 		this.load.image("aiko-host", "/images/aiko-cafe/aiko-host-v1.png");
-		this.load.image("nature-retreat", NATURE_RETREAT_BACKGROUND_URL);
-		this.load.image("aiko-nature", AIKO_NATURE_URL);
 		for (const sprite of Object.values(CAFE_PLAYER_SPRITES)) {
 			this.load.spritesheet(sprite.key, sprite.url, {
 				frameWidth: CAFE_PLAYER_FRAME_SIZE,
@@ -311,7 +307,7 @@ export class CafeScene extends Phaser.Scene {
 	}
 
 	private renderRoom(room: CafeRoomState) {
-		this.applyMapLayout(room.mapId, room.mapLayout);
+		this.applyMapLayout(room.mapLayout);
 		const activePlayerIds = new Set(room.players.map((player) => player.id));
 		for (const [playerId, visual] of this.playerVisuals) {
 			if (!activePlayerIds.has(playerId)) {
@@ -557,27 +553,6 @@ export class CafeScene extends Phaser.Scene {
 		);
 		let nextTarget: string | null = null;
 		const selfPlayer = this.room.players.find((player) => player.id === this.selfPlayerId);
-		if (this.room.mapId === "nature_retreat") {
-			let nearestDistance = Number.POSITIVE_INFINITY;
-			for (const target of this.room.mapLayout.interactionTargets) {
-				const distance = Phaser.Math.Distance.Between(
-					localPosition.x,
-					localPosition.y,
-					target.x,
-					target.y
-				);
-				const radius =
-					target.id === "aiko"
-						? this.room.mapLayout.hostInteractionRadius
-						: this.room.mapLayout.interactionRadius;
-				if (distance <= radius && distance < nearestDistance) {
-					nextTarget = target.id;
-					nearestDistance = distance;
-				}
-			}
-			this.changeInteractionTarget(nextTarget);
-			return;
-		}
 		if (
 			this.room.activity.id === "tea_delivery" ||
 			(this.room.activity.id === "cafe_rush" && !selfPlayer?.carriedOrderId)
@@ -683,18 +658,13 @@ export class CafeScene extends Phaser.Scene {
 		this.cameras.main.setDeadzone(framing.deadZoneWidth, framing.deadZoneHeight);
 	}
 
-	private applyMapLayout(mapId: CafeRoomState["mapId"], layout: CafeMapLayout) {
+	private applyMapLayout(layout: CafeMapLayout) {
 		if (this.appliedMapVersion === layout.version) {
 			return;
 		}
 		this.appliedMapVersion = layout.version;
 		this.cameras.main.setBounds(0, 0, layout.width, layout.height);
-		this.background
-			?.setTexture(mapId === "nature_retreat" ? "nature-retreat" : "cafe-room")
-			.setDisplaySize(layout.width, layout.height)
-			.setVisible(true);
-		this.aiko?.setTexture(mapId === "nature_retreat" ? "aiko-nature" : "aiko-host");
-		this.aikoQuestMarker?.setVisible(false);
+		this.background?.setDisplaySize(layout.width, layout.height).setVisible(true);
 		this.updateCameraFraming();
 	}
 

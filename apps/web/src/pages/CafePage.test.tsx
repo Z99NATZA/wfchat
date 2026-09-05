@@ -65,7 +65,6 @@ const room = {
 	isPrivate: false,
 	playerCount: 1,
 	capacity: 8,
-	mapId: "cafe" as const,
 	activityId: "tea_delivery" as const,
 	activityCompleted: false
 };
@@ -231,7 +230,7 @@ describe("CafePage", () => {
 		expect(inviteCodeInput.parentElement?.className).toContain("lg:col-start-1");
 		fireEvent.click(quickJoin);
 
-		await waitFor(() => expect(serviceMocks.quickJoinCafe).toHaveBeenCalledWith("cafe"));
+		await waitFor(() => expect(serviceMocks.quickJoinCafe).toHaveBeenCalledTimes(1));
 		expect(screen.queryByText(/login required/i)).toBeNull();
 	});
 
@@ -258,44 +257,6 @@ describe("CafePage", () => {
 		expect(window.sessionStorage.getItem(CAFE_PLAYER_NAME_STORAGE_KEY)).toBe("Tea Friend");
 		fireEvent.change(playerName, { target: { value: "   " } });
 		expect(window.sessionStorage.getItem(CAFE_PLAYER_NAME_STORAGE_KEY)).toBeNull();
-	});
-
-	it("defaults to Aiko Cafe and uses the selected Greenwood map for room entry", async () => {
-		serviceMocks.listCafeRooms.mockResolvedValue([]);
-		serviceMocks.getCafeProgress.mockResolvedValue(progress);
-		const natureRoom = {
-			...room,
-			mapId: "nature_retreat" as const,
-			activityId: "nature_retreat" as const
-		};
-		serviceMocks.quickJoinCafe.mockResolvedValue(natureRoom);
-		serviceMocks.createCafeRoom.mockResolvedValue(natureRoom);
-
-		render(
-			<MemoryRouter initialEntries={["/cafe"]}>
-				<CafePage
-					activityBar={null}
-					backgroundImageUrl=""
-					headerControls={headerControls}
-				/>
-			</MemoryRouter>
-		);
-
-		await screen.findByTestId("cafe-map-selector");
-		expect(
-			screen
-				.getByRole("button", { name: /cafe\.map\.cafeTitle/ })
-				.getAttribute("aria-pressed")
-		).toBe("true");
-		fireEvent.click(screen.getByRole("button", { name: /cafe\.nature\.title/ }));
-		fireEvent.click(screen.getByRole("button", { name: "cafe.lobby.quickJoin" }));
-		await waitFor(() =>
-			expect(serviceMocks.quickJoinCafe).toHaveBeenCalledWith("nature_retreat")
-		);
-		fireEvent.click(screen.getByRole("button", { name: "cafe.lobby.createRoom" }));
-		await waitFor(() =>
-			expect(serviceMocks.createCafeRoom).toHaveBeenCalledWith(true, "nature_retreat")
-		);
 	});
 
 	it("shows a specific message when an invite room is full", async () => {

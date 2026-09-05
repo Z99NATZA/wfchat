@@ -1,0 +1,1 @@
+drop table cafe_timed_reward_progress;

@@ -1,5 +1,5 @@
 use std::{
-    collections::{HashMap, HashSet, VecDeque},
+    collections::{HashMap, VecDeque},
     future::Future,
     net::SocketAddr,
     pin::Pin,
@@ -17,10 +17,9 @@ use std::{
 };
 
 use axum::{
-    body::to_bytes,
     extract::{
         ws::{CloseFrame, Message, WebSocket, WebSocketUpgrade},
-        ConnectInfo, Path, Query, Request, State,
+        ConnectInfo, Path, Query, State,
     },
     http::{
         header::{ORIGIN, SET_COOKIE},
@@ -63,13 +62,10 @@ const ROUND_INTERMISSION: Duration = Duration::from_secs(8);
 const CAFE_RUSH_DURATION: Duration = Duration::from_secs(90);
 const CAFE_RUSH_COMBO_WINDOW: Duration = Duration::from_secs(15);
 const MAX_CAFE_PLAYER_NAME_CHARS: usize = 24;
-const MAX_QUICK_JOIN_REQUEST_BYTES: usize = 16 * 1024;
 const CAFE_RESYNC_CLOSE_CODE: u16 = 1013;
 const CAFE_MESSAGE_TOO_BIG_CLOSE_CODE: u16 = 1009;
 const CAFE_ACCOUNT_DELETED_CLOSE_CODE: u16 = 1008;
 const SERVICE_COUNTER_TARGET_ID: &str = "service-counter";
-const NATURE_FIRST_REWARD_INTERVAL: Duration = Duration::from_secs(60);
-const NATURE_REPEAT_REWARD_INTERVAL: Duration = Duration::from_secs(300);
 const CAFE_MAP_LAYOUT: CafeMapLayout = CafeMapLayout {
     version: "cafe-room-v1",
     width: 1280.0,
@@ -95,37 +91,6 @@ const CAFE_MAP_INTERACTION_TARGETS: [CafeMapInteractionTarget; 5] = [
     CafeMapInteractionTarget::new("table-window", 250.0, 383.0),
     CafeMapInteractionTarget::new("table-garden", 1047.0, 391.0),
     CafeMapInteractionTarget::new("table-long", 636.0, 573.0),
-];
-const NATURE_RETREAT_MAP_LAYOUT: CafeMapLayout = CafeMapLayout {
-    version: "nature-retreat-v1",
-    width: 1920.0,
-    height: 1200.0,
-    player_collision_radius: 10.0,
-    interaction_radius: 112.0,
-    host_interaction_radius: 144.0,
-    player_spawn: CafeMapPoint { x: 980.0, y: 720.0 },
-    colliders: &NATURE_RETREAT_MAP_COLLIDERS,
-    interaction_targets: &NATURE_RETREAT_MAP_INTERACTION_TARGETS,
-};
-const NATURE_RETREAT_MAP_COLLIDERS: [CafeMapCollider; 9] = [
-    CafeMapCollider::new("north-canopy", 0.0, 0.0, 1920.0, 155.0),
-    CafeMapCollider::new("west-canopy", 0.0, 0.0, 92.0, 1200.0),
-    CafeMapCollider::new("east-canopy", 1840.0, 0.0, 80.0, 1200.0),
-    CafeMapCollider::new("picnic-deck", 112.0, 150.0, 520.0, 300.0),
-    CafeMapCollider::new("overlook-bench", 902.0, 170.0, 250.0, 105.0),
-    CafeMapCollider::new("pond", 1510.0, 170.0, 410.0, 455.0),
-    CafeMapCollider::new("flower-garden", 0.0, 770.0, 610.0, 430.0),
-    CafeMapCollider::new("south-rocks", 700.0, 1088.0, 475.0, 112.0),
-    CafeMapCollider::new("southeast-canopy", 1620.0, 930.0, 300.0, 270.0),
-];
-const NATURE_RETREAT_MAP_INTERACTION_TARGETS: [CafeMapInteractionTarget; 7] = [
-    CafeMapInteractionTarget::new("aiko", 760.0, 445.0),
-    CafeMapInteractionTarget::new("nature-picnic", 650.0, 330.0),
-    CafeMapInteractionTarget::new("nature-overlook", 1025.0, 305.0),
-    CafeMapInteractionTarget::new("nature-fish", 1450.0, 500.0),
-    CafeMapInteractionTarget::new("nature-butterflies", 1120.0, 650.0),
-    CafeMapInteractionTarget::new("nature-stones", 1480.0, 720.0),
-    CafeMapInteractionTarget::new("nature-flowers", 640.0, 870.0),
 ];
 
 const TEA_LAYOUTS: [[(f32, f32); 3]; 3] = [
@@ -175,7 +140,6 @@ pub fn router() -> Router<AppState> {
 #[derive(Clone)]
 pub struct CafeHub {
     rooms: Arc<Mutex<HashMap<Uuid, CafeRoom>>>,
-    nature_rewards: Arc<Mutex<HashMap<CafeRewardOwnerKey, NatureRewardClock>>>,
     creation_gate: Arc<Mutex<()>>,
     limits: Arc<CafeSecurityConfig>,
     abuse: Arc<StdMutex<CafeAbuseState>>,
@@ -191,60 +155,6 @@ struct CafeAbuseState {
     sockets_by_ip: HashMap<String, usize>,
     active_sockets: usize,
     room_creation_buckets: HashMap<CafeCreationIdentity, VecDeque<Instant>>,
-}
-
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-struct CafeRewardOwnerKey {
-    id: Uuid,
-    account: bool,
-}
-
-impl CafeRewardOwnerKey {
-    fn from_owner(owner: OwnerScope) -> Self {
-        Self {
-            id: owner.user_id.unwrap_or(owner.session_id),
-            account: owner.user_id.is_some(),
-        }
-    }
-}
-
-struct NatureRewardClock {
-    reward_sequence: u64,
-    accumulated: Duration,
-    active_connection: Option<Uuid>,
-    visible_connections: HashSet<Uuid>,
-    last_tick: Instant,
-    pending_sequence: Option<u64>,
-}
-
-impl NatureRewardClock {
-    fn new(reward_sequence: u64) -> Self {
-        Self {
-            reward_sequence,
-            accumulated: Duration::ZERO,
-            active_connection: None,
-            visible_connections: HashSet::new(),
-            last_tick: Instant::now(),
-            pending_sequence: None,
-        }
-    }
-
-    fn threshold(&self) -> Duration {
-        if self.reward_sequence == 0 {
-            NATURE_FIRST_REWARD_INTERVAL
-        } else {
-            NATURE_REPEAT_REWARD_INTERVAL
-        }
-    }
-
-    fn accrue(&mut self, now: Instant) {
-        if self.active_connection.is_some() {
-            self.accumulated = self
-                .accumulated
-                .saturating_add(now.saturating_duration_since(self.last_tick));
-        }
-        self.last_tick = now;
-    }
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
@@ -299,7 +209,6 @@ struct CafeRoom {
     id: Uuid,
     invite_code: String,
     is_private: bool,
-    map_id: CafeMapId,
     players: HashMap<Uuid, CafePlayer>,
     activity: CafeActivity,
     chat_history: VecDeque<CafeChatEvent>,
@@ -354,7 +263,6 @@ struct CafeRoomState {
     invite_code: String,
     is_private: bool,
     capacity: usize,
-    map_id: CafeMapId,
     map_layout: CafeMapLayout,
     players: Vec<CafePlayerState>,
     activity: CafeActivity,
@@ -426,7 +334,8 @@ impl CafeMapCollider {
         }
     }
 
-    fn contains_player(self, x: f32, y: f32, radius: f32) -> bool {
+    fn contains_player(self, x: f32, y: f32) -> bool {
+        let radius = CAFE_MAP_LAYOUT.player_collision_radius;
         x + radius > self.x
             && x - radius < self.x + self.width
             && y + radius > self.y
@@ -529,15 +438,6 @@ enum CafeActivityId {
     TeaDelivery,
     TableService,
     CafeRush,
-    NatureRetreat,
-}
-
-#[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "snake_case")]
-enum CafeMapId {
-    #[default]
-    Cafe,
-    NatureRetreat,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
@@ -572,7 +472,6 @@ pub struct CafeRoomSummary {
     is_private: bool,
     player_count: usize,
     capacity: usize,
-    map_id: CafeMapId,
     activity_id: CafeActivityId,
     activity_completed: bool,
 }
@@ -623,14 +522,6 @@ struct EquipCafeAvatarRequest {
 struct CreateRoomRequest {
     #[serde(default = "default_private_room")]
     is_private: bool,
-    #[serde(default)]
-    map_id: CafeMapId,
-}
-
-#[derive(Deserialize)]
-struct QuickJoinRoomRequest {
-    #[serde(default)]
-    map_id: CafeMapId,
 }
 
 fn default_private_room() -> bool {
@@ -665,9 +556,6 @@ enum CafeClientMessage {
     },
     Chat {
         text: String,
-    },
-    Presence {
-        visible: bool,
     },
     Ping,
 }
@@ -749,7 +637,6 @@ struct CafeJoin {
 struct CafeInteractionResult {
     awarded_owners: Vec<OwnerScope>,
     completed_round: Option<u32>,
-    personal_dialogue: Option<(&'static str, &'static str)>,
 }
 
 impl CafeInteractionResult {
@@ -757,7 +644,6 @@ impl CafeInteractionResult {
         Self {
             awarded_owners: Vec::new(),
             completed_round: None,
-            personal_dialogue: None,
         }
     }
 }
@@ -768,24 +654,6 @@ impl CafeActivity {
             1 => Self::tea_delivery(round_number),
             2 => Self::table_service(round_number),
             _ => Self::cafe_rush(round_number, player_count),
-        }
-    }
-
-    fn nature_retreat() -> Self {
-        Self {
-            id: CafeActivityId::NatureRetreat,
-            round_number: 0,
-            phase: CafeActivityPhase::Active,
-            next_round_at: None,
-            ends_at: None,
-            delivered: 0,
-            target: 0,
-            combo: 0,
-            best_combo: 0,
-            combo_expires_at: None,
-            completed: false,
-            tea_leaves: Vec::new(),
-            table_orders: Vec::new(),
         }
     }
 
@@ -835,7 +703,7 @@ impl CafeActivity {
                 .into_iter()
                 .enumerate()
                 .map(|(index, (table_id, drink, target_id))| {
-                    let target = cafe_map_interaction_target(CAFE_MAP_LAYOUT, target_id);
+                    let target = cafe_map_interaction_target(target_id);
                     CafeTableOrder {
                         id: format!("order-{round_number}-{}", index + 1),
                         table_id,
@@ -881,7 +749,7 @@ impl CafeActivity {
                 .take(usize::from(target))
                 .enumerate()
                 .map(|(index, (table_id, drink, target_id))| {
-                    let target = cafe_map_interaction_target(CAFE_MAP_LAYOUT, target_id);
+                    let target = cafe_map_interaction_target(target_id);
                     CafeTableOrder {
                         id: format!("order-{round_number}-{}", index + 1),
                         table_id,
@@ -917,7 +785,6 @@ impl CafeHub {
         let (session_revocations, _) = broadcast::channel(64);
         Self {
             rooms: Arc::new(Mutex::new(HashMap::new())),
-            nature_rewards: Arc::new(Mutex::new(HashMap::new())),
             creation_gate: Arc::new(Mutex::new(())),
             limits: Arc::new(limits),
             abuse: Arc::new(StdMutex::new(CafeAbuseState::default())),
@@ -932,99 +799,6 @@ impl CafeHub {
         for session_id in session_ids {
             let _ = self.session_revocations.send(*session_id);
         }
-    }
-
-    async fn register_nature_reward(&self, owner: OwnerScope, reward_sequence: u64) {
-        let key = CafeRewardOwnerKey::from_owner(owner);
-        let mut rewards = self.nature_rewards.lock().await;
-        let clock = rewards
-            .entry(key)
-            .or_insert_with(|| NatureRewardClock::new(reward_sequence));
-        clock.reward_sequence = clock.reward_sequence.max(reward_sequence);
-    }
-
-    async fn set_nature_reward_visible(
-        &self,
-        owner: OwnerScope,
-        connection_id: Uuid,
-        visible: bool,
-        now: Instant,
-    ) {
-        let key = CafeRewardOwnerKey::from_owner(owner);
-        let mut rewards = self.nature_rewards.lock().await;
-        let Some(clock) = rewards.get_mut(&key) else {
-            return;
-        };
-        if visible {
-            clock.visible_connections.insert(connection_id);
-            if clock.active_connection.is_none() {
-                clock.active_connection = Some(connection_id);
-                clock.last_tick = now;
-            }
-            return;
-        }
-
-        clock.visible_connections.remove(&connection_id);
-        if clock.active_connection == Some(connection_id) {
-            clock.accrue(now);
-            clock.active_connection = clock.visible_connections.iter().next().copied();
-            clock.last_tick = now;
-        }
-    }
-
-    async fn nature_reward_tick(
-        &self,
-        owner: OwnerScope,
-        connection_id: Uuid,
-        now: Instant,
-    ) -> Option<u64> {
-        let key = CafeRewardOwnerKey::from_owner(owner);
-        let mut rewards = self.nature_rewards.lock().await;
-        let clock = rewards.get_mut(&key)?;
-        if clock.active_connection != Some(connection_id) {
-            return None;
-        }
-        clock.accrue(now);
-        if clock.pending_sequence.is_some() || clock.accumulated < clock.threshold() {
-            return None;
-        }
-        let sequence = clock.reward_sequence.saturating_add(1);
-        clock.pending_sequence = Some(sequence);
-        Some(sequence)
-    }
-
-    async fn confirm_nature_reward(&self, owner: OwnerScope, reward_sequence: u64) {
-        let key = CafeRewardOwnerKey::from_owner(owner);
-        let mut rewards = self.nature_rewards.lock().await;
-        let Some(clock) = rewards.get_mut(&key) else {
-            return;
-        };
-        if clock.pending_sequence != Some(reward_sequence) {
-            return;
-        }
-        let threshold = clock.threshold();
-        clock.accumulated = clock.accumulated.saturating_sub(threshold);
-        clock.reward_sequence = reward_sequence;
-        clock.pending_sequence = None;
-    }
-
-    async fn sync_nature_reward(&self, owner: OwnerScope, reward_sequence: u64) {
-        let key = CafeRewardOwnerKey::from_owner(owner);
-        let mut rewards = self.nature_rewards.lock().await;
-        let Some(clock) = rewards.get_mut(&key) else {
-            return;
-        };
-        if reward_sequence > clock.reward_sequence {
-            clock.accumulated = Duration::ZERO;
-            clock.reward_sequence = reward_sequence;
-        }
-        clock.pending_sequence = None;
-        clock.last_tick = Instant::now();
-    }
-
-    async fn disconnect_nature_reward(&self, owner: OwnerScope, connection_id: Uuid) {
-        self.set_nature_reward_visible(owner, connection_id, false, Instant::now())
-            .await;
     }
 
     pub fn reserve_socket(
@@ -1143,37 +917,23 @@ impl CafeHub {
         resolved_ip: String,
         is_private: bool,
     ) -> AppResult<CafeRoomSummary> {
-        self.create_room_for_map_limited(session_id, resolved_ip, is_private, CafeMapId::Cafe)
-            .await
-    }
-
-    async fn create_room_for_map_limited(
-        &self,
-        session_id: Uuid,
-        resolved_ip: String,
-        is_private: bool,
-        map_id: CafeMapId,
-    ) -> AppResult<CafeRoomSummary> {
         let _gate = self.creation_gate.lock().await;
         self.consume_room_creation(session_id, resolved_ip, Instant::now())
             .await?;
-        Ok(self.create_room_for_map(is_private, map_id).await)
+        Ok(self.create_room(is_private).await)
     }
 
-    async fn quick_join_limited(
+    pub async fn quick_join_limited(
         &self,
         session_id: Uuid,
         resolved_ip: String,
-        map_id: CafeMapId,
     ) -> AppResult<CafeRoomSummary> {
         let _gate = self.creation_gate.lock().await;
         {
             let rooms = self.rooms.lock().await;
             if let Some(room) = rooms
                 .values()
-                .filter(|room| {
-                    !room.is_private && room.map_id == map_id && room.players.len() < ROOM_CAPACITY
-                })
+                .filter(|room| !room.is_private && room.players.len() < ROOM_CAPACITY)
                 .max_by_key(|room| room.players.len())
             {
                 return Ok(room_summary(room));
@@ -1181,7 +941,7 @@ impl CafeHub {
         }
         self.consume_room_creation(session_id, resolved_ip, Instant::now())
             .await?;
-        Ok(self.create_room_for_map(false, map_id).await)
+        Ok(self.create_room(false).await)
     }
 
     pub async fn list_public_rooms(&self) -> Vec<CafeRoomSummary> {
@@ -1200,22 +960,9 @@ impl CafeHub {
         summaries
     }
 
-    async fn room_map_id(&self, room_id: Uuid) -> Option<CafeMapId> {
-        self.rooms
-            .lock()
-            .await
-            .get(&room_id)
-            .map(|room| room.map_id)
-    }
-
-    #[cfg(test)]
     async fn create_room(&self, is_private: bool) -> CafeRoomSummary {
-        self.create_room_for_map(is_private, CafeMapId::Cafe).await
-    }
-
-    async fn create_room_for_map(&self, is_private: bool, map_id: CafeMapId) -> CafeRoomSummary {
         let mut rooms = self.rooms.lock().await;
-        let room = new_room_for_map(is_private, map_id, &rooms);
+        let room = new_room(is_private, &rooms);
         let summary = room_summary(&room);
         rooms.insert(room.id, room);
         summary
@@ -1275,10 +1022,6 @@ impl CafeHub {
             player.carried_tea = existing.carried_tea;
             player.carried_rush_ingredient_ids = existing.carried_rush_ingredient_ids.clone();
             player.carried_order_id = existing.carried_order_id.clone();
-        } else {
-            let spawn = cafe_map_layout(room.map_id).player_spawn;
-            player.x = spawn.x;
-            player.y = spawn.y;
         }
         let receiver = room.sender.subscribe();
         let chat_history = room.chat_history.iter().cloned().collect();
@@ -1436,12 +1179,11 @@ impl CafeHub {
         } else {
             (movement.x, movement.y)
         };
-        let layout = cafe_map_layout(room.map_id);
-        let radius = layout.player_collision_radius;
-        let next_x = next_x.clamp(radius, layout.width - radius);
-        let next_y = next_y.clamp(radius, layout.height - radius);
+        let radius = CAFE_MAP_LAYOUT.player_collision_radius;
+        let next_x = next_x.clamp(radius, CAFE_MAP_LAYOUT.width - radius);
+        let next_y = next_y.clamp(radius, CAFE_MAP_LAYOUT.height - radius);
 
-        if !cafe_map_collides(layout, next_x, next_y) {
+        if !cafe_map_collides(next_x, next_y) {
             player.x = next_x;
             player.y = next_y;
         }
@@ -1694,22 +1436,12 @@ impl CafeHub {
             return CafeInteractionResult::none();
         }
         let player_position = (player.x, player.y);
-        let layout = cafe_map_layout(room.map_id);
-        let aiko = cafe_map_interaction_target(layout, "aiko");
-
-        if room.map_id == CafeMapId::NatureRetreat {
-            let personal_dialogue = nature_retreat_dialogue(layout, player_position, target_id);
-            return CafeInteractionResult {
-                awarded_owners: Vec::new(),
-                completed_round: None,
-                personal_dialogue,
-            };
-        }
+        let aiko = cafe_map_interaction_target("aiko");
 
         if room.activity.phase == CafeActivityPhase::Intermission {
             if target_id == "aiko"
                 && distance_between(player_position, (aiko.x, aiko.y))
-                    <= layout.host_interaction_radius
+                    <= CAFE_MAP_LAYOUT.host_interaction_radius
             {
                 let _ = room.sender.send(CafeServerMessage::Dialogue {
                     message_key: "cafe.dialogue.intermission",
@@ -1730,7 +1462,9 @@ impl CafeHub {
             .position(|leaf| leaf.id == target_id && leaf.available)
         {
             let leaf = &room.activity.tea_leaves[leaf_index];
-            if distance_between(player_position, (leaf.x, leaf.y)) <= layout.interaction_radius {
+            if distance_between(player_position, (leaf.x, leaf.y))
+                <= CAFE_MAP_LAYOUT.interaction_radius
+            {
                 room.activity.tea_leaves[leaf_index].available = false;
                 if let Some(player) = room.players.get_mut(&player_id) {
                     player.carried_tea = player.carried_tea.saturating_add(1);
@@ -1758,7 +1492,8 @@ impl CafeHub {
         }
 
         if target_id != "aiko"
-            || distance_between(player_position, (aiko.x, aiko.y)) > layout.host_interaction_radius
+            || distance_between(player_position, (aiko.x, aiko.y))
+                > CAFE_MAP_LAYOUT.host_interaction_radius
         {
             return CafeInteractionResult::none();
         }
@@ -1810,7 +1545,6 @@ impl CafeHub {
         CafeInteractionResult {
             awarded_owners,
             completed_round,
-            personal_dialogue: None,
         }
     }
 
@@ -1857,7 +1591,6 @@ impl CafeHub {
                     CafeActivityId::TeaDelivery => "cafe.dialogue.teaRoundReady",
                     CafeActivityId::TableService => "cafe.dialogue.serviceRoundReady",
                     CafeActivityId::CafeRush => "cafe.dialogue.rushRoundReady",
-                    CafeActivityId::NatureRetreat => "cafe.dialogue.natureWelcome",
                 },
                 expression: "happy",
             });
@@ -1963,7 +1696,7 @@ fn interact_table_service(
     target_id: &str,
 ) -> CafeInteractionResult {
     if target_id == SERVICE_COUNTER_TARGET_ID {
-        let counter = cafe_map_interaction_target(CAFE_MAP_LAYOUT, SERVICE_COUNTER_TARGET_ID);
+        let counter = cafe_map_interaction_target(SERVICE_COUNTER_TARGET_ID);
         if distance_between(player_position, (counter.x, counter.y))
             > CAFE_MAP_LAYOUT.host_interaction_radius
         {
@@ -2008,35 +1741,6 @@ fn interact_table_service(
     serve_claimed_order(room, player_id, player_position, target_id)
 }
 
-fn nature_retreat_dialogue(
-    layout: CafeMapLayout,
-    player_position: (f32, f32),
-    target_id: &str,
-) -> Option<(&'static str, &'static str)> {
-    let target = layout
-        .interaction_targets
-        .iter()
-        .find(|target| target.id == target_id)?;
-    let radius = if target_id == "aiko" {
-        layout.host_interaction_radius
-    } else {
-        layout.interaction_radius
-    };
-    if distance_between(player_position, (target.x, target.y)) > radius {
-        return None;
-    }
-    Some(match target_id {
-        "aiko" => ("cafe.dialogue.natureWelcome", "happy"),
-        "nature-picnic" => ("cafe.dialogue.naturePicnic", "happy"),
-        "nature-overlook" => ("cafe.dialogue.natureOverlook", "neutral"),
-        "nature-fish" => ("cafe.dialogue.natureFish", "happy"),
-        "nature-butterflies" => ("cafe.dialogue.natureButterflies", "shy"),
-        "nature-stones" => ("cafe.dialogue.natureStones", "happy"),
-        "nature-flowers" => ("cafe.dialogue.natureFlowers", "happy"),
-        _ => return None,
-    })
-}
-
 fn interact_cafe_rush(
     room: &mut CafeRoom,
     player_id: Uuid,
@@ -2047,7 +1751,7 @@ fn interact_cafe_rush(
         return serve_claimed_order(room, player_id, player_position, target_id);
     }
 
-    let counter = cafe_map_interaction_target(CAFE_MAP_LAYOUT, SERVICE_COUNTER_TARGET_ID);
+    let counter = cafe_map_interaction_target(SERVICE_COUNTER_TARGET_ID);
     if distance_between(player_position, (counter.x, counter.y))
         > CAFE_MAP_LAYOUT.host_interaction_radius
     {
@@ -2214,7 +1918,6 @@ fn serve_claimed_order(
     CafeInteractionResult {
         awarded_owners,
         completed_round,
-        personal_dialogue: None,
     }
 }
 
@@ -2244,7 +1947,7 @@ async fn create_room(
     let resolved_ip = resolved_cafe_ip(&state, &headers, peer_addr);
     let room = match state
         .cafe
-        .create_room_for_map_limited(session.id, resolved_ip, payload.is_private, payload.map_id)
+        .create_room_limited(session.id, resolved_ip, payload.is_private)
         .await
     {
         Ok(room) => room,
@@ -2260,20 +1963,11 @@ async fn quick_join(
     State(state): State<AppState>,
     ConnectInfo(peer_addr): ConnectInfo<SocketAddr>,
     headers: HeaderMap,
-    request: Request,
 ) -> AppResult<(HeaderMap, Json<CafeRoomResponse>)> {
     let action = AuthorizationAction::QuickJoinCafeRoom;
     let (session, response_headers) = ensure_cafe_session(&state, &headers, action).await?;
-    let body = to_bytes(request.into_body(), MAX_QUICK_JOIN_REQUEST_BYTES)
-        .await
-        .map_err(|_| AppError::PayloadTooLarge)?;
-    let map_id = quick_join_map_id(&body)?;
     let resolved_ip = resolved_cafe_ip(&state, &headers, peer_addr);
-    let room = match state
-        .cafe
-        .quick_join_limited(session.id, resolved_ip, map_id)
-        .await
-    {
+    let room = match state.cafe.quick_join_limited(session.id, resolved_ip).await {
         Ok(room) => room,
         Err(error) => {
             log_cafe_request_rejection(&error, action);
@@ -2281,16 +1975,6 @@ async fn quick_join(
         }
     };
     Ok((response_headers, Json(CafeRoomResponse { room })))
-}
-
-fn quick_join_map_id(body: &[u8]) -> AppResult<CafeMapId> {
-    if body.is_empty() {
-        return Ok(CafeMapId::default());
-    }
-
-    serde_json::from_slice::<QuickJoinRoomRequest>(body)
-        .map(|request| request.map_id)
-        .map_err(|_| AppError::BadRequest("invalid cafe quick join request".to_owned()))
 }
 
 async fn join_by_code(
@@ -2413,14 +2097,10 @@ async fn cafe_socket(
         }
     };
     let player_name = cafe_display_name(&state, &session, query.nickname.as_deref()).await?;
-    let owner = OwnerScope::from_session(&session);
-    let nature_reward_sequence =
-        if state.cafe.room_map_id(room_id).await == Some(CafeMapId::NatureRetreat) {
-            state.store.get_cafe_timed_reward_sequence(owner).await?
-        } else {
-            0
-        };
-    let progress = state.store.get_cafe_progress(owner).await?;
+    let progress = state
+        .store
+        .get_cafe_progress(OwnerScope::from_session(&session))
+        .await?;
     let player = new_player_with_avatar(
         &session,
         player_name,
@@ -2433,18 +2113,7 @@ async fn cafe_socket(
         .max_frame_size(max_bytes)
         .max_message_size(max_bytes)
         .on_upgrade(move |socket| {
-            handle_cafe_socket(
-                socket,
-                CafeSocketContext {
-                    state,
-                    room_id,
-                    player,
-                    owner,
-                    nature_reward_sequence,
-                    initial_stars,
-                    _reservation: reservation,
-                },
-            )
+            handle_cafe_socket(socket, state, room_id, player, initial_stars, reservation)
         });
     if let Some(cookie) = response_headers.get(SET_COOKIE).cloned() {
         response.headers_mut().insert(SET_COOKIE, cookie);
@@ -2475,26 +2144,14 @@ fn is_allowed_websocket_origin(headers: &HeaderMap, configured_origins: &str) ->
         .any(|configured| !configured.is_empty() && configured == origin)
 }
 
-struct CafeSocketContext {
+async fn handle_cafe_socket(
+    mut socket: WebSocket,
     state: AppState,
     room_id: Uuid,
     player: CafePlayer,
-    owner: OwnerScope,
-    nature_reward_sequence: u64,
     initial_stars: u32,
     _reservation: CafeSocketReservation,
-}
-
-async fn handle_cafe_socket(mut socket: WebSocket, context: CafeSocketContext) {
-    let CafeSocketContext {
-        state,
-        room_id,
-        player,
-        owner,
-        nature_reward_sequence,
-        initial_stars,
-        _reservation,
-    } = context;
+) {
     let player_id = player.id;
     let connection_id = player.connection_id;
     let mut session_revocations = state.cafe.session_revocations.subscribe();
@@ -2519,13 +2176,6 @@ async fn handle_cafe_socket(mut socket: WebSocket, context: CafeSocketContext) {
             return;
         }
     };
-    let is_nature_retreat = joined.snapshot.map_id == CafeMapId::NatureRetreat;
-    if is_nature_retreat {
-        state
-            .cafe
-            .register_nature_reward(owner, nature_reward_sequence)
-            .await;
-    }
 
     if !send_socket_message(
         &mut socket,
@@ -2549,8 +2199,6 @@ async fn handle_cafe_socket(mut socket: WebSocket, context: CafeSocketContext) {
 
     let mut recent_messages = VecDeque::new();
     let mut recent_chat_messages = VecDeque::new();
-    let mut nature_reward_interval = tokio::time::interval(Duration::from_secs(1));
-    nature_reward_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
     loop {
         tokio::select! {
             biased;
@@ -2589,62 +2237,6 @@ async fn handle_cafe_socket(mut socket: WebSocket, context: CafeSocketContext) {
                         break;
                     }
                     Err(OutboundRoomError::Closed) => break,
-                }
-            }
-            _ = nature_reward_interval.tick(), if is_nature_retreat => {
-                if let Some(reward_sequence) = state
-                    .cafe
-                    .nature_reward_tick(owner, connection_id, Instant::now())
-                    .await
-                {
-                    let earned_stars = sample_nature_reward_stars();
-                    match state
-                        .store
-                        .award_cafe_timed_reward(owner, reward_sequence, earned_stars)
-                        .await
-                    {
-                        Ok(true) => {
-                            state
-                                .cafe
-                                .confirm_nature_reward(owner, reward_sequence)
-                                .await;
-                            if !send_socket_message(
-                                &mut socket,
-                                &state.cafe,
-                                &CafeServerMessage::Reward {
-                                    player_id,
-                                    earned_stars,
-                                },
-                            )
-                            .await
-                            {
-                                break;
-                            }
-                        }
-                        Ok(false) => {
-                            match state.store.get_cafe_timed_reward_sequence(owner).await {
-                                Ok(sequence) => {
-                                    state.cafe.sync_nature_reward(owner, sequence).await;
-                                }
-                                Err(error) => tracing::error!(
-                                    %player_id,
-                                    error = %error,
-                                    "failed to synchronize Greenwood Retreat reward sequence"
-                                ),
-                            }
-                        }
-                        Err(error) => {
-                            state
-                                .cafe
-                                .sync_nature_reward(owner, reward_sequence.saturating_sub(1))
-                                .await;
-                            tracing::error!(
-                                %player_id,
-                                error = %error,
-                                "failed to persist Greenwood Retreat timed reward"
-                            );
-                        }
-                    }
                 }
             }
             incoming = socket.recv() => {
@@ -2701,20 +2293,6 @@ async fn handle_cafe_socket(mut socket: WebSocket, context: CafeSocketContext) {
                             }
                             CafeClientMessage::Interact { target_id } => {
                                 let result = state.cafe.interact_for_connection(room_id, player_id, connection_id, &target_id).await;
-                                if let Some((message_key, expression)) = result.personal_dialogue {
-                                    if !send_socket_message(
-                                        &mut socket,
-                                        &state.cafe,
-                                        &CafeServerMessage::Dialogue {
-                                            message_key,
-                                            expression,
-                                        },
-                                    )
-                                    .await
-                                    {
-                                        break;
-                                    }
-                                }
                                 if let Some(completed_round) = result.completed_round {
                                     let cafe = state.cafe.clone();
                                     tokio::spawn(async move {
@@ -2763,19 +2341,6 @@ async fn handle_cafe_socket(mut socket: WebSocket, context: CafeSocketContext) {
                                     ).await;
                                 }
                             }
-                            CafeClientMessage::Presence { visible } => {
-                                if is_nature_retreat {
-                                    state
-                                        .cafe
-                                        .set_nature_reward_visible(
-                                            owner,
-                                            connection_id,
-                                            visible,
-                                            Instant::now(),
-                                        )
-                                        .await;
-                                }
-                            }
                             CafeClientMessage::Ping => {
                                 if !send_socket_message(&mut socket, &state.cafe, &CafeServerMessage::Pong).await {
                                     break;
@@ -2796,13 +2361,6 @@ async fn handle_cafe_socket(mut socket: WebSocket, context: CafeSocketContext) {
                 }
             }
         }
-    }
-
-    if is_nature_retreat {
-        state
-            .cafe
-            .disconnect_nature_reward(owner, connection_id)
-            .await;
     }
 
     state
@@ -2921,18 +2479,6 @@ fn accept_chat_message(recent_messages: &mut VecDeque<Instant>) -> bool {
     }
     recent_messages.push_back(now);
     true
-}
-
-fn sample_nature_reward_stars() -> u32 {
-    let bytes = Uuid::new_v4().into_bytes();
-    let roll = u16::from_be_bytes([bytes[0], bytes[1]]);
-    if roll < 655 {
-        3
-    } else if roll < 6_554 {
-        2
-    } else {
-        1
-    }
 }
 
 fn normalize_cafe_chat_message(value: &str) -> Result<String, CafeChatErrorCode> {
@@ -3107,16 +2653,7 @@ fn new_player(
 
 const PLAYER_COLORS: &[&str] = &["#f48fb1", "#80cbc4", "#90caf9", "#ffcc80", "#ce93d8"];
 
-#[cfg(test)]
 fn new_room(is_private: bool, rooms: &HashMap<Uuid, CafeRoom>) -> CafeRoom {
-    new_room_for_map(is_private, CafeMapId::Cafe, rooms)
-}
-
-fn new_room_for_map(
-    is_private: bool,
-    map_id: CafeMapId,
-    rooms: &HashMap<Uuid, CafeRoom>,
-) -> CafeRoom {
     let id = Uuid::new_v4();
     let invite_code = unique_invite_code(id, rooms);
     let (sender, _) = broadcast::channel(128);
@@ -3128,12 +2665,8 @@ fn new_room_for_map(
         id,
         invite_code,
         is_private,
-        map_id,
         players: HashMap::new(),
-        activity: match map_id {
-            CafeMapId::Cafe => CafeActivity::for_round(1, 0),
-            CafeMapId::NatureRetreat => CafeActivity::nature_retreat(),
-        },
+        activity: CafeActivity::for_round(1, 0),
         chat_history: VecDeque::new(),
         sender,
         movement_sender,
@@ -3200,7 +2733,6 @@ fn room_summary(room: &CafeRoom) -> CafeRoomSummary {
         is_private: room.is_private,
         player_count: room.players.len(),
         capacity: ROOM_CAPACITY,
-        map_id: room.map_id,
         activity_id: room.activity.id,
         activity_completed: room.activity.completed,
     }
@@ -3213,8 +2745,7 @@ fn room_state(room: &CafeRoom) -> CafeRoomState {
         invite_code: dynamic.invite_code,
         is_private: dynamic.is_private,
         capacity: dynamic.capacity,
-        map_id: room.map_id,
-        map_layout: cafe_map_layout(room.map_id),
+        map_layout: CAFE_MAP_LAYOUT,
         players: dynamic.players,
         activity: dynamic.activity,
         aiko: dynamic.aiko,
@@ -3256,7 +2787,7 @@ fn player_states(room: &CafeRoom) -> Vec<CafePlayerState> {
 }
 
 fn aiko_state(room: &CafeRoom) -> CafeAikoState {
-    let aiko = cafe_map_interaction_target(cafe_map_layout(room.map_id), "aiko");
+    let aiko = cafe_map_interaction_target("aiko");
     CafeAikoState {
         x: aiko.x,
         y: aiko.y,
@@ -3346,22 +2877,15 @@ fn distance_between(left: (f32, f32), right: (f32, f32)) -> f32 {
     (dx * dx + dy * dy).sqrt()
 }
 
-fn cafe_map_layout(map_id: CafeMapId) -> CafeMapLayout {
-    match map_id {
-        CafeMapId::Cafe => CAFE_MAP_LAYOUT,
-        CafeMapId::NatureRetreat => NATURE_RETREAT_MAP_LAYOUT,
-    }
-}
-
-fn cafe_map_collides(layout: CafeMapLayout, x: f32, y: f32) -> bool {
-    layout
+fn cafe_map_collides(x: f32, y: f32) -> bool {
+    CAFE_MAP_LAYOUT
         .colliders
         .iter()
-        .any(|collider| collider.contains_player(x, y, layout.player_collision_radius))
+        .any(|collider| collider.contains_player(x, y))
 }
 
-fn cafe_map_interaction_target(layout: CafeMapLayout, id: &str) -> CafeMapInteractionTarget {
-    layout
+fn cafe_map_interaction_target(id: &str) -> CafeMapInteractionTarget {
+    CAFE_MAP_LAYOUT
         .interaction_targets
         .iter()
         .find(|target| target.id == id)
@@ -3506,185 +3030,16 @@ mod tests {
                 "table-long"
             ]
         );
-        assert!(!cafe_map_collides(CAFE_MAP_LAYOUT, 180.0, 380.0));
-        assert!(cafe_map_collides(CAFE_MAP_LAYOUT, 181.0, 380.0));
-        assert!(cafe_map_collides(CAFE_MAP_LAYOUT, 250.0, 380.0));
-        assert!(!cafe_map_collides(CAFE_MAP_LAYOUT, 320.0, 380.0));
+        assert!(!cafe_map_collides(180.0, 380.0));
+        assert!(cafe_map_collides(181.0, 380.0));
+        assert!(cafe_map_collides(250.0, 380.0));
+        assert!(!cafe_map_collides(320.0, 380.0));
 
         let room = new_room(false, &HashMap::new());
         let value = serde_json::to_value(room_state(&room)).expect("room state should serialize");
         assert_eq!(value["map_layout"]["version"], "cafe-room-v1");
         assert_eq!(value["map_layout"]["player_collision_radius"], 10.0);
         assert_eq!(value["map_layout"]["colliders"][1]["width"], 120.0);
-    }
-
-    #[test]
-    fn nature_retreat_map_is_large_relaxed_and_serializes_its_identity() {
-        let room = new_room_for_map(false, CafeMapId::NatureRetreat, &HashMap::new());
-        let state = room_state(&room);
-        let value = serde_json::to_value(state).expect("nature room state should serialize");
-
-        assert_eq!(room.map_id, CafeMapId::NatureRetreat);
-        assert_eq!(room.activity.id, CafeActivityId::NatureRetreat);
-        assert_eq!(room.activity.target, 0);
-        assert!(room.activity.tea_leaves.is_empty());
-        assert!(room.activity.table_orders.is_empty());
-        assert_eq!(value["map_id"], "nature_retreat");
-        assert_eq!(value["map_layout"]["width"], 1920.0);
-        assert_eq!(value["map_layout"]["height"], 1200.0);
-        assert_eq!(value["map_layout"]["version"], "nature-retreat-v1");
-        assert!(NATURE_RETREAT_MAP_LAYOUT
-            .interaction_targets
-            .iter()
-            .any(|target| target.id == "nature-fish"));
-        assert!(!cafe_map_collides(
-            NATURE_RETREAT_MAP_LAYOUT,
-            NATURE_RETREAT_MAP_LAYOUT.player_spawn.x,
-            NATURE_RETREAT_MAP_LAYOUT.player_spawn.y
-        ));
-        assert!(!cafe_map_collides(
-            NATURE_RETREAT_MAP_LAYOUT,
-            1_500.0,
-            500.0
-        ));
-        assert!(cafe_map_collides(NATURE_RETREAT_MAP_LAYOUT, 1_501.0, 500.0));
-
-        let request: CreateRoomRequest = serde_json::from_value(serde_json::json!({
-            "is_private": false,
-            "map_id": "nature_retreat"
-        }))
-        .expect("nature map id should deserialize");
-        assert_eq!(request.map_id, CafeMapId::NatureRetreat);
-        assert_eq!(
-            quick_join_map_id(br#"{"map_id":"nature_retreat"}"#)
-                .expect("Quick Join nature map id should deserialize"),
-            CafeMapId::NatureRetreat
-        );
-        assert_eq!(
-            quick_join_map_id(br#"{}"#)
-                .expect("Quick Join should default to Cafe when map id is omitted"),
-            CafeMapId::Cafe
-        );
-        assert_eq!(
-            quick_join_map_id(b"").expect("empty Quick Join should default to Cafe"),
-            CafeMapId::Cafe
-        );
-        assert!(matches!(
-            quick_join_map_id(br#"{"map_id":"unknown"}"#),
-            Err(AppError::BadRequest(_))
-        ));
-        assert!(matches!(
-            quick_join_map_id(b"{"),
-            Err(AppError::BadRequest(_))
-        ));
-        assert!(
-            serde_json::from_value::<CreateRoomRequest>(serde_json::json!({
-                "map_id": "unknown"
-            }))
-            .is_err()
-        );
-    }
-
-    #[test]
-    fn nature_retreat_ambient_interactions_are_range_checked_and_non_scoring() {
-        let fish = cafe_map_interaction_target(NATURE_RETREAT_MAP_LAYOUT, "nature-fish");
-        assert_eq!(
-            nature_retreat_dialogue(NATURE_RETREAT_MAP_LAYOUT, (fish.x, fish.y), "nature-fish"),
-            Some(("cafe.dialogue.natureFish", "happy"))
-        );
-        assert_eq!(
-            nature_retreat_dialogue(
-                NATURE_RETREAT_MAP_LAYOUT,
-                (
-                    fish.x - NATURE_RETREAT_MAP_LAYOUT.interaction_radius - 1.0,
-                    fish.y
-                ),
-                "nature-fish"
-            ),
-            None
-        );
-        assert_eq!(
-            nature_retreat_dialogue(NATURE_RETREAT_MAP_LAYOUT, (fish.x, fish.y), "tea-1"),
-            None
-        );
-    }
-
-    #[tokio::test]
-    async fn nature_reward_clock_counts_one_visible_connection_and_keeps_partial_time() {
-        let hub = CafeHub::default();
-        let owner = OwnerScope {
-            session_id: Uuid::new_v4(),
-            user_id: Some(Uuid::new_v4()),
-        };
-        let first_connection = Uuid::new_v4();
-        let second_connection = Uuid::new_v4();
-        let started_at = Instant::now();
-        hub.register_nature_reward(owner, 0).await;
-        hub.set_nature_reward_visible(owner, first_connection, true, started_at)
-            .await;
-        hub.set_nature_reward_visible(owner, second_connection, true, started_at)
-            .await;
-
-        assert_eq!(
-            hub.nature_reward_tick(
-                owner,
-                second_connection,
-                started_at + Duration::from_secs(61)
-            )
-            .await,
-            None
-        );
-        hub.set_nature_reward_visible(
-            owner,
-            first_connection,
-            false,
-            started_at + Duration::from_secs(30),
-        )
-        .await;
-        assert_eq!(
-            hub.nature_reward_tick(
-                owner,
-                second_connection,
-                started_at + Duration::from_secs(59)
-            )
-            .await,
-            None
-        );
-        assert_eq!(
-            hub.nature_reward_tick(
-                owner,
-                second_connection,
-                started_at + Duration::from_secs(61)
-            )
-            .await,
-            Some(1)
-        );
-        hub.confirm_nature_reward(owner, 1).await;
-        assert_eq!(
-            hub.nature_reward_tick(
-                owner,
-                second_connection,
-                started_at + Duration::from_secs(359)
-            )
-            .await,
-            None
-        );
-        assert_eq!(
-            hub.nature_reward_tick(
-                owner,
-                second_connection,
-                started_at + Duration::from_secs(360)
-            )
-            .await,
-            Some(2)
-        );
-    }
-
-    #[test]
-    fn nature_reward_sample_is_always_between_one_and_three_stars() {
-        for _ in 0..1_000 {
-            assert!((1..=3).contains(&sample_nature_reward_stars()));
-        }
     }
 
     #[test]
@@ -4204,7 +3559,7 @@ mod tests {
         let hub = CafeHub::default();
         let room = hub.create_room(false).await;
         let session = guest();
-        let aiko = cafe_map_interaction_target(CAFE_MAP_LAYOUT, "aiko");
+        let aiko = cafe_map_interaction_target("aiko");
         hub.join(room.id, new_player(&session, "Guest TEA".to_owned(), None))
             .await
             .expect("player should join");
@@ -4265,7 +3620,7 @@ mod tests {
         let room = hub.create_room(false).await;
         let first = guest();
         let second = guest();
-        let aiko = cafe_map_interaction_target(CAFE_MAP_LAYOUT, "aiko");
+        let aiko = cafe_map_interaction_target("aiko");
         hub.join(room.id, new_player(&first, "Guest SERVER".to_owned(), None))
             .await
             .expect("first player should join");
@@ -4379,7 +3734,7 @@ mod tests {
         let room = hub.create_room(false).await;
         let first = guest();
         let second = guest();
-        let counter = cafe_map_interaction_target(CAFE_MAP_LAYOUT, SERVICE_COUNTER_TARGET_ID);
+        let counter = cafe_map_interaction_target(SERVICE_COUNTER_TARGET_ID);
         hub.join(room.id, new_player(&first, "Guest RUSH".to_owned(), None))
             .await
             .expect("first player should join");
@@ -4661,12 +4016,9 @@ mod tests {
         let hub = CafeHub::new(limits);
         let session = Uuid::new_v4();
         let ip = "198.51.100.9".to_owned();
-        let created = hub
-            .quick_join_limited(session, ip.clone(), CafeMapId::Cafe)
-            .await
-            .unwrap();
+        let created = hub.quick_join_limited(session, ip.clone()).await.unwrap();
         let reused = hub
-            .quick_join_limited(session, ip.clone(), CafeMapId::Cafe)
+            .quick_join_limited(session, ip.clone())
             .await
             .expect("reusing an existing public room must not consume quota");
         assert_eq!(reused.id, created.id);
@@ -4677,33 +4029,6 @@ mod tests {
             .expect("a subsequent actual creation must hit the consumed quota");
         assert_eq!(rejected.reason(), Some(ErrorReason::CafeRoomCreationRate));
         assert_eq!(rejected.retry_after_seconds(), Some(600));
-    }
-
-    #[tokio::test]
-    async fn quick_join_reuses_or_creates_only_the_requested_map() {
-        let hub = CafeHub::default();
-        let cafe = hub.create_room(false).await;
-        let session = Uuid::new_v4();
-        let ip = "198.51.100.10".to_owned();
-
-        let nature = hub
-            .quick_join_limited(session, ip.clone(), CafeMapId::NatureRetreat)
-            .await
-            .expect("Greenwood Quick Join should create a public Greenwood room");
-        assert_eq!(nature.map_id, CafeMapId::NatureRetreat);
-        assert_ne!(nature.id, cafe.id);
-
-        let reused_nature = hub
-            .quick_join_limited(session, ip.clone(), CafeMapId::NatureRetreat)
-            .await
-            .expect("Greenwood Quick Join should reuse its public room");
-        assert_eq!(reused_nature.id, nature.id);
-
-        let reused_cafe = hub
-            .quick_join_limited(session, ip, CafeMapId::Cafe)
-            .await
-            .expect("Cafe Quick Join should not cross into Greenwood");
-        assert_eq!(reused_cafe.id, cafe.id);
     }
 
     #[tokio::test]

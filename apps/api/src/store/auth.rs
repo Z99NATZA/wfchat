@@ -203,7 +203,6 @@ impl ChatStore {
             "memory_extraction_jobs",
             "memory_items",
             "chats",
-            "cafe_timed_reward_progress",
             "cafe_room_rewards",
             "cafe_cosmetic_loadouts",
             "cafe_progress",
@@ -363,10 +362,6 @@ impl ChatStore {
                  )
                  and not exists (
                    select 1 from cafe_room_rewards
-                   where owner_session_id = auth_sessions.id and owner_user_id is not null
-                 )
-                 and not exists (
-                   select 1 from cafe_timed_reward_progress
                    where owner_session_id = auth_sessions.id and owner_user_id is not null
                  )
                order by coalesce(revoked_at, expires_at), id
@@ -615,35 +610,6 @@ impl ChatStore {
         .execute(&mut **tx)
         .await?;
 
-        sqlx::query(
-            "insert into cafe_timed_reward_progress (
-                owner_kind, owner_id, owner_session_id, owner_user_id, reward_sequence, updated_at
-             )
-             select 'account', $1, $2, $1, reward_sequence, now()
-             from cafe_timed_reward_progress
-             where owner_session_id = $2
-             on conflict (owner_kind, owner_id)
-             do update set
-                owner_session_id = excluded.owner_session_id,
-                owner_user_id = excluded.owner_user_id,
-                reward_sequence = greatest(
-                    cafe_timed_reward_progress.reward_sequence,
-                    excluded.reward_sequence
-                ),
-                updated_at = now()",
-        )
-        .bind(user_id)
-        .bind(session_id)
-        .execute(&mut **tx)
-        .await?;
-        sqlx::query(
-            "delete from cafe_timed_reward_progress
-             where owner_session_id = $1 and owner_kind = 'guest'",
-        )
-        .bind(session_id)
-        .execute(&mut **tx)
-        .await?;
-
         Ok(())
     }
 
@@ -671,42 +637,6 @@ impl ChatStore {
                 .execute(&mut **tx)
                 .await?;
         }
-        sqlx::query(
-            "insert into cafe_timed_reward_progress (
-                owner_kind, owner_id, owner_session_id, owner_user_id, reward_sequence, updated_at
-             )
-             select owner_kind,
-                    case when owner_kind = 'guest' then $1 else owner_id end,
-                    $1,
-                    owner_user_id,
-                    reward_sequence,
-                    now()
-             from cafe_timed_reward_progress
-             where owner_session_id = $2
-             on conflict (owner_kind, owner_id)
-             do update set
-                owner_session_id = excluded.owner_session_id,
-                owner_user_id = coalesce(
-                    excluded.owner_user_id,
-                    cafe_timed_reward_progress.owner_user_id
-                ),
-                reward_sequence = greatest(
-                    cafe_timed_reward_progress.reward_sequence,
-                    excluded.reward_sequence
-                ),
-                updated_at = now()",
-        )
-        .bind(replacement_session_id)
-        .bind(old_session_id)
-        .execute(&mut **tx)
-        .await?;
-        sqlx::query(
-            "delete from cafe_timed_reward_progress
-             where owner_session_id = $1",
-        )
-        .bind(old_session_id)
-        .execute(&mut **tx)
-        .await?;
         for table in ["sync_entities", "sync_commits"] {
             let query = format!("update {table} set session_id = $1 where session_id = $2");
             sqlx::query(&query)

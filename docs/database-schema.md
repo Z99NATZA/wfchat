@@ -49,27 +49,26 @@ reservation is released from the independent global counter.
 
 ## Tables
 
-| Table                                | Role                                                            |
-| ------------------------------------ | --------------------------------------------------------------- |
-| `auth_sessions`                      | Guest/registered request identity and ownership boundary        |
-| `auth_identities`                    | Google subject, email, name, and provider avatar                |
-| `user_profiles`                      | Editable account display name and avatar                        |
-| `chats`                              | Owner- and character-scoped chat sessions                       |
-| `chat_messages`                      | Ordered user/assistant/system text within a chat                |
-| `chat_attachments`                   | Validated image metadata; pending or linked to one user message |
-| `memory_items`                       | Normalized learned context keyed per owner and character        |
-| `memory_sources`                     | Chat/message evidence supporting a memory item                  |
-| `memory_extraction_jobs`             | Durable, retryable capture outbox                               |
-| `memory_follow_up_deliveries`        | Idempotent New Chat follow-up claims                            |
-| `cafe_progress`                      | Per-session stars and unlocked cosmetics                        |
-| `cafe_cosmetic_loadouts`             | Per-session equipped Cafe avatar and cosmetic                   |
-| `cafe_room_rewards`                  | One reward per room, round, and session                         |
-| `cafe_timed_reward_progress`         | Monotonic Greenwood reward sequence per account or Guest        |
-| `sync_entities`                      | Latest generic sync value or tombstone per item                 |
-| `sync_commits`                       | Per-session sync operation idempotency record                   |
-| `chat_daily_owner_quotas`            | Reserved or committed daily uses per account or Guest session   |
-| `chat_daily_global_quotas`           | Reserved and provider-started daily generation totals           |
-| `chat_generation_quota_reservations` | Retry-safe owner/global generation transitions                  |
+| Table                         | Role                                                            |
+| ----------------------------- | --------------------------------------------------------------- |
+| `auth_sessions`               | Guest/registered request identity and ownership boundary        |
+| `auth_identities`             | Google subject, email, name, and provider avatar                |
+| `user_profiles`               | Editable account display name and avatar                        |
+| `chats`                       | Owner- and character-scoped chat sessions                       |
+| `chat_messages`               | Ordered user/assistant/system text within a chat                |
+| `chat_attachments`            | Validated image metadata; pending or linked to one user message |
+| `memory_items`                | Normalized learned context keyed per owner and character        |
+| `memory_sources`              | Chat/message evidence supporting a memory item                  |
+| `memory_extraction_jobs`      | Durable, retryable capture outbox                               |
+| `memory_follow_up_deliveries` | Idempotent New Chat follow-up claims                            |
+| `cafe_progress`               | Per-session stars and unlocked cosmetics                        |
+| `cafe_cosmetic_loadouts`      | Per-session equipped Cafe avatar and cosmetic                   |
+| `cafe_room_rewards`           | One reward per room, round, and session                         |
+| `sync_entities`               | Latest generic sync value or tombstone per item                 |
+| `sync_commits`                | Per-session sync operation idempotency record                   |
+| `chat_daily_owner_quotas`     | Reserved or committed daily uses per account or Guest session   |
+| `chat_daily_global_quotas`    | Reserved and provider-started daily generation totals           |
+| `chat_generation_quota_reservations` | Retry-safe owner/global generation transitions          |
 
 ## Core Relationships
 
@@ -80,7 +79,6 @@ auth_session
   -> memory_extraction_jobs
   -> memory_follow_up_deliveries
   -> cafe_progress / cafe_cosmetic_loadouts / cafe_room_rewards
-  -> cafe_timed_reward_progress
   -> sync_entities / sync_commits
 
 registered user
@@ -126,12 +124,9 @@ removal; store transactions delete unsupported memories or recalculate retained
 confidence. Extraction jobs reference the persisted turn and store its timezone.
 Follow-up deliveries reference one memory and may later attach to one chat.
 
-Aiko World rooms themselves are in-process. PostgreSQL stores progress,
-loadout, idempotent Cafe round rewards, and the monotonic Greenwood timed-reward
-sequence. The Greenwood claim transaction advances exactly the next sequence
-and adds its sampled stars together, so concurrent claims cannot duplicate a
-reward. Account progress is aggregated across promoted session rows; the latest
-account loadout wins deterministically.
+Cafe rooms themselves are in-process. PostgreSQL stores only progress, loadout,
+and idempotent round rewards. Account progress is aggregated across promoted
+session rows; the latest account loadout wins deterministically.
 
 Generic sync remains separate from canonical chat tables. `sync_entities`
 stores cache/delta items, and pulled chat items are not materialized into
@@ -141,6 +136,6 @@ stores cache/delta items, and pulled chat items are not materialized into
 
 - [Chat image attachments](chat-image-attachments.md)
 - [Automatic memory](automatic-memory.md)
-- [Aiko World](aiko-cafe.md)
+- [Aiko Cafe](aiko-cafe.md)
 - [Sync system](sync-system.md)
 - [Database migrations](database-migrations.md)

@@ -57,7 +57,6 @@ describe("cafeApiService", () => {
 				isPrivate: false,
 				playerCount: 2,
 				capacity: 8,
-				mapId: "cafe",
 				activityId: "tea_delivery",
 				activityCompleted: false
 			}
@@ -116,16 +115,13 @@ describe("cafeApiService", () => {
 	it("uses the explicit room operations and websocket route", async () => {
 		vi.mocked(apiClient.post).mockResolvedValue({ data: { room } });
 
-		await quickJoinCafe("nature_retreat");
-		await createCafeRoom(true, "nature_retreat");
+		await quickJoinCafe();
+		await createCafeRoom(true);
 		await joinCafeByCode("abc123");
 
-		expect(apiClient.post).toHaveBeenNthCalledWith(1, "/api/cafe/rooms/quick-join", {
-			map_id: "nature_retreat"
-		});
+		expect(apiClient.post).toHaveBeenNthCalledWith(1, "/api/cafe/rooms/quick-join");
 		expect(apiClient.post).toHaveBeenNthCalledWith(2, "/api/cafe/rooms", {
-			is_private: true,
-			map_id: "nature_retreat"
+			is_private: true
 		});
 		expect(apiClient.post).toHaveBeenNthCalledWith(3, "/api/cafe/rooms/join", {
 			invite_code: "abc123"

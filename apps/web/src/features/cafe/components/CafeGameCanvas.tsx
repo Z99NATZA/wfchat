@@ -29,12 +29,6 @@ type CafeGameCanvasProps = {
 		prepareOrder: string;
 		findIngredient: string;
 		returnIngredient: string;
-		enjoyPicnic: string;
-		viewScenery: string;
-		feedFish: string;
-		watchButterflies: string;
-		skipStones: string;
-		waterFlowers: string;
 		idle: string;
 	};
 	loadingLabel: string;
@@ -61,7 +55,6 @@ function CafeGameCanvas({
 	const [interactionTarget, setInteractionTarget] = useState<string | null>(null);
 	const selfPlayer = room?.players.find((player) => player.id === selfPlayerId);
 	const carriedTea = selfPlayer?.carriedTea ?? 0;
-	const isNatureRetreat = room?.mapId === "nature_retreat";
 	const isCafeRush = room?.activity.id === "cafe_rush";
 	const isServiceActivity =
 		room?.activity.id === "table_service" || room?.activity.id === "cafe_rush";
@@ -98,33 +91,31 @@ function CafeGameCanvas({
 			: effectiveInteractionTarget.startsWith("order-") &&
 				effectiveInteractionTarget !== carriedOrder?.id);
 	const currentInteractionTarget = tableTargetIsStale ? null : effectiveInteractionTarget;
-	const interactionLabel = isNatureRetreat
-		? natureInteractionLabel(currentInteractionTarget, interactionLabels)
-		: isServiceActivity
-			? currentInteractionTarget === "service-counter"
-				? isCafeRush && carriedTea > 0
-					? interactionLabels.prepareOrder
-					: interactionLabels.pickUpDrink
-				: currentInteractionTarget?.startsWith("order-")
-					? interactionLabels.serveDrink
-					: carriedOrder
-						? interactionLabels.findTable
-						: isCafeRush
-							? carriedTea > 0
-								? interactionLabels.returnIngredient
-								: room?.activity.tableOrders.some(
-											(order) => order.status === "available"
-									  )
-									? interactionLabels.findCounter
-									: interactionLabels.findIngredient
-							: interactionLabels.findCounter
-			: currentInteractionTarget
-				? currentInteractionTarget === "aiko"
-					? carriedTea > 0
-						? interactionLabels.deliverTea
-						: interactionLabels.talkToAiko
-					: interactionLabels.collectTea
-				: interactionLabels.idle;
+	const interactionLabel = isServiceActivity
+		? currentInteractionTarget === "service-counter"
+			? isCafeRush && carriedTea > 0
+				? interactionLabels.prepareOrder
+				: interactionLabels.pickUpDrink
+			: currentInteractionTarget?.startsWith("order-")
+				? interactionLabels.serveDrink
+				: carriedOrder
+					? interactionLabels.findTable
+					: isCafeRush
+						? carriedTea > 0
+							? interactionLabels.returnIngredient
+							: room?.activity.tableOrders.some(
+										(order) => order.status === "available"
+								  )
+								? interactionLabels.findCounter
+								: interactionLabels.findIngredient
+						: interactionLabels.findCounter
+		: currentInteractionTarget
+			? currentInteractionTarget === "aiko"
+				? carriedTea > 0
+					? interactionLabels.deliverTea
+					: interactionLabels.talkToAiko
+				: interactionLabels.collectTea
+			: interactionLabels.idle;
 	movementRef.current = onMovement;
 	interactRef.current = onInteract;
 
@@ -332,30 +323,6 @@ function CafeGameCanvas({
 			)}
 		</div>
 	);
-}
-
-function natureInteractionLabel(
-	targetId: string | null,
-	labels: CafeGameCanvasProps["interactionLabels"]
-) {
-	switch (targetId) {
-		case "aiko":
-			return labels.talkToAiko;
-		case "nature-picnic":
-			return labels.enjoyPicnic;
-		case "nature-overlook":
-			return labels.viewScenery;
-		case "nature-fish":
-			return labels.feedFish;
-		case "nature-butterflies":
-			return labels.watchButterflies;
-		case "nature-stones":
-			return labels.skipStones;
-		case "nature-flowers":
-			return labels.waterFlowers;
-		default:
-			return labels.idle;
-	}
 }
 
 function isEditableElement(target: EventTarget | null) {

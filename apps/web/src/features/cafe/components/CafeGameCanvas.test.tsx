@@ -46,12 +46,6 @@ const interactionLabels = {
 	prepareOrder: "Prepare order",
 	findIngredient: "Find ingredient",
 	returnIngredient: "Return ingredient",
-	enjoyPicnic: "Enjoy picnic",
-	viewScenery: "View scenery",
-	feedFish: "Feed fish",
-	watchButterflies: "Watch butterflies",
-	skipStones: "Skip stones",
-	waterFlowers: "Water flowers",
 	idle: "Move closer"
 };
 
