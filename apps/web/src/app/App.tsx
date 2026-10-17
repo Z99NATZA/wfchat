@@ -28,6 +28,7 @@ import { resetLearnedContext } from "@/services/automaticMemoryService";
 import { Navigate, Route, Routes } from "react-router-dom";
 
 const CafeRoomPage = lazy(() => import("@/pages/CafeRoomPage"));
+const MistwaterPage = lazy(() => import("@/pages/MistwaterPage"));
 
 function App() {
 	const settings = useAppSettings();
@@ -338,6 +339,18 @@ function App() {
 								/>
 							</Suspense>
 						)
+					}
+				/>
+				<Route
+					path="/mistwater"
+					element={
+						<Suspense fallback={cafeLoading}>
+							<MistwaterPage
+								activityBar={activityBar}
+								backgroundImageUrl={settings.backgroundImageUrl}
+								headerControls={headerControls}
+							/>
+						</Suspense>
 					}
 				/>
 				<Route path="/avatar" element={<Navigate to="/avatar/pngtuber" replace />} />

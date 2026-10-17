@@ -54,3 +54,4 @@ current contracts, or planned work. Those are not lessons learned.
 - `backend-auth.md`: session ownership and profile-input security failures
 - `backend-persistence.md`: database and migration failure modes
 - `shared-buttons.md`: repeated UI control patterns that caused visual drift
+- `mistwater.md`: layered map rendering and editable animated scenery

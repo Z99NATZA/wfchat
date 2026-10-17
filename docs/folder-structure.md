@@ -20,7 +20,7 @@ apps/
     src/
       app/             top-level providers and orchestration
       components/      reusable UI
-      features/        avatar, cafe, and chat domains
+      features/        avatar, cafe, chat, and standalone game domains
       hooks/           app-level React hooks
       layouts/         shared shells
       pages/           route screens
