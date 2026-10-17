@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
 	MISTWATER_BLOOM_POINTS,
+	MISTWATER_EDDIES,
+	MISTWATER_FLOW_CURRENTS,
 	MISTWATER_MAP_COLUMNS,
 	MISTWATER_MAP_ROWS,
 	MISTWATER_PLAYER_START,
-	MISTWATER_SCENERY,
+	MISTWATER_SURFACE_GLINTS,
 	MISTWATER_TILE_SIZE,
 	MISTWATER_WORLD_HEIGHT,
 	MISTWATER_WORLD_WIDTH,
@@ -17,18 +19,6 @@ describe("Mistwater map data", () => {
 		expect(MISTWATER_WORLD_HEIGHT).toBe(MISTWATER_MAP_ROWS * MISTWATER_TILE_SIZE);
 	});
 
-	it("keeps editable objects uniquely named and inside the world", () => {
-		const ids = MISTWATER_SCENERY.map((object) => object.id);
-		expect(new Set(ids).size).toBe(ids.length);
-
-		for (const object of MISTWATER_SCENERY) {
-			expect(object.x).toBeGreaterThanOrEqual(0);
-			expect(object.x).toBeLessThanOrEqual(MISTWATER_WORLD_WIDTH);
-			expect(object.y).toBeGreaterThanOrEqual(0);
-			expect(object.y).toBeLessThanOrEqual(MISTWATER_WORLD_HEIGHT);
-		}
-	});
-
 	it("places the breeze and every gameplay bloom on water", () => {
 		expect(isMistwaterWaterPoint(MISTWATER_PLAYER_START.x, MISTWATER_PLAYER_START.y)).toBe(
 			true
@@ -38,9 +28,36 @@ describe("Mistwater map data", () => {
 		}
 	});
 
-	it("keeps a land rim and central island around the animated basin", () => {
+	it("keeps the playable water inside a compact land rim", () => {
 		expect(isMistwaterWaterPoint(16, 16)).toBe(false);
-		expect(isMistwaterWaterPoint(800, 410)).toBe(false);
-		expect(isMistwaterWaterPoint(800, 535)).toBe(true);
+		expect(isMistwaterWaterPoint(MISTWATER_WORLD_WIDTH - 16, 16)).toBe(false);
+		expect(isMistwaterWaterPoint(900, 120)).toBe(false);
+		expect(isMistwaterWaterPoint(900, 515)).toBe(true);
+	});
+
+	it("keeps water effects uniquely named and positioned on water", () => {
+		const effects = [
+			...MISTWATER_FLOW_CURRENTS,
+			...MISTWATER_SURFACE_GLINTS,
+			...MISTWATER_EDDIES
+		];
+		const ids = effects.map((effect) => effect.id);
+		expect(new Set(ids).size).toBe(ids.length);
+
+		for (const glint of MISTWATER_SURFACE_GLINTS) {
+			expect(isMistwaterWaterPoint(glint.x, glint.y), glint.id).toBe(true);
+		}
+		for (const eddy of MISTWATER_EDDIES) {
+			expect(isMistwaterWaterPoint(eddy.x, eddy.y), eddy.id).toBe(true);
+		}
+	});
+
+	it("keeps every gameplay point inside the compact world", () => {
+		for (const point of [MISTWATER_PLAYER_START, ...MISTWATER_BLOOM_POINTS]) {
+			expect(point.x).toBeGreaterThan(0);
+			expect(point.x).toBeLessThan(MISTWATER_WORLD_WIDTH);
+			expect(point.y).toBeGreaterThan(0);
+			expect(point.y).toBeLessThan(MISTWATER_WORLD_HEIGHT);
+		}
 	});
 });

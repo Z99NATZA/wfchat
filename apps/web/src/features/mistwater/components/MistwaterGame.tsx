@@ -29,9 +29,9 @@ function MistwaterGame({ ariaLabel, onSnapshot, resetSignal }: MistwaterGameProp
 			parent: host,
 			backgroundColor: "#061d24",
 			render: {
-				antialias: false,
-				pixelArt: true,
-				roundPixels: true
+				antialias: true,
+				pixelArt: false,
+				roundPixels: false
 			},
 			scale: {
 				mode: Phaser.Scale.RESIZE,

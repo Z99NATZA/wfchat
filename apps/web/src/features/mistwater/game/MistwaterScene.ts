@@ -8,11 +8,11 @@ import {
 	MISTWATER_BLOOM_POINTS,
 	MISTWATER_PLAYER_START,
 	MISTWATER_WORLD_HEIGHT,
-	MISTWATER_WORLD_WIDTH
+	MISTWATER_WORLD_WIDTH,
+	isMistwaterWaterPoint
 } from "@/features/mistwater/game/mistwaterMap";
 import {
 	createMistwaterWorld,
-	MISTWATER_SCENERY_TEXTURE_KEY,
 	preloadMistwaterWorld,
 	type MistwaterWorld
 } from "@/features/mistwater/game/MistwaterWorld";
@@ -27,7 +27,9 @@ type DirectionKeys = Record<DirectionKey, Phaser.Input.Keyboard.Key>;
 type Bloom = {
 	x: number;
 	y: number;
-	petals: Phaser.GameObjects.Image;
+	flower: Phaser.GameObjects.Container;
+	petals: Phaser.GameObjects.Ellipse[];
+	center: Phaser.GameObjects.Arc;
 	glow: Phaser.GameObjects.Arc;
 	awakeUntil: number;
 };
@@ -44,6 +46,7 @@ export default class MistwaterScene extends Phaser.Scene {
 	private snapshot = initialMistwaterSnapshot();
 	private lastBloomAt: number | null = null;
 	private lastRippleAt = 0;
+	private wakeSide = 1;
 	private world?: MistwaterWorld;
 
 	constructor(onSnapshot: (snapshot: MistwaterSnapshot) => void) {
@@ -111,16 +114,30 @@ export default class MistwaterScene extends Phaser.Scene {
 
 		const smoothing = 1 - Math.pow(0.0009, delta / 1000);
 		this.velocity.lerp(desiredVelocity, smoothing);
-		const nextX = Phaser.Math.Clamp(
+		const proposedX = Phaser.Math.Clamp(
 			this.breeze.x + this.velocity.x * (delta / 1000),
 			45,
 			MISTWATER_WORLD_WIDTH - 45
 		);
-		const nextY = Phaser.Math.Clamp(
+		const proposedY = Phaser.Math.Clamp(
 			this.breeze.y + this.velocity.y * (delta / 1000),
 			45,
 			MISTWATER_WORLD_HEIGHT - 45
 		);
+		let nextX = this.breeze.x;
+		let nextY = this.breeze.y;
+		if (isMistwaterWaterPoint(proposedX, proposedY)) {
+			nextX = proposedX;
+			nextY = proposedY;
+		} else {
+			if (isMistwaterWaterPoint(proposedX, this.breeze.y)) {
+				nextX = proposedX;
+			}
+			if (isMistwaterWaterPoint(this.breeze.x, proposedY)) {
+				nextY = proposedY;
+			}
+			this.velocity.scale(0.72);
+		}
 		this.breeze.setPosition(nextX, nextY);
 
 		const motion = Phaser.Math.Clamp(this.velocity.length() / PLAYER_SPEED, 0, 1);
@@ -179,14 +196,23 @@ export default class MistwaterScene extends Phaser.Scene {
 
 	private createBloom(x: number, y: number, index: number): Bloom {
 		const glow = this.add
-			.circle(x, y, 25, 0x8fffd2, 0.1)
+			.circle(x, y, 22, 0x8fffd2, 0.08)
 			.setStrokeStyle(1, 0xcfffee, 0.36)
 			.setDepth(5);
-		const petals = this.add
-			.image(x, y, MISTWATER_SCENERY_TEXTURE_KEY, 3)
-			.setScale(0.105)
-			.setDepth(6);
-		this.drawBloom(petals, false);
+		const petals = Array.from({ length: 7 }, (_, petalIndex) => {
+			const angle = (Math.PI * 2 * petalIndex) / 7;
+			return this.add
+				.ellipse(Math.cos(angle) * 7, Math.sin(angle) * 7, 8, 15, 0xc9eee7, 0.78)
+				.setRotation(angle + Math.PI / 2);
+		});
+		const center = this.add.circle(0, 0, 5, 0xf3d99b, 0.86);
+		const flower = this.add
+			.container(x, y, [...petals, center])
+			.setDepth(6)
+			.setScale(0.82)
+			.setRotation(index * 0.37);
+		const bloom = { x, y, flower, petals, center, glow, awakeUntil: 0 };
+		this.drawBloom(bloom, false);
 		this.tweens.add({
 			targets: glow,
 			scale: 1.22,
@@ -196,20 +222,30 @@ export default class MistwaterScene extends Phaser.Scene {
 			repeat: -1,
 			ease: "Sine.InOut"
 		});
-		return { x, y, petals, glow, awakeUntil: 0 };
+		this.tweens.add({
+			targets: flower,
+			rotation: flower.rotation + Math.PI * 2,
+			duration: 18_000 + index * 320,
+			repeat: -1
+		});
+		return bloom;
 	}
 
-	private drawBloom(petals: Phaser.GameObjects.Image, awake: boolean) {
-		petals.setTint(awake ? 0xffe7a0 : 0x9ddfd5).setAlpha(awake ? 1 : 0.72);
+	private drawBloom(bloom: Bloom, awake: boolean) {
+		for (const petal of bloom.petals) {
+			petal.setFillStyle(awake ? 0xfff1c2 : 0xc9eee7, awake ? 0.96 : 0.72);
+		}
+		bloom.center.setFillStyle(awake ? 0xffc95c : 0xf3d99b, awake ? 1 : 0.82);
+		bloom.flower.setAlpha(awake ? 1 : 0.82);
 	}
 
 	private wakeBloom(bloom: Bloom, time: number) {
 		bloom.awakeUntil = time + BLOOM_REST_MS;
-		this.drawBloom(bloom.petals, true);
+		this.drawBloom(bloom, true);
 		bloom.glow.setFillStyle(0xffe891, 0.28).setStrokeStyle(2, 0xfff0ae, 0.7).setRadius(34);
 		this.tweens.add({
-			targets: bloom.petals,
-			scale: 0.135,
+			targets: bloom.flower,
+			scale: 1.12,
 			duration: 270,
 			yoyo: true,
 			ease: "Back.Out"
@@ -231,9 +267,9 @@ export default class MistwaterScene extends Phaser.Scene {
 
 	private restBloom(bloom: Bloom) {
 		bloom.awakeUntil = 0;
-		this.drawBloom(bloom.petals, false);
+		this.drawBloom(bloom, false);
 		bloom.glow.setFillStyle(0x8fffd2, 0.1).setStrokeStyle(1, 0xcfffee, 0.36).setRadius(25);
-		bloom.petals.setScale(0.105);
+		bloom.flower.setScale(0.82);
 		bloom.glow.setScale(1);
 	}
 
@@ -258,18 +294,42 @@ export default class MistwaterScene extends Phaser.Scene {
 	}
 
 	private createRipple(x: number, y: number) {
+		const speed = Math.max(this.velocity.length(), 1);
+		const directionX = this.velocity.x / speed;
+		const directionY = this.velocity.y / speed;
+		const normalX = -directionY;
+		const normalY = directionX;
+		const trailX = x - directionX * 18 + normalX * this.wakeSide * 8;
+		const trailY = y - directionY * 18 + normalY * this.wakeSide * 8 + 8;
+		this.wakeSide *= -1;
 		const ripple = this.add
-			.ellipse(x, y + 8, 28, 13, 0x8cf6ec, 0)
+			.ellipse(trailX, trailY, 24, 10, 0x8cf6ec, 0)
 			.setStrokeStyle(2, 0xc5fff5, 0.48)
-			.setDepth(7);
+			.setRotation(Math.atan2(directionY, directionX))
+			.setDepth(7)
+			.setBlendMode(Phaser.BlendModes.ADD);
+		const sparkle = this.add
+			.circle(trailX, trailY, 2, 0xe7fff9, 0.72)
+			.setDepth(8)
+			.setBlendMode(Phaser.BlendModes.ADD);
 		this.tweens.add({
 			targets: ripple,
-			scaleX: 1.9,
-			scaleY: 1.9,
+			scaleX: 2.1,
+			scaleY: 1.65,
 			alpha: 0,
-			duration: 720,
+			duration: 820,
 			ease: "Sine.Out",
 			onComplete: () => ripple.destroy()
+		});
+		this.tweens.add({
+			targets: sparkle,
+			x: trailX - directionX * 10,
+			y: trailY - directionY * 10,
+			alpha: 0,
+			scale: 0.3,
+			duration: 480,
+			ease: "Cubic.Out",
+			onComplete: () => sparkle.destroy()
 		});
 	}
 
@@ -321,18 +381,23 @@ export default class MistwaterScene extends Phaser.Scene {
 		const viewportWidth = Math.max(this.scale.width, 320);
 		const viewportHeight = Math.max(this.scale.height, 320);
 		const zoom = Phaser.Math.Clamp(
-			Math.min(viewportWidth / 960, viewportHeight / 620),
+			Math.max(
+				viewportWidth / MISTWATER_WORLD_WIDTH,
+				viewportHeight / MISTWATER_WORLD_HEIGHT
+			),
 			0.72,
-			1.16
+			1.05
 		);
 		this.cameras.main.setZoom(zoom);
 		this.cameras.main.startFollow(this.breeze, true, 0.08, 0.08);
-		this.cameras.main.setRoundPixels(true);
+		this.cameras.main.setRoundPixels(false);
 	}
 
 	private resetRun() {
 		this.snapshot = initialMistwaterSnapshot();
 		this.lastBloomAt = null;
+		this.lastRippleAt = 0;
+		this.wakeSide = 1;
 		this.pointerTarget = null;
 		this.velocity.set(0, 0);
 		this.breeze?.setPosition(MISTWATER_PLAYER_START.x, MISTWATER_PLAYER_START.y);
