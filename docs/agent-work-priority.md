@@ -60,3 +60,4 @@ No active implementation scope.
 - Read `docs/lessons-learned/*` only for the subsystem being changed, when debugging
   a regression, or before reworking behavior with a known failure mode.
 - Alias of agent-work-priority.md = priority | pri
+- commit format: 1 line en, https://www.conventionalcommits.org/en/v1.0.0/

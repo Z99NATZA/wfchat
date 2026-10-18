@@ -1,22 +1,13 @@
 import { useEffect, useRef } from "react";
 import Phaser from "phaser";
 import MistwaterScene from "@/features/mistwater/game/MistwaterScene";
-import type { MistwaterSnapshot } from "@/features/mistwater/game/mistwaterState";
 
 type MistwaterGameProps = {
 	ariaLabel: string;
-	onSnapshot: (snapshot: MistwaterSnapshot) => void;
-	resetSignal: number;
 };
 
-function MistwaterGame({ ariaLabel, onSnapshot, resetSignal }: MistwaterGameProps) {
+function MistwaterGame({ ariaLabel }: MistwaterGameProps) {
 	const hostRef = useRef<HTMLDivElement>(null);
-	const gameRef = useRef<Phaser.Game | null>(null);
-	const snapshotCallbackRef = useRef(onSnapshot);
-
-	useEffect(() => {
-		snapshotCallbackRef.current = onSnapshot;
-	}, [onSnapshot]);
 
 	useEffect(() => {
 		const host = hostRef.current;
@@ -38,21 +29,11 @@ function MistwaterGame({ ariaLabel, onSnapshot, resetSignal }: MistwaterGameProp
 				width: Math.max(host.clientWidth, 320),
 				height: Math.max(host.clientHeight, 320)
 			},
-			scene: [new MistwaterScene((snapshot) => snapshotCallbackRef.current(snapshot))]
+			scene: [new MistwaterScene()]
 		});
-		gameRef.current = game;
 
-		return () => {
-			gameRef.current = null;
-			game.destroy(true);
-		};
+		return () => game.destroy(true);
 	}, []);
-
-	useEffect(() => {
-		if (resetSignal > 0) {
-			gameRef.current?.events.emit("mistwater:reset");
-		}
-	}, [resetSignal]);
 
 	return (
 		<div

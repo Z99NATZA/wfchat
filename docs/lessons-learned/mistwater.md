@@ -27,5 +27,60 @@ Lesson:
 
 - A cohesive static environment may be baked into one background, but anything
   expected to animate or move must remain an explicit layer or map datum.
-  Mistwater keeps gameplay flowers, atmosphere, and water-flow paths separate
-  while the non-interactive forest and shoreline share one rendered backdrop.
+  Mistwater keeps the runtime water material and wave boundary separate while
+  the non-interactive forest and shoreline share one rendered backdrop.
+
+## 2026-10-18 - Overlay motion did not make the pond surface move
+
+Context:
+
+- The realistic pond already had current streaks, glints, eddies, and ripple
+  outlines layered over a detailed water texture.
+
+Failed approach:
+
+- Treating those moving overlays as a substitute for deformation of the water
+  image itself.
+
+Problem observed:
+
+- The effects moved, but reflections, highlights, submerged stones, and the
+  base water pattern stayed fixed, so the pond still read as a static picture.
+
+Root cause:
+
+- No effect changed the sampled pixels of the pond texture or propagated an
+  impulse through neighboring water regions.
+
+Lesson:
+
+- Use overlays for readable flow direction, but pair them with a shoreline-
+  masked displacement layer driven by a damped wave field when the underlying
+  water surface must appear physically alive.
+
+## 2026-10-18 - Baked caustics competed with runtime lighting
+
+Context:
+
+- The pond used a painterly background with strong cyan caustics and white
+  reflection bands already rendered into the water.
+
+Failed approach:
+
+- Adding moving procedural light over the fully lit background.
+
+Problem observed:
+
+- Runtime light moved, but the dominant painted highlights remained fixed, so
+  the combined surface still appeared static.
+
+Root cause:
+
+- The base color and runtime lighting represented the same optical detail, but
+  only one of those layers responded to the wave simulation.
+
+Lesson:
+
+- Keep the pond base limited to depth, color, and submerged detail. Generate
+  caustics and surface highlights at runtime, clip them to the shoreline, and
+  displace them with the same height field as the water image.

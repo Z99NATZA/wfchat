@@ -1,31 +1,15 @@
 /**
  * @vitest-environment happy-dom
  */
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import MistwaterPage from "@/pages/MistwaterPage";
 
-const gameProps = vi.hoisted(() => ({ resetSignal: -1 }));
-
 vi.mock("@/features/mistwater/components/MistwaterGame", () => ({
-	default: ({
-		onSnapshot,
-		resetSignal
-	}: {
-		onSnapshot: (snapshot: { blooms: number; streak: number; bestStreak: number }) => void;
-		resetSignal: number;
-	}) => {
-		gameProps.resetSignal = resetSignal;
-		return (
-			<button
-				data-testid="mistwater-game"
-				onClick={() => onSnapshot({ blooms: 7, streak: 3, bestStreak: 5 })}
-			>
-				game
-			</button>
-		);
-	}
+	default: ({ ariaLabel }: { ariaLabel: string }) => (
+		<div data-testid="mistwater-game" aria-label={ariaLabel} />
+	)
 }));
 vi.mock("@/layouts/AppLayout", () => ({
 	default: ({ children, sidebar }: { children: ReactNode; sidebar: ReactNode }) => (
@@ -56,12 +40,9 @@ const headerControls = {
 };
 
 describe("MistwaterPage", () => {
-	afterEach(() => {
-		cleanup();
-		gameProps.resetSignal = -1;
-	});
+	afterEach(cleanup);
 
-	it("shows live arcade stats and can reset the local run", () => {
+	it("shows the water study without gameplay decorations", () => {
 		render(
 			<MistwaterPage
 				activityBar={null}
@@ -71,15 +52,8 @@ describe("MistwaterPage", () => {
 		);
 
 		expect(screen.getByTestId("mistwater-stage")).toBeTruthy();
-		expect(screen.getByText("mistwater.game.hint")).toBeTruthy();
-
-		fireEvent.click(screen.getByTestId("mistwater-game"));
-		expect(screen.getAllByText("7")).toHaveLength(2);
-		expect(screen.getAllByText("×3")).toHaveLength(2);
-		expect(screen.getByText("×5")).toBeTruthy();
-
-		fireEvent.click(screen.getByRole("button", { name: "mistwater.actions.reset" }));
-		expect(gameProps.resetSignal).toBe(1);
-		expect(screen.getAllByText("0").length).toBeGreaterThan(0);
+		expect(screen.getByLabelText("mistwater.game.ariaLabel")).toBeTruthy();
+		expect(screen.queryByTestId("mistwater-sidebar")).toBeNull();
+		expect(screen.queryByText("mistwater.game.hint")).toBeNull();
 	});
 });
