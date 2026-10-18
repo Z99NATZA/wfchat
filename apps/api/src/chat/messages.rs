@@ -609,7 +609,7 @@ fn ensure_output_within_limit(message: &AiMessage, max_chars: usize) -> AppResul
 fn reserve_output_chunk(counter: &AtomicUsize, chunk: &str, max_chars: usize) -> AppResult<()> {
     let chunk_chars = chunk.chars().count();
     counter
-        .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |current| {
+        .try_update(Ordering::Relaxed, Ordering::Relaxed, |current| {
             current
                 .checked_add(chunk_chars)
                 .filter(|next| *next <= max_chars)
