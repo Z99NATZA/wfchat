@@ -4,16 +4,15 @@ Use this file as the first document to read before starting a new scoped agent t
 
 ## Active Scope
 
-No active implementation scope.
+None.
 
 ## Required Read Order
 
 1. `docs/agent-work-priority.md`
-2. Add the owning current-behavior documents for the next active scope.
 
 ## Required Outcome
 
-- Define the required outcome for the next active scope.
+- No active task.
 
 ## Authorization And Verification
 

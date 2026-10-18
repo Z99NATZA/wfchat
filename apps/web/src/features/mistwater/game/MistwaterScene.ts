@@ -73,7 +73,7 @@ export default class MistwaterScene extends Phaser.Scene {
 				viewportWidth / MISTWATER_WORLD_WIDTH,
 				viewportHeight / MISTWATER_WORLD_HEIGHT
 			),
-			0.72,
+			0.38,
 			1.05
 		);
 		this.cameras.main.stopFollow();

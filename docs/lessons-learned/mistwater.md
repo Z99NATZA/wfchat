@@ -27,8 +27,8 @@ Lesson:
 
 - A cohesive static environment may be baked into one background, but anything
   expected to animate or move must remain an explicit layer or map datum.
-  Mistwater keeps the runtime water material and wave boundary separate while
-  the non-interactive forest and shoreline share one rendered backdrop.
+  Mistwater keeps the ground tile, pond rim, runtime water material, tree
+  trunks, crowns, foliage, and wave boundary as separate layers or data.
 
 ## 2026-10-18 - Overlay motion did not make the pond surface move
 
@@ -168,3 +168,60 @@ Lesson:
 - Reserve point impulses for direct pointer interaction. Drive idle motion with
   low-amplitude directional wave normals that cross the surface continuously
   without creating impact centers or concentric rings.
+
+## 2026-10-18 - Animated overlays did not increase map scale
+
+Context:
+
+- The pond scene needed to grow into a wider forest while keeping the existing
+  natural water as its visual anchor.
+
+Failed approach:
+
+- Adding wind, transmitted light, and leaves to canopy crops from the same
+  compact 1792×896 background.
+
+Problem observed:
+
+- The forest moved, but the pond still occupied the same composition and no new
+  terrain existed, so the map did not feel broader.
+
+Root cause:
+
+- Runtime animation changes time, not spatial extent. The world dimensions and
+  source artwork still described the original compact pond.
+
+Lesson:
+
+- Expand the base terrain and world coordinates first, then remap the shoreline,
+  camera, canopy regions, and particle sources before layering animation over
+  the larger environment.
+
+## 2026-10-18 - Large canopy crops made the ground drift
+
+Context:
+
+- The expanded forest needed visible wind movement without reducing the
+  realism of its terrain.
+
+Failed approach:
+
+- Cropping large rectangular regions from the flattened background and moving
+  them behind soft masks.
+
+Problem observed:
+
+- The crops contained rocks, roots, trunks, and forest floor in addition to
+  leaves. Their motion made the land appear to slide instead of making the
+  vegetation appear alive.
+
+Root cause:
+
+- A feathered edge hides a crop boundary but cannot separate rigid terrain from
+  flexible foliage inside the crop.
+
+Lesson:
+
+- Keep the background completely stationary. Animate only alpha-isolated
+  branches and understory around fixed attachment points, and represent moving
+  light separately from geometric motion.
