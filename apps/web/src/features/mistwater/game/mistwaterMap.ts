@@ -37,17 +37,6 @@ export const MISTWATER_SHORELINE: ReadonlyArray<MistwaterPoint> = [
 	{ x: 390, y: 250 }
 ];
 
-export const MISTWATER_AMBIENT_IMPULSES: ReadonlyArray<MistwaterPoint> = [
-	{ x: 520, y: 350 },
-	{ x: 850, y: 285 },
-	{ x: 1_210, y: 345 },
-	{ x: 420, y: 505 },
-	{ x: 920, y: 500 },
-	{ x: 1_400, y: 510 },
-	{ x: 690, y: 640 },
-	{ x: 1_180, y: 650 }
-];
-
 export function isMistwaterWaterPoint(x: number, y: number): boolean {
 	let inside = false;
 	for (

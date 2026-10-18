@@ -9,7 +9,7 @@ chat, reward, persistence, or backend behavior.
 The route presents a fixed-camera water study without a visible player,
 decorative flowers, score HUD, gameplay sidebar, or movement controls. Clicking,
 dragging, or touching the pond injects ripples directly into the water field;
-ambient impulses keep the surface moving when there is no input.
+low-amplitude directional waves keep the surface moving when there is no input.
 
 ## Rendering And Ownership
 
@@ -25,9 +25,9 @@ no baked caustic mesh or fixed surface highlights; those are runtime effects. It
 lives under `apps/web/public/images/mistwater/`.
 
 `apps/web/src/features/mistwater/game/mistwaterMap.ts` defines the cropped water
-bounds, editable shoreline polygon, and ambient impulse positions. Pointer
-validation and the WebGL water mask share the same shoreline data, so changing
-the simulated water boundary does not require regenerating the background.
+bounds and editable shoreline polygon. Pointer validation and the WebGL water
+mask share the same shoreline data, so changing the simulated water boundary
+does not require regenerating the background.
 
 The camera stays centered on the pond and adjusts zoom to cover the viewport
 without changing world-space pointer coordinates. The renderer uses
@@ -36,9 +36,18 @@ smooth while scaled.
 
 On WebGL renderers, Mistwater places a cropped copy of the pond over the static
 background and clips it to the shoreline polygon. The same mask contains a
-depth-light gradient, two counter-moving underwater caustic layers, and moving
-surface highlights. A 96×44 damped height field propagates ambient and pointer
-impulses at 30 simulation steps per second. Its slope map refreshes at 20 frames
-per second and displaces both the water image and lighting layers, so caustics
-and reflections deform with wave energy while the forest remains still. Canvas
+depth-light gradient, refractive caustics, and clustered surface highlights.
+The caustic light map is generated at runtime from an analytic spectrum of
+gravity and capillary waves. Surface second derivatives form a refractive
+Jacobian; its compression focuses light into irregular branches whose size,
+thickness, and brightness change continuously. Optical softening keeps the
+bright folds finite, while depth attenuation makes them weaker in deeper water.
+
+A 96×44 damped height field propagates pointer impulses at 30 simulation steps
+per second. Its bilinearly sampled curvature feeds the optical field, so
+interactive ripples alter both refraction and focused light. At idle, three
+low-amplitude analytic wave normals move continuously across the displacement
+map instead of point impacts, avoiding rain-like rings. The slope map encodes
+horizontal and vertical gradients separately; the displacement and 256×128
+caustic maps refresh at 20 frames per second. The forest remains still. Canvas
 renderers show the neutral static background without the WebGL water material.

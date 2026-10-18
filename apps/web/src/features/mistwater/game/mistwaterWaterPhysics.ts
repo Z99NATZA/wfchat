@@ -1,4 +1,25 @@
 const DEFAULT_DAMPING = 0.982;
+const TAU = Math.PI * 2;
+
+const AMBIENT_SURFACE_WAVES = [
+	{
+		directionX: 0.94,
+		directionY: 0.34,
+		frequency: 1.15,
+		speed: 0.032,
+		strength: 3.2,
+		phase: 0.3
+	},
+	{
+		directionX: 0.58,
+		directionY: -0.81,
+		frequency: 1.85,
+		speed: -0.024,
+		strength: 1.8,
+		phase: 2.4
+	},
+	{ directionX: 0.99, directionY: -0.14, frequency: 3.1, speed: 0.046, strength: 0.8, phase: 4.7 }
+] as const;
 
 export class MistwaterWaterPhysics {
 	readonly width: number;
@@ -69,7 +90,7 @@ export class MistwaterWaterPhysics {
 		this.next = retired;
 	}
 
-	writeDisplacementMap(pixels: Uint8ClampedArray) {
+	writeDisplacementMap(pixels: Uint8ClampedArray, ambientTimeSeconds?: number) {
 		if (pixels.length !== this.width * this.height * 4) {
 			throw new Error("Displacement pixel buffer does not match the water field");
 		}
@@ -81,12 +102,35 @@ export class MistwaterWaterPhysics {
 				const right = this.current[y * this.width + Math.min(this.width - 1, x + 1)];
 				const up = this.current[Math.max(0, y - 1) * this.width + x];
 				const down = this.current[Math.min(this.height - 1, y + 1) * this.width + x];
-				const slope = (right - left) * 0.68 + (down - up) * 0.32;
-				const shade = Math.round(clamp(128 + slope * 92, 8, 248));
+				const horizontalSlope = right - left;
+				const verticalSlope = down - up;
+				let ambientNormalX = 0;
+				let ambientNormalY = 0;
+				if (ambientTimeSeconds !== undefined) {
+					const normalizedX = x / (this.width - 1);
+					const normalizedY = y / (this.height - 1);
+					const aspectRatio = this.width / this.height;
+					for (const wave of AMBIENT_SURFACE_WAVES) {
+						const phase =
+							TAU *
+								(wave.frequency *
+									(normalizedX * aspectRatio * wave.directionX +
+										normalizedY * wave.directionY) -
+									ambientTimeSeconds * wave.speed) +
+							wave.phase;
+						const normal = Math.cos(phase) * wave.strength;
+						ambientNormalX += normal * wave.directionX;
+						ambientNormalY += normal * wave.directionY;
+					}
+				}
 				const pixelIndex = fieldIndex * 4;
-				pixels[pixelIndex] = shade;
-				pixels[pixelIndex + 1] = shade;
-				pixels[pixelIndex + 2] = shade;
+				pixels[pixelIndex] = Math.round(
+					clamp(128 + horizontalSlope * 92 + ambientNormalX, 8, 248)
+				);
+				pixels[pixelIndex + 1] = Math.round(
+					clamp(128 + verticalSlope * 92 + ambientNormalY, 8, 248)
+				);
+				pixels[pixelIndex + 2] = 128;
 				pixels[pixelIndex + 3] = 255;
 			}
 		}
@@ -94,6 +138,28 @@ export class MistwaterWaterPhysics {
 
 	getHeight(column: number, row: number): number {
 		return this.current[row * this.width + column] ?? 0;
+	}
+
+	sampleHeight(normalizedX: number, normalizedY: number): number {
+		const fieldX = clamp(normalizedX, 0, 1) * (this.width - 1);
+		const fieldY = clamp(normalizedY, 0, 1) * (this.height - 1);
+		const left = Math.floor(fieldX);
+		const top = Math.floor(fieldY);
+		const right = Math.min(left + 1, this.width - 1);
+		const bottom = Math.min(top + 1, this.height - 1);
+		const horizontalMix = fieldX - left;
+		const verticalMix = fieldY - top;
+		const topHeight = lerp(
+			this.current[top * this.width + left],
+			this.current[top * this.width + right],
+			horizontalMix
+		);
+		const bottomHeight = lerp(
+			this.current[bottom * this.width + left],
+			this.current[bottom * this.width + right],
+			horizontalMix
+		);
+		return lerp(topHeight, bottomHeight, verticalMix);
 	}
 
 	getPeak(): number {
@@ -113,4 +179,8 @@ export class MistwaterWaterPhysics {
 
 function clamp(value: number, min: number, max: number): number {
 	return Math.max(min, Math.min(max, value));
+}
+
+function lerp(start: number, end: number, amount: number): number {
+	return start + (end - start) * amount;
 }

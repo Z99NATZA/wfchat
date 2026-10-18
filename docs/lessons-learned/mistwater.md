@@ -84,3 +84,87 @@ Lesson:
 - Keep the pond base limited to depth, color, and submerged detail. Generate
   caustics and surface highlights at runtime, clip them to the shoreline, and
   displace them with the same height field as the water image.
+
+## 2026-10-18 - Periodic contour caustics looked synthetic
+
+Context:
+
+- The neutral pond base exposed the shape and repetition of every procedural
+  lighting layer.
+
+Failed approach:
+
+- Building caustics from several periodic sine contours and encoding both wave
+  slopes into one displacement value.
+
+Problem observed:
+
+- The light formed long repeating loops across the pond, while wave refraction
+  favored a shared diagonal direction.
+
+Root cause:
+
+- Periodic contours lacked irregular cell boundaries, and one displacement
+  channel could not preserve independent horizontal and vertical surface
+  gradients.
+
+Lesson:
+
+- Derive the light field from surface curvature rather than drawing periodic
+  contours. Encode horizontal slope in red and vertical slope in green so
+  displacement follows the local wave normal instead of a shared direction.
+
+## 2026-10-18 - Complete cellular outlines looked like scales
+
+Context:
+
+- Cellular distance fields replaced the pond's repeating sine contours.
+
+Failed approach:
+
+- Drawing every Voronoi boundary with nearly the same opacity across the full
+  water surface.
+
+Problem observed:
+
+- The dense, uniformly lit polygons read as a net or reptile scales instead of
+  intermittent focused light.
+
+Root cause:
+
+- Geometric irregularity alone did not create the sparse, high-contrast energy
+  distribution of natural caustics.
+
+Lesson:
+
+- Do not trace arbitrary geometry to imitate caustics. Combine differently
+  directed gravity and capillary waves, calculate the refractive mapping
+  Jacobian, and turn its compression into finite focused light. This produces
+  changing branches and varied energy without revealing a repeated cell mesh.
+
+## 2026-10-18 - Automatic point impulses looked like rainfall
+
+Context:
+
+- The pond needed to remain alive while the user was not interacting with it.
+
+Failed approach:
+
+- Periodically injecting small disturbances at different points across the
+  pond.
+
+Problem observed:
+
+- Each disturbance expanded as a circular front, so the calm forest pond read
+  as though droplets were continually striking its surface.
+
+Root cause:
+
+- A point impulse is physically equivalent to a local impact even when its
+  amplitude is subtle.
+
+Lesson:
+
+- Reserve point impulses for direct pointer interaction. Drive idle motion with
+  low-amplitude directional wave normals that cross the surface continuously
+  without creating impact centers or concentric rings.

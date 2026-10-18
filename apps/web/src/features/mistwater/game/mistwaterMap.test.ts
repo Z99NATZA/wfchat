@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-	MISTWATER_AMBIENT_IMPULSES,
 	MISTWATER_MAP_COLUMNS,
 	MISTWATER_MAP_ROWS,
 	MISTWATER_SHORELINE,
@@ -22,12 +21,6 @@ describe("Mistwater map data", () => {
 		expect(isMistwaterWaterPoint(MISTWATER_WORLD_WIDTH - 16, 16)).toBe(false);
 		expect(isMistwaterWaterPoint(900, 120)).toBe(false);
 		expect(isMistwaterWaterPoint(900, 515)).toBe(true);
-	});
-
-	it("places every ambient impulse inside the pond", () => {
-		for (const point of MISTWATER_AMBIENT_IMPULSES) {
-			expect(isMistwaterWaterPoint(point.x, point.y)).toBe(true);
-		}
 	});
 
 	it("keeps the editable shoreline and water surface inside the world", () => {

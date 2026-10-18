@@ -30,8 +30,45 @@ describe("Mistwater water physics", () => {
 
 		for (let index = 0; index < pixels.length; index += 4) {
 			expect(pixels[index]).toBe(128);
+			expect(pixels[index + 1]).toBe(128);
+			expect(pixels[index + 2]).toBe(128);
 			expect(pixels[index + 3]).toBe(255);
 		}
+	});
+
+	it("encodes horizontal and vertical wave slopes independently", () => {
+		const water = new MistwaterWaterPhysics(7, 7);
+		const pixels = new Uint8ClampedArray(7 * 7 * 4);
+		water.disturb(0.5, 0.5, 1, 1);
+		water.writeDisplacementMap(pixels);
+
+		const leftOfWave = (3 * 7 + 2) * 4;
+		const aboveWave = (2 * 7 + 3) * 4;
+		expect(pixels[leftOfWave]).toBeGreaterThan(128);
+		expect(pixels[leftOfWave + 1]).toBe(128);
+		expect(pixels[aboveWave]).toBe(128);
+		expect(pixels[aboveWave + 1]).toBeGreaterThan(128);
+	});
+
+	it("keeps idle water moving with continuous directional waves", () => {
+		const water = new MistwaterWaterPhysics(11, 7);
+		const first = new Uint8ClampedArray(11 * 7 * 4);
+		const later = new Uint8ClampedArray(11 * 7 * 4);
+		water.writeDisplacementMap(first, 0);
+		water.writeDisplacementMap(later, 2);
+
+		expect(first).not.toEqual(later);
+		expect(first.some((value, index) => index % 4 < 2 && value !== 128)).toBe(true);
+		expect(water.getPeak()).toBe(0);
+	});
+
+	it("samples the height field smoothly in normalized coordinates", () => {
+		const water = new MistwaterWaterPhysics(5, 5);
+		water.disturb(0.5, 0.5, 1, 1);
+
+		expect(water.sampleHeight(0.5, 0.5)).toBeCloseTo(1);
+		expect(water.sampleHeight(0.625, 0.5)).toBeCloseTo(0.5);
+		expect(water.sampleHeight(-1, -1)).toBe(0);
 	});
 
 	it("resets active waves", () => {
