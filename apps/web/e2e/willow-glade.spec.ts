@@ -1,6 +1,6 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 
-async function openGlade(page: Page) {
+async function mockGuest(page: Page) {
 	await page.route("**/api/**", (route) =>
 		route.fulfill({
 			json: route.request().url().includes("/auth/me")
@@ -8,6 +8,10 @@ async function openGlade(page: Page) {
 				: { personas: [], voice_credits: [] }
 		})
 	);
+}
+
+async function openGlade(page: Page) {
+	await mockGuest(page);
 	await page.goto("/willow-glade");
 	const game = page.getByTestId("willow-game");
 	await expect(game).toHaveAttribute("data-status", "ready");
@@ -109,4 +113,43 @@ test("offers recovery when the 3D graphics context is lost", async ({ page }) =>
 	await page.getByRole("button", { name: "Try again", exact: true }).click();
 	await expect(page.getByTestId("willow-game")).toHaveAttribute("data-status", "ready");
 	await expect(page.getByTestId("willow-game").locator("canvas")).toHaveCount(1);
+});
+
+test("retries a failed tree texture before starting the scene", async ({ page }) => {
+	await mockGuest(page);
+	await page.route("**/images/willow-glade/foliage-cluster-v1.png", (route) => route.abort());
+	await page.goto("/willow-glade");
+	await expect(page.getByRole("alert")).toContainText("The 3D scene could not start");
+	await expect(page.getByTestId("willow-game").locator("canvas")).toHaveCount(0);
+	await page.unroute("**/images/willow-glade/foliage-cluster-v1.png");
+	await page.getByRole("button", { name: "Try again", exact: true }).click();
+	await expect(page.getByTestId("willow-game")).toHaveAttribute("data-status", "ready");
+	await expect(page.getByTestId("willow-game").locator("canvas")).toHaveCount(1);
+});
+
+test("does not mount a late scene after leaving during texture loading", async ({ page }) => {
+	await mockGuest(page);
+	const errors: string[] = [];
+	page.on("pageerror", (error) => errors.push(error.message));
+	let release!: () => void;
+	const gate = new Promise<void>((resolve) => {
+		release = resolve;
+	});
+	await page.route("**/images/willow-glade/foliage-cluster-v1.png", async (route) => {
+		await gate;
+		await route.continue();
+	});
+	const textureRequested = page.waitForRequest("**/images/willow-glade/foliage-cluster-v1.png");
+	await page.goto("/willow-glade", { waitUntil: "domcontentloaded" });
+	await textureRequested;
+	await expect(page.getByTestId("willow-game")).toHaveAttribute("data-status", "loading");
+	await page.getByRole("link", { name: "Chat", exact: true }).click();
+	await expect(page.getByTestId("willow-game")).toHaveCount(0);
+	const textureLoaded = page.waitForResponse("**/images/willow-glade/foliage-cluster-v1.png");
+	release();
+	await textureLoaded;
+	await page.getByRole("link", { name: "Willow Glade", exact: true }).click();
+	await expect(page.getByTestId("willow-game")).toHaveAttribute("data-status", "ready");
+	await expect(page.getByTestId("willow-game").locator("canvas")).toHaveCount(1);
+	expect(errors).toEqual([]);
 });

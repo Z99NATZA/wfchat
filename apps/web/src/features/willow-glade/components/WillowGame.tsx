@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useI18n } from "@/i18n/i18nContext";
 import WillowWorld from "../game/WillowWorld";
+import { disposeTreeTextures, loadTreeTextures } from "../game/willowTrees";
 
 function WillowGame() {
 	const hostRef = useRef<HTMLDivElement>(null);
@@ -12,22 +13,40 @@ function WillowGame() {
 		const host = hostRef.current;
 		if (!host) return;
 		let world: WillowWorld | undefined;
+		let cancelled = false;
 		const frame = window.requestAnimationFrame(() => {
-			try {
-				world = new WillowWorld(host, {
-					onError: () => setStatus("error"),
-					onMove: (point) => {
-						host.dataset.playerX = point.x.toFixed(2);
-						host.dataset.playerY = point.y.toFixed(2);
-					},
-					reducedMotion: window.matchMedia("(prefers-reduced-motion: reduce)").matches
+			void loadTreeTextures()
+				.then((textures) => {
+					if (cancelled) {
+						disposeTreeTextures(textures);
+						return;
+					}
+					try {
+						world = new WillowWorld(
+							host,
+							{
+								onError: () => setStatus("error"),
+								onMove: (point) => {
+									host.dataset.playerX = point.x.toFixed(2);
+									host.dataset.playerY = point.y.toFixed(2);
+								},
+								reducedMotion: window.matchMedia("(prefers-reduced-motion: reduce)")
+									.matches
+							},
+							textures
+						);
+						setStatus("ready");
+					} catch {
+						disposeTreeTextures(textures);
+						setStatus("error");
+					}
+				})
+				.catch(() => {
+					if (!cancelled) setStatus("error");
 				});
-				setStatus("ready");
-			} catch {
-				setStatus("error");
-			}
 		});
 		return () => {
+			cancelled = true;
 			window.cancelAnimationFrame(frame);
 			world?.dispose();
 		};

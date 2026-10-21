@@ -19,6 +19,8 @@ import {
 	makeWoodland
 } from "./willowModels";
 
+import type { TreeTextures } from "./willowTrees";
+
 type WorldCallbacks = {
 	onMove: (point: Point) => void;
 	onError: () => void;
@@ -60,7 +62,8 @@ export default class WillowWorld {
 
 	constructor(
 		private host: HTMLElement,
-		private callbacks: WorldCallbacks
+		private callbacks: WorldCallbacks,
+		treeTextures: TreeTextures
 	) {
 		try {
 			this.renderer = new THREE.WebGLRenderer({
@@ -77,13 +80,13 @@ export default class WillowWorld {
 			this.renderer.shadowMap.needsUpdate = true;
 			this.host.appendChild(this.renderer.domElement);
 			this.renderer.domElement.addEventListener("webglcontextlost", this.contextLost);
-			this.scene.background = new THREE.Color("#cddbc2");
-			this.scene.fog = new THREE.Fog("#cddbc2", 28, 64);
-			this.scene.add(new THREE.HemisphereLight("#f2f0da", "#536b55", 2.2));
-			this.sun = new THREE.DirectionalLight("#fff0cd", 2.7);
+			this.scene.background = new THREE.Color("#d6e2d3");
+			this.scene.fog = new THREE.Fog("#d6e2d3", 24, 60);
+			this.scene.add(new THREE.HemisphereLight("#e7f1fa", "#758260", 2.5));
+			this.sun = new THREE.DirectionalLight("#ffe8c5", 2.3);
 			this.sun.position.set(-9, 16, 8);
 			this.sun.castShadow = true;
-			this.sun.shadow.mapSize.set(2048, 2048);
+			this.sun.shadow.mapSize.set(1024, 1024);
 			Object.assign(this.sun.shadow.camera, {
 				left: -22,
 				right: 22,
@@ -98,7 +101,7 @@ export default class WillowWorld {
 			this.scene.add(this.sun);
 			this.terrain = makeTerrain();
 			this.scene.add(this.terrain);
-			this.canopies = makeWoodland(this.scene);
+			this.canopies = makeWoodland(this.scene, treeTextures);
 			makeMeadow(this.scene, this.wind);
 			makeBench(this.scene);
 			makeRocks(this.scene);
@@ -299,9 +302,10 @@ export default class WillowWorld {
 			const occludes =
 				along > 0 && along < distance && ray.distanceToPoint(canopy.center) < canopy.radius;
 			canopy.mesh.material.opacity = occludes ? 0.22 : 1;
+			canopy.mesh.material.alphaTest = occludes ? 0.06 : 0.3;
 			canopy.mesh.material.depthWrite = !occludes;
-			if (canopy.mesh.castShadow === occludes) this.renderer.shadowMap.needsUpdate = true;
-			canopy.mesh.castShadow = !occludes;
+			if (canopy.shadow.castShadow === occludes) this.renderer.shadowMap.needsUpdate = true;
+			canopy.shadow.castShadow = !occludes;
 		}
 	}
 
