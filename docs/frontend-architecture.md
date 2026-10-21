@@ -70,6 +70,8 @@ Shared layers must not import page- or feature-specific behavior.
   `useCafeRoom` owns transport and `CafeScene` owns simulation/rendering.
 - Mistwater is a client-only feature. Its lazy route owns a Phaser scene and
   local run state, and it does not call the API or import Cafe behavior.
+- Willow Glade is an independent client-only Three.js walking scene, loaded by
+  its own lazy route. Map, collision, art, and runtime stay in `features/willow-glade`.
 - Image bytes, voice providers, models, credentials, and automatic memory remain
   backend-owned.
 

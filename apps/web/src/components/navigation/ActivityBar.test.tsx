@@ -13,6 +13,20 @@ vi.mock("@/i18n/i18nContext", () => ({
 describe("ActivityBar", () => {
 	afterEach(cleanup);
 
+	it("opens Willow Glade independently of the existing games", () => {
+		render(
+			<MemoryRouter initialEntries={["/willow-glade"]}>
+				<ActivityBar />
+			</MemoryRouter>
+		);
+		const link = screen.getByRole("link", { name: "navigation.willowGlade" });
+		expect(link.getAttribute("href")).toBe("/willow-glade");
+		expect(link.getAttribute("aria-current")).toBe("page");
+		expect(
+			screen.getByRole("link", { name: "navigation.mistwater" }).getAttribute("aria-current")
+		).toBeNull();
+	});
+
 	it("links directly to the standalone Mistwater route", () => {
 		render(
 			<MemoryRouter initialEntries={["/mistwater"]}>

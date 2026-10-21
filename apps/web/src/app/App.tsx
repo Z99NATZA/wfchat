@@ -29,6 +29,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 
 const CafeRoomPage = lazy(() => import("@/pages/CafeRoomPage"));
 const MistwaterPage = lazy(() => import("@/pages/MistwaterPage"));
+const WillowGladePage = lazy(() => import("@/pages/WillowGladePage"));
 
 function App() {
 	const settings = useAppSettings();
@@ -346,6 +347,18 @@ function App() {
 					element={
 						<Suspense fallback={cafeLoading}>
 							<MistwaterPage
+								activityBar={activityBar}
+								backgroundImageUrl={settings.backgroundImageUrl}
+								headerControls={headerControls}
+							/>
+						</Suspense>
+					}
+				/>
+				<Route
+					path="/willow-glade"
+					element={
+						<Suspense fallback={cafeLoading}>
+							<WillowGladePage
 								activityBar={activityBar}
 								backgroundImageUrl={settings.backgroundImageUrl}
 								headerControls={headerControls}

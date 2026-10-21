@@ -11,6 +11,7 @@ ActivityBar -> page sidebar -> page header/content/details
 - `chat`: the main chat workspace.
 - `cafe`: the guest-first Aiko Cafe lobby and joinable top-down rooms.
 - `mistwater`: the client-only Mistwater nature arcade game.
+- `willow-glade`: the independent client-only woodland walking scene.
 - `pngtuber`: the PNGTuber workspace used for the current PNG-based visual performer.
 - `model2d`: a Live2D workspace shell with no model runtime.
 
@@ -28,6 +29,8 @@ other paths lazy-load `App.tsx`, which owns the interactive route map through
   values return to the lobby without opening a WebSocket.
 - `/mistwater` opens the standalone Mistwater game. It does not require login
   or load Cafe state.
+- `/willow-glade` opens [Willow Glade](willow-glade.md), a single-map walking
+  scene. It does not require login or load another game's state.
 - `/avatar` redirects to `/avatar/pngtuber`.
 - `/avatar/pngtuber` opens the PNGTuber workspace.
 - `/model` redirects to `/model/live2d`.
