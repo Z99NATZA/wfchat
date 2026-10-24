@@ -12,6 +12,55 @@ export type MistwaterLeafKinematics = {
 	velocityY: number;
 };
 
+export type MistwaterGrassBend = {
+	angle: number;
+	angularVelocity: number;
+};
+
+export function integrateGrassBend(
+	state: MistwaterGrassBend,
+	windForce: number,
+	deltaSeconds: number
+): MistwaterGrassBend {
+	const target = clamp(windForce * 0.055, -0.045, 0.045);
+	let remaining = clamp(deltaSeconds, 0, 0.05);
+	let { angle, angularVelocity } = state;
+	while (remaining > 0) {
+		const step = Math.min(remaining, 1 / 120);
+		const acceleration = (target - angle) * 18 - angularVelocity * 6.5;
+		angularVelocity += acceleration * step;
+		angle += angularVelocity * step;
+		remaining -= step;
+	}
+	return { angle, angularVelocity };
+}
+
+// Coordinates are normalized to the source sprite. Everything at or below
+// the root stays fixed; flexibility grows quadratically toward the tips.
+export function deformGrassPoint(
+	x: number,
+	y: number,
+	rootX: number,
+	rootY: number,
+	bendAngle: number,
+	timeSeconds: number,
+	phase: number
+): { x: number; y: number } {
+	const height = clamp((rootY - y) / rootY, 0, 1);
+	const flexibility = height * height;
+	const groupPhase = (x - rootX) * 7.2 + phase;
+	const flutter =
+		Math.sin(timeSeconds * 0.95 - height * 1.7 + groupPhase) * 0.009 +
+		Math.sin(timeSeconds * 1.65 + groupPhase * 1.6) * 0.003;
+	return {
+		x: x + flexibility * (bendAngle * 1.5 + flutter),
+		y:
+			y +
+			flexibility *
+				(Math.sin(timeSeconds * 0.8 + groupPhase) * 0.002 + Math.abs(bendAngle) * 0.08)
+	};
+}
+
 type Gust = {
 	start: number;
 	duration: number;

@@ -11,7 +11,7 @@ export type MistwaterPoint = {
 
 export type MistwaterFoliageLayer = {
 	id: string;
-	kind: "branch" | "understory";
+	kind: "branch" | "understory" | "grass";
 	x: number;
 	y: number;
 	scale: number;
@@ -85,6 +85,23 @@ export const MISTWATER_SHORELINE: ReadonlyArray<MistwaterPoint> = [
 export const MISTWATER_TREE_OBJECTS: ReadonlyArray<MistwaterTreeObject> = [];
 
 export const MISTWATER_FOLIAGE_LAYERS: ReadonlyArray<MistwaterFoliageLayer> = [
+	{
+		id: "pond-bank-grass",
+		kind: "grass",
+		x: 1_900,
+		y: 1_170,
+		scale: 0.24,
+		originX: 0.5,
+		originY: 0.76,
+		flipX: false,
+		alpha: 1,
+		tint: 0xffffff,
+		rotation: 0,
+		sway: 1,
+		phase: 0.6,
+		depthFactor: 1,
+		depth: 2.65
+	},
 	{
 		id: "upper-left-branch",
 		kind: "branch",

@@ -1,5 +1,15 @@
 # Mistwater
 
+## 2026-10-25 - Whole-sprite grass rotation looked rigid
+
+A grass clump used a damped spring to rotate its complete sprite around a fixed
+root. The motion still looked stiff because every leaf moved together; steady
+frame timing did not make the clump bend.
+
+Deforming a small textured grid preserves the root while increasing flexibility
+toward the tips. Spatially offset motion across the grid lets leaf groups bend
+at different times without moving the underlying ground.
+
 ## 2026-10-17 - Flattened nature map blocked animation and editing
 
 Context:

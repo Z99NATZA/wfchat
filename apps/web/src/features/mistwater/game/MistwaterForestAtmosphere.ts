@@ -1,33 +1,32 @@
 import Phaser from "phaser";
 import {
+	createMistwaterGrass,
+	type MistwaterGrass
+} from "@/features/mistwater/game/MistwaterGrass";
+import {
 	MISTWATER_FOLIAGE_LAYERS,
 	MISTWATER_LEAF_SOURCE_AREAS,
 	MISTWATER_TREE_OBJECTS,
 	MISTWATER_WORLD_HEIGHT,
 	MISTWATER_WORLD_WIDTH,
+	type MistwaterFoliageLayer,
 	type MistwaterTreeObject,
 	isMistwaterWaterPoint
 } from "@/features/mistwater/game/mistwaterMap";
 import {
 	MistwaterWindModel,
-	beerLambertTransmittance,
 	integrateLeafMotion,
-	leafPigmentTint,
-	smoothValueNoise
+	leafPigmentTint
 } from "@/features/mistwater/game/mistwaterForestPhysics";
 
-const DAPPLE_TEXTURE_KEY = "mistwater-forest-dapple";
-const CANOPY_SHADOW_TEXTURE_KEY = "mistwater-canopy-shadow";
 const LEAF_TEXTURE_KEY = "mistwater-falling-leaf";
-const DAPPLE_WIDTH = 288;
-const DAPPLE_HEIGHT = 144;
-const DAPPLE_REFRESH_MS = 100;
 const MAX_LEAVES = 36;
 const TAU = Math.PI * 2;
 
 type FoliageLayer = {
 	image: Phaser.GameObjects.Image;
-	kind: "branch" | "understory";
+	kind: MistwaterFoliageLayer["kind"];
+	grass?: MistwaterGrass;
 	baseScale: number;
 	baseRotation: number;
 	sway: number;
@@ -68,9 +67,7 @@ export function createMistwaterForestAtmosphere(scene: Phaser.Scene): MistwaterF
 		addTreeLayer(scene, treeLayers, tree);
 	}
 	const foliageLayers = createFoliageLayers(scene);
-	const dapple = createDappleLayer(scene);
 	const leaves = createLeafPool(scene);
-	let dappleAccumulator = 0;
 	let leafAccumulator = 0;
 
 	return {
@@ -81,13 +78,7 @@ export function createMistwaterForestAtmosphere(scene: Phaser.Scene): MistwaterF
 			const broadWind = windModel.sample(timeSeconds);
 
 			updateTreeCrowns(treeLayers.values(), windModel, timeSeconds);
-			updateFoliage(foliageLayers, windModel, timeSeconds);
-
-			dappleAccumulator += Math.min(delta, 100);
-			if (dapple && dappleAccumulator >= DAPPLE_REFRESH_MS) {
-				dapple.render(timeSeconds, broadWind.x, broadWind.y);
-				dappleAccumulator %= DAPPLE_REFRESH_MS;
-			}
+			updateFoliage(foliageLayers, windModel, timeSeconds, deltaSeconds);
 
 			leafAccumulator += deltaSeconds * (0.18 + broadWind.gust * 3.2);
 			while (leafAccumulator >= 1) {
@@ -213,10 +204,14 @@ function isTreePositionValid(x: number, y: number): boolean {
 
 function createFoliageLayers(scene: Phaser.Scene): FoliageLayer[] {
 	return MISTWATER_FOLIAGE_LAYERS.map((layer) => {
-		const image = scene.add
-			.image(layer.x, layer.y, `mistwater-${layer.kind}`)
-			.setOrigin(layer.originX, layer.originY)
-			.setScale(layer.scale)
+		const grass = layer.kind === "grass" ? createMistwaterGrass(scene, layer) : undefined;
+		const image =
+			grass?.image ??
+			scene.add
+				.image(layer.x, layer.y, `mistwater-${layer.kind}`)
+				.setOrigin(layer.originX, layer.originY)
+				.setScale(layer.scale);
+		image
 			.setFlipX(layer.flipX)
 			.setRotation(layer.rotation)
 			.setAlpha(layer.alpha)
@@ -225,6 +220,7 @@ function createFoliageLayers(scene: Phaser.Scene): FoliageLayer[] {
 		return {
 			image,
 			kind: layer.kind,
+			grass,
 			baseScale: layer.scale,
 			baseRotation: layer.rotation,
 			sway: layer.sway,
@@ -234,13 +230,22 @@ function createFoliageLayers(scene: Phaser.Scene): FoliageLayer[] {
 	});
 }
 
-function updateFoliage(layers: FoliageLayer[], windModel: MistwaterWindModel, timeSeconds: number) {
+function updateFoliage(
+	layers: FoliageLayer[],
+	windModel: MistwaterWindModel,
+	timeSeconds: number,
+	deltaSeconds: number
+) {
 	for (const layer of layers) {
 		const wind = windModel.sample(
 			timeSeconds,
 			layer.image.x / MISTWATER_WORLD_WIDTH,
 			layer.image.y / MISTWATER_WORLD_HEIGHT
 		);
+		if (layer.grass) {
+			layer.grass.update(timeSeconds, deltaSeconds, wind);
+			continue;
+		}
 		const fineSway = Math.sin(timeSeconds * 1.28 + layer.phase) * (0.18 + wind.strength);
 		const motion = layer.sway * layer.depthFactor;
 		const bend = (wind.x * 0.035 + fineSway * 0.006) * motion;
@@ -251,96 +256,6 @@ function updateFoliage(layers: FoliageLayer[], windModel: MistwaterWindModel, ti
 			layer.baseScale * (1 - wind.strength * 0.003 * motion)
 		);
 	}
-}
-
-function createDappleLayer(scene: Phaser.Scene): {
-	render: (timeSeconds: number, windX: number, windY: number) => void;
-} | null {
-	if (scene.textures.exists(DAPPLE_TEXTURE_KEY)) {
-		scene.textures.remove(DAPPLE_TEXTURE_KEY);
-	}
-	if (scene.textures.exists(CANOPY_SHADOW_TEXTURE_KEY)) {
-		scene.textures.remove(CANOPY_SHADOW_TEXTURE_KEY);
-	}
-	const texture = scene.textures.createCanvas(DAPPLE_TEXTURE_KEY, DAPPLE_WIDTH, DAPPLE_HEIGHT);
-	const shadowTexture = scene.textures.createCanvas(
-		CANOPY_SHADOW_TEXTURE_KEY,
-		DAPPLE_WIDTH,
-		DAPPLE_HEIGHT
-	);
-	if (!texture || !shadowTexture) {
-		return null;
-	}
-	const imageData = texture.context.createImageData(DAPPLE_WIDTH, DAPPLE_HEIGHT);
-	const shadowImageData = shadowTexture.context.createImageData(DAPPLE_WIDTH, DAPPLE_HEIGHT);
-	const landMask = new Uint8Array(DAPPLE_WIDTH * DAPPLE_HEIGHT);
-	for (let y = 0; y < DAPPLE_HEIGHT; y += 1) {
-		for (let x = 0; x < DAPPLE_WIDTH; x += 1) {
-			const worldX = ((x + 0.5) / DAPPLE_WIDTH) * MISTWATER_WORLD_WIDTH;
-			const worldY = ((y + 0.5) / DAPPLE_HEIGHT) * MISTWATER_WORLD_HEIGHT;
-			landMask[y * DAPPLE_WIDTH + x] = isMistwaterWaterPoint(worldX, worldY) ? 0 : 1;
-		}
-	}
-
-	scene.add
-		.image(MISTWATER_WORLD_WIDTH / 2, MISTWATER_WORLD_HEIGHT / 2, CANOPY_SHADOW_TEXTURE_KEY)
-		.setDisplaySize(MISTWATER_WORLD_WIDTH, MISTWATER_WORLD_HEIGHT)
-		.setDepth(2.1)
-		.setBlendMode(Phaser.BlendModes.MULTIPLY)
-		.setAlpha(0.24);
-
-	scene.add
-		.image(MISTWATER_WORLD_WIDTH / 2, MISTWATER_WORLD_HEIGHT / 2, DAPPLE_TEXTURE_KEY)
-		.setDisplaySize(MISTWATER_WORLD_WIDTH, MISTWATER_WORLD_HEIGHT)
-		.setDepth(2.15)
-		.setBlendMode(Phaser.BlendModes.ADD)
-		.setAlpha(0.58);
-
-	const render = (timeSeconds: number, windX: number, windY: number) => {
-		const driftX = timeSeconds * (0.22 + windX * 1.8);
-		const driftY = timeSeconds * (0.08 + windY * 1.5);
-		for (let y = 0; y < DAPPLE_HEIGHT; y += 1) {
-			for (let x = 0; x < DAPPLE_WIDTH; x += 1) {
-				const pixel = y * DAPPLE_WIDTH + x;
-				const offset = pixel * 4;
-				if (landMask[pixel] === 0) {
-					imageData.data[offset + 3] = 0;
-					shadowImageData.data[offset + 3] = 0;
-					continue;
-				}
-
-				const nx = x / DAPPLE_WIDTH;
-				const ny = y / DAPPLE_HEIGHT;
-				const sampleX = nx * 7.4 + driftX;
-				const sampleY = ny * 4.2 + driftY;
-				const canopyDensity =
-					smoothValueNoise(sampleX, sampleY, 0x18ad) * 0.57 +
-					smoothValueNoise(sampleX * 2.15 + 9.3, sampleY * 2.15 - 4.7, 0x5eed) * 0.29 +
-					smoothValueNoise(sampleX * 4.6 - 3.8, sampleY * 4.6 + 6.1, 0xca11) * 0.14;
-				const opticalDepth = 0.16 + canopyDensity * 3.15;
-				const transmission = beerLambertTransmittance(opticalDepth, 0.92);
-				const aperture = smoothStep(0.21, 0.57, transmission);
-				const broadSun = 0.68 + smoothValueNoise(nx * 2.2 + 4, ny * 2.2 - 2, 0x51a7) * 0.32;
-				const alpha = Math.round(aperture * aperture * broadSun * 84);
-				imageData.data[offset] = 164;
-				imageData.data[offset + 1] = 219;
-				imageData.data[offset + 2] = 244;
-				imageData.data[offset + 3] = alpha;
-				const shadow = smoothStep(0.42, 0.78, canopyDensity);
-				shadowImageData.data[offset] = 25;
-				shadowImageData.data[offset + 1] = 57;
-				shadowImageData.data[offset + 2] = 78;
-				shadowImageData.data[offset + 3] = Math.round(shadow * 58);
-			}
-		}
-		texture.context.putImageData(imageData, 0, 0);
-		shadowTexture.context.putImageData(shadowImageData, 0, 0);
-		texture.refresh();
-		shadowTexture.refresh();
-	};
-
-	render(0, 0, 0);
-	return { render };
 }
 
 function createLeafPool(scene: Phaser.Scene): LeafState[] {
@@ -465,9 +380,4 @@ function createSeededRandom(seed: number): () => number {
 		value ^= value + Math.imul(value ^ (value >>> 7), value | 61);
 		return ((value ^ (value >>> 14)) >>> 0) / 4_294_967_296;
 	};
-}
-
-function smoothStep(min: number, max: number, value: number): number {
-	const amount = Phaser.Math.Clamp((value - min) / (max - min), 0, 1);
-	return amount * amount * (3 - 2 * amount);
 }

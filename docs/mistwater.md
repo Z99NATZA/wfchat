@@ -9,7 +9,9 @@ chat, reward, persistence, or backend behavior.
 The route presents a fixed-camera living forest and pond without a visible
 player, standalone trees, decorative flowers, score HUD, gameplay sidebar, or
 movement controls. The forest floor uses dark emerald greens and navy-blue
-shadows, with cool foliage tints, shoreline shading, and dappled light.
+shadows, with cool foliage tints and shoreline shading. Moving land-light and
+canopy-shadow overlays are disabled. A single independently drawn grass clump
+sways gently on the near bank.
 Clicking, dragging, or touching the pond injects ripples directly into the
 water field; low-amplitude directional waves keep the surface moving when there
 is no input.
@@ -18,7 +20,7 @@ is no input.
 
 `apps/web/src/pages/MistwaterPage.tsx` composes the shared app shell and owns the
 React surface. `apps/web/src/features/mistwater/` owns the Phaser scene, pond
-mask, procedural lighting, forest atmosphere, and water simulation. The route
+mask, forest atmosphere, and water simulation. The route
 is lazy-loaded, so Mistwater and Phaser do not add to the initial Chat route
 module graph.
 
@@ -27,7 +29,7 @@ former compact pond world. A repeatable forest-floor tile fills the world; a
 transparent pond-rim layer preserves only the pond, shoreline, and nearby
 scenery from the painted source. The base water has no baked caustic mesh or
 fixed surface highlights; those are runtime effects. Tree trunks, crowns,
-branches, and understory are separate transparent assets under
+branches, understory, and grass are separate transparent assets under
 `apps/web/public/images/mistwater/` rather than pixels flattened into the
 terrain.
 
@@ -73,11 +75,13 @@ fixed-anchor rule. A seeded wind field keeps a low ambient flow and introduces
 smooth intermittent gusts, with foreground leaf tips moving more than distant
 foliage.
 
-Moving dappled light combines advected multi-scale value noise with
-Beer–Lambert optical attenuation, so dense virtual canopy transmits less light
-than gaps. A paired low-opacity multiply layer moves transmitted canopy shadows
-with the same field. Sparse leaves use the local wind with aerodynamic drag,
-downward acceleration, flutter, and chlorophyll-to-carotenoid color variation.
-Both light maps exclude the pond so they do not compete with the water optics.
-Canvas renderers retain isolated foliage, procedural land light, and leaves but
-omit the WebGL water material.
+`apps/web/src/features/mistwater/game/MistwaterGrass.ts` deforms the grass on a
+small textured grid each rendered frame. The root and pixels below it stay
+fixed, while bending grows quadratically toward the tips. Spatially offset
+wave phases give leaf groups different motion. A damped spring follows local
+wind using steps of at most 1/120 second and caps each frame at 50 milliseconds.
+The deformed canvas texture works with both Canvas and WebGL renderers. Grass
+position and size live in the foliage map data rather than the terrain.
+Sparse leaves use the local wind with aerodynamic drag, downward acceleration,
+flutter, and chlorophyll-to-carotenoid color variation. Canvas renderers retain
+isolated foliage, grass motion, and leaves but omit the WebGL water material.

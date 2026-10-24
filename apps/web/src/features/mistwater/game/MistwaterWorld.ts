@@ -19,6 +19,8 @@ const UNDERSTORY_KEY = "mistwater-understory";
 const UNDERSTORY_URL = "/images/mistwater/mistwater-understory-v1.webp?v=fa85aec1de39e840";
 const BRANCH_KEY = "mistwater-branch";
 const BRANCH_URL = "/images/mistwater/mistwater-branch-v1.webp?v=93c8960bf49b0a25";
+const GRASS_KEY = "mistwater-grass";
+const GRASS_URL = "/images/mistwater/mistwater-grass-v1.webp";
 
 export type MistwaterWorld = {
 	update: (time: number, delta: number) => void;
@@ -35,6 +37,7 @@ export function preloadMistwaterWorld(scene: Phaser.Scene) {
 	scene.load.image(TREE_CROWN_KEY, TREE_CROWN_URL);
 	scene.load.image(UNDERSTORY_KEY, UNDERSTORY_URL);
 	scene.load.image(BRANCH_KEY, BRANCH_URL);
+	scene.load.image(GRASS_KEY, GRASS_URL);
 }
 
 export function createMistwaterWorld(scene: Phaser.Scene): MistwaterWorld {
