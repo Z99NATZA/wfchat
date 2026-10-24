@@ -1,5 +1,16 @@
 # Mistwater
 
+## 2026-10-25 - A coarse water mask crossed the painted bank
+
+A sparse shoreline polygon placed the animated pond crop over foreground rocks
+and left visible sections of water outside the effect. The crop also omitted
+the static pond's cool tint, making the polygon boundary visible as a color seam.
+
+Trace the waterline against the actual pond-rim texture in world coordinates,
+share it with pointer validation, and apply the same tint to both copies. A
+stationary shoreline cover blends out refraction and additive light before
+they reach the bank.
+
 ## 2026-10-25 - Whole-sprite grass rotation looked rigid
 
 A grass clump used a damped spring to rotate its complete sprite around a fixed

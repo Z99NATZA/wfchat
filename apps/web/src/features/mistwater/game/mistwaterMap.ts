@@ -50,36 +50,147 @@ export type MistwaterArea = {
 };
 
 export const MISTWATER_WATER_BOUNDS = {
-	x: 680,
-	y: 350,
-	width: 1_600,
-	height: 800
+	x: 620,
+	y: 320,
+	width: 1_660,
+	height: 820
 } as const;
 
-// Shared by pointer validation and the animated water mask.
+// Traced against the pond-rim artwork in world coordinates. Shared by
+// pointer validation, the water mask, and the stationary shoreline blend.
 export const MISTWATER_SHORELINE: ReadonlyArray<MistwaterPoint> = [
-	{ x: 1_010, y: 420 },
-	{ x: 1_230, y: 390 },
-	{ x: 1_470, y: 390 },
-	{ x: 1_700, y: 410 },
-	{ x: 1_910, y: 470 },
-	{ x: 2_100, y: 550 },
-	{ x: 2_220, y: 650 },
-	{ x: 2_250, y: 750 },
-	{ x: 2_160, y: 840 },
-	{ x: 2_030, y: 940 },
-	{ x: 1_840, y: 1_020 },
-	{ x: 1_640, y: 1_080 },
-	{ x: 1_460, y: 1_090 },
-	{ x: 1_230, y: 1_080 },
-	{ x: 1_040, y: 1_000 },
-	{ x: 890, y: 900 },
-	{ x: 770, y: 790 },
-	{ x: 720, y: 680 },
-	{ x: 750, y: 570 },
-	{ x: 830, y: 490 },
-	{ x: 920, y: 440 }
+	{ x: 1_100, y: 378 },
+	{ x: 1_140, y: 364 },
+	{ x: 1_190, y: 357 },
+	{ x: 1_240, y: 353 },
+	{ x: 1_280, y: 352 },
+	{ x: 1_310, y: 358 },
+	{ x: 1_334, y: 370 },
+	{ x: 1_370, y: 373 },
+	{ x: 1_400, y: 376 },
+	{ x: 1_412, y: 390 },
+	{ x: 1_418, y: 408 },
+	{ x: 1_430, y: 416 },
+	{ x: 1_450, y: 422 },
+	{ x: 1_470, y: 435 },
+	{ x: 1_490, y: 445 },
+	{ x: 1_510, y: 446 },
+	{ x: 1_530, y: 445 },
+	{ x: 1_550, y: 453 },
+	{ x: 1_570, y: 457 },
+	{ x: 1_590, y: 466 },
+	{ x: 1_610, y: 475 },
+	{ x: 1_630, y: 484 },
+	{ x: 1_650, y: 497 },
+	{ x: 1_670, y: 498 },
+	{ x: 1_690, y: 500 },
+	{ x: 1_710, y: 497 },
+	{ x: 1_730, y: 508 },
+	{ x: 1_750, y: 512 },
+	{ x: 1_770, y: 520 },
+	{ x: 1_790, y: 522 },
+	{ x: 1_810, y: 540 },
+	{ x: 1_840, y: 537 },
+	{ x: 1_880, y: 540 },
+	{ x: 1_898, y: 560 },
+	{ x: 1_930, y: 570 },
+	{ x: 1_960, y: 574 },
+	{ x: 1_990, y: 590 },
+	{ x: 2_010, y: 603 },
+	{ x: 2_040, y: 613 },
+	{ x: 2_070, y: 628 },
+	{ x: 2_100, y: 637 },
+	{ x: 2_130, y: 648 },
+	{ x: 2_160, y: 671 },
+	{ x: 2_180, y: 685 },
+	{ x: 2_198, y: 699 },
+	{ x: 2_205, y: 721 },
+	{ x: 2_190, y: 733 },
+	{ x: 2_206, y: 750 },
+	{ x: 2_220, y: 764 },
+	{ x: 2_230, y: 788 },
+	{ x: 2_220, y: 803 },
+	{ x: 2_193, y: 809 },
+	{ x: 2_160, y: 816 },
+	{ x: 2_130, y: 837 },
+	{ x: 2_115, y: 865 },
+	{ x: 2_110, y: 885 },
+	{ x: 2_075, y: 905 },
+	{ x: 2_052, y: 921 },
+	{ x: 2_030, y: 936 },
+	{ x: 2_028, y: 950 },
+	{ x: 2_000, y: 955 },
+	{ x: 1_980, y: 970 },
+	{ x: 1_953, y: 979 },
+	{ x: 1_920, y: 992 },
+	{ x: 1_910, y: 1_008 },
+	{ x: 1_885, y: 1_021 },
+	{ x: 1_855, y: 1_030 },
+	{ x: 1_810, y: 1_044 },
+	{ x: 1_780, y: 1_057 },
+	{ x: 1_730, y: 1_075 },
+	{ x: 1_680, y: 1_092 },
+	{ x: 1_640, y: 1_100 },
+	{ x: 1_595, y: 1_091 },
+	{ x: 1_560, y: 1_088 },
+	{ x: 1_510, y: 1_090 },
+	{ x: 1_480, y: 1_075 },
+	{ x: 1_460, y: 1_057 },
+	{ x: 1_430, y: 1_050 },
+	{ x: 1_400, y: 1_045 },
+	{ x: 1_370, y: 1_037 },
+	{ x: 1_340, y: 1_032 },
+	{ x: 1_325, y: 1_013 },
+	{ x: 1_290, y: 1_005 },
+	{ x: 1_255, y: 996 },
+	{ x: 1_215, y: 990 },
+	{ x: 1_180, y: 987 },
+	{ x: 1_150, y: 975 },
+	{ x: 1_120, y: 973 },
+	{ x: 1_095, y: 968 },
+	{ x: 1_084, y: 941 },
+	{ x: 1_064, y: 920 },
+	{ x: 1_040, y: 908 },
+	{ x: 1_012, y: 897 },
+	{ x: 985, y: 893 },
+	{ x: 952, y: 897 },
+	{ x: 926, y: 889 },
+	{ x: 904, y: 879 },
+	{ x: 890, y: 858 },
+	{ x: 864, y: 840 },
+	{ x: 832, y: 827 },
+	{ x: 800, y: 825 },
+	{ x: 787, y: 818 },
+	{ x: 779, y: 800 },
+	{ x: 780, y: 780 },
+	{ x: 767, y: 762 },
+	{ x: 739, y: 746 },
+	{ x: 710, y: 730 },
+	{ x: 696, y: 707 },
+	{ x: 688, y: 686 },
+	{ x: 678, y: 664 },
+	{ x: 670, y: 638 },
+	{ x: 670, y: 607 },
+	{ x: 672, y: 584 },
+	{ x: 680, y: 560 },
+	{ x: 700, y: 542 },
+	{ x: 721, y: 530 },
+	{ x: 754, y: 518 },
+	{ x: 786, y: 507 },
+	{ x: 811, y: 494 },
+	{ x: 847, y: 484 },
+	{ x: 878, y: 475 },
+	{ x: 910, y: 462 },
+	{ x: 940, y: 450 },
+	{ x: 962, y: 442 },
+	{ x: 984, y: 438 },
+	{ x: 1_008, y: 428 },
+	{ x: 1_024, y: 410 },
+	{ x: 1_050, y: 398 },
+	{ x: 1_075, y: 388 }
 ];
+
+export const MISTWATER_SHORE_BLEND_WIDTH = 32;
 
 // The default scene has no standalone trees; runtime editing can add them.
 export const MISTWATER_TREE_OBJECTS: ReadonlyArray<MistwaterTreeObject> = [];
@@ -266,4 +377,26 @@ export function isMistwaterWaterPoint(x: number, y: number): boolean {
 		}
 	}
 	return inside;
+}
+
+// Fade water effects only inside the shoreline so land always stays stationary.
+export function getMistwaterWaterBlend(x: number, y: number): number {
+	if (!isMistwaterWaterPoint(x, y)) {
+		return 0;
+	}
+	let nearestSquared = Infinity;
+	for (let index = 0; index < MISTWATER_SHORELINE.length; index += 1) {
+		const a = MISTWATER_SHORELINE[index];
+		const b = MISTWATER_SHORELINE[(index + 1) % MISTWATER_SHORELINE.length];
+		const dx = b.x - a.x;
+		const dy = b.y - a.y;
+		const lengthSquared = dx * dx + dy * dy;
+		const projection =
+			lengthSquared > 0 ? ((x - a.x) * dx + (y - a.y) * dy) / lengthSquared : 0;
+		const along = Math.max(0, Math.min(1, projection));
+		const distanceSquared = (x - a.x - dx * along) ** 2 + (y - a.y - dy * along) ** 2;
+		nearestSquared = Math.min(nearestSquared, distanceSquared);
+	}
+	const blend = Math.min(1, Math.sqrt(nearestSquared) / MISTWATER_SHORE_BLEND_WIDTH);
+	return blend * blend * (3 - 2 * blend);
 }

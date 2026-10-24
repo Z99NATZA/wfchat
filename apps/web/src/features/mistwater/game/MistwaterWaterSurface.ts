@@ -2,6 +2,7 @@ import Phaser from "phaser";
 import {
 	MISTWATER_SHORELINE,
 	MISTWATER_WATER_BOUNDS,
+	getMistwaterWaterBlend,
 	isMistwaterWaterPoint
 } from "@/features/mistwater/game/mistwaterMap";
 import { MistwaterCaustics } from "@/features/mistwater/game/mistwaterCaustics";
@@ -12,6 +13,7 @@ const WAVE_TEXTURE_KEY = "mistwater-wave-displacement";
 const CAUSTICS_TEXTURE_KEY = "mistwater-refractive-caustics";
 const SPECULAR_TEXTURE_KEY = "mistwater-surface-specular";
 const DEPTH_LIGHT_TEXTURE_KEY = "mistwater-depth-light";
+const SHORE_BLEND_TEXTURE_KEY = "mistwater-shore-blend";
 const FIELD_WIDTH = 96;
 const FIELD_HEIGHT = 44;
 const CAUSTICS_WIDTH = 256;
@@ -34,7 +36,8 @@ export type MistwaterWaterSurface = {
 
 export function createMistwaterWaterSurface(
 	scene: Phaser.Scene,
-	terrainKey: string
+	terrainKey: string,
+	terrainTint = 0xffffff
 ): MistwaterWaterSurface | null {
 	if (scene.game.renderer.type !== Phaser.WEBGL) {
 		return null;
@@ -64,6 +67,7 @@ export function createMistwaterWaterSurface(
 		.image(MISTWATER_WATER_BOUNDS.x, MISTWATER_WATER_BOUNDS.y, terrainKey, WATER_FRAME)
 		.setOrigin(0)
 		.setDepth(1)
+		.setTint(terrainTint)
 		.setAlpha(0.88);
 	const maskSource = createShorelineMask(scene);
 	const waterMask = maskSource.createGeometryMask();
@@ -129,6 +133,7 @@ export function createMistwaterWaterSurface(
 
 	renderDisplacement(0);
 	renderCaustics(0);
+	createShorelineBlend(scene, terrainKey, terrainTint);
 
 	return {
 		update(time: number, delta: number) {
@@ -160,6 +165,61 @@ export function createMistwaterWaterSurface(
 			renderCaustics(0);
 		}
 	};
+}
+
+function createShorelineBlend(scene: Phaser.Scene, terrainKey: string, terrainTint: number) {
+	const bounds = MISTWATER_WATER_BOUNDS;
+	const texture = createCanvasTexture(
+		scene,
+		SHORE_BLEND_TEXTURE_KEY,
+		bounds.width,
+		bounds.height,
+		(context) => {
+			const source = scene.textures.get(terrainKey).getSourceImage() as HTMLImageElement;
+			context.drawImage(
+				source,
+				bounds.x,
+				bounds.y,
+				bounds.width,
+				bounds.height,
+				0,
+				0,
+				bounds.width,
+				bounds.height
+			);
+			// This stationary copy covers refraction and additive light near shore.
+			// An alpha mask at quarter resolution is computed once, then interpolated.
+			const mask = document.createElement("canvas");
+			mask.width = Math.ceil(bounds.width / 4);
+			mask.height = Math.ceil(bounds.height / 4);
+			const maskContext = mask.getContext("2d")!;
+			const pixels = maskContext.createImageData(mask.width, mask.height);
+			for (let y = 0; y < mask.height; y += 1) {
+				for (let x = 0; x < mask.width; x += 1) {
+					const worldX = bounds.x + ((x + 0.5) / mask.width) * bounds.width;
+					const worldY = bounds.y + ((y + 0.5) / mask.height) * bounds.height;
+					const index = (y * mask.width + x) * 4;
+					pixels.data[index] = 255;
+					pixels.data[index + 1] = 255;
+					pixels.data[index + 2] = 255;
+					pixels.data[index + 3] = Math.round(
+						(1 - getMistwaterWaterBlend(worldX, worldY)) * 255
+					);
+				}
+			}
+			maskContext.putImageData(pixels, 0, 0);
+			context.globalCompositeOperation = "destination-in";
+			context.drawImage(mask, 0, 0, bounds.width, bounds.height);
+			context.globalCompositeOperation = "source-over";
+		}
+	);
+	if (!texture) return;
+	scene.add
+		.image(bounds.x, bounds.y, SHORE_BLEND_TEXTURE_KEY)
+		.setOrigin(0)
+		.setDepth(1.3)
+		.setTint(terrainTint);
+	scene.events.once("shutdown", () => scene.textures.remove(SHORE_BLEND_TEXTURE_KEY));
 }
 
 function createWaterLightTextures(scene: Phaser.Scene): Phaser.Textures.CanvasTexture | null {

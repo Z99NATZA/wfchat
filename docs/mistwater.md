@@ -50,8 +50,12 @@ bound accommodates the larger map. The renderer uses antialiasing rather than
 pixel-art sampling so the detailed background remains smooth while scaled.
 
 On WebGL renderers, Mistwater places a cropped copy of the pond over the static
-background and clips it to the shoreline polygon. The same mask contains a
-depth-light gradient, refractive caustics, and clustered surface highlights.
+background and clips it to a shoreline traced against the pond-rim artwork in
+world coordinates. The crop and static pond use the same tint. A stationary
+copy of the shoreline fades refraction and lighting inward over 32 world pixels,
+keeping rocks and the bank still and hiding hard polygon seams. The same mask
+contains a depth-light gradient, refractive caustics, and clustered surface
+highlights.
 The caustic light map is generated at runtime from an analytic spectrum of
 gravity and capillary waves. Surface second derivatives form a refractive
 Jacobian; its compression focuses light into irregular branches whose size,
