@@ -7,7 +7,9 @@ chat, reward, persistence, or backend behavior.
 ## Experience
 
 The route presents a fixed-camera living forest and pond without a visible
-player, decorative flowers, score HUD, gameplay sidebar, or movement controls.
+player, standalone trees, decorative flowers, score HUD, gameplay sidebar, or
+movement controls. The forest floor uses dark emerald greens and navy-blue
+shadows, with cool foliage tints, shoreline shading, and dappled light.
 Clicking, dragging, or touching the pond injects ripples directly into the
 water field; low-amplitude directional waves keep the surface moving when there
 is no input.

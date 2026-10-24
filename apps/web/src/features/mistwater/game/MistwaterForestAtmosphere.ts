@@ -322,13 +322,13 @@ function createDappleLayer(scene: Phaser.Scene): {
 				const aperture = smoothStep(0.21, 0.57, transmission);
 				const broadSun = 0.68 + smoothValueNoise(nx * 2.2 + 4, ny * 2.2 - 2, 0x51a7) * 0.32;
 				const alpha = Math.round(aperture * aperture * broadSun * 84);
-				imageData.data[offset] = 255;
-				imageData.data[offset + 1] = 238;
-				imageData.data[offset + 2] = 184;
+				imageData.data[offset] = 164;
+				imageData.data[offset + 1] = 219;
+				imageData.data[offset + 2] = 244;
 				imageData.data[offset + 3] = alpha;
 				const shadow = smoothStep(0.42, 0.78, canopyDensity);
-				shadowImageData.data[offset] = 72;
-				shadowImageData.data[offset + 1] = 94;
+				shadowImageData.data[offset] = 25;
+				shadowImageData.data[offset + 1] = 57;
 				shadowImageData.data[offset + 2] = 78;
 				shadowImageData.data[offset + 3] = Math.round(shadow * 58);
 			}

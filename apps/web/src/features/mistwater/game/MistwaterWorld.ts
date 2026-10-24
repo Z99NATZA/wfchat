@@ -8,7 +8,7 @@ import {
 } from "@/features/mistwater/game/mistwaterMap";
 
 const FOREST_FLOOR_KEY = "mistwater-forest-floor";
-const FOREST_FLOOR_URL = "/images/mistwater/mistwater-forest-floor-v1.webp?v=cfaa544f4e72ed22";
+const FOREST_FLOOR_URL = "/images/mistwater/mistwater-forest-floor-v2.webp";
 const POND_RIM_KEY = "mistwater-pond-rim";
 const POND_RIM_URL = "/images/mistwater/mistwater-pond-rim-v1.webp?v=24ebd436988c0736";
 const TREE_TRUNK_KEY = "mistwater-tree-trunk";
@@ -42,7 +42,7 @@ export function createMistwaterWorld(scene: Phaser.Scene): MistwaterWorld {
 		.tileSprite(0, 0, MISTWATER_WORLD_WIDTH, MISTWATER_WORLD_HEIGHT, FOREST_FLOOR_KEY)
 		.setOrigin(0)
 		.setDepth(0);
-	scene.add.image(0, 0, POND_RIM_KEY).setOrigin(0).setDepth(0.2);
+	scene.add.image(0, 0, POND_RIM_KEY).setOrigin(0).setDepth(0.2).setTint(0x79b9cf);
 	const waterSurface = createMistwaterWaterSurface(scene, POND_RIM_KEY);
 	const forestAtmosphere = createMistwaterForestAtmosphere(scene);
 
