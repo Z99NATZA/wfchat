@@ -361,7 +361,8 @@ export function renderWorld(
 				sheet = players[pose.action],
 				sourceWidth = "naturalWidth" in sheet ? sheet.naturalWidth : sheet.width,
 				sourceHeight = "naturalHeight" in sheet ? sheet.naturalHeight : sheet.height,
-				compiled = pose.action === "walk" || pose.action === "idle",
+				compiled =
+					pose.action === "walk" || pose.action === "idle" || pose.action === "run",
 				cw = sourceWidth / ANIMATIONS[pose.action].frames,
 				rowRect = ANIMATIONS[pose.action].rowRects?.[pose.row],
 				sourceY = rowRect

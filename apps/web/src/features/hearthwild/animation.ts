@@ -35,10 +35,9 @@ export const ANIMATIONS: Record<
 		loop: true
 	},
 	run: {
-		url: "/images/hearthwild/aiko-run-v1.png",
-		mirroredFrames: ["2:1", "2:2", "2:3"],
-		frames: 4,
-		fps: 12,
+		url: "/images/hearthwild/aiko-run-front-v2.png",
+		frames: 8,
+		fps: 24,
 		rows: [0, 1, 2, 3],
 		loop: true
 	},

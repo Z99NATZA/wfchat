@@ -87,17 +87,22 @@ mirroring, frame rates and playback rules:
 | --- | --- | --- | --- |
 | Idle | `aiko-idle-v2.png` | 2 fps | Breathing loop; 120 ms blink every 5 seconds |
 | Walk | `aiko-walk-{front,back,side}-v2.png` | 16 fps | 8-frame loop; left mirrors right |
-| Run | `aiko-run-v1.png` | 12 fps | Loop |
+| Run | `aiko-run-{front,back,side}-v2.png` | 24 fps | 8-frame grounded loop; left mirrors right |
 | Sword | `aiko-sword-v1.png` | 10 fps | Once per attack |
 | Bow | `aiko-bow-v1.png` | 6.25 fps | Once per attack |
 
-`playerSprites.ts` registers the idle and walk artwork once at load time. Its
+`playerSprites.ts` registers the idle, walk and run artwork once at load time. Its
 96-pixel cells align the head center and foot baseline, normalize body height,
-and use explicit source row boundaries to retain complete boots. Idle uses a
+and use explicit source row boundaries to retain complete boots. Tiny isolated
+opaque fragments are filtered before registration; substantial accessories
+and connected limbs remain. Idle uses a
 fixed lower-body layer so its feet and coat hem do not shuffle during breathing.
 The blink frame is displayed briefly rather than held for a whole breathing
-step. Walking uses separate front, back and right-profile source sheets; the
-same profile supplies the mirrored left view throughout the cycle.
+step. Walking and running use separate front, back and right-profile source sheets;
+the same profile supplies the mirrored left view throughout each cycle. The
+run cycle keeps a supporting boot at the ground baseline and uses restrained
+rear-leg recovery instead of tucked, floating poses. All locomotion actions
+share the same normalized body height and foot anchor.
 
 The renderer selects actual sprite frames rather than translating a standing
 pose. Walking phase advances by distance actually traveled, including collision
@@ -112,7 +117,7 @@ bounds so its weapons and boots remain visible.
 All raster assets were generated with the built-in imagegen tool. Woodland and
 interior prompts are in `art-prompt.txt` and `interior-art-prompt.txt`; Aiko's
 prompts are the adjacent `aiko-<action>-prompt.txt` files for v1 artwork and
-`aiko-<action>-v2-prompt.txt` files for the idle and directional walk artwork. No external asset
+`aiko-<action>-v2-prompt.txt` files for the idle and directional walk/run artwork. No external asset
 host is required at runtime.
 
 ## Focused verification

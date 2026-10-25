@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { measureFrame, framePlacement, PLAYER_FOOT, PLAYER_BODY_HEIGHT } from "./playerSprites";
+import {
+	measureFrame,
+	removeSpecks,
+	framePlacement,
+	PLAYER_FOOT,
+	PLAYER_BODY_HEIGHT
+} from "./playerSprites";
 
 function fixture(offsetX: number, offsetY: number, armWidth = 0) {
 	const w = 120,
@@ -34,6 +40,19 @@ describe("Aiko sprite registration", () => {
 		expect(pb.height).toBeCloseTo(pa.height);
 		expect(pa.x + (ba.anchorX - ba.x) * pa.scale).toBeCloseTo(PLAYER_FOOT.x);
 		expect(pb.x + (bb.anchorX - bb.x) * pb.scale).toBeCloseTo(PLAYER_FOOT.x);
+	});
+	it("removes isolated opaque fragments while retaining connected legs and substantial accessories", () => {
+		const f = fixture(0, 0);
+		f.pixels[(125 * f.w + 110) * 4 + 3] = 255;
+		for (let y = 98; y < 104; y++)
+			for (let x = 94; x < 100; x++) f.pixels[(y * f.w + x) * 4 + 3] = 255;
+		for (let y = 65; y < 70; y++)
+			for (let x = 85; x < 90; x++) f.pixels[(y * f.w + x) * 4 + 3] = 255;
+		removeSpecks(f.pixels, f.w, f.cell);
+		expect(f.pixels[(125 * f.w + 110) * 4 + 3]).toBe(0);
+		expect(f.pixels[(100 * f.w + 96) * 4 + 3]).toBe(0);
+		expect(f.pixels[(67 * f.w + 87) * 4 + 3]).toBe(255);
+		expect(f.pixels[(100 * f.w + 40) * 4 + 3]).toBe(255);
 	});
 	it("ignores faint edge pixels and rejects empty cells instead of drawing missing limbs", () => {
 		const f = fixture(0, 0),

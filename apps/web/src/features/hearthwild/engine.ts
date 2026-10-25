@@ -1,4 +1,11 @@
-import { prepareIdle, prepareWalk, WALK_SOURCES, type PlayerSheets } from "./playerSprites";
+import {
+	prepareIdle,
+	prepareWalk,
+	prepareRun,
+	WALK_SOURCES,
+	RUN_SOURCES,
+	type PlayerSheets
+} from "./playerSprites";
 import { ANIMATIONS, RUN_SPEED, WALK_SPEED, type AnimationName, type Weapon } from "./animation";
 import { woodlandMaterial } from "./appearance";
 import {
@@ -84,6 +91,7 @@ export class HearthwildEngine {
 	) as Record<AnimationName, HTMLImageElement>;
 	private players: PlayerSheets | null = null;
 	private walkExtras = { back: new Image(), side: new Image() };
+	private runExtras = { back: new Image(), side: new Image() };
 	private woodland: HTMLCanvasElement | null = null;
 	private frame = 0;
 	private last = 0;
@@ -122,7 +130,8 @@ export class HearthwildEngine {
 			this.art,
 			this.interior,
 			...Object.values(this.playerImages),
-			...Object.values(this.walkExtras)
+			...Object.values(this.walkExtras),
+			...Object.values(this.runExtras)
 		];
 		const start = () => {
 			if (
@@ -136,7 +145,8 @@ export class HearthwildEngine {
 				this.players = {
 					...this.playerImages,
 					idle: prepareIdle(this.playerImages.idle),
-					walk: prepareWalk({ front: this.playerImages.walk, ...this.walkExtras })
+					walk: prepareWalk({ front: this.playerImages.walk, ...this.walkExtras }),
+					run: prepareRun({ front: this.playerImages.run, ...this.runExtras })
 				};
 			} catch {
 				this.loaded(true);
@@ -159,6 +169,8 @@ export class HearthwildEngine {
 			image.src = ANIMATIONS[key as AnimationName].url;
 		this.walkExtras.back.src = WALK_SOURCES.back;
 		this.walkExtras.side.src = WALK_SOURCES.side;
+		this.runExtras.back.src = RUN_SOURCES.back;
+		this.runExtras.side.src = RUN_SOURCES.side;
 
 		this.update({ ...this.state }, true);
 	}
@@ -356,7 +368,8 @@ export class HearthwildEngine {
 		this.interior.onerror = null;
 		for (const image of [
 			...Object.values(this.playerImages),
-			...Object.values(this.walkExtras)
+			...Object.values(this.walkExtras),
+			...Object.values(this.runExtras)
 		]) {
 			image.onload = null;
 			image.onerror = null;

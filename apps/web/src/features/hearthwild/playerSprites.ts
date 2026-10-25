@@ -8,6 +8,11 @@ export const WALK_SOURCES = {
 	back: "/images/hearthwild/aiko-walk-back-v2.png",
 	side: "/images/hearthwild/aiko-walk-side-v2.png"
 } as const;
+export const RUN_SOURCES = {
+	front: "/images/hearthwild/aiko-run-front-v2.png",
+	back: "/images/hearthwild/aiko-run-back-v2.png",
+	side: "/images/hearthwild/aiko-run-side-v2.png"
+} as const;
 export type PlayerSheet = HTMLImageElement | HTMLCanvasElement;
 export type PlayerSheets = Record<AnimationName, PlayerSheet>;
 export type SourceCell = { x: number; y: number; width: number; height: number };
@@ -65,6 +70,61 @@ export function framePlacement(bounds: SpriteBounds) {
 		scale
 	};
 }
+// Generated sheets can carry tiny opaque fragments from adjacent cells.
+// Keep substantial detached accessories, but discard isolated specks before registration.
+export function removeSpecks(pixels: Uint8ClampedArray, imageWidth: number, cell: SourceCell) {
+	const visited = new Uint8Array(cell.width * cell.height),
+		components: number[][] = [];
+	for (let ly = 0; ly < cell.height; ly++)
+		for (let lx = 0; lx < cell.width; lx++) {
+			const start = ly * cell.width + lx,
+				global = (cell.y + ly) * imageWidth + cell.x + lx;
+			if (visited[start] || pixels[global * 4 + 3] < 48) continue;
+			visited[start] = 1;
+			const component = [start];
+			for (let i = 0; i < component.length; i++) {
+				const pos = component[i],
+					x = pos % cell.width,
+					y = Math.floor(pos / cell.width);
+				for (let dy = -1; dy <= 1; dy++)
+					for (let dx = -1; dx <= 1; dx++) {
+						const nx = x + dx,
+							ny = y + dy;
+						if (nx < 0 || ny < 0 || nx >= cell.width || ny >= cell.height) continue;
+						const n = ny * cell.width + nx;
+						if (visited[n]) continue;
+						const p = (cell.y + ny) * imageWidth + cell.x + nx;
+						if (pixels[p * 4 + 3] < 48) continue;
+						visited[n] = 1;
+						component.push(n);
+					}
+			}
+			components.push(component);
+		}
+	const primary = components.reduce<number[]>(
+		(best, c) => (c.length > best.length ? c : best),
+		[]
+	);
+	let top = cell.height,
+		bottom = 0;
+	for (const pos of primary) {
+		const y = Math.floor(pos / cell.width);
+		top = Math.min(top, y);
+		bottom = Math.max(bottom, y);
+	}
+	const groundBand = top + (bottom - top) * 0.75;
+	for (const component of components) {
+		const nearGround = component.every((pos) => Math.floor(pos / cell.width) > groundBand);
+		const minimum = Math.max(4, primary.length * (nearGround ? 0.03 : 0.005));
+		if (component.length < minimum)
+			for (const pos of component) {
+				const x = pos % cell.width,
+					y = Math.floor(pos / cell.width),
+					p = ((cell.y + y) * imageWidth + cell.x + x) * 4;
+				pixels[p] = pixels[p + 1] = pixels[p + 2] = pixels[p + 3] = 0;
+			}
+	}
+}
 function readSheet(
 	image: HTMLImageElement,
 	columns: number,
@@ -76,15 +136,16 @@ function readSheet(
 	canvas.height = image.naturalHeight;
 	const ctx = canvas.getContext("2d", { willReadFrequently: true })!;
 	ctx.drawImage(image, 0, 0);
-	const pixels = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
-	return Array.from({ length: columns * rows }, (_, i) => {
+	const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height),
+		pixels = imageData.data;
+	const bounds = Array.from({ length: columns * rows }, (_, i) => {
 		const col = i % columns,
 			row = Math.floor(i / columns),
 			x = Math.floor((col * canvas.width) / columns),
 			y = Math.floor(
 				boundaries ? (boundaries[row] * canvas.height) / 1254 : (row * canvas.height) / rows
 			);
-		return measureFrame(pixels, canvas.width, {
+		const cell = {
 			x,
 			y,
 			width: Math.floor(((col + 1) * canvas.width) / columns) - x,
@@ -94,8 +155,12 @@ function readSheet(
 						? (boundaries[row + 1] * canvas.height) / 1254
 						: ((row + 1) * canvas.height) / rows
 				) - y
-		});
+		};
+		removeSpecks(pixels, canvas.width, cell);
+		return measureFrame(pixels, canvas.width, cell);
 	});
+	ctx.putImageData(imageData, 0, 0);
+	return { image: canvas, bounds };
 }
 function makeAtlas(frames: number) {
 	const canvas = document.createElement("canvas");
@@ -107,7 +172,7 @@ function makeAtlas(frames: number) {
 }
 function paintFrame(
 	ctx: CanvasRenderingContext2D,
-	image: HTMLImageElement,
+	image: PlayerSheet,
 	bounds: SpriteBounds,
 	col: number,
 	row: number,
@@ -132,9 +197,11 @@ function paintFrame(
 }
 export function prepareIdle(image: HTMLImageElement) {
 	const { canvas, ctx } = makeAtlas(4),
-		bounds = readSheet(image, 4, 4, [0, 334, 645, 938, 1254]);
+		source = readSheet(image, 4, 4, [0, 334, 645, 938, 1254]),
+		bounds = source.bounds;
 	for (let row = 0; row < 4; row++)
-		for (let col = 0; col < 4; col++) paintFrame(ctx, image, bounds[row * 4 + col], col, row);
+		for (let col = 0; col < 4; col++)
+			paintFrame(ctx, source.image, bounds[row * 4 + col], col, row);
 	// Planted legs and coat hem use one stable layer; breathing affects the upper body.
 	const plantedY = 58;
 	for (let row = 0; row < 4; row++)
@@ -159,18 +226,29 @@ export function prepareIdle(image: HTMLImageElement) {
 		}
 	return canvas;
 }
-export function prepareWalk(images: Record<keyof typeof WALK_SOURCES, HTMLImageElement>) {
-	const { canvas, ctx } = makeAtlas(ANIMATIONS.walk.frames);
+type StrideImages = Record<keyof typeof WALK_SOURCES, HTMLImageElement>;
+function prepareStride(
+	images: StrideImages,
+	frames: number,
+	boundaries: Partial<Record<keyof StrideImages, readonly number[]>> = {}
+) {
+	const { canvas, ctx } = makeAtlas(frames);
 	const bounds = {
-		front: readSheet(images.front, 4, 2, [0, 650, 1254]),
-		back: readSheet(images.back, 4, 2),
-		side: readSheet(images.side, 4, 2)
+		front: readSheet(images.front, 4, 2, boundaries.front),
+		back: readSheet(images.back, 4, 2, boundaries.back),
+		side: readSheet(images.side, 4, 2, boundaries.side)
 	};
 	const sources = ["front", "back", "side", "side"] as const;
 	for (let row = 0; row < 4; row++)
-		for (let col = 0; col < 8; col++) {
+		for (let col = 0; col < frames; col++) {
 			const key = sources[row];
-			paintFrame(ctx, images[key], bounds[key][col], col, row, row === 2);
+			paintFrame(ctx, bounds[key].image, bounds[key].bounds[col], col, row, row === 2);
 		}
 	return canvas;
+}
+export function prepareWalk(images: StrideImages) {
+	return prepareStride(images, ANIMATIONS.walk.frames, { front: [0, 650, 1254] });
+}
+export function prepareRun(images: StrideImages) {
+	return prepareStride(images, ANIMATIONS.run.frames);
 }

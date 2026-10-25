@@ -77,6 +77,22 @@ describe("Aiko animation, sprint and weapons", () => {
 		tick(s, 0.4);
 		expect(s.animationTime).toBe(phase);
 	});
+	it("uses eight running phases with one consistent facing and the same full cycle duration", () => {
+		const s = newGame();
+		s.motion = "run";
+		s.direction = 2;
+		expect(ANIMATIONS.run.frames).toBe(8);
+		expect(ANIMATIONS.run.frames / ANIMATIONS.run.fps).toBeCloseTo(1 / 3);
+		for (let i = 0; i < 8; i++) {
+			s.animationTime = (i + 0.1) / ANIMATIONS.run.fps;
+			expect(playerFrame(s)).toMatchObject({
+				action: "run",
+				frame: i,
+				row: 2,
+				mirror: false
+			});
+		}
+	});
 	it("runs faster than walking, normalizes diagonals, and cannot pass through walls", () => {
 		const walk = newGame(),
 			run = newGame(),
