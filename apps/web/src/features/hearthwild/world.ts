@@ -1,4 +1,5 @@
 export const TILE = 32;
+export const GARDEN_SOUTH_WATER_ROW = 23;
 export type MapId = "garden" | "home" | "dungeon";
 export type ObjectKind =
 	| "tree"
@@ -43,6 +44,8 @@ export function terrain(
 	y: number
 ): "grass" | "path" | "water" | "floor" | "wall" | "stone" {
 	const { width, height } = MAPS[map];
+	if (x < 0 || y < 0 || x >= width || y >= height) return "wall";
+	if (map === "garden" && y >= GARDEN_SOUTH_WATER_ROW) return "water";
 	if (x < 1 || y < 1 || x >= width - 1 || y >= height - 1) return "wall";
 	if (map === "home") return "floor";
 	if (map === "dungeon") {
@@ -138,7 +141,7 @@ export function initialObjects(): Record<MapId, WorldObject[]> {
 		[6, 8]
 	])
 		dungeon.push(obj("rock", x, y));
-	return { garden, home, dungeon };
+	return { garden: garden.filter((o) => o.y < GARDEN_SOUTH_WATER_ROW), home, dungeon };
 }
 export function isSolid(kind: ObjectKind) {
 	return !["crop", "mushroom"].includes(kind);

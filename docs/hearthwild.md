@@ -12,6 +12,13 @@ the app locale.
 ## World and controls
 
 The garden, cottage interior and cavern are separate maps with explicit doors.
+The garden's five southern rows (23–27) are water across the entire map width,
+joining the existing pond and ending the southbound path at the shore. Terrain,
+collision, placement, water animation and the minimap share this water boundary.
+Existing saves remove objects and ground edits from the flooded strip and
+refund materials for player placements. A saved player on the former land is
+moved to the nearest open dry tile while keeping progress and sleep state.
+
 WASD, arrow keys, click-to-walk and a touch directional pad move the character.
 Hold Shift while moving, including click-to-walk, to run at 5.8 tiles per second
 instead of walking at 3.5; diagonals retain the same speed and collision rules.

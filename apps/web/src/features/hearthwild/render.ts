@@ -78,7 +78,11 @@ export function makeGround(map: MapId, s: GameState) {
 	const g = c.getContext("2d")!;
 	for (let y = 0; y < height; y++)
 		for (let x = 0; x < width; x++) {
-			const t = s.tiles[`${map}:${x}:${y}`] ?? terrain(map, x, y),
+			const baseTerrain = terrain(map, x, y),
+				t =
+					baseTerrain === "water"
+						? baseTerrain
+						: (s.tiles[`${map}:${x}:${y}`] ?? baseTerrain),
 				px = x * TILE,
 				py = y * TILE,
 				n = hash(x, y);
@@ -235,8 +239,8 @@ export function renderWorld(
 	const { width, height } = MAPS[s.map];
 	if (s.map === "garden") {
 		// Animated water glints and little windblown petals.
-		for (let y = 16; y < 23; y++)
-			for (let x = 23; x < 33; x++)
+		for (let y = 0; y < height; y++)
+			for (let x = 0; x < width; x++)
 				if (terrain("garden", x, y) === "water" && hash(x, y) > 0.5) {
 					ctx.globalAlpha = 0.25 + 0.15 * Math.sin(time / 1000 + x + y);
 					rect(ctx, "#79a5b2", x * 32 + ((time / 90 + x * 3) % 15), y * 32 + 12, 7, 1);

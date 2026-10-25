@@ -31,7 +31,7 @@ import { useI18n } from "@/i18n/i18nContext";
 import { HearthwildEngine, nearestHint } from "./engine";
 import { newGame, type GameState } from "./state";
 import { PALETTE } from "./appearance";
-import { MAPS, type Tool } from "./world";
+import { MAPS, terrain, type Tool } from "./world";
 import "./hearthwild.css";
 const TOOLS: { id: Tool; icon: typeof Hand; cost?: number; sprite?: number }[] = [
 	{ id: "hand", icon: Hand },
@@ -55,13 +55,19 @@ function MiniMap({ state }: { state: GameState }) {
 		const sx = 114 / width,
 			sy = 84 / height;
 		if (state.map === "garden") {
-			ctx.fillStyle = PALETTE.water;
-			ctx.beginPath();
-			ctx.ellipse(27 * sx, 19 * sy, 5.5 * sx, 4 * sy, 0, 0, Math.PI * 2);
-			ctx.fill();
-			ctx.fillStyle = PALETTE.path;
-			ctx.fillRect(13 * sx, 9 * sy, 3 * sx, 19 * sy);
-			ctx.fillRect(9 * sx, 10 * sy, 24 * sx, 3 * sy);
+			for (let y = 0; y < height; y++)
+				for (let x = 0; x < width; x++) {
+					const t = terrain("garden", x, y);
+					ctx.fillStyle =
+						t === "water"
+							? PALETTE.water
+							: t === "path"
+								? PALETTE.path
+								: t === "wall"
+									? PALETTE.forest
+									: PALETTE.grass[1];
+					ctx.fillRect(x * sx, y * sy, Math.ceil(sx), Math.ceil(sy));
+				}
 			ctx.fillStyle = "#b7754f";
 			ctx.fillRect(11 * sx, 5 * sy, 7 * sx, 4 * sy);
 		}

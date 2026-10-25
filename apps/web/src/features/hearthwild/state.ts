@@ -9,6 +9,7 @@ import {
 	type Motion
 } from "./animation";
 import {
+	GARDEN_SOUTH_WATER_ROW,
 	initialObjects,
 	isFixture,
 	isSolid,
@@ -452,6 +453,46 @@ function portalsReachable(s: GameState) {
 export function serialize(s: GameState) {
 	return JSON.stringify(s);
 }
+// Reconcile existing saves when the former southern land becomes permanent water.
+function migrateSouthernWater(s: GameState) {
+	s.objects.garden = s.objects.garden.filter((o) => {
+		if (o.y < GARDEN_SOUTH_WATER_ROW) return true;
+		if (o.id.startsWith("placed-")) {
+			s.wood += COST[o.kind as Tool] ?? 0;
+			if (o.kind === "crop") s.seeds++;
+		}
+		return false;
+	});
+	for (const [key, value] of Object.entries(s.tiles)) {
+		const [map, , row] = key.split(":");
+		if (map === "garden" && Number(row) >= GARDEN_SOUTH_WATER_ROW) {
+			if (value === "path") s.wood++;
+			delete s.tiles[key];
+		}
+	}
+	if (s.map !== "garden" || s.y < GARDEN_SOUTH_WATER_ROW) return;
+	const { width, height } = MAPS.garden,
+		queue: [number, number][] = [[Math.floor(s.x), Math.floor(s.y)]],
+		seen = new Set<string>();
+	for (let i = 0; i < queue.length; i++) {
+		const [x, y] = queue[i],
+			key = `${x},${y}`;
+		if (x < 0 || y < 0 || x >= width || y >= height || seen.has(key)) continue;
+		seen.add(key);
+		if (!blocked(s, "garden", x + 0.5, y + 0.5)) {
+			s.x = x + 0.5;
+			s.y = y + 0.5;
+			return;
+		}
+		for (const [dx, dy] of [
+			[0, -1],
+			[-1, 0],
+			[1, 0],
+			[0, 1]
+		])
+			queue.push([x + dx, y + dy]);
+	}
+}
 export function deserialize(raw: string | null): GameState {
 	if (!raw) return newGame();
 	try {
@@ -541,6 +582,7 @@ export function deserialize(raw: string | null): GameState {
 			return fresh;
 		if (s.weapon === undefined) s.weapon = "sword";
 		if (s.weapon !== "sword" && s.weapon !== "bow") return fresh;
+		migrateSouthernWater(s);
 		s.motion = "idle";
 		s.animationTime = 0;
 		s.attackDirection = s.direction;

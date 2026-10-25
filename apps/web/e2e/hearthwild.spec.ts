@@ -507,3 +507,72 @@ test("day/night test button previews lighting without changing game time or save
 	await page.getByRole("button", { name: "กลับไปใช้เวลาในเกม", exact: true }).click();
 	await expect(stage).toHaveAttribute("data-lighting-preview", "auto");
 });
+
+test("southern garden becomes open water and old saves return safely to shore", async ({
+	page
+}) => {
+	const state = newGame();
+	state.x = 14.5;
+	state.y = 25.5;
+	state.coins = 432;
+	state.gems = 3;
+	state.objects.garden.push(
+		{ id: "initial-legacy-tree", kind: "tree", x: 7, y: 26 },
+		{ id: "placed-legacy-lantern", kind: "lantern", x: 14, y: 25 }
+	);
+	state.tiles["garden:14:25"] = "path";
+	await page.clock.install();
+	await openWorld(page, state);
+	await page.clock.pauseAt((await page.evaluate(() => Date.now())) + 500);
+	await page.evaluate(() => window.dispatchEvent(new Event("pagehide")));
+	const saved = await savedState(page);
+	expect(saved.y).toBeLessThan(23);
+	expect(saved.coins).toBe(432);
+	expect(saved.gems).toBe(3);
+	expect(saved.wood).toBe(state.wood + 4);
+	expect(saved.objects.garden.every((o) => o.y < 23)).toBe(true);
+	expect(saved.tiles["garden:14:25"]).toBeUndefined();
+	const canvas = page.getByTestId("hearthwild-canvas");
+	const water = await page.evaluate(async () => {
+		const renderPath = "/src/features/hearthwild/render.ts",
+			{ makeGround } = await import(renderPath);
+		const s = JSON.parse(localStorage.getItem("wfchat.hearthwild.v1")!);
+		s.tiles["garden:14:25"] = "path";
+		const ground = makeGround("garden", s) as HTMLCanvasElement,
+			ctx = ground.getContext("2d")!;
+		const southern = Array.from({ length: 38 }, (_, x) =>
+			Array.from(ctx.getImageData(x * 32 + 16, 26 * 32 + 16, 1, 1).data).slice(0, 3)
+		);
+		const stalePath = Array.from(ctx.getImageData(14 * 32 + 16, 25 * 32 + 16, 1, 1).data).slice(
+			0,
+			3
+		);
+		const map = document.querySelector<HTMLCanvasElement>(".hw-minimap canvas")!,
+			m = map.getContext("2d")!;
+		const minimap = Array.from({ length: 38 }, (_, x) =>
+			Array.from(m.getImageData(x * 3 + 1, 82, 1, 1).data).slice(0, 3)
+		);
+		return { southern, stalePath, minimap };
+	});
+	for (const [r, g, b] of [...water.southern, ...water.minimap, water.stalePath]) {
+		expect(b).toBeGreaterThan(g);
+		expect(g).toBeGreaterThan(r);
+	}
+	await page.getByTestId("hearthwild-stage").focus();
+	await page.keyboard.down("s");
+	await page.clock.runFor(800);
+	await page.keyboard.up("s");
+	await page.clock.runFor(100);
+	await page.evaluate(() => window.dispatchEvent(new Event("pagehide")));
+	expect((await savedState(page)).y).toBeLessThan(23);
+	await page.getByRole("button", { name: "Place lantern", exact: true }).click();
+	const s = await savedState(page),
+		box = (await canvas.boundingBox())!,
+		view = viewFor(s, box.width, box.height, 1.2);
+	await canvas.click({
+		position: { x: (14.5 * 32 - view.cameraX) * 1.2, y: (23.5 * 32 - view.cameraY) * 1.2 }
+	});
+	expect((await savedState(page)).wood).toBe(saved.wood);
+	await page.getByRole("button", { name: "Explore", exact: true }).click();
+	await page.screenshot({ path: "test-results/hearthwild-southern-water.png" });
+});
