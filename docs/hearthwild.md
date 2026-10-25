@@ -77,6 +77,20 @@ preserves wood, roofs and light sources. `appearance.ts` defines deterministic
 tree width and height variation from object coordinates. Tree sprites remain
 stationary and keep their grid anchor and collision tile at the trunk.
 
+Between 18:00 and 06:00, the garden has a soft pool of visibility centered on
+Aiko's body. The clear inner radius is 0.75 tiles and fades into the dark
+ambient scene by 4.5 tiles. Distant scenery retains a dim blue-green silhouette
+for navigation; the night edge vignette is limited to avoid black corners.
+The pool follows world position and scales with camera zoom. Existing lantern
+glows remain visible. `lighting.ts` owns this garden overlay; daytime and the
+cottage/cavern lighting retain their separate rendering behavior.
+The Light test control under the journal switches the rendered lighting between
+day and night. Auto restores the game clock. This temporary preview changes no
+simulation time, sleepiness, crop growth or save data; it resets on leaving or
+reloading the game.
+
+
+
 Aiko is the playable character, based on the main app's
 `apps/web/public/images/aiko-avatar.png`: navy-black hair with blue streaks,
 side braid, blue-violet eyes and blue jewelry, with an ivory and navy adventurer

@@ -589,5 +589,11 @@
 	"hearthwild.run": "Run",
 	"hearthwild.weapons": "Weapons",
 	"hearthwild.weapon.sword": "Sword",
-	"hearthwild.weapon.bow": "Bow"
+	"hearthwild.weapon.bow": "Bow",
+	"hearthwild.lighting.test": "Light test",
+	"hearthwild.lighting.toggle": "Toggle day/night lighting (test)",
+	"hearthwild.lighting.day": "Day",
+	"hearthwild.lighting.night": "Night",
+	"hearthwild.lighting.auto": "Auto",
+	"hearthwild.lighting.reset": "Follow the game clock"
 }

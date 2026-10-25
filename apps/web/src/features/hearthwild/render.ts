@@ -1,3 +1,4 @@
+import { drawGardenNight, lightingMinutes, type LightingPreview } from "./lighting";
 import { PLAYER_CELL, PLAYER_FOOT, type PlayerSheets } from "./playerSprites";
 import { ANIMATIONS, playerFrame } from "./animation";
 import { PALETTE, treeAppearance } from "./appearance";
@@ -221,7 +222,8 @@ export function renderWorld(
 	time: number,
 	tool: Tool,
 	hover: [number, number] | null,
-	grid: boolean
+	grid: boolean,
+	lightingPreview: LightingPreview = "auto"
 ) {
 	ctx.imageSmoothingEnabled = false;
 	ctx.clearRect(0, 0, v.width, v.height);
@@ -418,10 +420,19 @@ export function renderWorld(
 			ctx.globalAlpha = 1;
 		}
 	}
-	const hour = (s.minutes / 60) % 24;
+	const minutes = lightingMinutes(s.minutes, lightingPreview);
+	const gardenNight = drawGardenNight(
+		ctx,
+		{ map: s.map, x: s.x, y: s.y, minutes },
+		width * TILE,
+		height * TILE
+	);
+	const hour = (minutes / 60) % 24;
 	if (s.map === "dungeon" || hour >= 18 || hour < 6) {
-		ctx.fillStyle = s.map === "dungeon" ? "#0b142d77" : "#14264488";
-		ctx.fillRect(0, 0, width * 32, height * 32);
+		if (!gardenNight) {
+			ctx.fillStyle = s.map === "dungeon" ? "#0b142d77" : "#14264488";
+			ctx.fillRect(0, 0, width * TILE, height * TILE);
+		}
 		for (const o of s.objects[s.map])
 			if (o.kind === "lantern" || o.kind === "crystal") {
 				const x = (o.x + 0.5) * 32,
@@ -443,7 +454,7 @@ export function renderWorld(
 		v.width * 0.65
 	);
 	vignette.addColorStop(0, "#13251a00");
-	vignette.addColorStop(1, "#101d2055");
+	vignette.addColorStop(1, gardenNight ? "rgba(4,11,23,0.12)" : "#101d2055");
 	ctx.fillStyle = vignette;
 	ctx.fillRect(0, 0, v.width, v.height);
 }

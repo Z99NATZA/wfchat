@@ -1,3 +1,4 @@
+import type { LightingPreview } from "./lighting";
 import {
 	prepareIdle,
 	prepareWalk,
@@ -26,7 +27,13 @@ import {
 } from "./state";
 import { INTERIOR_URL, ART_URL, makeGround, renderWorld, viewFor, type View } from "./render";
 import { MAPS, TILE, type Tool } from "./world";
-export type GameOptions = { tool: Tool; grid: boolean; paused: boolean; zoom: number };
+export type GameOptions = {
+	tool: Tool;
+	grid: boolean;
+	paused: boolean;
+	zoom: number;
+	lightingPreview: LightingPreview;
+};
 export function findPath(s: GameState, x: number, y: number): [number, number][] {
 	const start: [number, number] = [Math.floor(s.x), Math.floor(s.y)],
 		goal = [Math.floor(x), Math.floor(y)];
@@ -76,7 +83,13 @@ export function followPath(s: GameState, path: [number, number][], dt: number, r
 }
 export class HearthwildEngine {
 	state: GameState;
-	options: GameOptions = { tool: "hand", grid: false, paused: false, zoom: 1.2 };
+	options: GameOptions = {
+		tool: "hand",
+		grid: false,
+		paused: false,
+		zoom: 1.2,
+		lightingPreview: "auto"
+	};
 	private keys = new Set<string>();
 	private path: [number, number][] = [];
 	private hover: [number, number] | null = null;
@@ -234,7 +247,8 @@ export class HearthwildEngine {
 				now,
 				this.options.tool,
 				this.hover,
-				this.options.grid
+				this.options.grid,
+				this.options.lightingPreview
 			);
 		}
 		if (now - this.lastUi > 160) {
@@ -270,7 +284,8 @@ export class HearthwildEngine {
 	private keyDown = (e: KeyboardEvent) => {
 		if (
 			e.target instanceof HTMLElement &&
-			(e.target.matches("input,textarea,select") || e.target.closest('[role="dialog"]'))
+			(e.target.matches("input,textarea,select,button") ||
+				e.target.closest('[role="dialog"]'))
 		)
 			return;
 		const key = e.key.toLowerCase();

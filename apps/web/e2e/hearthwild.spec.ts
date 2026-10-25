@@ -364,3 +364,146 @@ test("Aiko running keeps a supporting sole on the shared ground plane in all dir
 		}
 	await page.screenshot({ path: "test-results/hearthwild-aiko-run-contact.png" });
 });
+
+test("garden night visibility is brighter near Aiko, dim but readable outside and follows world coordinates", async ({
+	page
+}) => {
+	const state = newGame();
+	state.minutes = 1200;
+	state.x = 18.5;
+	state.y = 12.5;
+	await page.clock.install();
+	await openWorld(page, state);
+	await page.clock.pauseAt((await page.evaluate(() => Date.now())) + 1000);
+	const samples = await page.evaluate(async () => {
+		const modulePath = "/src/features/hearthwild/lighting.ts";
+		const { drawGardenNight } = await import(modulePath);
+		const s = { map: "garden", minutes: 1200, x: 5, y: 244 / 32 };
+		const canvas = document.createElement("canvas");
+		canvas.width = 960;
+		canvas.height = 672;
+		const ctx = canvas.getContext("2d")!;
+		const brightness = (x: number, y: number) => {
+			const c = ctx.getImageData(x, y, 1, 1).data;
+			return (c[0] + c[1] + c[2]) / 3;
+		};
+		const paint = (zoom = 1, cameraX = 0, cameraY = 0) => {
+			ctx.fillStyle = "#808080";
+			ctx.fillRect(0, 0, 960, 672);
+			ctx.save();
+			ctx.scale(zoom, zoom);
+			ctx.translate(-cameraX, -cameraY);
+			drawGardenNight(ctx, s, 960, 672);
+			ctx.restore();
+		};
+		paint();
+		const night = {
+			near: brightness(160, 224),
+			middle: brightness(224, 224),
+			far: brightness(528, 224)
+		};
+		s.x += 8;
+		paint();
+		const moved = { near: brightness(416, 224), old: brightness(160, 224) };
+		paint(1.5, 80, 20);
+		const zoomed = brightness((416 - 80) * 1.5, (224 - 20) * 1.5);
+		s.minutes = 720;
+		paint();
+		const day = { near: brightness(416, 224), far: brightness(528, 224) };
+		return { night, moved, zoomed, day };
+	});
+	expect(samples.night.near).toBeGreaterThan(samples.night.far * 2.2);
+	expect(samples.night.near).toBeGreaterThan(samples.night.middle);
+	expect(samples.night.middle).toBeGreaterThan(samples.night.far);
+	expect(samples.night.far).toBeGreaterThan(25);
+	expect(samples.night.far).toBeLessThan(65);
+	expect(samples.moved.near).toBeGreaterThan(samples.moved.old * 2.2);
+	expect(Math.abs(samples.zoomed - samples.night.near)).toBeLessThan(2);
+	expect(samples.day).toEqual({ near: 128, far: 128 });
+	await page.screenshot({ path: "test-results/hearthwild-night-player-light.png" });
+	await page.getByTestId("hearthwild-stage").focus();
+	await page.keyboard.down("d");
+	await page.clock.runFor(600);
+	await page.keyboard.up("d");
+	await page.clock.runFor(160);
+	await page.keyboard.press("f");
+	expect((await savedState(page)).x).toBeGreaterThan(20);
+	await page.getByRole("button", { name: "Zoom in", exact: true }).click();
+	await page.clock.runFor(160);
+	await page.screenshot({ path: "test-results/hearthwild-night-follow-zoom.png" });
+});
+
+test("day/night test button previews lighting without changing game time or saves", async ({
+	page
+}) => {
+	await page.clock.install();
+	await openWorld(page);
+	await page.clock.pauseAt((await page.evaluate(() => Date.now())) + 1000);
+	const stage = page.getByTestId("hearthwild-stage"),
+		toggle = page.getByRole("button", {
+			name: "Toggle day/night lighting (test)",
+			exact: true
+		});
+	const luminance = () =>
+		page.getByTestId("hearthwild-canvas").evaluate((el) => {
+			const canvas = el as HTMLCanvasElement,
+				p = canvas.getContext("2d")!.getImageData(0, 0, canvas.width, canvas.height).data;
+			let sum = 0,
+				n = 0;
+			for (let i = 0; i < p.length; i += 4 * 64) {
+				sum += (p[i] + p[i + 1] + p[i + 2]) / 3;
+				n++;
+			}
+			return sum / n;
+		});
+	await page.evaluate(() => window.dispatchEvent(new Event("pagehide")));
+	const before = await savedState(page);
+	await expect(stage).toHaveAttribute("data-lighting-preview", "auto");
+	await toggle.focus();
+	await page.keyboard.press("Enter");
+	await page.clock.runFor(160);
+	await expect(stage).toHaveAttribute("data-lighting-preview", "night");
+	await expect(toggle).toHaveAttribute("aria-pressed", "true");
+	const night = await luminance();
+	await page.screenshot({ path: "test-results/hearthwild-light-test-night.png" });
+	await toggle.click();
+	await page.clock.runFor(160);
+	await expect(stage).toHaveAttribute("data-lighting-preview", "day");
+	await expect(toggle).toHaveAttribute("aria-pressed", "false");
+	const day = await luminance();
+	expect(day).toBeGreaterThan(night * 1.4);
+	await page.getByRole("button", { name: "Follow the game clock", exact: true }).click();
+	await page.clock.runFor(160);
+	await expect(stage).toHaveAttribute("data-lighting-preview", "auto");
+	await toggle.click();
+	await page.clock.runFor(160);
+	await expect(stage).toHaveAttribute("data-lighting-preview", "night");
+	await page.evaluate(() => window.dispatchEvent(new Event("pagehide")));
+	const after = await savedState(page);
+	expect(after.minutes - before.minutes).toBeGreaterThanOrEqual(0);
+	expect(after.minutes - before.minutes).toBeLessThan(2);
+	expect(before.awake - after.awake).toBeLessThan(1.5);
+	expect(after.objects).toEqual(before.objects);
+	expect(after.food).toBe(before.food);
+	expect(after.sleep).toBe(0);
+	expect(after).not.toHaveProperty("lightingPreview");
+	await expect(page.locator(".hw-clock b")).toHaveText(/^06:/);
+	await page.clock.resume();
+	await page.reload();
+	await expect(stage).toHaveAttribute("data-lighting-preview", "auto");
+	await page.getByRole("combobox", { name: "Language", exact: true }).selectOption("th");
+	await page.setViewportSize({ width: 390, height: 844 });
+	const thaiToggle = page.getByRole("button", {
+		name: "สลับกลางวัน/กลางคืน (ทดสอบ)",
+		exact: true
+	});
+	await expect(thaiToggle).toBeVisible();
+	await thaiToggle.click();
+	await expect(stage).toHaveAttribute("data-lighting-preview", "night");
+	const bounds = (await page.locator(".hw-light-preview").boundingBox())!;
+	expect(bounds.x).toBeGreaterThanOrEqual(48);
+	expect(bounds.x + bounds.width).toBeLessThanOrEqual(390);
+	await page.screenshot({ path: "test-results/hearthwild-light-test-mobile.png" });
+	await page.getByRole("button", { name: "กลับไปใช้เวลาในเกม", exact: true }).click();
+	await expect(stage).toHaveAttribute("data-lighting-preview", "auto");
+});

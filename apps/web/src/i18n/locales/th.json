@@ -589,5 +589,11 @@
 	"hearthwild.run": "วิ่ง",
 	"hearthwild.weapons": "อาวุธ",
 	"hearthwild.weapon.sword": "ดาบ",
-	"hearthwild.weapon.bow": "ธนู"
+	"hearthwild.weapon.bow": "ธนู",
+	"hearthwild.lighting.test": "ทดสอบแสง",
+	"hearthwild.lighting.toggle": "สลับกลางวัน/กลางคืน (ทดสอบ)",
+	"hearthwild.lighting.day": "กลางวัน",
+	"hearthwild.lighting.night": "กลางคืน",
+	"hearthwild.lighting.auto": "ตามเวลา",
+	"hearthwild.lighting.reset": "กลับไปใช้เวลาในเกม"
 }

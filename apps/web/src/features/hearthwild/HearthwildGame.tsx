@@ -1,3 +1,4 @@
+import { isNightTime, lightingMinutes, type LightingPreview } from "./lighting";
 import { useEffect, useRef, useState } from "react";
 import {
 	Backpack,
@@ -91,6 +92,7 @@ export default function HearthwildGame() {
 		[panel, setPanel] = useState<"help" | "bag" | null>(null),
 		[journal, setJournal] = useState(false),
 		[zoom, setZoom] = useState(1.2),
+		[lightingPreview, setLightingPreview] = useState<LightingPreview>("auto"),
 		[loading, setLoading] = useState(true),
 		[error, setError] = useState(false),
 		[retry, setRetry] = useState(0),
@@ -98,6 +100,7 @@ export default function HearthwildGame() {
 		[muted, setMuted] = useState(true);
 	const audio = useRef<AudioContext | null>(null);
 	const blocked = paused || panel !== null;
+	const previewNight = isNightTime(lightingMinutes(state.minutes, lightingPreview));
 	useEffect(() => {
 		if (!canvas.current || !root.current) return;
 		const game = new HearthwildEngine(
@@ -119,8 +122,8 @@ export default function HearthwildGame() {
 		};
 	}, [retry]);
 	useEffect(() => {
-		engine.current?.configure({ tool, grid, paused: blocked, zoom });
-	}, [tool, grid, blocked, zoom, retry]);
+		engine.current?.configure({ tool, grid, paused: blocked, zoom, lightingPreview });
+	}, [tool, grid, blocked, zoom, lightingPreview, retry]);
 	useEffect(
 		() => () => {
 			void audio.current?.close();
@@ -171,6 +174,7 @@ export default function HearthwildGame() {
 			data-motion={state.motion}
 			data-animation={state.attack > 0 ? state.weapon : state.motion}
 			data-weapon={state.weapon}
+			data-lighting-preview={lightingPreview}
 			onKeyDown={(e) => {
 				if (e.key === "Escape") {
 					if (panel) setPanel(null);
@@ -216,6 +220,43 @@ export default function HearthwildGame() {
 					</span>
 					<ChevronDown size={14} />
 				</button>
+				<div
+					className="hw-light-preview hw-panel"
+					role="group"
+					aria-label={tr("lighting.test")}
+				>
+					<button
+						aria-label={tr("lighting.toggle")}
+						title={tr("lighting.toggle")}
+						aria-pressed={previewNight}
+						disabled={loading || error || state.sleep > 0}
+						onClick={() => {
+							setLightingPreview((current) =>
+								isNightTime(lightingMinutes(state.minutes, current))
+									? "day"
+									: "night"
+							);
+							root.current?.focus({ preventScroll: true });
+						}}
+					>
+						{previewNight ? <Moon size={15} /> : <Sun size={15} />}
+						<span>{tr(previewNight ? "lighting.night" : "lighting.day")}</span>
+						<small>{tr("lighting.test")}</small>
+					</button>
+					{lightingPreview !== "auto" && (
+						<button
+							className="hw-light-auto"
+							aria-label={tr("lighting.reset")}
+							title={tr("lighting.reset")}
+							onClick={() => {
+								setLightingPreview("auto");
+								root.current?.focus({ preventScroll: true });
+							}}
+						>
+							{tr("lighting.auto")}
+						</button>
+					)}
+				</div>
 				{journal && (
 					<div className="hw-journal hw-panel">
 						<span className="hw-eyebrow">{tr("firstSteps")}</span>
@@ -585,6 +626,7 @@ export default function HearthwildGame() {
 											tool,
 											grid,
 											paused: false,
+											lightingPreview,
 											zoom
 										});
 										act("eat");
