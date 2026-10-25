@@ -73,6 +73,7 @@ adapters. Provider adapters should not depend on frontend concepts.
 - [Chat voice](chat-voice.md)
 - [Aiko Cafe](aiko-cafe.md)
 - [Mistwater](mistwater.md)
+- [Hearthwild](hearthwild.md)
 - [Sync system](sync-system.md)
 - [Database schema](database-schema.md)
 - [Automatic memory](automatic-memory.md) - storage, automatic capture, and

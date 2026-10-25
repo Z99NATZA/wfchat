@@ -1,9 +1,17 @@
-import { Coffee, Droplets, Layers, MessageCircle, type LucideIcon, UserRound } from "lucide-react";
+import {
+	Coffee,
+	Droplets,
+	TreePine,
+	Layers,
+	MessageCircle,
+	type LucideIcon,
+	UserRound
+} from "lucide-react";
 import { NavLink } from "react-router-dom";
 import { useI18n } from "@/i18n/i18nContext";
 import { cn } from "@/utils/classNames";
 
-export type AppPageId = "chat" | "cafe" | "mistwater" | "pngtuber" | "model2d";
+export type AppPageId = "chat" | "cafe" | "mistwater" | "hearthwild" | "pngtuber" | "model2d";
 
 const navItems: Array<{ id: AppPageId; labelKey: string; icon: LucideIcon; path: string }> = [
 	{ id: "chat", labelKey: "navigation.chat", icon: MessageCircle, path: "/chat" },
@@ -14,6 +22,7 @@ const navItems: Array<{ id: AppPageId; labelKey: string; icon: LucideIcon; path:
 		icon: Droplets,
 		path: "/mistwater"
 	},
+	{ id: "hearthwild", labelKey: "navigation.hearthwild", icon: TreePine, path: "/hearthwild" },
 	{ id: "pngtuber", labelKey: "navigation.pngtuber", icon: UserRound, path: "/avatar/pngtuber" },
 	{ id: "model2d", labelKey: "navigation.model2d", icon: Layers, path: "/model/live2d" }
 ];

@@ -10,6 +10,7 @@ ActivityBar -> page sidebar -> page header/content/details
 
 - `chat`: the main chat workspace.
 - `cafe`: the guest-first Aiko Cafe lobby and joinable top-down rooms.
+- `hearthwild`: the standalone garden, cottage and dungeon adventure.
 - `mistwater`: the client-only Mistwater nature arcade game.
 - `pngtuber`: the PNGTuber workspace used for the current PNG-based visual performer.
 - `model2d`: a Live2D workspace shell with no model runtime.
@@ -28,6 +29,7 @@ other paths lazy-load `App.tsx`, which owns the interactive route map through
   values return to the lobby without opening a WebSocket.
 - `/mistwater` opens the standalone Mistwater game. It does not require login
   or load Cafe state.
+- `/hearthwild` opens the client-only [Hearthwild](hearthwild.md) game without login.
 - `/avatar` redirects to `/avatar/pngtuber`.
 - `/avatar/pngtuber` opens the PNGTuber workspace.
 - `/model` redirects to `/model/live2d`.
