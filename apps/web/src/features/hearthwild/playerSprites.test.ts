@@ -3,8 +3,11 @@ import {
 	measureFrame,
 	removeSpecks,
 	framePlacement,
+	sharedFrameHorizontalScale,
+	sharedFrameScale,
 	PLAYER_FOOT,
-	PLAYER_BODY_HEIGHT
+	PLAYER_BODY_HEIGHT,
+	PLAYER_HEAD_WIDTH
 } from "./playerSprites";
 
 function fixture(offsetX: number, offsetY: number, armWidth = 0) {
@@ -24,12 +27,43 @@ function fixture(offsetX: number, offsetY: number, armWidth = 0) {
 	return { pixels: p, w, cell: { x: 0, y: 0, width: w, height: h } };
 }
 describe("Aiko sprite registration", () => {
+	it("uses one stable scale across compact and extended animation poses", () => {
+		const compact = {
+			...measureFrame(fixture(0, 0).pixels, 120, fixture(0, 0).cell),
+			height: 100
+		};
+		const extended = { ...compact, height: 110 };
+		const scale = sharedFrameScale([compact, extended]),
+			compactPlacement = framePlacement(compact, scale),
+			extendedPlacement = framePlacement(extended, scale);
+		expect(compactPlacement.scale).toBe(extendedPlacement.scale);
+		expect(compactPlacement.height).toBeLessThan(PLAYER_BODY_HEIGHT);
+		expect(extendedPlacement.height).toBeGreaterThan(PLAYER_BODY_HEIGHT);
+		expect((compactPlacement.height + extendedPlacement.height) / 2).toBeCloseTo(
+			PLAYER_BODY_HEIGHT
+		);
+	});
+	it("balances narrow and wide source art around one perceived head width", () => {
+		const base = measureFrame(fixture(0, 0).pixels, 120, fixture(0, 0).cell),
+			slim = { ...base, headWidth: 14 },
+			wide = { ...base, headWidth: 45 },
+			verticalScale = sharedFrameScale([base]);
+		const slimScale = sharedFrameHorizontalScale([slim], verticalScale),
+			wideScale = sharedFrameHorizontalScale([wide], verticalScale);
+		expect(slimScale).toBeGreaterThan(1);
+		expect(wideScale).toBeLessThan(1);
+		expect(slim.headWidth * verticalScale * slimScale).toBeLessThanOrEqual(PLAYER_HEAD_WIDTH);
+		expect(
+			Math.abs(wide.headWidth * verticalScale * wideScale - PLAYER_HEAD_WIDTH)
+		).toBeLessThan(0.1);
+	});
 	it("anchors at the head and soles instead of the changing silhouette center", () => {
 		const a = fixture(0, 0),
 			b = fixture(9, 12, 20);
 		const ba = measureFrame(a.pixels, a.w, a.cell),
 			bb = measureFrame(b.pixels, b.w, b.cell);
 		expect(ba.anchorX).toBeCloseTo(50);
+		expect(ba.headWidth).toBe(20);
 		expect(bb.anchorX).toBeCloseTo(59);
 		expect(bb.anchorY - ba.anchorY).toBe(12);
 		const pa = framePlacement(ba),

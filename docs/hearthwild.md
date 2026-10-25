@@ -99,6 +99,12 @@ tree width and height variation from object coordinates. Tree sprites remain
 stationary, use small deterministic position offsets to break up straight rows,
 and keep their collision tile at the trunk. The initial woodland border uses
 spaced clusters rather than a continuous wall of trees.
+
+Aiko's idle, walking and running atlases use one anatomical scale per facing
+direction instead of resizing each pose independently. Pose silhouettes may
+extend naturally while the head registration and shared foot plane remain fixed.
+Directional source art is width-balanced around a common head and torso scale,
+with bounded horizontal correction to avoid alternating thin and swollen frames.
 The garden's invisible boundary collision is painted with the same textured
 ground as its interior, so land and southern water reach the viewport edge at
 the same horizontal position without exposing a blank boundary column.

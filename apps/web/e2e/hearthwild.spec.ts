@@ -226,13 +226,14 @@ test("Aiko equips a bow, draws, releases an arrow and saves her weapon choice", 
 	await expect(page.getByTestId("hearthwild-stage")).toHaveAttribute("data-weapon", "bow");
 });
 
-test("Aiko idle soles stay planted and every walking frame shares its registration", async ({
+test("Aiko idle soles stay planted and walking poses keep one stable anatomical scale", async ({
 	page
 }) => {
 	await openWorld(page);
 	const stats = await page.evaluate(async () => {
 		const modulePath = "/src/features/hearthwild/playerSprites.ts";
-		const { prepareIdle, prepareWalk, measureFrame, PLAYER_CELL } = await import(modulePath);
+		const { prepareIdle, prepareWalk, measureFrame, PLAYER_CELL, PLAYER_HEAD_WIDTH } =
+			await import(modulePath);
 		const load = (src: string) =>
 			new Promise<HTMLImageElement>((resolve, reject) => {
 				const image = new Image();
@@ -270,6 +271,7 @@ test("Aiko idle soles stay planted and every walking frame shares its registrati
 				});
 				return {
 					head: b.anchorX - col * PLAYER_CELL,
+					headWidth: b.headWidth,
 					sole: b.anchorY - row * PLAYER_CELL,
 					height: b.height
 				};
@@ -292,7 +294,7 @@ test("Aiko idle soles stay planted and every walking frame shares its registrati
 			review.append(col);
 		}
 		document.body.append(review);
-		return { soles, registration };
+		return { soles, registration, headWidth: PLAYER_HEAD_WIDTH };
 	});
 	for (const row of stats.soles) expect(new Set(row).size).toBe(1);
 	for (const row of stats.registration) {
@@ -301,20 +303,30 @@ test("Aiko idle soles stay planted and every walking frame shares its registrati
 		).toBeLessThanOrEqual(1);
 		expect(
 			Math.max(...row.map((f) => f.height)) - Math.min(...row.map((f) => f.height))
-		).toBeLessThanOrEqual(1);
-		for (const frame of row) expect(Math.abs(frame.head - 48)).toBeLessThan(1);
+		).toBeLessThanOrEqual(3);
+		for (const frame of row) {
+			expect(Math.abs(frame.head - 48)).toBeLessThan(1);
+			expect(Math.abs(frame.headWidth - stats.headWidth)).toBeLessThanOrEqual(2);
+		}
 	}
 	await page.screenshot({ path: "test-results/hearthwild-aiko-motion-contact.png" });
 });
 
-test("Aiko running keeps a supporting sole on the shared ground plane in all directions", async ({
+test("Aiko running keeps standing scale and a supporting sole in all directions", async ({
 	page
 }) => {
 	await openWorld(page);
 	const stats = await page.evaluate(async () => {
 		const modulePath = "/src/features/hearthwild/playerSprites.ts";
-		const { prepareRun, measureFrame, PLAYER_CELL, PLAYER_FOOT, PLAYER_BODY_HEIGHT } =
-			await import(modulePath);
+		const {
+			prepareIdle,
+			prepareRun,
+			measureFrame,
+			PLAYER_CELL,
+			PLAYER_FOOT,
+			PLAYER_BODY_HEIGHT,
+			PLAYER_HEAD_WIDTH
+		} = await import(modulePath);
 		const load = (src: string) =>
 			new Promise<HTMLImageElement>((resolve, reject) => {
 				const image = new Image();
@@ -322,12 +334,14 @@ test("Aiko running keeps a supporting sole on the shared ground plane in all dir
 				image.onerror = reject;
 				image.src = src;
 			});
-		const [front, back, side] = await Promise.all([
+		const [idleImage, front, back, side] = await Promise.all([
+			load("/images/hearthwild/aiko-idle-v2.png"),
 			load("/images/hearthwild/aiko-run-front-v2.png"),
 			load("/images/hearthwild/aiko-run-back-v2.png"),
 			load("/images/hearthwild/aiko-run-side-v2.png")
 		]);
-		const run = prepareRun({ front, back, side }) as HTMLCanvasElement,
+		const idle = prepareIdle(idleImage) as HTMLCanvasElement,
+			run = prepareRun({ front, back, side }) as HTMLCanvasElement,
 			ctx = run.getContext("2d")!,
 			pixels = ctx.getImageData(0, 0, run.width, run.height).data;
 		const frames = Array.from({ length: 4 }, (_, row) =>
@@ -348,30 +362,65 @@ test("Aiko running keeps a supporting sole on the shared ground plane in all dir
 				for (let i = 3; i < ground.length; i += 4) if (ground[i] >= 48) support++;
 				return {
 					head: b.anchorX - col * PLAYER_CELL,
+					headWidth: b.headWidth,
 					sole: b.anchorY - row * PLAYER_CELL,
 					height: b.height,
 					support
 				};
 			})
 		);
+		const idleContext = idle.getContext("2d")!,
+			idlePixels = idleContext.getImageData(0, 0, idle.width, idle.height).data,
+			idleHeights = Array.from({ length: 4 }, (_, row) =>
+				Array.from(
+					{ length: 4 },
+					(_, col) =>
+						measureFrame(idlePixels, idle.width, {
+							x: col * PLAYER_CELL,
+							y: row * PLAYER_CELL,
+							width: PLAYER_CELL,
+							height: PLAYER_CELL
+						}).height
+				)
+			);
 		const review = document.createElement("section");
 		review.style.cssText =
-			"position:fixed;inset:0;z-index:9999;background:#122c38;color:#d8e5eb;padding:24px;font:14px system-ui";
+			"position:fixed;inset:0;z-index:9999;background:#122c38;color:#d8e5eb;padding:24px;font:14px system-ui;display:flex;gap:24px;align-items:flex-start";
+		const idleReview = document.createElement("div"),
+			runReview = document.createElement("div"),
+			idleLabel = document.createElement("p");
+		idleLabel.textContent = "Aiko idle · standing scale reference";
+		idle.style.cssText = "image-rendering:pixelated;background:#29424a;display:block";
+		idleReview.append(idleLabel, idle);
 		const label = document.createElement("p");
 		label.textContent =
 			"Aiko grounded run · 8 phases × down / up / left / right · common contact plane";
 		run.style.cssText = "image-rendering:pixelated;background:#29424a;display:block";
-		review.append(label, run);
+		runReview.append(label, run);
+		review.append(idleReview, runReview);
 		document.body.append(review);
-		return { frames, foot: PLAYER_FOOT.y, height: PLAYER_BODY_HEIGHT };
+		return {
+			frames,
+			idleHeights,
+			foot: PLAYER_FOOT.y,
+			height: PLAYER_BODY_HEIGHT,
+			headWidth: PLAYER_HEAD_WIDTH
+		};
 	});
-	for (const row of stats.frames)
+	for (const [rowIndex, row] of stats.frames.entries()) {
 		for (const frame of row) {
 			expect(Math.abs(frame.head - 48)).toBeLessThan(1);
+			expect(Math.abs(frame.headWidth - stats.headWidth)).toBeLessThanOrEqual(2);
 			expect(Math.abs(frame.sole - stats.foot)).toBeLessThanOrEqual(1);
 			expect(Math.abs(frame.height - stats.height)).toBeLessThanOrEqual(1);
 			expect(frame.support).toBeGreaterThanOrEqual(3);
 		}
+		const runHeight = row.reduce((sum, frame) => sum + frame.height, 0) / row.length,
+			idleHeight =
+				stats.idleHeights[rowIndex].reduce((sum, height) => sum + height, 0) /
+				stats.idleHeights[rowIndex].length;
+		expect(Math.abs(runHeight - idleHeight)).toBeLessThanOrEqual(2);
+	}
 	await page.screenshot({ path: "test-results/hearthwild-aiko-run-contact.png" });
 });
 
