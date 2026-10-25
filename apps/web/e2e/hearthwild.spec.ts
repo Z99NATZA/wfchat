@@ -77,7 +77,7 @@ test("garden artwork, keyboard travel, grid edits, inventory and saved reload", 
 	expect(errors).toEqual([]);
 	await page.screenshot({ path: "test-results/hearthwild-home.png" });
 });
-test("the bed darkens the world for ten seconds and advances exactly six hours", async ({
+test("the bed keeps the dimmed map visible for ten seconds and advances exactly six hours", async ({
 	page
 }) => {
 	const state = newGame();
@@ -88,14 +88,24 @@ test("the bed darkens the world for ten seconds and advances exactly six hours",
 	state.awake = 30;
 	await page.clock.install();
 	await openWorld(page, state);
+	const stage = page.getByTestId("hearthwild-stage"),
+		canvas = page.getByTestId("hearthwild-canvas"),
+		sleep = page.getByTestId("sleep-overlay");
 	await page.keyboard.press("e");
-	await expect(page.getByTestId("sleep-overlay")).toBeVisible();
+	await expect(sleep).toBeVisible();
+	await expect(stage).toHaveAttribute("data-sleeping", "true");
+	await expect(sleep).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+	await expect(canvas).toHaveCSS("filter", "brightness(0.3) saturate(0.68) contrast(0.94)");
+	await expect(sleep.getByText("Resting", { exact: true })).toBeVisible();
+	await expect(sleep.locator("b")).toHaveText(/^(9|10)s$/);
+	await page.screenshot({ path: "test-results/hearthwild-sleep-map-dim.png" });
 	const bedtime = (await savedState(page)).minutes;
 	await page.clock.runFor(9000);
-	await expect(page.getByTestId("sleep-overlay")).toBeVisible();
+	await expect(sleep).toBeVisible();
 	await page.clock.runFor(1300);
-	await expect(page.getByTestId("sleep-overlay")).toBeHidden();
-	await page.getByTestId("hearthwild-stage").focus();
+	await expect(sleep).toBeHidden();
+	await expect(stage).toHaveAttribute("data-sleeping", "false");
+	await stage.focus();
 	await page.keyboard.press("f");
 	const rested = await savedState(page);
 	expect(rested.minutes - bedtime).toBeGreaterThanOrEqual(360);
@@ -526,11 +536,11 @@ test("southern garden becomes open water and old saves return safely to shore", 
 	await page.clock.pauseAt((await page.evaluate(() => Date.now())) + 500);
 	await page.evaluate(() => window.dispatchEvent(new Event("pagehide")));
 	const saved = await savedState(page);
-	expect(saved.y).toBeLessThan(23);
+	expect(saved.y).toBeLessThan(24);
 	expect(saved.coins).toBe(432);
 	expect(saved.gems).toBe(3);
 	expect(saved.wood).toBe(state.wood + 4);
-	expect(saved.objects.garden.every((o) => o.y < 23)).toBe(true);
+	expect(saved.objects.garden.every((o) => o.y < 24)).toBe(true);
 	expect(saved.tiles["garden:14:25"]).toBeUndefined();
 	const canvas = page.getByTestId("hearthwild-canvas");
 	const water = await page.evaluate(async () => {
@@ -547,6 +557,7 @@ test("southern garden becomes open water and old saves return safely to shore", 
 			0,
 			3
 		);
+		const landEdge = Array.from(ctx.getImageData(16, 20 * 32 + 16, 1, 1).data).slice(0, 3);
 		const map = document.querySelector<HTMLCanvasElement>(".hw-minimap canvas")!,
 			m = map.getContext("2d")!;
 		const minimap = Array.from({ length: 38 }, (_, x) =>
@@ -556,7 +567,7 @@ test("southern garden becomes open water and old saves return safely to shore", 
 		let shallowBrightness = 0,
 			deepBrightness = 0;
 		for (let x = 0; x < ground.width; x += 4) {
-			const shallow = ((23 * 32 + 16) * ground.width + x) * 4,
+			const shallow = ((24 * 32 + 16) * ground.width + x) * 4,
 				deep = ((27 * 32 + 16) * ground.width + x) * 4;
 			shallowBrightness += pixels[shallow] + pixels[shallow + 1] + pixels[shallow + 2];
 			deepBrightness += pixels[deep] + pixels[deep + 1] + pixels[deep + 2];
@@ -564,6 +575,7 @@ test("southern garden becomes open water and old saves return safely to shore", 
 		return {
 			southern,
 			stalePath,
+			landEdge,
 			minimap,
 			shallowBrightness,
 			deepBrightness
@@ -573,6 +585,8 @@ test("southern garden becomes open water and old saves return safely to shore", 
 		expect(b).toBeGreaterThan(g);
 		expect(g).toBeGreaterThan(r);
 	}
+	expect(water.landEdge[1]).toBeGreaterThan(65);
+	expect(water.landEdge[2]).toBeGreaterThan(65);
 	expect(water.shallowBrightness).toBeGreaterThan(water.deepBrightness * 1.25);
 	await page.getByTestId("hearthwild-stage").focus();
 	await page.keyboard.down("s");
@@ -580,13 +594,13 @@ test("southern garden becomes open water and old saves return safely to shore", 
 	await page.keyboard.up("s");
 	await page.clock.runFor(100);
 	await page.evaluate(() => window.dispatchEvent(new Event("pagehide")));
-	expect((await savedState(page)).y).toBeLessThan(23);
+	expect((await savedState(page)).y).toBeLessThan(24);
 	await page.getByRole("button", { name: "Place lantern", exact: true }).click();
 	const s = await savedState(page),
 		box = (await canvas.boundingBox())!,
 		view = viewFor(s, box.width, box.height, 1.2);
 	await canvas.click({
-		position: { x: (14.5 * 32 - view.cameraX) * 1.2, y: (23.5 * 32 - view.cameraY) * 1.2 }
+		position: { x: (14.5 * 32 - view.cameraX) * 1.2, y: (24.05 * 32 - view.cameraY) * 1.2 }
 	});
 	expect((await savedState(page)).wood).toBe(saved.wood);
 	await page.getByRole("button", { name: "Explore", exact: true }).click();

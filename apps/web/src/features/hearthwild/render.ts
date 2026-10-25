@@ -87,9 +87,10 @@ export function makeGround(map: MapId, s: GameState) {
 				px = x * TILE,
 				py = y * TILE,
 				n = hash(x, y),
-				waterUnderlay = map === "garden" && t === "water";
+				waterUnderlay = map === "garden" && t === "water",
+				gardenBoundary = map === "garden" && t === "wall";
 			const base =
-				t === "grass" || waterUnderlay
+				t === "grass" || waterUnderlay || gardenBoundary
 					? PALETTE.grass[Math.floor(n * 3)]
 					: t === "path"
 						? PALETTE.path
@@ -110,7 +111,7 @@ export function makeGround(map: MapId, s: GameState) {
 					b = hash(x * 9 + i, y * 33 - i),
 					xx = px + Math.floor(a * 30),
 					yy = py + Math.floor(b * 30);
-				if (t === "grass" || waterUnderlay) {
+				if (t === "grass" || waterUnderlay || gardenBoundary) {
 					rect(
 						g,
 						i % 3 ? PALETTE.grassLight : PALETTE.grassShade,
@@ -294,12 +295,13 @@ export function renderWorld(
 			y: 9 * 32,
 			draw: () => sprite(ctx, art, 1, 10.5 * 32, 1.8 * 32, 8 * 32, 7.5 * 32)
 		});
-	for (const o of s.objects[s.map])
+	for (const o of s.objects[s.map]) {
+		const treeShape = o.kind === "tree" ? treeAppearance(o) : null;
 		drawables.push({
-			y: (o.y + 1) * 32,
+			y: (o.y + 1) * 32 + (treeShape?.offsetY ?? 0),
 			draw: () => {
-				const cx = (o.x + 0.5) * 32,
-					bottom = (o.y + 1) * 32;
+				const cx = (o.x + 0.5) * 32 + (treeShape?.offsetX ?? 0),
+					bottom = (o.y + 1) * 32 + (treeShape?.offsetY ?? 0);
 				const size: Record<ObjectKind, [number, number]> = {
 					tree: [76, 94],
 					rock: [37, 36],
@@ -313,10 +315,9 @@ export function renderWorld(
 					bush: [40, 34]
 				};
 				let [w, h] = size[o.kind];
-				if (o.kind === "tree") {
-					const shape = treeAppearance(o);
-					w = shape.width;
-					h = shape.height;
+				if (treeShape) {
+					w = treeShape.width;
+					h = treeShape.height;
 				}
 				if (o.kind === "crop" && s.minutes - (o.planted ?? 0) < 90) {
 					w = 18;
@@ -331,6 +332,7 @@ export function renderWorld(
 				ctx.globalAlpha = 1;
 			}
 		});
+	}
 	if (s.map === "dungeon")
 		for (const e of s.enemies)
 			if (e.hp > 0)

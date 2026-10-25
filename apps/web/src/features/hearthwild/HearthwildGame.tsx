@@ -29,7 +29,7 @@ import {
 } from "lucide-react";
 import { useI18n } from "@/i18n/i18nContext";
 import { HearthwildEngine, nearestHint } from "./engine";
-import { newGame, type GameState } from "./state";
+import { newGame, SLEEP_SECONDS, type GameState } from "./state";
 import { PALETTE } from "./appearance";
 import { MAPS, terrain, type Tool } from "./world";
 import "./hearthwild.css";
@@ -181,6 +181,7 @@ export default function HearthwildGame() {
 			data-animation={state.attack > 0 ? state.weapon : state.motion}
 			data-weapon={state.weapon}
 			data-lighting-preview={lightingPreview}
+			data-sleeping={state.sleep > 0}
 			onKeyDown={(e) => {
 				if (e.key === "Escape") {
 					if (panel) setPanel(null);
@@ -539,12 +540,20 @@ export default function HearthwildGame() {
 				</div>
 			)}
 			{state.sleep > 0 && (
-				<div className="hw-sleep" data-testid="sleep-overlay">
-					<Moon size={38} />
-					<h2>{tr("sleepTitle")}</h2>
-					<p>{tr("sleepDetail")}</p>
-					<b>{Math.ceil(state.sleep)}s</b>
-					<span>{tr(`message.${state.message}`)}</span>
+				<div
+					className="hw-sleep"
+					data-testid="sleep-overlay"
+					role="status"
+					aria-label={tr("sleeping")}
+				>
+					<div className="hw-sleep-status">
+						<Moon size={20} />
+						<span>{tr("sleeping")}</span>
+						<b>{Math.ceil(state.sleep)}s</b>
+						<div className="hw-sleep-meter" aria-hidden="true">
+							<i style={{ width: `${(state.sleep / SLEEP_SECONDS) * 100}%` }} />
+						</div>
+					</div>
 				</div>
 			)}
 			{blocked && (

@@ -453,10 +453,16 @@ function portalsReachable(s: GameState) {
 export function serialize(s: GameState) {
 	return JSON.stringify(s);
 }
-// Reconcile existing saves when the former southern land becomes permanent water.
+function floodedGardenCell(x: number, y: number) {
+	return (
+		y >= GARDEN_SOUTH_WATER_ROW ||
+		(y === GARDEN_SOUTH_WATER_ROW - 1 && terrain("garden", x, y) === "water")
+	);
+}
+// Reconcile existing saves when former garden land becomes permanent water.
 function migrateSouthernWater(s: GameState) {
 	s.objects.garden = s.objects.garden.filter((o) => {
-		if (o.y < GARDEN_SOUTH_WATER_ROW) return true;
+		if (!floodedGardenCell(o.x, o.y)) return true;
 		if (o.id.startsWith("placed-")) {
 			s.wood += COST[o.kind as Tool] ?? 0;
 			if (o.kind === "crop") s.seeds++;
@@ -464,13 +470,13 @@ function migrateSouthernWater(s: GameState) {
 		return false;
 	});
 	for (const [key, value] of Object.entries(s.tiles)) {
-		const [map, , row] = key.split(":");
-		if (map === "garden" && Number(row) >= GARDEN_SOUTH_WATER_ROW) {
+		const [map, column, row] = key.split(":");
+		if (map === "garden" && floodedGardenCell(Number(column), Number(row))) {
 			if (value === "path") s.wood++;
 			delete s.tiles[key];
 		}
 	}
-	if (s.map !== "garden" || s.y < GARDEN_SOUTH_WATER_ROW) return;
+	if (s.map !== "garden" || !floodedGardenCell(Math.floor(s.x), Math.floor(s.y))) return;
 	const { width, height } = MAPS.garden,
 		queue: [number, number][] = [[Math.floor(s.x), Math.floor(s.y)]],
 		seen = new Set<string>();
@@ -557,6 +563,17 @@ export function deserialize(raw: string | null): GameState {
 				)
 					return fresh;
 		}
+		const currentGardenTrees = new Set(
+			fresh.objects.garden
+				.filter((o) => o.kind === "tree" && o.id.startsWith("initial-"))
+				.map((o) => `${o.x}:${o.y}`)
+		);
+		s.objects.garden = s.objects.garden.filter(
+			(o) =>
+				o.kind !== "tree" ||
+				!o.id.startsWith("initial-") ||
+				currentGardenTrees.has(`${o.x}:${o.y}`)
+		);
 		if (
 			!Array.isArray(s.enemies) ||
 			s.enemies.length > 30 ||

@@ -17,7 +17,9 @@ export function treeAppearance(o: Pick<WorldObject, "x" | "y">) {
 	const scale = 0.65 + hash(o.x + 47, o.y + 19) * 0.7;
 	return {
 		width: 76 * scale * (0.88 + hash(o.x + 83, o.y) * 0.22),
-		height: 94 * scale * (0.9 + hash(o.x, o.y + 67) * 0.24)
+		height: 94 * scale * (0.9 + hash(o.x, o.y + 67) * 0.24),
+		offsetX: Math.round((hash(o.x + 139, o.y + 37) - 0.5) * 18),
+		offsetY: Math.round((hash(o.x + 59, o.y + 173) - 0.5) * 18)
 	};
 }
 // A cached rendering material shifts foliage toward deep blue-green without tinting wood or roofs.

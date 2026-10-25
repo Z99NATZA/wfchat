@@ -1,4 +1,4 @@
-import { hash, MAPS, terrain, TILE } from "./world";
+import { GARDEN_SOUTH_WATER_ROW, hash, MAPS, terrain, TILE } from "./world";
 
 const WATER_BASE = "#0a4059";
 const WATER_DEEP = "#062f4b";
@@ -16,6 +16,8 @@ function dryGardenTile(x: number, y: number) {
 
 const SHORE_STEP = 8;
 const POND_POINTS = 64;
+const POND_MOUTH_LEFT = 25 * TILE;
+const POND_MOUTH_RIGHT = 30 * TILE;
 
 export function gardenSouthShoreY(worldX: number): number {
 	const point = Math.max(0, Math.floor(worldX / SHORE_STEP)),
@@ -23,7 +25,7 @@ export function gardenSouthShoreY(worldX: number): number {
 		value = (index: number) => 2 + Math.floor(hash(index + 101, 719) * 6),
 		from = value(point),
 		to = value(point + 1);
-	return 23 * TILE + Math.round(from + (to - from) * fraction);
+	return GARDEN_SOUTH_WATER_ROW * TILE + Math.round(from + (to - from) * fraction);
 }
 
 export function gardenPondShoreline(): ReadonlyArray<WaterPoint> {
@@ -37,10 +39,11 @@ export function gardenPondShoreline(): ReadonlyArray<WaterPoint> {
 				1 +
 				(hash(index + 419, 887) - 0.5) * 0.065 +
 				Math.sin(angle * 3 + 0.7) * 0.035 +
-				Math.sin(angle * 7 - 0.4) * 0.018;
+				Math.sin(angle * 7 - 0.4) * 0.018,
+			channel = Math.pow(Math.max(0, Math.sin(angle)), 8) * TILE * 0.75;
 		return [
 			Math.round((centerX + Math.cos(angle) * radiusX * organic) / 2) * 2,
-			Math.round((centerY + Math.sin(angle) * radiusY * organic) / 2) * 2
+			Math.round((centerY + Math.sin(angle) * radiusY * organic + channel) / 2) * 2
 		] as const;
 	});
 }
@@ -54,20 +57,15 @@ function waterMask(ctx: CanvasRenderingContext2D) {
 	const { width, height } = MAPS.garden;
 	const worldWidth = width * TILE,
 		worldHeight = height * TILE,
-		southBank = Array.from(
-			{ length: Math.ceil(worldWidth / SHORE_STEP) + 1 },
-			(_, index) =>
-				[
-					Math.min(worldWidth, index * SHORE_STEP),
-					gardenSouthShoreY(index * SHORE_STEP)
-				] as const
-		);
+		{ southBank, mouthPolygon } = gardenShoreSegments(worldWidth);
 	ctx.beginPath();
 	tracePoints(ctx, southBank);
 	ctx.lineTo(worldWidth, worldHeight);
 	ctx.lineTo(0, worldHeight);
 	ctx.closePath();
 	tracePoints(ctx, gardenPondShoreline());
+	ctx.closePath();
+	tracePoints(ctx, mouthPolygon);
 	ctx.closePath();
 	ctx.clip();
 }
@@ -106,6 +104,26 @@ function strokeShore(ctx: CanvasRenderingContext2D, points: ReadonlyArray<WaterP
 	ctx.stroke();
 }
 
+function curvedTransition(from: WaterPoint, to: WaterPoint): WaterPoint[] {
+	const direction = Math.sign(to[0] - from[0]) || 1,
+		handle = Math.min(8, Math.abs(to[0] - from[0]) / 3),
+		controlA: WaterPoint = [from[0] + direction * handle, from[1]],
+		controlB: WaterPoint = [to[0] - direction * handle, to[1]];
+	return Array.from({ length: 7 }, (_, index) => {
+		const progress = index / 6,
+			inverse = 1 - progress,
+			curve = (start: number, first: number, second: number, end: number) =>
+				inverse ** 3 * start +
+				3 * inverse ** 2 * progress * first +
+				3 * inverse * progress ** 2 * second +
+				progress ** 3 * end;
+		return [
+			Math.round(curve(from[0], controlA[0], controlB[0], to[0])),
+			Math.round(curve(from[1], controlA[1], controlB[1], to[1]))
+		] as const;
+	});
+}
+
 function gardenShoreSegments(worldWidth: number) {
 	const southBank = Array.from(
 		{ length: Math.ceil(worldWidth / SHORE_STEP) + 1 },
@@ -117,7 +135,7 @@ function gardenShoreSegments(worldWidth: number) {
 	);
 	const pondSegments: WaterPoint[][] = [];
 	for (const point of gardenPondShoreline()) {
-		if (point[1] < gardenSouthShoreY(point[0]) + 2) {
+		if (point[1] < gardenSouthShoreY(point[0]) - 12) {
 			const segment = pondSegments.at(-1);
 			if (segment) segment.push(point);
 			else pondSegments.push([point]);
@@ -130,14 +148,31 @@ function gardenShoreSegments(worldWidth: number) {
 	let pondBank = pondSegments.filter((segment) => segment.length > 1)[0] ?? [];
 	if (pondBank.length > 1 && pondBank[0][0] > pondBank.at(-1)![0])
 		pondBank = [...pondBank].reverse();
+	const mouthLeft = [POND_MOUTH_LEFT, gardenSouthShoreY(POND_MOUTH_LEFT)] as const,
+		mouthRight = [POND_MOUTH_RIGHT, gardenSouthShoreY(POND_MOUTH_RIGHT)] as const,
+		leftTransition = pondBank.length ? curvedTransition(mouthLeft, pondBank[0]) : [mouthLeft],
+		rightTransition = pondBank.length
+			? curvedTransition(pondBank.at(-1)!, mouthRight)
+			: [mouthRight];
 	const leftBank = pondBank.length
-		? southBank.filter((point) => point[0] < pondBank[0][0])
+		? southBank.filter((point) => point[0] <= POND_MOUTH_LEFT)
 		: southBank;
 	const rightBank = pondBank.length
-		? southBank.filter((point) => point[0] > pondBank.at(-1)![0])
+		? southBank.filter((point) => point[0] >= POND_MOUTH_RIGHT)
 		: [];
+	const mouthPolygon = pondBank.length
+		? [...leftTransition, pondBank.at(-1)!, ...rightTransition.slice(1)]
+		: [mouthLeft, mouthRight];
 	return {
-		outline: [...leftBank, ...pondBank, ...rightBank],
+		outline: [
+			...leftBank,
+			...leftTransition.slice(1),
+			...pondBank.slice(1),
+			...rightTransition.slice(1),
+			...rightBank.slice(1)
+		],
+		southBank,
+		mouthPolygon,
 		leftBank,
 		pondBank,
 		rightBank

@@ -37,6 +37,10 @@
 	inset: 0;
 	touch-action: none;
 	image-rendering: pixelated;
+	transition: filter 0.45s ease;
+}
+.hearthwild[data-sleeping="true"] .hw-world {
+	filter: brightness(0.3) saturate(0.68) contrast(0.94);
 }
 .hw-panel {
 	background: var(--hw-panel);
@@ -570,38 +574,54 @@
 	position: absolute;
 	inset: 0;
 	z-index: 30;
-	background: #050910;
 	display: flex;
-	flex-direction: column;
 	align-items: center;
 	justify-content: center;
-	gap: 15px;
-	color: #d3d8d6;
-	animation: hw-sleep-in 0.8s ease-out;
+	pointer-events: auto;
+	background: transparent;
 }
-.hw-sleep svg {
+.hw-sleep-status {
+	display: grid;
+	grid-template-columns: auto 1fr auto;
+	align-items: center;
+	gap: 8px 10px;
+	width: min(250px, calc(100% - 32px));
+	padding: 11px 14px 10px;
+	color: #d3d8d6;
+	background: #111b21d9;
+	border: 1px solid #a8ad8052;
+	border-radius: 8px;
+	box-shadow:
+		0 3px 0 #06101666,
+		0 10px 35px #02070b70;
+	backdrop-filter: blur(5px);
+}
+.hw-sleep-status svg {
 	color: #d1d1ae;
 }
-.hw-sleep h2 {
-	font-family: Georgia, serif;
-	font-size: 32px;
-	font-weight: 400;
-	letter-spacing: 1px;
+.hw-sleep-status > span {
+	font-size: 12px;
+	color: #d8d9c4;
 }
-.hw-sleep p {
-	font-size: 13px;
-	color: #8b9c9c;
-}
-.hw-sleep b {
-	font-size: 19px;
-	font-weight: 400;
+.hw-sleep-status b {
+	font-size: 16px;
+	font-weight: 500;
 	font-variant-numeric: tabular-nums;
+	color: #eee5be;
 }
-.hw-sleep > span {
-	font-size: 11px;
-	color: #8c9b91;
-	max-width: 80%;
-	text-align: center;
+.hw-sleep-meter {
+	grid-column: 1 / -1;
+	height: 2px;
+	overflow: hidden;
+	background: #71818438;
+	border-radius: 999px;
+}
+.hw-sleep-meter i {
+	display: block;
+	height: 100%;
+	background: #c9c99c;
+	border-radius: inherit;
+	transition: width 0.16s linear;
 }
 .hw-touch {
 	display: none;
@@ -665,14 +685,6 @@
 	100% {
 		opacity: 0;
 		translate: 0 0;
-	}
-}
-@keyframes hw-sleep-in {
-	from {
-		opacity: 0;
-	}
-	to {
-		opacity: 1;
 	}
 }
 @media (max-width: 900px) {
@@ -907,9 +919,6 @@
 }
 @media (prefers-reduced-motion: reduce) {
 	.hw-toast {
-		animation: none;
-	}
-	.hw-sleep {
 		animation: none;
 	}
 	.hearthwild * {

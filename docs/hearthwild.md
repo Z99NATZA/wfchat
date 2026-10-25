@@ -12,11 +12,13 @@ the app locale.
 ## World and controls
 
 The garden, cottage interior and cavern are separate maps with explicit doors.
-The garden's five southern rows (23–27) are water across the entire map width,
-joining the existing pond and ending the southbound path at the shore. Terrain,
+The garden's four southern rows (24–27) are water across the entire map width.
+A tapered five-tile mouth through row 23 joins the pond to this southern water,
+while the southbound path reaches the restored land row beside it. Terrain,
 collision, placement, water rendering and the minimap share this water boundary.
 The lake uses a stationary deep-teal surface with shallow shoreline light,
-submerged stones and local depth variation. It has no animated wave, caustic or
+submerged stones, local depth variation and a five-tile tapered mouth into the
+southern water. It has no animated wave, caustic or
 specular effects. The pond and southern water share one open connection and one
 continuous outer bank, without a shoreline drawn across the joining water. The
 visual shoreline uses deterministic sub-tile contours to soften the collision grid's
@@ -56,11 +58,13 @@ awake time starts involuntary sleep where the player stands. Outdoor collapse
 has a 45% injury chance, increased to 85% inside the cavern; injury costs 35
 health and a quarter of coins. Otherwise the player wakes unharmed.
 
-Sleep darkens the entire game stage for 10 active real seconds. Completing
-sleep advances world time exactly six hours, restores up to 45 health, resets
-the awake timer and respawns cavern enemies. Awake time advances the world at
-1.2 game minutes per active real second. Menus, manual pause and hidden tabs
-pause simulation, including sleep. Reloading does not simulate offline time.
+Sleep keeps the current map visible but dims the world canvas for 10 active real
+seconds. A compact status card shows the live seconds remaining; no opaque
+full-stage sleep screen covers the map. Completing sleep advances world time
+exactly six hours, restores up to 45 health, resets the awake timer and respawns
+cavern enemies. Awake time advances the world at 1.2 game minutes per active
+real second. Menus, manual pause and hidden tabs pause simulation, including
+sleep. Reloading does not simulate offline time.
 
 Slimes deal 12 damage with a 1.4-second player damage cooldown. Sword swings
 last 0.4 seconds, with damage at the slash frame after 0.2 seconds; a hit
@@ -92,7 +96,12 @@ shallow-light color language in a lower-resolution style that matches the garden
 The cottage keeps its warm interior colors. A cached foliage material
 preserves wood, roofs and light sources. `appearance.ts` defines deterministic
 tree width and height variation from object coordinates. Tree sprites remain
-stationary and keep their grid anchor and collision tile at the trunk.
+stationary, use small deterministic position offsets to break up straight rows,
+and keep their collision tile at the trunk. The initial woodland border uses
+spaced clusters rather than a continuous wall of trees.
+The garden's invisible boundary collision is painted with the same textured
+ground as its interior, so land and southern water reach the viewport edge at
+the same horizontal position without exposing a blank boundary column.
 
 Between 18:00 and 06:00, the garden has a soft pool of visibility centered on
 Aiko's body. The clear inner radius is 0.75 tiles and fades into the dark

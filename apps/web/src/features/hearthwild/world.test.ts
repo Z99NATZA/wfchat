@@ -4,6 +4,20 @@ import { blocked, deserialize, edit, move, newGame, serialize } from "./state";
 import { findPath } from "./engine";
 
 describe("southern garden water", () => {
+	it("keeps the woodland border sparse instead of forming continuous tree rows", () => {
+		const trees = initialObjects().garden.filter((o) => o.kind === "tree"),
+			cells = new Set(trees.map((o) => `${o.x}:${o.y}`));
+		expect(trees.length).toBeGreaterThan(35);
+		expect(trees.length).toBeLessThan(55);
+		for (let y = 2; y < GARDEN_SOUTH_WATER_ROW; y++) {
+			let run = 0;
+			for (let x = 1; x < MAPS.garden.width - 1; x++) {
+				run = cells.has(`${x}:${y}`) ? run + 1 : 0;
+				expect(run).toBeLessThanOrEqual(3);
+			}
+		}
+	});
+
 	it("fills all southern rows, including map-edge corners, and joins the pond", () => {
 		for (let y = GARDEN_SOUTH_WATER_ROW; y < MAPS.garden.height; y++)
 			for (let x = 0; x < MAPS.garden.width; x++)
@@ -11,7 +25,12 @@ describe("southern garden water", () => {
 		expect(terrain("garden", 27, 22)).toBe("water");
 		expect(terrain("garden", 27, 23)).toBe("water");
 		expect(terrain("garden", 14, 22)).toBe("path");
-		expect(terrain("garden", 14, 23)).toBe("water");
+		expect(terrain("garden", 14, 23)).toBe("path");
+		expect(terrain("garden", 14, 24)).toBe("water");
+		expect(terrain("garden", 24, 23)).toBe("grass");
+		expect(terrain("garden", 25, 23)).toBe("water");
+		expect(terrain("garden", 29, 23)).toBe("water");
+		expect(terrain("garden", 30, 23)).toBe("grass");
 		expect(terrain("garden", 14, 28)).toBe("wall");
 		expect(terrain("garden", -1, 25)).toBe("wall");
 		expect(terrain("home", 10, 15)).toBe("wall");
@@ -21,15 +40,15 @@ describe("southern garden water", () => {
 		expect(initialObjects().garden.every((o) => o.y < GARDEN_SOUTH_WATER_ROW)).toBe(true);
 		const s = newGame();
 		s.x = 14.5;
-		s.y = 22.5;
+		s.y = 23.5;
 		const wood = s.wood;
-		expect(blocked(s, "garden", 14.5, 23.5)).toBe(true);
+		expect(blocked(s, "garden", 14.5, 24.5)).toBe(true);
 		expect(findPath(s, 14.5, 25.5)).toEqual([]);
 		for (const tool of ["path", "soil", "tree", "lantern", "crop"] as const)
 			expect(edit(s, tool, 14, 24)).toBe(false);
 		expect(s.wood).toBe(wood);
 		move(s, 0, 1, 2, true);
-		expect(Math.floor(s.y)).toBe(22);
+		expect(Math.floor(s.y)).toBe(23);
 	});
 	it("migrates flooded placements once, refunds their materials and preserves dry land edits", () => {
 		const s = newGame();
@@ -78,5 +97,13 @@ describe("southern garden water", () => {
 		expect(restored.coins).toBe(123);
 		expect(restored.awake).toBe(22);
 		expect(restored.sleep).toBe(3.5);
+	});
+	it("moves a saved player out of the widened pond mouth", () => {
+		const s = newGame();
+		s.x = 25.5;
+		s.y = 23.5;
+		const restored = deserialize(serialize(s));
+		expect(terrain("garden", Math.floor(restored.x), Math.floor(restored.y))).not.toBe("water");
+		expect(blocked(restored, "garden", restored.x, restored.y)).toBe(false);
 	});
 });

@@ -81,6 +81,8 @@ describe("woodland presentation", () => {
 	it("provides deterministic small and tall trees and a dark blue-green ground palette", () => {
 		const shapes = Array.from({ length: 30 }, (_, x) => treeAppearance({ x, y: 5 }));
 		expect(shapes).toEqual(Array.from({ length: 30 }, (_, x) => treeAppearance({ x, y: 5 })));
+		expect(new Set(shapes.map((shape) => shape.offsetX)).size).toBeGreaterThan(3);
+		expect(new Set(shapes.map((shape) => shape.offsetY)).size).toBeGreaterThan(3);
 		expect(
 			Math.max(...shapes.map((s) => s.height)) - Math.min(...shapes.map((s) => s.height))
 		).toBeGreaterThan(40);

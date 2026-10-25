@@ -187,6 +187,16 @@ describe("Hearthwild survival and world", () => {
 		])
 			expect(deserialize(raw)).toEqual(newGame());
 	});
+	it("removes obsolete dense-border trees from old saves without touching placed trees", () => {
+		const s = newGame();
+		s.objects.garden.push(
+			{ id: "initial-legacy-dense-tree", kind: "tree", x: 2, y: 2 },
+			{ id: "placed-player-tree", kind: "tree", x: 25, y: 15 }
+		);
+		const restored = deserialize(serialize(s));
+		expect(restored.objects.garden.some((o) => o.id === "initial-legacy-dense-tree")).toBe(false);
+		expect(restored.objects.garden.some((o) => o.id === "placed-player-tree")).toBe(true);
+	});
 	it("blocks solid indoor furniture for both walking and placement", () => {
 		const s = newGame();
 		s.map = "home";

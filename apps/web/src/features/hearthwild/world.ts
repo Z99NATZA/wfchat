@@ -1,5 +1,5 @@
 export const TILE = 32;
-export const GARDEN_SOUTH_WATER_ROW = 23;
+export const GARDEN_SOUTH_WATER_ROW = 24;
 export type MapId = "garden" | "home" | "dungeon";
 export type ObjectKind =
 	| "tree"
@@ -56,6 +56,7 @@ export function terrain(
 			return "wall";
 		return "stone";
 	}
+	if (y === GARDEN_SOUTH_WATER_ROW - 1 && x >= 25 && x <= 29) return "water";
 	if (((x - 27) / 5.5) ** 2 + ((y - 19) / 4) ** 2 < 1) return "water";
 	if (
 		(x >= 13 && x <= 15 && y >= 9) ||
@@ -79,6 +80,7 @@ export function initialObjects(): Record<MapId, WorldObject[]> {
 			if (
 				(x < 6 || y < 4 || x > 35 || y > 25) &&
 				hash(x, y) > 0.48 &&
+				hash(x * 3 + 17, y * 5 + 23) > 0.6 &&
 				Math.hypot(x - 33, y - 5) > 3
 			)
 				garden.push(obj("tree", x, y));
