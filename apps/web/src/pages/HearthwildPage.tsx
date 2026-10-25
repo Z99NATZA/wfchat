@@ -25,7 +25,7 @@ export default function HearthwildPage({
 			header={
 				<AppHeaderBar
 					leading={
-						<span className="flex size-9 items-center justify-center rounded-lg bg-[#344632] text-[#d7dcb4]">
+						<span className="flex size-9 items-center justify-center rounded-lg bg-[#183d4b] text-[#bddae1]">
 							<TreePine size={21} />
 						</span>
 					}

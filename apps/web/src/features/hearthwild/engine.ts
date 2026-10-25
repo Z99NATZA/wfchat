@@ -1,3 +1,6 @@
+import { prepareIdle, prepareWalk, WALK_SOURCES, type PlayerSheets } from "./playerSprites";
+import { ANIMATIONS, RUN_SPEED, WALK_SPEED, type AnimationName, type Weapon } from "./animation";
+import { woodlandMaterial } from "./appearance";
 import {
 	attack,
 	blocked,
@@ -10,6 +13,8 @@ import {
 	serialize,
 	tick,
 	move,
+	equip,
+	setMotion,
 	type GameState
 } from "./state";
 import { INTERIOR_URL, ART_URL, makeGround, renderWorld, viewFor, type View } from "./render";
@@ -47,6 +52,21 @@ export function findPath(s: GameState, x: number, y: number): [number, number][]
 	}
 	return [];
 }
+// Consume reached waypoints in the same frame so route corners do not restart gait.
+export function followPath(s: GameState, path: [number, number][], dt: number, running = false) {
+	while (path.length && Math.hypot(path[0][0] - s.x, path[0][1] - s.y) < 0.01)
+		[s.x, s.y] = path.shift()!;
+	if (!path.length) return false;
+	const [x, y] = path[0],
+		dist = Math.hypot(x - s.x, y - s.y);
+	return move(
+		s,
+		(x - s.x) / dist,
+		(y - s.y) / dist,
+		Math.min(dt, dist / (running ? RUN_SPEED : WALK_SPEED)),
+		running
+	);
+}
 export class HearthwildEngine {
 	state: GameState;
 	options: GameOptions = { tool: "hand", grid: false, paused: false, zoom: 1.2 };
@@ -59,6 +79,12 @@ export class HearthwildEngine {
 	private view: View | null = null;
 	private art = new Image();
 	private interior = new Image();
+	private playerImages = Object.fromEntries(
+		Object.keys(ANIMATIONS).map((key) => [key, new Image()])
+	) as Record<AnimationName, HTMLImageElement>;
+	private players: PlayerSheets | null = null;
+	private walkExtras = { back: new Image(), side: new Image() };
+	private woodland: HTMLCanvasElement | null = null;
 	private frame = 0;
 	private last = 0;
 	private lastUi = 0;
@@ -92,24 +118,48 @@ export class HearthwildEngine {
 		canvas.addEventListener("pointermove", this.pointerMove);
 		canvas.addEventListener("pointerleave", this.pointerLeave);
 		window.addEventListener("pagehide", this.saveOnExit);
-		this.art.onload = this.interior.onload = () => {
+		const images = [
+			this.art,
+			this.interior,
+			...Object.values(this.playerImages),
+			...Object.values(this.walkExtras)
+		];
+		const start = () => {
 			if (
 				this.disposed ||
-				!this.art.naturalWidth ||
-				!this.interior.naturalWidth ||
-				this.ready
+				this.ready ||
+				images.some((img) => !img.complete || !img.naturalWidth)
 			)
 				return;
+			try {
+				this.woodland = woodlandMaterial(this.art);
+				this.players = {
+					...this.playerImages,
+					idle: prepareIdle(this.playerImages.idle),
+					walk: prepareWalk({ front: this.playerImages.walk, ...this.walkExtras })
+				};
+			} catch {
+				this.loaded(true);
+				return;
+			}
 			this.ready = true;
 			this.loaded(false);
 			if (document.activeElement === document.body) this.root.focus({ preventScroll: true });
 			this.frame = requestAnimationFrame(this.loop);
 		};
-		this.art.onerror = this.interior.onerror = () => {
-			if (!this.disposed) this.loaded(true);
-		};
+		for (const image of images) {
+			image.onload = start;
+			image.onerror = () => {
+				if (!this.disposed) this.loaded(true);
+			};
+		}
 		this.art.src = ART_URL;
 		this.interior.src = INTERIOR_URL;
+		for (const [key, image] of Object.entries(this.playerImages))
+			image.src = ANIMATIONS[key as AnimationName].url;
+		this.walkExtras.back.src = WALK_SOURCES.back;
+		this.walkExtras.side.src = WALK_SOURCES.side;
+
 		this.update({ ...this.state }, true);
 	}
 	private measure = () => {
@@ -133,18 +183,15 @@ export class HearthwildEngine {
 			const dy =
 				Number(this.keys.has("s") || this.keys.has("arrowdown")) -
 				Number(this.keys.has("w") || this.keys.has("arrowup"));
+			let moved = false;
+			const running = this.keys.has("shift");
 			if (dx || dy) {
 				this.path = [];
-				move(s, dx, dy, dt);
+				moved = move(s, dx, dy, dt, running);
 			} else if (this.path.length) {
-				const [x, y] = this.path[0],
-					dist = Math.hypot(x - s.x, y - s.y);
-				if (dist < 0.12) {
-					s.x = x;
-					s.y = y;
-					this.path.shift();
-				} else move(s, (x - s.x) / dist, (y - s.y) / dist, Math.min(dt, dist / 3.5));
+				moved = followPath(s, this.path, dt, running);
 			}
+			if (!moved) setMotion(s, "idle");
 			tick(s, dt);
 			if (s.map !== oldMap || s.sleep > 0) this.path = [];
 		}
@@ -166,8 +213,9 @@ export class HearthwildEngine {
 			);
 			renderWorld(
 				ctx,
-				this.art,
+				this.state.map === "home" ? this.art : this.woodland!,
 				this.interior,
+				this.players!,
 				this.ground!,
 				this.state,
 				this.view,
@@ -198,6 +246,7 @@ export class HearthwildEngine {
 	};
 	private saveOnExit = () => this.save();
 	private clearKeys = () => {
+		setMotion(this.state, "idle");
 		this.keys.clear();
 		this.path = [];
 	};
@@ -225,6 +274,8 @@ export class HearthwildEngine {
 				"arrowright",
 				"e",
 				"f",
+				"shift",
+				"q",
 				" "
 			].includes(key)
 		)
@@ -232,7 +283,9 @@ export class HearthwildEngine {
 		e.preventDefault();
 		if (this.options.paused) return;
 		this.keys.add(key);
+		if (e.shiftKey) this.keys.add("shift");
 		if (!e.repeat) {
+			if (key === "q") this.selectWeapon(this.state.weapon === "sword" ? "bow" : "sword");
 			if (key === "e") this.action("interact");
 			if (key === "f") this.action("eat");
 			if (key === " ") this.action("attack");
@@ -257,6 +310,7 @@ export class HearthwildEngine {
 	};
 	private pointerDown = (e: PointerEvent) => {
 		this.root.focus({ preventScroll: true });
+		if (e.shiftKey) this.keys.add("shift");
 		if (!this.view || this.options.paused || this.state.sleep > 0) return;
 		const [x, y] = this.pointerTile(e);
 		if (this.options.tool !== "hand") {
@@ -277,6 +331,12 @@ export class HearthwildEngine {
 		this.save();
 		this.update({ ...this.state }, this.storageOk);
 	};
+	selectWeapon = (weapon: Weapon) => {
+		if (this.options.paused) return;
+		equip(this.state, weapon);
+		this.save();
+		this.update({ ...this.state }, this.storageOk);
+	};
 	direction = (key: string, down: boolean) => {
 		if (down) this.keys.add(key);
 		else this.keys.delete(key);
@@ -294,6 +354,13 @@ export class HearthwildEngine {
 		this.art.onerror = null;
 		this.interior.onload = null;
 		this.interior.onerror = null;
+		for (const image of [
+			...Object.values(this.playerImages),
+			...Object.values(this.walkExtras)
+		]) {
+			image.onload = null;
+			image.onerror = null;
+		}
 		this.root.removeEventListener("keydown", this.keyDown);
 		this.root.removeEventListener("keyup", this.keyUp);
 		window.removeEventListener("blur", this.clearKeys);

@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import {
 	Backpack,
+	Crosshair,
+	Footprints,
 	BookOpen,
 	ChevronDown,
 	Expand,
@@ -27,6 +29,7 @@ import {
 import { useI18n } from "@/i18n/i18nContext";
 import { HearthwildEngine, nearestHint } from "./engine";
 import { newGame, type GameState } from "./state";
+import { PALETTE } from "./appearance";
 import { MAPS, type Tool } from "./world";
 import "./hearthwild.css";
 const TOOLS: { id: Tool; icon: typeof Hand; cost?: number; sprite?: number }[] = [
@@ -46,16 +49,16 @@ function MiniMap({ state }: { state: GameState }) {
 		if (!canvas) return;
 		const ctx = canvas.getContext("2d")!;
 		const { width, height } = MAPS[state.map];
-		ctx.fillStyle = state.map === "garden" ? "#6a854b" : "#484a43";
+		ctx.fillStyle = state.map === "garden" ? PALETTE.grass[1] : "#484a43";
 		ctx.fillRect(0, 0, 114, 84);
 		const sx = 114 / width,
 			sy = 84 / height;
 		if (state.map === "garden") {
-			ctx.fillStyle = "#528c8d";
+			ctx.fillStyle = PALETTE.water;
 			ctx.beginPath();
 			ctx.ellipse(27 * sx, 19 * sy, 5.5 * sx, 4 * sy, 0, 0, Math.PI * 2);
 			ctx.fill();
-			ctx.fillStyle = "#b7a076";
+			ctx.fillStyle = PALETTE.path;
 			ctx.fillRect(13 * sx, 9 * sy, 3 * sx, 19 * sy);
 			ctx.fillRect(9 * sx, 10 * sy, 24 * sx, 3 * sy);
 			ctx.fillStyle = "#b7754f";
@@ -63,7 +66,7 @@ function MiniMap({ state }: { state: GameState }) {
 		}
 		for (const o of state.objects[state.map]) {
 			ctx.fillStyle =
-				o.kind === "tree" ? "#304e32" : o.kind === "crystal" ? "#68d6bf" : "#9d9167";
+				o.kind === "tree" ? PALETTE.forest : o.kind === "crystal" ? "#68d6bf" : "#9d9167";
 			ctx.fillRect(o.x * sx, o.y * sy, Math.max(2, sx), Math.max(2, sy));
 		}
 		ctx.fillStyle = "#ffe3a4";
@@ -165,6 +168,9 @@ export default function HearthwildGame() {
 			tabIndex={0}
 			className="hearthwild"
 			data-testid="hearthwild-stage"
+			data-motion={state.motion}
+			data-animation={state.attack > 0 ? state.weapon : state.motion}
+			data-weapon={state.weapon}
 			onKeyDown={(e) => {
 				if (e.key === "Escape") {
 					if (panel) setPanel(null);
@@ -379,6 +385,8 @@ export default function HearthwildGame() {
 					<span>
 						<kbd>W A S D</kbd> {tr("move")}
 						<i>·</i>
+						<kbd>SHIFT</kbd> {tr("run")}
+						<i>·</i>
 						<kbd>SPACE</kbd> {tr("attack")}
 						<i>·</i>
 						{tr("clickWalk")}
@@ -388,6 +396,25 @@ export default function HearthwildGame() {
 						{tr(saved ? "autosave" : "saveFailed")}
 					</span>
 				</div>
+			</div>
+			<div className="hw-weapons hw-panel" role="group" aria-label={tr("weapons")}>
+				<span className="hw-player-name">Aiko</span>
+				{(["sword", "bow"] as const).map((weapon) => (
+					<button
+						key={weapon}
+						aria-label={tr(`weapon.${weapon}`)}
+						aria-pressed={state.weapon === weapon}
+						disabled={blocked || state.sleep > 0 || state.attack > 0}
+						onClick={() => {
+							engine.current?.selectWeapon(weapon);
+							root.current?.focus({ preventScroll: true });
+						}}
+					>
+						{weapon === "sword" ? <Swords size={17} /> : <Crosshair size={17} />}
+						<span>{tr(`weapon.${weapon}`)}</span>
+					</button>
+				))}
+				<kbd>Q</kbd>
 			</div>
 			<div className="hw-zoom hw-panel">
 				<button
@@ -424,11 +451,24 @@ export default function HearthwildGame() {
 					))}
 				</div>
 				<button
+					className="hw-run-hold"
+					aria-label={tr("run")}
+					onPointerDown={(e) => {
+						e.currentTarget.setPointerCapture(e.pointerId);
+						engine.current?.direction("shift", true);
+					}}
+					onPointerUp={() => engine.current?.direction("shift", false)}
+					onPointerCancel={() => engine.current?.direction("shift", false)}
+					onLostPointerCapture={() => engine.current?.direction("shift", false)}
+				>
+					<Footprints size={22} />
+				</button>
+				<button
 					className="hw-attack"
 					aria-label={tr("attack")}
 					onClick={() => act("attack")}
 				>
-					<Swords size={22} />
+					{state.weapon === "sword" ? <Swords size={22} /> : <Crosshair size={22} />}
 				</button>
 			</div>
 			{(loading || error) && (

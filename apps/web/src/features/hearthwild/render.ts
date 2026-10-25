@@ -1,3 +1,6 @@
+import { PLAYER_CELL, PLAYER_FOOT, type PlayerSheets } from "./playerSprites";
+import { ANIMATIONS, playerFrame } from "./animation";
+import { PALETTE, treeAppearance } from "./appearance";
 import type { GameState } from "./state";
 import { hash, MAPS, terrain, TILE, type MapId, type ObjectKind, type Tool } from "./world";
 export const INTERIOR_URL = "/images/hearthwild/interior-atlas-v1.png";
@@ -34,7 +37,7 @@ export const SPRITES: Record<ObjectKind, number> = {
 };
 export function sprite(
 	ctx: CanvasRenderingContext2D,
-	art: HTMLImageElement,
+	art: HTMLImageElement | HTMLCanvasElement,
 	index: number,
 	x: number,
 	y: number,
@@ -42,7 +45,7 @@ export function sprite(
 	h: number
 ) {
 	const r = RECTS[index],
-		scale = art.naturalWidth / 1254;
+		scale = ("naturalWidth" in art ? art.naturalWidth : art.width) / 1254;
 	ctx.drawImage(
 		art,
 		r[0] * scale,
@@ -80,19 +83,19 @@ export function makeGround(map: MapId, s: GameState) {
 				n = hash(x, y);
 			const base =
 				t === "grass"
-					? ["#648342", "#698946", "#6b8948"][Math.floor(n * 3)]
+					? PALETTE.grass[Math.floor(n * 3)]
 					: t === "path"
-						? "#b5a071"
+						? PALETTE.path
 						: t === "soil"
 							? "#725337"
 							: t === "water"
-								? "#397f82"
+								? PALETTE.water
 								: t === "floor"
 									? "#8c674a"
 									: t === "stone"
 										? "#343d47"
 										: map === "garden"
-											? "#344d30"
+											? PALETTE.forest
 											: "#222b32";
 			rect(g, base, px, py, 32, 32);
 			for (let i = 0; i < 18; i++) {
@@ -101,12 +104,34 @@ export function makeGround(map: MapId, s: GameState) {
 					xx = px + Math.floor(a * 30),
 					yy = py + Math.floor(b * 30);
 				if (t === "grass") {
-					rect(g, i % 3 ? "#78964e" : "#53783e", xx, yy, 1 + (i % 3), 1 + (i % 2));
-					if (i % 4 === 0) rect(g, "#88a55d", xx + 1, yy - 2, 1, 3);
+					rect(
+						g,
+						i % 3 ? PALETTE.grassLight : PALETTE.grassShade,
+						xx,
+						yy,
+						1 + (i % 3),
+						1 + (i % 2)
+					);
+					if (i % 4 === 0) rect(g, PALETTE.grassTip, xx + 1, yy - 2, 1, 3);
 				}
 				if (t === "path")
-					rect(g, i % 2 ? "#c3af7e" : "#a58f62", xx, yy, 2 + (i % 3), 1 + (i % 2));
-				if (t === "water") rect(g, i % 2 ? "#428e8c" : "#35777f", xx, yy, 3 + (i % 5), 1);
+					rect(
+						g,
+						i % 2 ? PALETTE.pathLight : PALETTE.pathShade,
+						xx,
+						yy,
+						2 + (i % 3),
+						1 + (i % 2)
+					);
+				if (t === "water")
+					rect(
+						g,
+						i % 2 ? PALETTE.waterLight : PALETTE.waterShade,
+						xx,
+						yy,
+						3 + (i % 5),
+						1
+					);
 				if (t === "stone") rect(g, i % 2 ? "#3b4650" : "#303840", xx, yy, 4, 2);
 			}
 			if (t === "floor") {
@@ -187,8 +212,9 @@ export function viewFor(s: GameState, width: number, height: number, zoom = 1.2)
 }
 export function renderWorld(
 	ctx: CanvasRenderingContext2D,
-	art: HTMLImageElement,
+	art: HTMLImageElement | HTMLCanvasElement,
 	interior: HTMLImageElement,
+	players: PlayerSheets,
 	ground: HTMLCanvasElement,
 	s: GameState,
 	v: View,
@@ -199,7 +225,7 @@ export function renderWorld(
 ) {
 	ctx.imageSmoothingEnabled = false;
 	ctx.clearRect(0, 0, v.width, v.height);
-	rect(ctx, s.map === "garden" ? "#263d2d" : "#141e24", 0, 0, v.width, v.height);
+	rect(ctx, s.map === "garden" ? "#102c37" : "#141e24", 0, 0, v.width, v.height);
 	ctx.save();
 	ctx.scale(v.zoom, v.zoom);
 	ctx.translate(-Math.round(v.cameraX), -Math.round(v.cameraY));
@@ -211,17 +237,17 @@ export function renderWorld(
 			for (let x = 23; x < 33; x++)
 				if (terrain("garden", x, y) === "water" && hash(x, y) > 0.5) {
 					ctx.globalAlpha = 0.25 + 0.15 * Math.sin(time / 1000 + x + y);
-					rect(ctx, "#b2d7ba", x * 32 + ((time / 90 + x * 3) % 15), y * 32 + 12, 7, 1);
+					rect(ctx, "#79a5b2", x * 32 + ((time / 90 + x * 3) % 15), y * 32 + 12, 7, 1);
 				}
 		ctx.globalAlpha = 1;
 		for (let i = 0; i < 18; i++) {
 			const x = (i * 137 + time * 0.008) % (width * TILE),
 				y = (i * 91 + time * 0.004) % (height * TILE);
-			rect(ctx, "#d9ca84", x, y, 2, 1);
+			rect(ctx, "#769eac", x, y, 2, 1);
 		}
 	}
 	if (grid || tool !== "hand") {
-		ctx.strokeStyle = s.map === "garden" ? "#e5efbb35" : "#dce6dd28";
+		ctx.strokeStyle = s.map === "garden" ? "#96c7cb24" : "#dce6dd28";
 		ctx.lineWidth = 0.5;
 		for (let x = 0; x <= width; x++) {
 			ctx.beginPath();
@@ -293,6 +319,11 @@ export function renderWorld(
 					bush: [40, 34]
 				};
 				let [w, h] = size[o.kind];
+				if (o.kind === "tree") {
+					const shape = treeAppearance(o);
+					w = shape.width;
+					h = shape.height;
+				}
 				if (o.kind === "crop" && s.minutes - (o.planted ?? 0) < 90) {
 					w = 18;
 					h = 17;
@@ -302,8 +333,7 @@ export function renderWorld(
 				ctx.ellipse(cx, bottom - 2, w * 0.34, 5, 0, 0, Math.PI * 2);
 				ctx.fill();
 				if (o.opened) ctx.globalAlpha = 0.55;
-				const sway = o.kind === "tree" ? Math.sin(time / 1700 + o.x) * 0.8 : 0;
-				sprite(ctx, art, SPRITES[o.kind], cx - w / 2 + sway, bottom - h, w, h);
+				sprite(ctx, art, SPRITES[o.kind], cx - w / 2, bottom - h, w, h);
 				ctx.globalAlpha = 1;
 			}
 		});
@@ -327,19 +357,53 @@ export function renderWorld(
 			ctx.beginPath();
 			ctx.ellipse(s.x * 32, s.y * 32 + 5, 11, 4, 0, 0, Math.PI * 2);
 			ctx.fill();
-			const bob = Math.sin(s.steps) * 1.3;
-			sprite(ctx, art, 12 + s.direction, s.x * 32 - 13, s.y * 32 - 47 + bob, 26, 54);
+			const pose = playerFrame(s),
+				sheet = players[pose.action],
+				sourceWidth = "naturalWidth" in sheet ? sheet.naturalWidth : sheet.width,
+				sourceHeight = "naturalHeight" in sheet ? sheet.naturalHeight : sheet.height,
+				compiled = pose.action === "walk" || pose.action === "idle",
+				cw = sourceWidth / ANIMATIONS[pose.action].frames,
+				rowRect = ANIMATIONS[pose.action].rowRects?.[pose.row],
+				sourceY = rowRect
+					? (rowRect[0] * sourceHeight) / 1254
+					: (pose.row * sourceHeight) / 4,
+				ch = rowRect ? (rowRect[1] * sourceHeight) / 1254 : sourceHeight / 4,
+				drawHeight = (64 * ch) / cw;
+			ctx.save();
+			ctx.translate(Math.round(s.x * 32), Math.round(s.y * 32));
+			if (pose.mirror) ctx.scale(-1, 1);
+			ctx.drawImage(
+				sheet,
+				pose.frame * cw,
+				sourceY,
+				cw,
+				ch,
+				-32,
+				compiled ? Math.round(6 - (PLAYER_FOOT.y / PLAYER_CELL) * 64) : 6 - drawHeight,
+				64,
+				drawHeight
+			);
+			ctx.restore();
 			ctx.globalAlpha = 1;
-			if (s.attack > 0) {
-				ctx.strokeStyle = "#fff2c3";
-				ctx.lineWidth = 3;
-				ctx.beginPath();
-				ctx.arc(s.x * 32, s.y * 32 - 9, 35, -s.attack * 8, 2.5 - s.attack * 8);
-				ctx.stroke();
-			}
 		}
 	});
 	drawables.sort((a, b) => a.y - b.y).forEach((d) => d.draw());
+	for (const p of s.projectiles) {
+		ctx.save();
+		ctx.translate(p.x * 32, p.y * 32 - 12);
+		ctx.rotate(Math.atan2(p.dy, p.dx));
+		rect(ctx, "#c5a774", -10, -1, 20, 2);
+		ctx.fillStyle = "#d3e6ef";
+		ctx.beginPath();
+		ctx.moveTo(12, 0);
+		ctx.lineTo(5, -4);
+		ctx.lineTo(5, 4);
+		ctx.closePath();
+		ctx.fill();
+		rect(ctx, "#82a6c2", -10, -3, 4, 6);
+		ctx.restore();
+	}
+
 	if (hover && tool !== "hand") {
 		const [x, y] = hover;
 		ctx.fillStyle = Math.hypot(s.x - x - 0.5, s.y - y - 0.5) <= 4.5 ? "#e4eebd55" : "#df745b66";

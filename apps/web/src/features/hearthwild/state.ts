@@ -1,4 +1,14 @@
 import {
+	ANIMATIONS,
+	ATTACK_DURATION,
+	ATTACK_RELEASE,
+	FACING,
+	WALK_SPEED,
+	RUN_SPEED,
+	type Weapon,
+	type Motion
+} from "./animation";
+import {
 	initialObjects,
 	isFixture,
 	isSolid,
@@ -11,6 +21,7 @@ import {
 export const AWAKE_SECONDS = 600;
 export const SLEEP_SECONDS = 10;
 export const SAVE_KEY = "wfchat.hearthwild.v1";
+export type Projectile = { x: number; y: number; dx: number; dy: number; remaining: number };
 export type Enemy = { id: number; x: number; y: number; hp: number };
 export type GameState = {
 	version: 1;
@@ -18,6 +29,11 @@ export type GameState = {
 	x: number;
 	y: number;
 	direction: number;
+	weapon: Weapon;
+	motion: Motion;
+	animationTime: number;
+	attackDirection: number;
+	projectiles: Projectile[];
 	minutes: number;
 	awake: number;
 	sleep: number;
@@ -44,6 +60,11 @@ export function newGame(): GameState {
 		x: 14.5,
 		y: 12.5,
 		direction: 0,
+		weapon: "sword",
+		motion: "idle",
+		animationTime: 0,
+		attackDirection: 0,
+		projectiles: [],
 		minutes: 360,
 		awake: 600,
 		sleep: 0,
@@ -87,20 +108,54 @@ export function blocked(s: GameState, map: MapId, x: number, y: number): boolean
 		s.objects[map].some((o) => o.x === tx && o.y === ty && isSolid(o.kind))
 	);
 }
-export function move(s: GameState, dx: number, dy: number, dt: number) {
+export function setMotion(s: GameState, motion: Motion) {
+	if (s.motion === motion) return;
+	const gait =
+		(s.motion === "walk" || s.motion === "run") && (motion === "walk" || motion === "run");
+	const phase = gait
+		? ((s.animationTime * ANIMATIONS[s.motion].fps) / ANIMATIONS[s.motion].frames) % 1
+		: 0;
+	s.motion = motion;
+	s.animationTime = (phase * ANIMATIONS[motion].frames) / ANIMATIONS[motion].fps;
+}
+export function move(s: GameState, dx: number, dy: number, dt: number, running = false): boolean {
 	const length = Math.hypot(dx, dy);
-	if (!length || s.sleep > 0) return;
-	const speed = (3.5 * dt) / length;
-	const nx = s.x + dx * speed,
-		ny = s.y + dy * speed;
-	if (!blocked(s, s.map, nx + 0.18 * Math.sign(dx), s.y)) s.x = nx;
-	if (!blocked(s, s.map, s.x, ny + 0.18 * Math.sign(dy))) s.y = ny;
+	if (!length || s.sleep > 0 || s.attack > 0 || dt <= 0) return false;
+	const step = ((running ? RUN_SPEED : WALK_SPEED) * dt) / length;
+	const beforeX = s.x,
+		beforeY = s.y;
+	// Small substeps preserve collision when running or advancing a large simulation step.
+	const parts = Math.max(1, Math.ceil((step * length) / 0.15));
+	for (let i = 0; i < parts; i++) {
+		const nx = s.x + (dx * step) / parts,
+			ny = s.y + (dy * step) / parts;
+		if (!blocked(s, s.map, nx + 0.18 * Math.sign(dx), s.y)) s.x = nx;
+		if (!blocked(s, s.map, s.x, ny + 0.18 * Math.sign(dy))) s.y = ny;
+	}
 	s.direction = Math.abs(dx) > Math.abs(dy) ? (dx < 0 ? 2 : 3) : dy < 0 ? 1 : 0;
-	s.steps += dt * 9;
+	const moved = Math.hypot(s.x - beforeX, s.y - beforeY) > 1e-6;
+	if (moved) {
+		setMotion(s, running ? "run" : "walk");
+		const distance = Math.hypot(s.x - beforeX, s.y - beforeY);
+		s.animationTime += distance / (running ? RUN_SPEED : WALK_SPEED);
+		s.steps += (distance / WALK_SPEED) * 9;
+	}
+	return moved;
+}
+export function equip(s: GameState, weapon: Weapon) {
+	if (s.sleep > 0 || s.attack > 0) return;
+	s.weapon = weapon;
+}
+function stopAction(s: GameState) {
+	s.attack = 0;
+	s.projectiles = [];
+	setMotion(s, "idle");
+	s.animationTime = 0;
 }
 export function startSleep(s: GameState, forced = false, random = Math.random) {
 	if (s.sleep > 0) return;
 	s.sleep = SLEEP_SECONDS;
+	stopAction(s);
 	if (forced) {
 		if (random() < (s.map === "dungeon" ? 0.85 : 0.45)) {
 			s.hp -= 35;
@@ -111,6 +166,7 @@ export function startSleep(s: GameState, forced = false, random = Math.random) {
 	if (s.hp <= 0) recover(s);
 }
 function recover(s: GameState) {
+	stopAction(s);
 	s.hp = 60;
 	s.coins = Math.floor(s.coins * 0.5);
 	s.sleep = 10;
@@ -134,7 +190,12 @@ export function tick(s: GameState, dt: number, random = Math.random) {
 	s.awake = Math.max(0, s.awake - dt);
 	s.minutes += dt * 1.2;
 	s.hurt = Math.max(0, s.hurt - dt);
+	const previousAttack = s.attack;
 	s.attack = Math.max(0, s.attack - dt);
+	if (s.motion === "idle") s.animationTime += dt;
+	const release = ATTACK_DURATION[s.weapon] - ATTACK_RELEASE[s.weapon];
+	if (previousAttack > release && s.attack <= release) releaseWeapon(s);
+	updateProjectiles(s, dt);
 	if (s.awake === 0) {
 		startSleep(s, true, random);
 		return;
@@ -169,6 +230,7 @@ export function interact(s: GameState) {
 		(p) => Math.hypot(s.x - p.x - 0.5, s.y - p.y - 0.5) < 1.8
 	);
 	if (portal) {
+		stopAction(s);
 		s.map = portal.to;
 		[s.x, s.y] = portal.spawn.map((n) => n + 0.5) as [number, number];
 		notice(s, `enter.${s.map}`);
@@ -227,15 +289,53 @@ export function interact(s: GameState) {
 }
 export function attack(s: GameState) {
 	if (s.sleep > 0 || s.attack > 0) return;
-	s.attack = 0.35;
-	for (const e of s.enemies)
-		if (s.map === "dungeon" && e.hp > 0 && Math.hypot(e.x - s.x, e.y - s.y) < 2) {
-			e.hp--;
-			if (e.hp === 0) {
-				s.coins += 12;
-				notice(s, "slimeDefeated");
+	s.attack = ATTACK_DURATION[s.weapon];
+	s.attackDirection = s.direction;
+	setMotion(s, "idle");
+	s.animationTime = 0;
+}
+function damageEnemy(s: GameState, e: Enemy) {
+	e.hp--;
+	if (e.hp === 0) {
+		s.coins += 12;
+		notice(s, "slimeDefeated");
+	}
+}
+function releaseWeapon(s: GameState) {
+	const [dx, dy] = FACING[s.attackDirection];
+	if (s.weapon === "bow") {
+		s.projectiles.push({ x: s.x + dx * 0.45, y: s.y + dy * 0.45, dx, dy, remaining: 9 });
+		return;
+	}
+	if (s.map !== "dungeon") return;
+	for (const e of s.enemies) {
+		if (e.hp <= 0) continue;
+		const ex = e.x - s.x,
+			ey = e.y - s.y,
+			d = Math.hypot(ex, ey);
+		if (d < 1.9 && (d < 0.6 || (ex * dx + ey * dy) / d >= -0.15)) damageEnemy(s, e);
+	}
+}
+function updateProjectiles(s: GameState, dt: number) {
+	s.projectiles = s.projectiles.filter((p) => {
+		const distance = Math.min(p.remaining, dt * 12),
+			parts = Math.max(1, Math.ceil(distance / 0.15));
+		for (let i = 0; i < parts; i++) {
+			p.x += (p.dx * distance) / parts;
+			p.y += (p.dy * distance) / parts;
+			p.remaining -= distance / parts;
+			if (blocked(s, s.map, p.x, p.y)) return false;
+			const hit =
+				s.map === "dungeon"
+					? s.enemies.find((e) => e.hp > 0 && Math.hypot(e.x - p.x, e.y - p.y) < 0.5)
+					: null;
+			if (hit) {
+				damageEnemy(s, hit);
+				return false;
 			}
 		}
+		return p.remaining > 1e-6;
+	});
 }
 export function eat(s: GameState) {
 	if (s.sleep > 0) return;
@@ -379,6 +479,7 @@ export function deserialize(raw: string | null): GameState {
 			s.hp > 100 ||
 			s.awake > 600 ||
 			s.sleep > 10 ||
+			!Number.isInteger(s.direction) ||
 			s.direction > 3 ||
 			s.x >= MAPS[s.map].width ||
 			s.y >= MAPS[s.map].height ||
@@ -438,6 +539,12 @@ export function deserialize(raw: string | null): GameState {
 			)
 		)
 			return fresh;
+		if (s.weapon === undefined) s.weapon = "sword";
+		if (s.weapon !== "sword" && s.weapon !== "bow") return fresh;
+		s.motion = "idle";
+		s.animationTime = 0;
+		s.attackDirection = s.direction;
+		s.projectiles = [];
 		s.attack = 0;
 		s.hurt = 0;
 		s.message = "welcomeBack";

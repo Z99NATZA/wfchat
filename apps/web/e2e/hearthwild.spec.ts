@@ -1,3 +1,5 @@
+import { ANIMATIONS } from "../src/features/hearthwild/animation";
+import { WALK_SOURCES } from "../src/features/hearthwild/playerSprites";
 import { expect, test, type Page } from "@playwright/test";
 import { viewFor } from "../src/features/hearthwild/render";
 import { newGame, SAVE_KEY, type GameState } from "../src/features/hearthwild/state";
@@ -119,6 +121,8 @@ test("forced sleep, paused menus and cavern combat work without a backend", asyn
 	await page.getByTestId("hearthwild-stage").focus();
 	await page.clock.runFor(32);
 	await page.keyboard.press(" ");
+	await page.clock.runFor(240);
+	await page.keyboard.press("f");
 	expect((await savedState(page)).enemies[0].hp).toBe(2);
 	await page.clock.runFor(9000);
 	await expect(page.getByTestId("sleep-overlay")).toBeVisible();
@@ -139,4 +143,155 @@ test("mobile Thai interface keeps the world and controls inside the viewport", a
 	await expect(page.getByRole("dialog", { name: "วิธีเล่น" })).toBeVisible();
 	await page.getByRole("button", { name: "ปิด", exact: true }).click();
 	await page.screenshot({ path: "test-results/hearthwild-mobile-th.png" });
+});
+
+test("Aiko changes from idle to walk and Shift sprint, then returns to idle", async ({ page }) => {
+	const expectedSheets = new Set([
+		...Object.values(ANIMATIONS).map((a) => a.url),
+		...Object.values(WALK_SOURCES)
+	]);
+	const sheets = new Set<string>();
+	page.on("response", (response) => {
+		const path = new URL(response.url()).pathname;
+		if (expectedSheets.has(path)) sheets.add(path);
+	});
+	const frozenTime = new Date("2026-01-01T00:00:00Z");
+	await page.clock.install({ time: frozenTime });
+	await openWorld(page);
+	await page.clock.pauseAt((await page.evaluate(() => Date.now())) + 1000);
+	const stage = page.getByTestId("hearthwild-stage");
+	await page.keyboard.down("d");
+	await page.clock.runFor(300);
+	await expect(stage).toHaveAttribute("data-motion", "walk");
+	await page.keyboard.press("f");
+	const walked = (await savedState(page)).x - 14.5;
+	await page.keyboard.down("Shift");
+	await page.clock.runFor(300);
+	await expect(stage).toHaveAttribute("data-motion", "run");
+	await page.keyboard.press("f");
+	const ran = (await savedState(page)).x - 14.5 - walked;
+	expect(ran).toBeGreaterThan(walked * 1.4);
+	await page.screenshot({ path: "test-results/hearthwild-aiko-running.png" });
+	await page.keyboard.up("Shift");
+	await page.clock.runFor(200);
+	await expect(stage).toHaveAttribute("data-motion", "walk");
+	await page.keyboard.up("d");
+	await page.clock.runFor(200);
+	await expect(stage).toHaveAttribute("data-motion", "idle");
+	expect(sheets).toEqual(expectedSheets);
+});
+
+test("Aiko equips a bow, draws, releases an arrow and saves her weapon choice", async ({
+	page
+}) => {
+	const state = newGame();
+	state.map = "dungeon";
+	state.x = 12.5;
+	state.y = 16.5;
+	state.direction = 3;
+	state.enemies = [{ id: 0, x: 18, y: 16.5, hp: 1 }];
+	const frozenTime = new Date("2026-01-01T00:00:00Z");
+	await page.clock.install({ time: frozenTime });
+	await openWorld(page, state);
+	await page.clock.pauseAt((await page.evaluate(() => Date.now())) + 1000);
+	await page.getByRole("button", { name: "Bow", exact: true }).click();
+	await expect(page.getByTestId("hearthwild-stage")).toHaveAttribute("data-weapon", "bow");
+	await page.keyboard.press(" ");
+	await expect(page.getByTestId("hearthwild-stage")).toHaveAttribute("data-animation", "bow");
+	await page.clock.runFor(180);
+	await page.screenshot({ path: "test-results/hearthwild-aiko-bow.png" });
+	await page.clock.runFor(180);
+	await page.keyboard.press("f");
+	let saved = await savedState(page);
+	expect(saved.projectiles).toHaveLength(1);
+	expect(saved.enemies[0].hp).toBe(1);
+	await page.clock.runFor(500);
+	await page.keyboard.press("f");
+	saved = await savedState(page);
+	expect(saved.enemies[0].hp).toBe(0);
+	expect(saved.coins).toBe(37);
+	await page.clock.resume();
+	await page.reload();
+	await expect(page.getByTestId("hearthwild-stage")).toHaveAttribute("data-weapon", "bow");
+});
+
+test("Aiko idle soles stay planted and every walking frame shares its registration", async ({
+	page
+}) => {
+	await openWorld(page);
+	const stats = await page.evaluate(async () => {
+		const modulePath = "/src/features/hearthwild/playerSprites.ts";
+		const { prepareIdle, prepareWalk, measureFrame, PLAYER_CELL } = await import(modulePath);
+		const load = (src: string) =>
+			new Promise<HTMLImageElement>((resolve, reject) => {
+				const image = new Image();
+				image.onload = () => resolve(image);
+				image.onerror = reject;
+				image.src = src;
+			});
+		const [idleImage, front, back, side] = await Promise.all([
+			load("/images/hearthwild/aiko-idle-v2.png"),
+			load("/images/hearthwild/aiko-walk-front-v2.png"),
+			load("/images/hearthwild/aiko-walk-back-v2.png"),
+			load("/images/hearthwild/aiko-walk-side-v2.png")
+		]);
+		const idle = prepareIdle(idleImage) as HTMLCanvasElement,
+			walk = prepareWalk({ front, back, side }) as HTMLCanvasElement;
+		const hash = (p: Uint8ClampedArray) => {
+			let h = 2166136261;
+			for (const n of p) h = Math.imul(h ^ n, 16777619);
+			return h >>> 0;
+		};
+		const soles = Array.from({ length: 4 }, (_, row) =>
+			Array.from({ length: 4 }, (_, col) =>
+				hash(idle.getContext("2d")!.getImageData(col * 96, row * 96 + 58, 96, 38).data)
+			)
+		);
+		const ctx = walk.getContext("2d")!,
+			pixels = ctx.getImageData(0, 0, walk.width, walk.height).data;
+		const registration = Array.from({ length: 4 }, (_, row) =>
+			Array.from({ length: 8 }, (_, col) => {
+				const b = measureFrame(pixels, walk.width, {
+					x: col * PLAYER_CELL,
+					y: row * PLAYER_CELL,
+					width: PLAYER_CELL,
+					height: PLAYER_CELL
+				});
+				return {
+					head: b.anchorX - col * PLAYER_CELL,
+					sole: b.anchorY - row * PLAYER_CELL,
+					height: b.height
+				};
+			})
+		);
+		const review = document.createElement("section");
+		review.id = "aiko-atlas-review";
+		review.style.cssText =
+			"position:fixed;inset:0;z-index:9999;background:#122c38;color:#d8e5eb;padding:22px;font:14px system-ui;display:flex;gap:16px;align-items:flex-start";
+		for (const [title, canvas] of [
+			["Walk · 8 frames × down / up / left / right", walk],
+			["Idle · planted feet + breathing", idle]
+		] as const) {
+			const col = document.createElement("div"),
+				label = document.createElement("p");
+			label.textContent = title;
+			label.style.margin = "0 0 16px";
+			canvas.style.cssText = "image-rendering:pixelated;background:#29424a;display:block";
+			col.append(label, canvas);
+			review.append(col);
+		}
+		document.body.append(review);
+		return { soles, registration };
+	});
+	for (const row of stats.soles) expect(new Set(row).size).toBe(1);
+	for (const row of stats.registration) {
+		expect(
+			Math.max(...row.map((f) => f.sole)) - Math.min(...row.map((f) => f.sole))
+		).toBeLessThanOrEqual(1);
+		expect(
+			Math.max(...row.map((f) => f.height)) - Math.min(...row.map((f) => f.height))
+		).toBeLessThanOrEqual(1);
+		for (const frame of row) expect(Math.abs(frame.head - 48)).toBeLessThan(1);
+	}
+	await page.screenshot({ path: "test-results/hearthwild-aiko-motion-contact.png" });
 });

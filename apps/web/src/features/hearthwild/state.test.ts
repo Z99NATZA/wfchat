@@ -162,6 +162,8 @@ describe("Hearthwild survival and world", () => {
 		const coins = s.coins;
 		attack(s);
 		attack(s);
+		expect(s.enemies[0].hp).toBe(1);
+		tick(s, 0.22);
 		expect(s.enemies[0].hp).toBe(0);
 		expect(s.enemies[1].hp).toBe(3);
 		expect(s.coins).toBe(coins + 12);

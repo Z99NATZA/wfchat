@@ -951,3 +951,158 @@
 .hw-overlay:has([role="dialog"]) {
 	z-index: 40;
 }
+.hearthwild {
+	background: #14343f;
+	--hw-panel: #142e3aee;
+	--hw-edge: #82adbb4a;
+	--hw-gold: #c6dce1;
+}
+.hw-tool {
+	background: #294954;
+	color: #b3cdd5;
+	border-color: #7cabb638;
+}
+.hw-tool:hover {
+	background: #385c68;
+}
+.hw-tool.active {
+	background: #426f7c;
+	border-color: #a8d0db;
+	box-shadow:
+		inset 0 0 0 2px #9fc5ce33,
+		0 0 10px #87b7c722;
+	color: #e5f4f5;
+}
+.hw-modal {
+	background: #193643;
+	border-color: #7299a399;
+}
+.hw-side-actions button,
+.hw-zoom button {
+	background: #193641db;
+	color: #b8d0d6;
+}
+.hw-weapons {
+	position: absolute;
+	left: 24px;
+	bottom: 68px;
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	padding: 6px;
+	color: #bad2db;
+}
+.hw-weapons button {
+	display: flex;
+	align-items: center;
+	gap: 5px;
+	padding: 6px;
+	border: 1px solid transparent;
+	border-radius: 4px;
+	background: transparent;
+	color: #adcad3;
+	font-size: 10px;
+}
+.hw-weapons button[aria-pressed="true"] {
+	background: #3a626e;
+	border-color: #8dbac6;
+	color: #edf8f8;
+}
+.hw-player-name {
+	font-size: 10px;
+	padding: 0 4px;
+}
+.hw-weapons kbd {
+	font-size: 8px;
+}
+.hw-run-hold {
+	position: relative;
+	border: 1px solid #8caebb99;
+	border-radius: 9px;
+	background: #20434ee6;
+	color: #d6e7ec;
+	width: 44px;
+	height: 44px;
+	align-self: center;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	touch-action: none;
+}
+.hw-run-hold:active {
+	background: #477989;
+}
+.hw-primary {
+	background: #85afba;
+	color: #122f39;
+	border-color: #aacbd2;
+}
+.hw-primary:hover {
+	background: #a6cbd4;
+}
+.hw-inventory > div {
+	background: #234752;
+	border-color: #648c9855;
+}
+.hw-side-actions button:hover {
+	background: #315763;
+}
+.hw-modal > svg,
+.hw-location-icon {
+	color: #a8c9d3;
+}
+.hw-energy i {
+	background: #78aebb;
+}
+.hw-modal p {
+	color: #b3c9ce;
+}
+.hw-help-list > div {
+	border-color: #6d9ba8;
+}
+.hw-season {
+	color: #afced4;
+}
+.hw-footer {
+	font-size: 7px;
+}
+.hw-touch {
+	gap: 12px;
+}
+@media (max-width: 900px) {
+	.hw-weapons {
+		left: 14px;
+		bottom: 182px;
+	}
+	.hw-player-name {
+		display: none;
+	}
+	.hw-footer {
+		font-size: 6px;
+	}
+}
+@media (max-width: 560px) {
+	.hw-weapons {
+		left: 9px;
+		bottom: 69px;
+		padding: 4px;
+	}
+	.hw-weapons button {
+		font-size: 9px;
+		padding: 5px;
+	}
+	.hw-weapons kbd {
+		font-size: 7px;
+	}
+	.hw-weapons svg {
+		width: 15px;
+	}
+}
+@media (pointer: coarse) and (min-width: 561px) {
+	.hw-weapons {
+		bottom: 78px;
+	}
+	.hw-weapons .hw-player-name {
+		display: none;
+	}
+}
