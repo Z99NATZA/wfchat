@@ -552,12 +552,28 @@ test("southern garden becomes open water and old saves return safely to shore", 
 		const minimap = Array.from({ length: 38 }, (_, x) =>
 			Array.from(m.getImageData(x * 3 + 1, 82, 1, 1).data).slice(0, 3)
 		);
-		return { southern, stalePath, minimap };
+		const pixels = ctx.getImageData(0, 0, ground.width, ground.height).data;
+		let shallowBrightness = 0,
+			deepBrightness = 0;
+		for (let x = 0; x < ground.width; x += 4) {
+			const shallow = ((23 * 32 + 16) * ground.width + x) * 4,
+				deep = ((27 * 32 + 16) * ground.width + x) * 4;
+			shallowBrightness += pixels[shallow] + pixels[shallow + 1] + pixels[shallow + 2];
+			deepBrightness += pixels[deep] + pixels[deep + 1] + pixels[deep + 2];
+		}
+		return {
+			southern,
+			stalePath,
+			minimap,
+			shallowBrightness,
+			deepBrightness
+		};
 	});
 	for (const [r, g, b] of [...water.southern, ...water.minimap, water.stalePath]) {
 		expect(b).toBeGreaterThan(g);
 		expect(g).toBeGreaterThan(r);
 	}
+	expect(water.shallowBrightness).toBeGreaterThan(water.deepBrightness * 1.25);
 	await page.getByTestId("hearthwild-stage").focus();
 	await page.keyboard.down("s");
 	await page.clock.runFor(800);

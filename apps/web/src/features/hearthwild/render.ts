@@ -3,6 +3,7 @@ import { PLAYER_CELL, PLAYER_FOOT, type PlayerSheets } from "./playerSprites";
 import { ANIMATIONS, playerFrame } from "./animation";
 import { PALETTE, treeAppearance } from "./appearance";
 import type { GameState } from "./state";
+import { paintGardenWaterGround } from "./water";
 import { hash, MAPS, terrain, TILE, type MapId, type ObjectKind, type Tool } from "./world";
 export const INTERIOR_URL = "/images/hearthwild/interior-atlas-v1.png";
 export const ART_URL = "/images/hearthwild/woodland-atlas-v1.png";
@@ -85,9 +86,10 @@ export function makeGround(map: MapId, s: GameState) {
 						: (s.tiles[`${map}:${x}:${y}`] ?? baseTerrain),
 				px = x * TILE,
 				py = y * TILE,
-				n = hash(x, y);
+				n = hash(x, y),
+				waterUnderlay = map === "garden" && t === "water";
 			const base =
-				t === "grass"
+				t === "grass" || waterUnderlay
 					? PALETTE.grass[Math.floor(n * 3)]
 					: t === "path"
 						? PALETTE.path
@@ -108,7 +110,7 @@ export function makeGround(map: MapId, s: GameState) {
 					b = hash(x * 9 + i, y * 33 - i),
 					xx = px + Math.floor(a * 30),
 					yy = py + Math.floor(b * 30);
-				if (t === "grass") {
+				if (t === "grass" || waterUnderlay) {
 					rect(
 						g,
 						i % 3 ? PALETTE.grassLight : PALETTE.grassShade,
@@ -127,15 +129,6 @@ export function makeGround(map: MapId, s: GameState) {
 						yy,
 						2 + (i % 3),
 						1 + (i % 2)
-					);
-				if (t === "water")
-					rect(
-						g,
-						i % 2 ? PALETTE.waterLight : PALETTE.waterShade,
-						xx,
-						yy,
-						3 + (i % 5),
-						1
 					);
 				if (t === "stone") rect(g, i % 2 ? "#3b4650" : "#303840", xx, yy, 4, 2);
 			}
@@ -163,6 +156,7 @@ export function makeGround(map: MapId, s: GameState) {
 			}
 		}
 	if (map === "garden") {
+		paintGardenWaterGround(g, width, height);
 		// Hand-laid stepping stones around the cottage and a tilled starter garden.
 		for (let x = 8; x < 12; x++)
 			for (let y = 16; y < 19; y++) {
@@ -238,18 +232,12 @@ export function renderWorld(
 	ctx.drawImage(ground, 0, 0);
 	const { width, height } = MAPS[s.map];
 	if (s.map === "garden") {
-		// Animated water glints and little windblown petals.
-		for (let y = 0; y < height; y++)
-			for (let x = 0; x < width; x++)
-				if (terrain("garden", x, y) === "water" && hash(x, y) > 0.5) {
-					ctx.globalAlpha = 0.25 + 0.15 * Math.sin(time / 1000 + x + y);
-					rect(ctx, "#79a5b2", x * 32 + ((time / 90 + x * 3) % 15), y * 32 + 12, 7, 1);
-				}
-		ctx.globalAlpha = 1;
+		// Little windblown petals remain independent from the still scenery.
 		for (let i = 0; i < 18; i++) {
 			const x = (i * 137 + time * 0.008) % (width * TILE),
 				y = (i * 91 + time * 0.004) % (height * TILE);
-			rect(ctx, "#769eac", x, y, 2, 1);
+			if (terrain("garden", Math.floor(x / TILE), Math.floor(y / TILE)) !== "water")
+				rect(ctx, "#769eac", x, y, 2, 1);
 		}
 	}
 	if (grid || tool !== "hand") {

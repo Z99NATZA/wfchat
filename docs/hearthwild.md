@@ -14,7 +14,15 @@ the app locale.
 The garden, cottage interior and cavern are separate maps with explicit doors.
 The garden's five southern rows (23–27) are water across the entire map width,
 joining the existing pond and ending the southbound path at the shore. Terrain,
-collision, placement, water animation and the minimap share this water boundary.
+collision, placement, water rendering and the minimap share this water boundary.
+The lake uses a stationary deep-teal surface with shallow shoreline light,
+submerged stones and local depth variation. It has no animated wave, caustic or
+specular effects. The pond and southern water share one open connection and one
+continuous outer bank, without a shoreline drawn across the joining water. The
+visual shoreline uses deterministic sub-tile contours to soften the collision grid's
+long straight banks and stair-step pond edges. A layered wet-soil bank, moss,
+shallow-water tint, small stones and grass tufts make the land-water transition
+read as a natural shoreline without changing collision.
 Existing saves remove objects and ground edits from the flooded strip and
 refund materials for player placements. A saved player on the former land is
 moved to the nearest open dry tile while keeping progress and sleep state.
@@ -78,8 +86,10 @@ Original transparent woodland and interior atlases live at
 `apps/web/public/images/hearthwild/woodland-atlas-v1.png` and
 `apps/web/public/images/hearthwild/interior-atlas-v1.png`. `render.ts` owns their
 source rectangles and draws independent objects above procedural textured
-ground tiles. Garden grass, water, paths and foliage use a dark blue-green
-palette; the cottage keeps its warm interior colors. A cached foliage material
+ground tiles. Garden grass, paths and foliage use a dark blue-green palette;
+the still-water presentation in `water.ts` uses Mistwater's deep-water and
+shallow-light color language in a lower-resolution style that matches the garden.
+The cottage keeps its warm interior colors. A cached foliage material
 preserves wood, roofs and light sources. `appearance.ts` defines deterministic
 tree width and height variation from object coordinates. Tree sprites remain
 stationary and keep their grid anchor and collision tile at the trunk.
@@ -96,21 +106,19 @@ day and night. Auto restores the game clock. This temporary preview changes no
 simulation time, sleepiness, crop growth or save data; it resets on leaving or
 reloading the game.
 
-
-
 Aiko is the playable character, based on the main app's
 `apps/web/public/images/aiko-avatar.png`: navy-black hair with blue streaks,
 side braid, blue-violet eyes and blue jewelry, with an ivory and navy adventurer
 outfit. `animation.ts` owns five animation actions and their source row mapping,
 mirroring, frame rates and playback rules:
 
-| Action | Asset under `apps/web/public/images/hearthwild/` | Rate | Playback |
-| --- | --- | --- | --- |
-| Idle | `aiko-idle-v2.png` | 2 fps | Breathing loop; 120 ms blink every 5 seconds |
-| Walk | `aiko-walk-{front,back,side}-v2.png` | 16 fps | 8-frame loop; left mirrors right |
-| Run | `aiko-run-{front,back,side}-v2.png` | 24 fps | 8-frame grounded loop; left mirrors right |
-| Sword | `aiko-sword-v1.png` | 10 fps | Once per attack |
-| Bow | `aiko-bow-v1.png` | 6.25 fps | Once per attack |
+| Action | Asset under `apps/web/public/images/hearthwild/` | Rate     | Playback                                     |
+| ------ | ------------------------------------------------ | -------- | -------------------------------------------- |
+| Idle   | `aiko-idle-v2.png`                               | 2 fps    | Breathing loop; 120 ms blink every 5 seconds |
+| Walk   | `aiko-walk-{front,back,side}-v2.png`             | 16 fps   | 8-frame loop; left mirrors right             |
+| Run    | `aiko-run-{front,back,side}-v2.png`              | 24 fps   | 8-frame grounded loop; left mirrors right    |
+| Sword  | `aiko-sword-v1.png`                              | 10 fps   | Once per attack                              |
+| Bow    | `aiko-bow-v1.png`                                | 6.25 fps | Once per attack                              |
 
 `playerSprites.ts` registers the idle, walk and run artwork once at load time. Its
 96-pixel cells align the head center and foot baseline, normalize body height,
