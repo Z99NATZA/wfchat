@@ -81,23 +81,6 @@ export function gardenWaterDepth(x: number, y: number): number {
 	return Math.max(1, Math.min(MAX_DEPTH_TILES, nearest));
 }
 
-function drawSubmergedStone(
-	ctx: CanvasRenderingContext2D,
-	x: number,
-	y: number,
-	width: number,
-	height: number
-) {
-	ctx.fillStyle = "rgba(3, 31, 44, 0.34)";
-	ctx.beginPath();
-	ctx.ellipse(x, y + 2, width * 0.54, height * 0.55, 0, 0, Math.PI * 2);
-	ctx.fill();
-	ctx.fillStyle = "rgba(57, 112, 105, 0.24)";
-	ctx.beginPath();
-	ctx.ellipse(x - width * 0.08, y - 1, width * 0.42, height * 0.32, 0, Math.PI, Math.PI * 2);
-	ctx.fill();
-}
-
 function strokeShore(ctx: CanvasRenderingContext2D, points: ReadonlyArray<WaterPoint>) {
 	ctx.beginPath();
 	tracePoints(ctx, points);
@@ -319,17 +302,8 @@ export function paintGardenWaterGround(
 		for (let x = 0; x < width; x++) {
 			if (terrain("garden", x, y) !== "water") continue;
 			const depth = gardenWaterDepth(x, y),
-				seed = hash(x + 211, y + 97),
 				px = x * TILE,
 				py = y * TILE;
-			if (depth > 1.5 && seed > 0.84)
-				drawSubmergedStone(
-					ctx,
-					px + 7 + hash(x + 19, y + 41) * 19,
-					py + 8 + hash(x + 71, y + 13) * 16,
-					8 + hash(x, y + 29) * 11,
-					4 + hash(x + 31, y) * 5
-				);
 			ctx.fillStyle = depth < 2 ? "rgba(143, 208, 176, 0.16)" : "rgba(115, 192, 186, 0.1)";
 			for (let speck = 0; speck < 4; speck++) {
 				const sx = Math.floor(hash(x * 17 + speck, y * 31 + speck) * 29),

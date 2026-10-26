@@ -1,5 +1,13 @@
 export const TILE = 32;
 export const GARDEN_SOUTH_WATER_ROW = 24;
+export const GARDEN_FIELD = {
+	left: 3,
+	right: 13,
+	top: 14,
+	bottom: 22,
+	pathX: 8,
+	pathY: 18
+} as const;
 export type MapId = "garden" | "home" | "dungeon";
 export type ObjectKind =
 	| "tree"
@@ -26,10 +34,7 @@ export const MAPS: Record<MapId, { width: number; height: number; portals: Porta
 	garden: {
 		width: 38,
 		height: 28,
-		portals: [
-			{ x: 14, y: 9, to: "home", spawn: [10, 12] },
-			{ x: 33, y: 5, to: "dungeon", spawn: [4, 17] }
-		]
+		portals: [{ x: 14, y: 9, to: "home", spawn: [10, 12] }]
 	},
 	home: { width: 20, height: 16, portals: [{ x: 10, y: 14, to: "garden", spawn: [14, 10] }] },
 	dungeon: { width: 32, height: 23, portals: [{ x: 3, y: 19, to: "garden", spawn: [32, 6] }] }
@@ -37,6 +42,24 @@ export const MAPS: Record<MapId, { width: number; height: number; portals: Porta
 export function hash(x: number, y: number) {
 	const n = Math.sin(x * 127.1 + y * 311.7) * 43758.5453;
 	return n - Math.floor(n);
+}
+export function isGardenFieldCell(x: number, y: number) {
+	return (
+		x >= GARDEN_FIELD.left &&
+		x <= GARDEN_FIELD.right &&
+		y >= GARDEN_FIELD.top &&
+		y <= GARDEN_FIELD.bottom
+	);
+}
+export function isGardenFieldBed(x: number, y: number) {
+	return (
+		x > GARDEN_FIELD.left &&
+		x < GARDEN_FIELD.right &&
+		y > GARDEN_FIELD.top &&
+		y < GARDEN_FIELD.bottom &&
+		x !== GARDEN_FIELD.pathX &&
+		y !== GARDEN_FIELD.pathY
+	);
 }
 export function terrain(
 	map: MapId,
@@ -58,12 +81,6 @@ export function terrain(
 	}
 	if (y === GARDEN_SOUTH_WATER_ROW - 1 && x >= 25 && x <= 29) return "water";
 	if (((x - 27) / 5.5) ** 2 + ((y - 19) / 4) ** 2 < 1) return "water";
-	if (
-		(x >= 13 && x <= 15 && y >= 9) ||
-		(y >= 10 && y <= 12 && x >= 9 && x <= 32) ||
-		(x >= 31 && x <= 33 && y >= 5 && y <= 12)
-	)
-		return "path";
 	return "grass";
 }
 export function initialObjects(): Record<MapId, WorldObject[]> {
@@ -75,50 +92,24 @@ export function initialObjects(): Record<MapId, WorldObject[]> {
 		y
 	});
 	const garden: WorldObject[] = [];
-	for (let y = 2; y < 27; y++)
-		for (let x = 2; x < 37; x++) {
-			if (
-				(x < 6 || y < 4 || x > 35 || y > 25) &&
-				hash(x, y) > 0.48 &&
-				hash(x * 3 + 17, y * 5 + 23) > 0.6 &&
-				Math.hypot(x - 33, y - 5) > 3
-			)
-				garden.push(obj("tree", x, y));
+	for (let y: number = GARDEN_FIELD.top; y <= GARDEN_FIELD.bottom; y++)
+		for (let x: number = GARDEN_FIELD.left; x <= GARDEN_FIELD.right; x++) {
+			const border =
+				x === GARDEN_FIELD.left ||
+				x === GARDEN_FIELD.right ||
+				y === GARDEN_FIELD.top ||
+				y === GARDEN_FIELD.bottom;
+			if (border && !(x === GARDEN_FIELD.pathX && y === GARDEN_FIELD.bottom))
+				garden.push({ id: `initial-field-fence-${x}-${y}`, kind: "fence", x, y });
+			else if (isGardenFieldBed(x, y))
+				garden.push({
+					id: `initial-field-crop-${x}-${y}`,
+					kind: "crop",
+					x,
+					y,
+					planted: -120
+				});
 		}
-	for (const [x, y] of [
-		[7, 7],
-		[8, 20],
-		[20, 5],
-		[22, 7],
-		[19, 22],
-		[7, 23]
-	])
-		garden.push(obj("tree", x, y));
-	for (const [x, y] of [
-		[19, 15],
-		[8, 15],
-		[21, 23],
-		[31, 24]
-	])
-		garden.push(obj("rock", x, y));
-	for (const [x, y] of [
-		[9, 9],
-		[18, 9],
-		[30, 7],
-		[22, 16],
-		[32, 20]
-	])
-		garden.push(obj("bush", x, y));
-	for (const [x, y] of [
-		[6, 17],
-		[20, 22],
-		[32, 22]
-	])
-		garden.push(obj("mushroom", x, y));
-	for (let x = 8; x < 12; x++)
-		for (let y = 16; y < 19; y++) garden.push({ ...obj("crop", x, y), planted: -120 });
-	for (let x = 7; x < 13; x++) garden.push(obj("fence", x, 20));
-	garden.push(obj("lantern", 12, 10), obj("lantern", 16, 10), obj("chest", 17, 8));
 	const home = [
 		obj("bed", 5, 5),
 		obj("chest", 14, 5),
@@ -143,7 +134,7 @@ export function initialObjects(): Record<MapId, WorldObject[]> {
 		[6, 8]
 	])
 		dungeon.push(obj("rock", x, y));
-	return { garden: garden.filter((o) => o.y < GARDEN_SOUTH_WATER_ROW), home, dungeon };
+	return { garden, home, dungeon };
 }
 export function isSolid(kind: ObjectKind) {
 	return !["crop", "mushroom"].includes(kind);

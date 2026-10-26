@@ -12,6 +12,7 @@ import {
 	GARDEN_SOUTH_WATER_ROW,
 	initialObjects,
 	isFixture,
+	isGardenFieldCell,
 	isSolid,
 	MAPS,
 	terrain,
@@ -25,7 +26,7 @@ export const SAVE_KEY = "wfchat.hearthwild.v1";
 export type Projectile = { x: number; y: number; dx: number; dy: number; remaining: number };
 export type Enemy = { id: number; x: number; y: number; hp: number };
 export type GameState = {
-	version: 1;
+	version: 1 | 2 | 3;
 	map: MapId;
 	x: number;
 	y: number;
@@ -56,7 +57,7 @@ export type GameState = {
 };
 export function newGame(): GameState {
 	return {
-		version: 1,
+		version: 3,
 		map: "garden",
 		x: 14.5,
 		y: 12.5,
@@ -262,6 +263,10 @@ export function interact(s: GameState) {
 		return;
 	}
 	if (o.kind === "crop") {
+		if (o.id.startsWith("initial-field-")) {
+			notice(s, "nothing");
+			return;
+		}
 		if (s.minutes - (o.planted ?? 0) < 90) {
 			notice(s, "growing");
 			return;
@@ -360,6 +365,7 @@ export function edit(s: GameState, tool: Tool, x: number, y: number): boolean {
 	if (
 		blockedTerrain(s.map, x, y) ||
 		isFixture(s.map, x, y) ||
+		(s.map === "garden" && isGardenFieldCell(x, y)) ||
 		MAPS[s.map].portals.some((p) => Math.hypot(p.x - x, p.y - y) < 2) ||
 		(Math.floor(s.x) === x && Math.floor(s.y) === y)
 	) {
@@ -503,7 +509,9 @@ export function deserialize(raw: string | null): GameState {
 	if (!raw) return newGame();
 	try {
 		const s = JSON.parse(raw) as GameState;
-		if (s.version !== 1 || !["garden", "home", "dungeon"].includes(s.map)) return newGame();
+		if (![1, 2, 3].includes(s.version) || !["garden", "home", "dungeon"].includes(s.map))
+			return newGame();
+		const savedVersion = s.version;
 		const fresh = newGame();
 		for (const key of [
 			"x",
@@ -544,7 +552,9 @@ export function deserialize(raw: string | null): GameState {
 			"crop",
 			"crystal",
 			"mushroom",
-			"bush"
+			"bush",
+			"coop",
+			"chicken"
 		];
 		for (const map of ["garden", "home", "dungeon"] as const) {
 			if (!Array.isArray(s.objects?.[map]) || s.objects[map].length > 2000) return fresh;
@@ -563,17 +573,39 @@ export function deserialize(raw: string | null): GameState {
 				)
 					return fresh;
 		}
-		const currentGardenTrees = new Set(
-			fresh.objects.garden
-				.filter((o) => o.kind === "tree" && o.id.startsWith("initial-"))
-				.map((o) => `${o.x}:${o.y}`)
-		);
-		s.objects.garden = s.objects.garden.filter(
-			(o) =>
-				o.kind !== "tree" ||
-				!o.id.startsWith("initial-") ||
-				currentGardenTrees.has(`${o.x}:${o.y}`)
-		);
+		if (savedVersion < 3) {
+			s.version = 3;
+			if (savedVersion === 1) {
+				s.objects.garden = [];
+				for (const key of Object.keys(s.tiles))
+					if (key.startsWith("garden:")) delete s.tiles[key];
+				if (s.map === "dungeon") {
+					s.map = "garden";
+					s.x = 14.5;
+					s.y = 12.5;
+				}
+			}
+			s.objects.garden = s.objects.garden.filter((o) => {
+				if (!isGardenFieldCell(o.x, o.y)) return true;
+				if (o.id.startsWith("placed-")) {
+					s.wood += COST[o.kind as Tool] ?? 0;
+					if (o.kind === "crop") s.seeds++;
+				}
+				return false;
+			});
+			for (const [key, value] of Object.entries(s.tiles)) {
+				const [map, column, row] = key.split(":");
+				if (map === "garden" && isGardenFieldCell(Number(column), Number(row))) {
+					if (value === "path") s.wood++;
+					delete s.tiles[key];
+				}
+			}
+			s.objects.garden.push(...fresh.objects.garden.map((o) => ({ ...o })));
+			if (s.map === "garden" && blocked(s, "garden", s.x, s.y)) {
+				s.x = 14.5;
+				s.y = 18.5;
+			}
+		}
 		if (
 			!Array.isArray(s.enemies) ||
 			s.enemies.length > 30 ||

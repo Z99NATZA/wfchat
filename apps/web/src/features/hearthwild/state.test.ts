@@ -69,7 +69,7 @@ describe("Hearthwild survival and world", () => {
 		edit(s, "lantern", 8, 8);
 		expect(serialize(s)).toBe(snapshot);
 	});
-	it("transitions through separate garden, home, and dungeon portals", () => {
+	it("transitions between the garden and home without a dungeon entrance", () => {
 		const s = newGame();
 		s.x = 14.5;
 		s.y = 10;
@@ -82,11 +82,6 @@ describe("Hearthwild survival and world", () => {
 		expect(s.map).toBe("garden");
 		s.x = 32.5;
 		s.y = 6;
-		interact(s);
-		expect(s.map).toBe("dungeon");
-		expect(blocked(s, s.map, s.x, s.y)).toBe(false);
-		s.x = 3.5;
-		s.y = 18.5;
 		interact(s);
 		expect(s.map).toBe("garden");
 	});
@@ -138,8 +133,8 @@ describe("Hearthwild survival and world", () => {
 		const s = newGame();
 		s.x = 16.5;
 		s.y = 14.5;
-		edit(s, "soil", 17, 14);
-		edit(s, "crop", 17, 14);
+		expect(edit(s, "soil", 17, 14)).toBe(true);
+		expect(edit(s, "crop", 17, 14)).toBe(true);
 		interact(s);
 		expect(s.message).toBe("growing");
 		tick(s, 75);
@@ -174,7 +169,7 @@ describe("Hearthwild survival and world", () => {
 		s.y = 14.5;
 		edit(s, "lantern", 17, 14);
 		s.sleep = 4.3;
-		s.objects.garden.find((o) => o.kind === "chest")!.opened = true;
+		s.objects.home.find((o) => o.kind === "chest")!.opened = true;
 		const restored = deserialize(serialize(s));
 		expect(restored.sleep).toBe(4.3);
 		expect(restored.wood).toBe(s.wood);
@@ -187,15 +182,52 @@ describe("Hearthwild survival and world", () => {
 		])
 			expect(deserialize(raw)).toEqual(newGame());
 	});
-	it("removes obsolete dense-border trees from old saves without touching placed trees", () => {
+	it("clears the version-one garden, adds the field and rescues dungeon saves", () => {
 		const s = newGame();
+		s.version = 1;
+		s.map = "dungeon";
 		s.objects.garden.push(
 			{ id: "initial-legacy-dense-tree", kind: "tree", x: 2, y: 2 },
 			{ id: "placed-player-tree", kind: "tree", x: 25, y: 15 }
 		);
+		s.tiles["garden:16:14"] = "path";
+		s.tiles["home:7:8"] = "path";
 		const restored = deserialize(serialize(s));
-		expect(restored.objects.garden.some((o) => o.id === "initial-legacy-dense-tree")).toBe(false);
-		expect(restored.objects.garden.some((o) => o.id === "placed-player-tree")).toBe(true);
+		expect(restored.version).toBe(3);
+		expect(restored.map).toBe("garden");
+		expect(restored.objects.garden.filter((o) => o.kind === "crop")).toHaveLength(48);
+		expect(restored.objects.garden.filter((o) => o.kind === "fence")).toHaveLength(35);
+		expect(restored.tiles).toEqual({ "home:7:8": "path" });
+		const reloaded = deserialize(serialize(restored));
+		expect(reloaded.version).toBe(3);
+		expect(reloaded.objects.garden).toEqual(restored.objects.garden);
+	});
+	it("adds the field to version-two saves while preserving edits outside its footprint", () => {
+		const s = newGame();
+		s.version = 2;
+		s.objects.garden = [
+			{ id: "placed-outside", kind: "lantern", x: 15, y: 14 },
+			{ id: "placed-inside", kind: "tree", x: 4, y: 15 }
+		];
+		s.tiles = { "garden:4:16": "path", "garden:16:14": "path" };
+		const wood = s.wood,
+			restored = deserialize(serialize(s));
+		expect(restored.version).toBe(3);
+		expect(restored.objects.garden.some((o) => o.id === "placed-outside")).toBe(true);
+		expect(restored.objects.garden.some((o) => o.id === "placed-inside")).toBe(false);
+		expect(restored.objects.garden.filter((o) => o.kind === "crop")).toHaveLength(48);
+		expect(restored.tiles).toEqual({ "garden:16:14": "path" });
+		expect(restored.wood).toBe(wood + 5);
+	});
+	it("keeps the fixed field planted and protected from grid edits", () => {
+		const s = newGame();
+		s.x = 4.5;
+		s.y = 15.5;
+		const objects = s.objects.garden.length;
+		interact(s);
+		expect(s.objects.garden).toHaveLength(objects);
+		s.x = 6.5;
+		expect(edit(s, "remove", 4, 15)).toBe(false);
 	});
 	it("blocks solid indoor furniture for both walking and placement", () => {
 		const s = newGame();

@@ -11,14 +11,15 @@ the app locale.
 
 ## World and controls
 
-The garden, cottage interior and cavern are separate maps with explicit doors.
+The garden and cottage interior are connected by the cottage door. The cavern
+remains implemented for direct testing, but has no entrance in the garden.
 The garden's four southern rows (24–27) are water across the entire map width.
 A tapered five-tile mouth through row 23 joins the pond to this southern water,
-while the southbound path reaches the restored land row beside it. Terrain,
+while every remaining dry garden tile starts as grass. Terrain,
 collision, placement, water rendering and the minimap share this water boundary.
 The lake uses a stationary deep-teal surface with shallow shoreline light,
-submerged stones, local depth variation and a five-tile tapered mouth into the
-southern water. It has no animated wave, caustic or
+local depth variation and a five-tile tapered mouth into the southern water. It
+has no submerged stones, animated wave, caustic or
 specular effects. The pond and southern water share one open connection and one
 continuous outer bank, without a shoreline drawn across the joining water. The
 visual shoreline uses deterministic sub-tile contours to soften the collision grid's
@@ -83,6 +84,10 @@ Progress, grid edits, collected rewards, enemy health and sleep progress save
 under `wfchat.hearthwild.v1` in localStorage every five seconds, on interactions,
 and when hiding or leaving the page. Invalid saves start a fresh world. Storage
 failure keeps the game playable and displays a save failure indicator.
+Legacy version-one saves clear their former garden objects and garden tile edits
+once; players left in the cavern return to the garden because its entrance is
+absent. Version-one and version-two saves then receive the fixed lower-left field
+without removing edits outside its footprint.
 
 ## Artwork
 
@@ -90,15 +95,18 @@ Original transparent woodland and interior atlases live at
 `apps/web/public/images/hearthwild/woodland-atlas-v1.png` and
 `apps/web/public/images/hearthwild/interior-atlas-v1.png`. `render.ts` owns their
 source rectangles and draws independent objects above procedural textured
-ground tiles. Garden grass, paths and foliage use a dark blue-green palette;
-the still-water presentation in `water.ts` uses Mistwater's deep-water and
+ground tiles. The initial garden is an open lawn with the fixed cottage and an
+11-by-9 lower-left field. Its dark teal soil holds four crop beds divided by a
+blue-green cross path, with a fenced perimeter and a southern entrance. The
+field is protected from grid edits. All other non-water terrain uses the dark
+blue-green grass palette. The pond and southern water retain their still depth
+gradients without submerged stones.
+The still-water presentation in `water.ts` uses Mistwater's deep-water and
 shallow-light color language in a lower-resolution style that matches the garden.
 The cottage keeps its warm interior colors. A cached foliage material
 preserves wood, roofs and light sources. `appearance.ts` defines deterministic
-tree width and height variation from object coordinates. Tree sprites remain
-stationary, use small deterministic position offsets to break up straight rows,
-and keep their collision tile at the trunk. The initial woodland border uses
-spaced clusters rather than a continuous wall of trees.
+width, height and position variation for trees placed by the player; their
+collision remains fixed to the trunk tile.
 
 Aiko's idle, walking and running atlases use one anatomical scale per facing
 direction instead of resizing each pose independently. Pose silhouettes may

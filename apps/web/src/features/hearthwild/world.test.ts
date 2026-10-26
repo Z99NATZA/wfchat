@@ -1,21 +1,32 @@
 import { describe, it, expect } from "vitest";
-import { GARDEN_SOUTH_WATER_ROW, MAPS, terrain, initialObjects } from "./world";
+import {
+	GARDEN_FIELD,
+	GARDEN_SOUTH_WATER_ROW,
+	isGardenFieldBed,
+	MAPS,
+	terrain,
+	initialObjects
+} from "./world";
 import { blocked, deserialize, edit, move, newGame, serialize } from "./state";
 import { findPath } from "./engine";
 
 describe("southern garden water", () => {
-	it("keeps the woodland border sparse instead of forming continuous tree rows", () => {
-		const trees = initialObjects().garden.filter((o) => o.kind === "tree"),
-			cells = new Set(trees.map((o) => `${o.x}:${o.y}`));
-		expect(trees.length).toBeGreaterThan(35);
-		expect(trees.length).toBeLessThan(55);
-		for (let y = 2; y < GARDEN_SOUTH_WATER_ROW; y++) {
-			let run = 0;
-			for (let x = 1; x < MAPS.garden.width - 1; x++) {
-				run = cells.has(`${x}:${y}`) ? run + 1 : 0;
-				expect(run).toBeLessThanOrEqual(3);
-			}
-		}
+	it("starts with a four-bed field in the lower-left lawn and only the cottage portal", () => {
+		const garden = initialObjects().garden;
+		expect(garden.filter((o) => o.kind === "crop")).toHaveLength(48);
+		expect(garden.filter((o) => o.kind === "fence")).toHaveLength(35);
+		expect(garden.every((o) => o.id.startsWith("initial-field-"))).toBe(true);
+		expect(garden.some((o) => o.x === GARDEN_FIELD.pathX && o.y === GARDEN_FIELD.bottom)).toBe(
+			false
+		);
+		expect(isGardenFieldBed(4, 15)).toBe(true);
+		expect(isGardenFieldBed(GARDEN_FIELD.pathX, 15)).toBe(false);
+		expect(isGardenFieldBed(4, GARDEN_FIELD.pathY)).toBe(false);
+		expect(MAPS.garden.portals).toEqual([{ x: 14, y: 9, to: "home", spawn: [10, 12] }]);
+		for (let y = 1; y < GARDEN_SOUTH_WATER_ROW; y++)
+			for (let x = 1; x < MAPS.garden.width - 1; x++)
+				if (terrain("garden", x, y) !== "water")
+					expect(terrain("garden", x, y)).toBe("grass");
 	});
 
 	it("fills all southern rows, including map-edge corners, and joins the pond", () => {
@@ -24,8 +35,8 @@ describe("southern garden water", () => {
 				expect(terrain("garden", x, y)).toBe("water");
 		expect(terrain("garden", 27, 22)).toBe("water");
 		expect(terrain("garden", 27, 23)).toBe("water");
-		expect(terrain("garden", 14, 22)).toBe("path");
-		expect(terrain("garden", 14, 23)).toBe("path");
+		expect(terrain("garden", 14, 22)).toBe("grass");
+		expect(terrain("garden", 14, 23)).toBe("grass");
 		expect(terrain("garden", 14, 24)).toBe("water");
 		expect(terrain("garden", 24, 23)).toBe("grass");
 		expect(terrain("garden", 25, 23)).toBe("water");

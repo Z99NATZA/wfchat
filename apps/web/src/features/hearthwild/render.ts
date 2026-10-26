@@ -4,7 +4,17 @@ import { ANIMATIONS, playerFrame } from "./animation";
 import { PALETTE, treeAppearance } from "./appearance";
 import type { GameState } from "./state";
 import { paintGardenWaterGround } from "./water";
-import { hash, MAPS, terrain, TILE, type MapId, type ObjectKind, type Tool } from "./world";
+import {
+	GARDEN_FIELD,
+	hash,
+	isGardenFieldBed,
+	MAPS,
+	terrain,
+	TILE,
+	type MapId,
+	type ObjectKind,
+	type Tool
+} from "./world";
 export const INTERIOR_URL = "/images/hearthwild/interior-atlas-v1.png";
 export const ART_URL = "/images/hearthwild/woodland-atlas-v1.png";
 const RECTS: number[][] = [
@@ -158,16 +168,25 @@ export function makeGround(map: MapId, s: GameState) {
 		}
 	if (map === "garden") {
 		paintGardenWaterGround(g, width, height);
-		// Hand-laid stepping stones around the cottage and a tilled starter garden.
-		for (let x = 8; x < 12; x++)
-			for (let y = 16; y < 19; y++) {
-				rect(g, "#715237", x * 32, y * 32, 32, 32);
-				for (let i = 3; i < 32; i += 7) rect(g, "#4e3b2b", x * 32 + 2, y * 32 + i, 28, 2);
+		for (let y = GARDEN_FIELD.top + 1; y < GARDEN_FIELD.bottom; y++)
+			for (let x = GARDEN_FIELD.left + 1; x < GARDEN_FIELD.right; x++) {
+				const px = x * TILE,
+					py = y * TILE;
+				if (isGardenFieldBed(x, y)) {
+					rect(g, "#173b40", px, py, TILE, TILE);
+					for (let row = 5; row < TILE; row += 7) {
+						rect(g, "#102e35", px + 2, py + row, 28, 2);
+						rect(g, "#28534f", px + 3, py + row + 2, 26, 1);
+					}
+				} else {
+					rect(g, "#31585c", px, py, TILE, TILE);
+					for (let i = 0; i < 8; i++) {
+						const xx = px + Math.floor(hash(x * 19 + i, y * 23 - i) * 28),
+							yy = py + Math.floor(hash(x * 7 - i, y * 29 + i) * 28);
+						rect(g, i % 2 ? "#496f70" : "#274a52", xx, yy, 2 + (i % 3), 1 + (i % 2));
+					}
+				}
 			}
-		for (let y = 9; y < 12; y++) {
-			rect(g, "#756f57", 14 * 32 + 3, y * 32 + 9, 25, 14);
-			rect(g, "#b7b497", 14 * 32 + 4, y * 32 + 8, 23, 11);
-		}
 	}
 	if (map === "home") {
 		rect(g, "#413732", 32, 32, 576, 51);
@@ -286,12 +305,6 @@ export function renderWorld(
 	}
 	if (s.map === "garden")
 		drawables.push({
-			y: 5.6 * 32,
-			draw: () => furnishing(3, 31.7 * 32, 2.1 * 32, 3.6 * 32, 3.8 * 32)
-		});
-
-	if (s.map === "garden")
-		drawables.push({
 			y: 9 * 32,
 			draw: () => sprite(ctx, art, 1, 10.5 * 32, 1.8 * 32, 8 * 32, 7.5 * 32)
 		});
@@ -328,7 +341,12 @@ export function renderWorld(
 				ctx.ellipse(cx, bottom - 2, w * 0.34, 5, 0, 0, Math.PI * 2);
 				ctx.fill();
 				if (o.opened) ctx.globalAlpha = 0.55;
-				sprite(ctx, art, SPRITES[o.kind], cx - w / 2, bottom - h, w, h);
+				if (o.id.startsWith("initial-field-crop-")) {
+					ctx.save();
+					ctx.filter = "hue-rotate(68deg) saturate(0.58) brightness(0.82)";
+					sprite(ctx, art, SPRITES[o.kind], cx - w / 2, bottom - h, w, h);
+					ctx.restore();
+				} else sprite(ctx, art, SPRITES[o.kind], cx - w / 2, bottom - h, w, h);
 				ctx.globalAlpha = 1;
 			}
 		});
