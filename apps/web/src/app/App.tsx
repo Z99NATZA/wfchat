@@ -28,6 +28,7 @@ import { resetLearnedContext } from "@/services/automaticMemoryService";
 import { Navigate, Route, Routes } from "react-router-dom";
 
 const CafeRoomPage = lazy(() => import("@/pages/CafeRoomPage"));
+const CozyFarmPage = lazy(() => import("@/pages/CozyFarmPage"));
 const HearthwildPage = lazy(() => import("@/pages/HearthwildPage"));
 const MistwaterPage = lazy(() => import("@/pages/MistwaterPage"));
 
@@ -347,6 +348,18 @@ function App() {
 					element={
 						<Suspense fallback={cafeLoading}>
 							<MistwaterPage
+								activityBar={activityBar}
+								backgroundImageUrl={settings.backgroundImageUrl}
+								headerControls={headerControls}
+							/>
+						</Suspense>
+					}
+				/>
+				<Route
+					path="/cozy-farm"
+					element={
+						<Suspense fallback={cafeLoading}>
+							<CozyFarmPage
 								activityBar={activityBar}
 								backgroundImageUrl={settings.backgroundImageUrl}
 								headerControls={headerControls}

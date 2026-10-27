@@ -72,6 +72,8 @@ Shared layers must not import page- or feature-specific behavior.
   local run state, and it does not call the API or import Cafe behavior.
 - Hearthwild is a separate client-only grid adventure. Its lazy route owns a Canvas
   renderer, three maps and localStorage saves; see [Hearthwild](hearthwild.md).
+- Cozy Fantasy Farm is an independent client-only PixiJS feature with tile-based
+  farming and its own localStorage save; see [Cozy Fantasy Farm](cozy-farm.md).
 - Image bytes, voice providers, models, credentials, and automatic memory remain
   backend-owned.
 

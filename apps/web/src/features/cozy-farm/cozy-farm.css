@@ -1,0 +1,284 @@
+.cozy-farm {
+	position: relative;
+	isolation: isolate;
+	width: 100%;
+	height: 100%;
+	min-height: 360px;
+	overflow: hidden;
+	background: #132e32;
+	color: #f3e6c9;
+	font-family: Georgia, "Noto Serif Thai", serif;
+}
+.cozy-canvas {
+	position: absolute;
+	inset: 0;
+	outline: none;
+}
+.cozy-canvas canvas {
+	display: block;
+	width: 100%;
+	height: 100%;
+	image-rendering: pixelated;
+}
+.cozy-panel {
+	background: rgba(16, 39, 42, 0.92);
+	border: 1px solid #a9945b66;
+	box-shadow: 0 4px 18px #071d2455;
+	border-radius: 7px;
+}
+.cozy-heading {
+	position: absolute;
+	top: 18px;
+	left: 20px;
+	padding: 13px 20px;
+	pointer-events: none;
+}
+.cozy-eyebrow {
+	font: 10px system-ui;
+	letter-spacing: 3px;
+	color: #c4bc8e;
+}
+.cozy-heading h1 {
+	font-size: 21px;
+	font-weight: 400;
+	margin: 4px 0;
+}
+.cozy-heading p {
+	font: 11px system-ui;
+	color: #a8c4b1;
+	margin: 5px 0 0;
+}
+.cozy-farm button {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	cursor: pointer;
+	color: inherit;
+	border: 1px solid transparent;
+	border-radius: 4px;
+	transition: background 0.15s;
+	background: transparent;
+}
+.cozy-farm button:hover {
+	background: #54736555;
+}
+.cozy-farm button:focus-visible {
+	outline: 2px solid #ffe1a3;
+	outline-offset: 2px;
+}
+.cozy-top-actions {
+	position: absolute;
+	top: 18px;
+	right: 20px;
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 7px 10px;
+	font: 13px system-ui;
+}
+.cozy-top-actions > span {
+	display: flex;
+	align-items: center;
+	gap: 7px;
+	padding: 0 7px;
+	color: #d7dda9;
+}
+.cozy-top-actions button {
+	width: 29px;
+	height: 29px;
+}
+.cozy-notice {
+	position: absolute;
+	top: 140px;
+	left: 20px;
+	max-width: min(370px, 80%);
+	padding: 9px 13px;
+	color: #c4d2ba;
+	font: 12px/1.6 system-ui;
+	pointer-events: none;
+}
+.cozy-bottom {
+	position: absolute;
+	bottom: 14px;
+	left: 50%;
+	transform: translateX(-50%);
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 7px;
+	max-width: 100%;
+}
+.cozy-toolbar {
+	display: flex;
+	gap: 5px;
+	padding: 7px;
+}
+.cozy-toolbar button,
+.cozy-build button {
+	position: relative;
+	width: 45px;
+	height: 47px;
+	background: #254752;
+	color: #c3d8d3;
+	border: 1px solid #4d7273;
+}
+.cozy-toolbar button.selected,
+.cozy-build button.selected {
+	border-color: #e7ca81;
+	background: #486b66;
+	box-shadow: inset 0 0 0 2px #d7bb7340;
+	color: #fff0bc;
+}
+.cozy-toolbar small {
+	position: absolute;
+	top: 2px;
+	left: 4px;
+	font: 9px system-ui;
+	color: #c1d6cc;
+}
+.cozy-farm .cozy-prompt {
+	padding: 7px 11px;
+	gap: 9px;
+	font: 12px system-ui;
+}
+.cozy-prompt kbd {
+	border: 1px solid #78908a;
+	padding: 2px 5px;
+	border-radius: 3px;
+}
+.cozy-caption {
+	font: 11px system-ui;
+	color: #ecdfb7;
+	text-shadow: 0 1px 3px #102c32;
+}
+.cozy-caption span {
+	color: #a4c0b1;
+}
+.cozy-build {
+	display: flex;
+	gap: 6px;
+	padding: 7px;
+	position: absolute;
+	bottom: 88px;
+	right: 0;
+}
+.cozy-help,
+.cozy-pause {
+	position: absolute;
+	left: 50%;
+	top: 50%;
+	transform: translate(-50%, -50%);
+	width: min(440px, 90%);
+	padding: 26px;
+	z-index: 3;
+	font: 14px/1.7 system-ui;
+}
+.cozy-help h2 {
+	font: 24px Georgia;
+	margin: 0 0 16px;
+}
+.cozy-help p {
+	margin: 13px 0;
+}
+.cozy-farm .cozy-close {
+	position: absolute;
+	right: 10px;
+	top: 10px;
+	padding: 5px;
+}
+.cozy-muted {
+	color: #98b0a7;
+	font-size: 12px;
+}
+.cozy-pause {
+	text-align: center;
+	width: 220px;
+}
+.cozy-pause button {
+	padding: 8px 20px;
+	border-color: #8c9d7c;
+}
+.cozy-loading {
+	position: absolute;
+	inset: 0;
+	display: grid;
+	place-items: center;
+	background: #132e32;
+	z-index: 5;
+}
+.cozy-sr {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	overflow: hidden;
+	clip-path: inset(50%);
+}
+.cozy-touch {
+	display: none;
+	position: absolute;
+	left: 12px;
+	bottom: 96px;
+	grid-template-columns: repeat(3, 34px);
+	gap: 3px;
+	touch-action: none;
+}
+.cozy-touch button {
+	height: 34px;
+	background: #173a40cc;
+	border-color: #718b7166;
+}
+.cozy-touch button:first-child {
+	grid-column: 2;
+}
+.cozy-touch button:nth-child(2) {
+	grid-column: 1;
+}
+@media (pointer: coarse) {
+	.cozy-touch {
+		display: grid;
+	}
+}
+@media (max-width: 700px) {
+	.cozy-heading {
+		top: 10px;
+		left: 10px;
+		padding: 8px 12px;
+	}
+	.cozy-heading h1 {
+		font-size: 15px;
+	}
+	.cozy-top-actions {
+		top: 95px;
+		right: 10px;
+		gap: 1px;
+		padding: 3px;
+	}
+	.cozy-top-actions > span {
+		padding: 0 3px;
+	}
+	.cozy-notice {
+		top: 10px;
+		left: auto;
+		right: 10px;
+		max-width: 40%;
+		font-size: 10px;
+		padding: 6px;
+	}
+	.cozy-toolbar {
+		gap: 3px;
+		padding: 5px;
+	}
+	.cozy-toolbar button {
+		width: 32px;
+		height: 40px;
+	}
+	.cozy-toolbar svg {
+		width: 19px;
+	}
+	.cozy-caption span {
+		display: none;
+	}
+	.cozy-bottom {
+		bottom: 8px;
+	}
+}
