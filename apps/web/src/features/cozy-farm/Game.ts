@@ -2,7 +2,7 @@
 // This supports nginx CSP without allowing dynamic code evaluation.
 import "pixi.js/unsafe-eval";
 import { Application, Container, Graphics, Sprite } from "pixi.js";
-import { Art, COTTAGE_CHIMNEY } from "./art";
+import { Art, BUILDING_ART, COTTAGE_CHIMNEY } from "./art";
 import { forestStyle } from "./composition";
 import { BUTTERFLY_MEADOWS, GARDEN_ACCENTS, pierEdges, sceneryFits } from "./environment";
 import { boatMoorings, type Mooring } from "./harbor";
@@ -198,6 +198,8 @@ export class Game {
 			sprite.scale.set(TILE_SIZE / (16 * ART_DENSITY));
 			sprite.anchor.set(0.5, 1);
 			sprite.position.set((object.x + def.w / 2) * TILE_SIZE, (object.y + def.h) * TILE_SIZE);
+			if (object.kind === "cottage" || object.kind === "shed")
+				sprite.anchor.y = BUILDING_ART[object.kind].anchorY;
 			if (treeStyle) {
 				sprite.scale.set(sprite.scale.x * treeStyle.scale);
 				sprite.x += treeStyle.offsetX;
@@ -1034,6 +1036,14 @@ export class Game {
 			for (let y = 0; y <= HEIGHT; y++)
 				g.moveTo(0, y * TILE_SIZE).lineTo(WIDTH * TILE_SIZE, y * TILE_SIZE);
 			g.stroke({ color: 0xf7df9e, width: 0.5, alpha: 0.2 });
+			// Show the actual solid footprint separately from roof overhangs.
+			for (const object of this.world.objects) {
+				if (object.kind !== "cottage" && object.kind !== "shed") continue;
+				const { w, h } = DEFINITIONS[object.kind];
+				g.rect(object.x * TILE_SIZE, object.y * TILE_SIZE, w * TILE_SIZE, h * TILE_SIZE)
+					.fill({ color: 0xf7df9e, alpha: 0.06 })
+					.stroke({ color: 0xf7df9e, width: 1, alpha: 0.85 });
+			}
 		}
 		if (this.hover) {
 			const { x, y } = this.hover;

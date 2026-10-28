@@ -2,6 +2,17 @@
 
 Environment and crop PNGs are original transparent atlases generated with the built-in image_gen tool for this project. Source alpha is preserved; runtime textures use two texels per world pixel with nearest filtering.
 
+## Front-facing buildings
+
+`buildings-front-v2.png` is an original transparent cottage/shed atlas generated
+with the built-in image_gen tool. The [generation prompt](buildings-front-v2-prompt.txt)
+uses `environment-v1.png` as a style reference and specifies a north-up view with
+level front foundations and south-facing doors. `BUILDING_ART` in `art.ts` owns
+the measured frames, shared-grid dimensions and foundation anchors. The cottage
+facade spans approximately 112 world pixels; the shed spans 64. Small roof,
+foliage and doorstep overhangs remain visual. The original atlas still supplies
+the other environment objects.
+
 ## Garden props
 
 `garden-props-v1.png` is an original transparent atlas generated with the built-in

@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { expect, test } from "@playwright/test";
-import { createWorld, SAVE_KEY } from "../src/features/cozy-farm/world";
+import { createWorld, DEFINITIONS, SAVE_KEY, TILE_SIZE } from "../src/features/cozy-farm/world";
 test("independent Pixi world supports farming, placement, movement, pause and saved reload", async ({
 	page
 }, testInfo) => {
@@ -45,6 +45,7 @@ test("independent Pixi world supports farming, placement, movement, pause and sa
 		"/images/cozy-farm/aiko-walk-back-v2.png",
 		"/images/cozy-farm/aiko-walk-front-v2.png",
 		"/images/cozy-farm/aiko-walk-side-v2.png",
+		"/images/cozy-farm/buildings-front-v2.png",
 		"/images/cozy-farm/crops-v1.png",
 		"/images/cozy-farm/environment-v1.png",
 		"/images/cozy-farm/garden-props-v1.png"
@@ -105,7 +106,75 @@ test("independent Pixi world supports farming, placement, movement, pause and sa
 	expect(errors).toEqual([]);
 });
 
-for (const asset of ["environment-v1.png", "garden-props-v1.png"]) {
+for (const kind of ["cottage", "shed"] as const) {
+	test(`${kind} has a solid level front and a walkable side approach`, async ({ page }) => {
+		const world = createWorld(),
+			building = world.objects.find((object) => object.kind === kind)!,
+			{ w, h } = DEFINITIONS[kind],
+			front = (building.y + h) * TILE_SIZE,
+			right = (building.x + w) * TILE_SIZE;
+		world.terrain.fill("grass");
+		world.crops = {};
+		world.objects = [building];
+		world.player = {
+			x: (building.x + w / 2) * TILE_SIZE,
+			y: front + 12,
+			dx: 0,
+			dy: -1
+		};
+		await page.addInitScript(
+			({ key, world }) => {
+				localStorage.setItem("wfchat.locale", "en");
+				localStorage.setItem(key, JSON.stringify(world));
+			},
+			{ key: SAVE_KEY, world }
+		);
+		await page.route("**/api/**", (route) =>
+			route.fulfill({
+				status: 200,
+				contentType: "application/json",
+				body: JSON.stringify({ user_id: "guest", session_id: "guest", kind: "guest" })
+			})
+		);
+		await page.goto("/cozy-farm");
+		await expect(page.locator(".cozy-canvas canvas")).toBeVisible();
+		await expect(page.getByText("Opening your garden…")).toBeHidden();
+		const host = page.locator(".cozy-canvas"),
+			player = () =>
+				page.evaluate((key) => {
+					window.dispatchEvent(new Event("pagehide"));
+					return JSON.parse(localStorage.getItem(key)!).player as {
+						x: number;
+						y: number;
+					};
+				}, SAVE_KEY),
+			walk = async (key: string, duration: number) => {
+				await host.focus();
+				await page.keyboard.down(key);
+				await page.waitForTimeout(duration);
+				await page.keyboard.up(key);
+				await page.waitForTimeout(250);
+			};
+		await walk("w", 600);
+		const stopped = await player();
+		expect(stopped.y).toBeGreaterThanOrEqual(front + 2);
+		expect(stopped.y).toBeLessThan(front + 5);
+		await page.getByRole("button", { name: "Zoom in", exact: true }).click();
+		await page.getByRole("button", { name: "Zoom in", exact: true }).click();
+		await host.focus();
+		await page.keyboard.press("g");
+		await page.waitForTimeout(300);
+		await page.screenshot({ path: `test-results/cozy-farm-${kind}-footprint.png` });
+		await walk("d", 1800);
+		const beside = await player();
+		expect(beside.x).toBeGreaterThan(right + 3);
+		expect(beside.y).toBeCloseTo(stopped.y, 1);
+		await walk("w", 650);
+		expect((await player()).y).toBeLessThan(front - 20);
+	});
+}
+
+for (const asset of ["environment-v1.png", "garden-props-v1.png", "buildings-front-v2.png"]) {
 	test(`missing ${asset} shows an explicit artwork error`, async ({ page }) => {
 		await page.route(`**/images/cozy-farm/${asset}`, (route) => route.abort());
 		await page.route("**/api/**", (route) =>

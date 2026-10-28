@@ -21,6 +21,13 @@ and a shared render scale. Object sprites extend beyond their logical footprints
 `details.ts` draws the small two-way fish/sprout sign, pier posts, rope fenders
 and decorative fishing tackle on the same pixel grid; light and particle effects
 are code-drawn.
+
+`buildings-front-v2.png` supplies the cottage and shed in a north-up view with
+level front walls and centered doors facing south. Their measured foundations
+align with the existing rectangular collision footprints (7 × 4 and 4 × 3
+cells); roof overhangs remain visual. Pressing G outlines these footprints over
+the artwork. Building positions, collision, interactions and saved worlds retain
+their existing contracts. Cottage smoke uses the new atlas's chimney mouth.
 `garden-props-v1.png` supplies the bench, mailbox, flower pot, produce crate,
 watering can, basket and woodland mushrooms. `environment.ts` owns their authored
 positions and checks complete artwork bounds against terrain, crops and objects.

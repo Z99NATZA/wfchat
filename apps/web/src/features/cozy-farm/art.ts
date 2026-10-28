@@ -22,12 +22,26 @@ interface Asset {
 	width: number;
 	height?: number;
 }
+// Foundation edges, rather than projecting doorstep/foliage tips, sit on the
+// collision rectangle's south edge. Roof overhangs do not enlarge collision.
+export const BUILDING_ART = {
+	cottage: {
+		frame: [76, 118, 872, 790] as const,
+		width: 133,
+		height: 120.5,
+		anchorY: (880 - 118) / 790
+	},
+	shed: {
+		frame: [1024, 426, 456, 470] as const,
+		width: 78,
+		height: 80.5,
+		anchorY: (884 - 426) / 470
+	}
+};
 // Measured alpha bounds from the original atlas, plus authored native world dimensions.
 // Normalize source images ONCE to a common two-texel/world-pixel asset grid. Renderers
 // use the same scale for every asset; a logical footprint never stretches a texture.
 const environment: Record<string, Asset> = {
-	cottage: { frame: [8, 12, 470, 440], width: 144 },
-	shed: { frame: [484, 158, 258, 268], width: 72 },
 	oak: { frame: [723, 46, 333, 400], width: 77 },
 	pine: { frame: [1055, 30, 199, 405], width: 60 },
 	rock: { frame: [41, 517, 248, 143], width: 27 },
@@ -46,8 +60,13 @@ const environment: Record<string, Asset> = {
 };
 // Chimney mouth measured in the cottage's source frame, relative to its foot anchor.
 export const COTTAGE_CHIMNEY = {
-	x: ((160 - 8) / 470 - 0.5) * 144,
-	y: ((25 - 12 - 440) / 470) * 144
+	x:
+		((292 - BUILDING_ART.cottage.frame[0]) / BUILDING_ART.cottage.frame[2] - 0.5) *
+		BUILDING_ART.cottage.width,
+	y:
+		((130 - BUILDING_ART.cottage.frame[1]) / BUILDING_ART.cottage.frame[3] -
+			BUILDING_ART.cottage.anchorY) *
+		BUILDING_ART.cottage.height
 };
 function loadImage(src: string) {
 	return new Promise<HTMLImageElement>((resolve, reject) => {
@@ -61,6 +80,7 @@ export class Art {
 	private textures = new Map<string, Texture>();
 	private atlas: HTMLImageElement | null = null;
 	private garden: HTMLImageElement | null = null;
+	private buildings: HTMLImageElement | null = null;
 	private heroine: Partial<PlayerSheets> = {};
 	private crops: HTMLImageElement | null = null;
 	async load() {
@@ -68,6 +88,7 @@ export class Art {
 			environment,
 			crops,
 			garden,
+			buildings,
 			idle,
 			walkFront,
 			walkBack,
@@ -80,6 +101,7 @@ export class Art {
 				"environment-v1.png",
 				"crops-v1.png",
 				"garden-props-v1.png",
+				"buildings-front-v2.png",
 				CHARACTER_SHEETS.idle,
 				...Object.values(CHARACTER_SHEETS.walk),
 				...Object.values(CHARACTER_SHEETS.run)
@@ -88,6 +110,7 @@ export class Art {
 		this.atlas = environment;
 		this.crops = crops;
 		this.garden = garden;
+		this.buildings = buildings;
 		this.heroine = {
 			idle: prepareIdle(idle),
 			walk: prepareWalk({ front: walkFront, back: walkBack, side: walkSide }),
@@ -116,10 +139,13 @@ export class Art {
 	}
 	scenery(name: string) {
 		const garden = Object.hasOwn(GARDEN_PROPS, name),
+			building = Object.hasOwn(BUILDING_ART, name),
 			asset: Asset = garden
 				? GARDEN_PROPS[name as keyof typeof GARDEN_PROPS]
-				: environment[name],
-			atlas = garden ? this.garden : this.atlas;
+				: building
+					? BUILDING_ART[name as keyof typeof BUILDING_ART]
+					: environment[name],
+			atlas = garden ? this.garden : building ? this.buildings : this.atlas;
 		if (!asset || !atlas) throw new Error(`Missing scenery: ${name}`);
 		const [x, y, w, h] = asset.frame,
 			height = asset.height ?? (asset.width * h) / w;
@@ -226,6 +252,7 @@ export class Art {
 		this.textures.clear();
 		this.atlas = null;
 		this.garden = null;
+		this.buildings = null;
 		this.heroine = {};
 		this.crops = null;
 	}
