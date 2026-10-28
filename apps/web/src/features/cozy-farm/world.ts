@@ -86,16 +86,16 @@ export function canStand(world: World, x: number, y: number) {
 		[3, 2]
 	].every(([dx, dy]) => !blocked(world, x + dx, y + dy));
 }
-export function move(world: World, dx: number, dy: number, dt: number) {
+export function move(world: World, dx: number, dy: number, dt: number, speed = 54) {
 	const length = Math.hypot(dx, dy);
 	if (!length) return;
 	world.player.dx = dx / length;
 	world.player.dy = dy / length;
 	// Substeps keep collision reliable even after a slow frame.
-	const steps = Math.ceil((54 * dt) / 3);
+	const steps = Math.ceil((speed * dt) / 3);
 	for (let i = 0; i < steps; i++) {
-		const x = world.player.x + ((dx / length) * 54 * dt) / steps,
-			y = world.player.y + ((dy / length) * 54 * dt) / steps;
+		const x = world.player.x + ((dx / length) * speed * dt) / steps,
+			y = world.player.y + ((dy / length) * speed * dt) / steps;
 		if (canStand(world, x, world.player.y)) world.player.x = x;
 		if (canStand(world, world.player.x, y)) world.player.y = y;
 	}

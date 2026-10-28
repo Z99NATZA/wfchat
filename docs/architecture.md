@@ -73,7 +73,6 @@ adapters. Provider adapters should not depend on frontend concepts.
 - [Chat voice](chat-voice.md)
 - [Aiko Cafe](aiko-cafe.md)
 - [Mistwater](mistwater.md)
-- [Hearthwild](hearthwild.md)
 - [Cozy Fantasy Farm](cozy-farm.md)
 - [Sync system](sync-system.md)
 - [Database schema](database-schema.md)

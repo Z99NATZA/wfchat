@@ -38,9 +38,15 @@ test("independent Pixi world supports farming, placement, movement, pause and sa
 	await expect(page.locator(".cozy-canvas canvas")).toBeVisible();
 	await expect(page.getByText("Opening your garden…")).toBeHidden();
 	expect([...assets].sort()).toEqual([
+		"/images/cozy-farm/aiko-idle-v2.png",
+		"/images/cozy-farm/aiko-run-back-v2.png",
+		"/images/cozy-farm/aiko-run-front-v2.png",
+		"/images/cozy-farm/aiko-run-side-v2.png",
+		"/images/cozy-farm/aiko-walk-back-v2.png",
+		"/images/cozy-farm/aiko-walk-front-v2.png",
+		"/images/cozy-farm/aiko-walk-side-v2.png",
 		"/images/cozy-farm/crops-v1.png",
-		"/images/cozy-farm/environment-v1.png",
-		"/images/cozy-farm/farmer-v1.png"
+		"/images/cozy-farm/environment-v1.png"
 	]);
 	const canvas = page.locator(".cozy-canvas canvas"),
 		host = page.locator(".cozy-canvas");
@@ -92,7 +98,8 @@ test("independent Pixi world supports farming, placement, movement, pause and sa
 	const toolbar = (await page.locator(".cozy-toolbar").boundingBox())!;
 	expect(toolbar.x).toBeGreaterThanOrEqual(48);
 	expect(toolbar.x + toolbar.width).toBeLessThanOrEqual(390);
-	await page.getByRole("link", { name: "Hearthwild", exact: true }).click();
+	await expect(page.locator('a[href="/hearthwild"]')).toHaveCount(0);
+	await page.getByRole("link", { name: "Mistwater", exact: true }).click();
 	await expect(canvas).toHaveCount(0);
 	expect(errors).toEqual([]);
 });
@@ -114,4 +121,66 @@ test("missing artwork shows an explicit error instead of a partial placeholder w
 		"The game could not start"
 	);
 	await expect(page.locator(".cozy-canvas canvas")).toHaveCount(0);
+});
+
+test("Shift runs faster and releasing movement settles before saving", async ({ page }) => {
+	const world = createWorld();
+	world.terrain.fill("grass");
+	world.objects = [];
+	world.player = { x: 250, y: 250, dx: 0, dy: 1 };
+	await page.addInitScript(
+		({ key, world }) => {
+			localStorage.setItem("wfchat.locale", "en");
+			localStorage.setItem(key, JSON.stringify(world));
+		},
+		{ key: SAVE_KEY, world }
+	);
+	await page.route("**/api/**", (route) =>
+		route.fulfill({
+			status: 200,
+			contentType: "application/json",
+			body: JSON.stringify({ user_id: "guest", session_id: "guest", kind: "guest" })
+		})
+	);
+	await page.goto("/cozy-farm");
+	await expect(page.locator(".cozy-canvas canvas")).toBeVisible();
+	await page.locator(".cozy-canvas").focus();
+	const saved = () =>
+		page.evaluate((key) => {
+			window.dispatchEvent(new Event("pagehide"));
+			return JSON.parse(localStorage.getItem(key)!);
+		}, SAVE_KEY);
+	const travel = async (run: boolean) => {
+		const before = await saved();
+		if (run) await page.keyboard.down("Shift");
+		await page.keyboard.down("d");
+		await page.waitForTimeout(500);
+		const after = await saved();
+		await page.keyboard.up("d");
+		await page.keyboard.up("Shift");
+		await page.waitForTimeout(300);
+		return (after.player.x - before.player.x) / (after.elapsed - before.elapsed);
+	};
+	const walkSpeed = await travel(false),
+		runSpeed = await travel(true);
+	expect(runSpeed).toBeGreaterThan(walkSpeed * 1.45);
+	const stopped = await saved();
+	await page.waitForTimeout(250);
+	const resting = await saved();
+	expect(resting.player.x).toBeCloseTo(stopped.player.x, 1);
+	expect(resting.player.dx).toBe(1);
+	expect(resting.player.dy).toBe(0);
+});
+
+test("removed adventure route uses the app's unknown-route fallback", async ({ page }) => {
+	await page.route("**/api/**", (route) =>
+		route.fulfill({
+			status: 200,
+			contentType: "application/json",
+			body: JSON.stringify({ user_id: "guest", session_id: "guest", kind: "guest" })
+		})
+	);
+	await page.goto("/hearthwild");
+	await expect(page).toHaveURL(/\/chat$/);
+	await expect(page.locator('a[href="/hearthwild"]')).toHaveCount(0);
 });

@@ -2,7 +2,6 @@ import {
 	Coffee,
 	Sprout,
 	Droplets,
-	TreePine,
 	Layers,
 	MessageCircle,
 	type LucideIcon,
@@ -12,8 +11,7 @@ import { NavLink } from "react-router-dom";
 import { useI18n } from "@/i18n/i18nContext";
 import { cn } from "@/utils/classNames";
 
-export type AppPageId =
-	"cozy-farm" | "chat" | "cafe" | "mistwater" | "hearthwild" | "pngtuber" | "model2d";
+export type AppPageId = "cozy-farm" | "chat" | "cafe" | "mistwater" | "pngtuber" | "model2d";
 
 const navItems: Array<{ id: AppPageId; labelKey: string; icon: LucideIcon; path: string }> = [
 	{ id: "chat", labelKey: "navigation.chat", icon: MessageCircle, path: "/chat" },
@@ -25,7 +23,6 @@ const navItems: Array<{ id: AppPageId; labelKey: string; icon: LucideIcon; path:
 		path: "/mistwater"
 	},
 	{ id: "cozy-farm", labelKey: "navigation.cozyFarm", icon: Sprout, path: "/cozy-farm" },
-	{ id: "hearthwild", labelKey: "navigation.hearthwild", icon: TreePine, path: "/hearthwild" },
 	{ id: "pngtuber", labelKey: "navigation.pngtuber", icon: UserRound, path: "/avatar/pngtuber" },
 	{ id: "model2d", labelKey: "navigation.model2d", icon: Layers, path: "/model/live2d" }
 ];

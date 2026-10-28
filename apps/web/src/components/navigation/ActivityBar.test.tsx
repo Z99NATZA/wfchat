@@ -24,14 +24,14 @@ describe("ActivityBar", () => {
 		expect(link.getAttribute("href")).toBe("/mistwater");
 		expect(link.getAttribute("aria-current")).toBe("page");
 	});
-	it("links to the independent Hearthwild adventure", () => {
+	it("links to Cozy Fantasy Farm", () => {
 		render(
-			<MemoryRouter initialEntries={["/hearthwild"]}>
+			<MemoryRouter initialEntries={["/cozy-farm"]}>
 				<ActivityBar />
 			</MemoryRouter>
 		);
-		const link = screen.getByRole("link", { name: "navigation.hearthwild" });
-		expect(link.getAttribute("href")).toBe("/hearthwild");
+		const link = screen.getByRole("link", { name: "navigation.cozyFarm" });
+		expect(link.getAttribute("href")).toBe("/cozy-farm");
 		expect(link.getAttribute("aria-current")).toBe("page");
 	});
 });

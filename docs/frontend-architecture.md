@@ -70,8 +70,6 @@ Shared layers must not import page- or feature-specific behavior.
   `useCafeRoom` owns transport and `CafeScene` owns simulation/rendering.
 - Mistwater is a client-only feature. Its lazy route owns a Phaser scene and
   local run state, and it does not call the API or import Cafe behavior.
-- Hearthwild is a separate client-only grid adventure. Its lazy route owns a Canvas
-  renderer, three maps and localStorage saves; see [Hearthwild](hearthwild.md).
 - Cozy Fantasy Farm is an independent client-only PixiJS feature with tile-based
   farming and its own localStorage save; see [Cozy Fantasy Farm](cozy-farm.md).
 - Image bytes, voice providers, models, credentials, and automatic memory remain

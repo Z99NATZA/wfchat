@@ -2,7 +2,7 @@
 
 `/cozy-farm` opens a separate client-only farming game from the activity bar.
 `apps/web/src/features/cozy-farm/` owns its implementation. It does not import
-Hearthwild, Mistwater or Cafe gameplay, assets or saves. The shared app shell
+Mistwater or Cafe gameplay, assets or saves. The shared app shell
 still performs normal session bootstrap; gameplay requires no API.
 
 ## World and rendering
@@ -11,15 +11,39 @@ The 48 × 36 world uses 16-pixel square cells. `world.ts` owns terrain, object
 footprints, collision, placement, crop simulation and versioned serialization.
 `Game.ts` owns the PixiJS 8 application, ticker, input, camera and rendering.
 React receives HUD snapshots four times per second rather than every frame.
-`art.ts` loads three original transparent sprite sheets from
-`apps/web/public/images/cozy-farm/`: environment, farmer and crops. Buildings,
+`art.ts` loads transparent sprite sheets from
+`apps/web/public/images/cozy-farm/`: environment, crops and seven Aiko character source sheets. Buildings,
 trees, shoreline rocks, vegetation, farm props and the waterfall use individually
 framed assets. The original PNG alpha is preserved; the runtime isolates each
 frame's main alpha region to exclude neighboring fragments. The asset manifest
 normalizes frames onto a common two-texel/world-pixel grid, with nearest filtering
 and a shared render scale. Object sprites extend beyond their logical footprints.
-The small sign and light/particle effects remain code-drawn. Farmer animation has
-eight poses with limited side-facing movement frames.
+The small sign and light/particle effects remain code-drawn.
+
+`character.ts` separates transient player velocity from animation playback. Aiko
+uses four idle poses and eight complete walking/running poses per direction.
+`playerSprites.ts` registers the seven source sheets into three runtime canvases
+once during artwork loading. Idle supplies four facing rows; walk and run each
+supply front, back and right-profile sheets, with the left profile mirrored.
+Explicit row boundaries preserve complete boots. Registration uses a shared
+scale per facing, bounded width correction, a head anchor and a common foot
+baseline. Small isolated fragments are removed; connected limbs remain intact.
+Idle retains one planted lower-body layer while the upper body breathes.
+
+`CharacterSprite.ts` displays each complete registered pose in PixiJS. `art.ts`
+normalizes the character to approximately 30 world pixels tall and caches its
+textures at two texels per world pixel. `CHARACTER_SHEETS`, `FRAME_COUNTS` and
+`CHARACTER_ROWS` own source selection, pose counts and facing mapping. The player
+sorts by feet Y and has a separate contact shadow. All character source images
+and their generation prompts live under `apps/web/public/images/cozy-farm/`.
+
+Walking and running phase follows collision-resolved travel, with a 24-pixel
+walking cycle and a 32-pixel running cycle. Changing speed preserves phase;
+blocked or stopped movement returns to idle. Idle uses the source breathing
+sequence at two frames per second and a 120 ms blink every five seconds.
+Running uses a grounded recovery cycle. Pause and page visibility suspend
+animation alongside simulation; loss of focus clears input and transient velocity.
+The character renderer does not own farming state or saves.
 
 `landscape.ts` builds a cached ground texture directly from the editable terrain
 cells. Neighbor coverage rounds visible corners independently of square collision
@@ -63,7 +87,9 @@ from other WFChat games.
 
 ## Controls and mechanics
 
-- WASD/arrows move with normalized diagonals and substepped collision.
+- WASD/arrows walk; hold Shift with movement to run. Diagonals are normalized,
+  with short acceleration/deceleration and substepped collision. Walking targets
+  54 world pixels/second and running 86; transient velocity is not saved.
 - 1–8 select tools. Click within four cells or press E for the nearby pointed cell
   or cell ahead. G toggles the grid; Escape pauses. Touch devices show movement buttons.
 - Till, plant, water, then use the hand to harvest. Watered turnips take 45 active
@@ -102,11 +128,15 @@ Focused checks from `apps/web`:
 ```sh
 npx vitest run src/features/cozy-farm
 npx playwright test --config playwright.cozy-farm.config.ts
+npx playwright test e2e/cozy-character.spec.ts
 ```
 
 The production browser test reads CSP directly from `apps/web/nginx.conf` and
 applies it to document responses. It checks asset loading, the farming and save
-loop, placement and explicit failure when required artwork is missing. It mocks
+loop, placement and explicit failure when required artwork is missing. It also checks removal of the retired adventure route and navigation entry.
+The focused character browser tests use real Canvas pixels to verify planted
+idle feet, distinct walking leg artwork, consistent head scale, and grounded
+running in all four directions. It mocks
 shared-shell API responses and needs
 no backend/database.
 Screenshots are written under `apps/web/test-results`.

@@ -1,6 +1,17 @@
 import { Texture } from "pixi.js";
 import { ART_DENSITY } from "./landscape";
 import type { ObjectKind } from "./world";
+import type { CharacterPose } from "./character";
+import { CHARACTER_SHEETS, CHARACTER_ROWS } from "./character";
+import {
+	prepareIdle,
+	prepareWalk,
+	prepareRun,
+	PLAYER_CELL,
+	PLAYER_BODY_HEIGHT,
+	PLAYER_FOOT,
+	type PlayerSheets
+} from "./playerSprites";
 
 type Frame = readonly [number, number, number, number];
 interface Asset {
@@ -41,14 +52,35 @@ function loadImage(src: string) {
 export class Art {
 	private textures = new Map<string, Texture>();
 	private atlas: HTMLImageElement | null = null;
-	private farmer: HTMLImageElement | null = null;
+	private heroine: Partial<PlayerSheets> = {};
 	private crops: HTMLImageElement | null = null;
 	async load() {
-		[this.atlas, this.farmer, this.crops] = await Promise.all(
-			["environment-v1.png", "farmer-v1.png", "crops-v1.png"].map((name) =>
-				loadImage(`/images/cozy-farm/${name}`)
-			)
+		const [
+			environment,
+			crops,
+			idle,
+			walkFront,
+			walkBack,
+			walkSide,
+			runFront,
+			runBack,
+			runSide
+		] = await Promise.all(
+			[
+				"environment-v1.png",
+				"crops-v1.png",
+				CHARACTER_SHEETS.idle,
+				...Object.values(CHARACTER_SHEETS.walk),
+				...Object.values(CHARACTER_SHEETS.run)
+			].map((name) => loadImage(`/images/cozy-farm/${name}`))
 		);
+		this.atlas = environment;
+		this.crops = crops;
+		this.heroine = {
+			idle: prepareIdle(idle),
+			walk: prepareWalk({ front: walkFront, back: walkBack, side: walkSide }),
+			run: prepareRun({ front: runFront, back: runBack, side: runSide })
+		};
 	}
 	private make(
 		key: string,
@@ -158,29 +190,31 @@ export class Art {
 			)
 		);
 	}
-	player(frame: number) {
-		if (!this.farmer) throw new Error("Farmer not loaded");
-		const w = this.farmer.width / 4,
-			h = this.farmer.height / 2;
-		return this.make(`player:${frame}`, 32, 32, (c) =>
+	player({ state, facing, frame }: CharacterPose) {
+		const image = this.heroine[state];
+		if (!image) throw new Error(`Heroine ${state} atlas not loaded`);
+		const row = CHARACTER_ROWS[facing];
+		const scale = 30 / PLAYER_BODY_HEIGHT;
+		return this.make(`aiko:${state}:${facing}:${frame}`, 40, 36, (c) => {
 			c.drawImage(
-				this.farmer!,
-				(frame % 4) * w,
-				Math.floor(frame / 4) * h,
-				w,
-				h,
-				0,
-				0,
-				32 * ART_DENSITY,
-				32 * ART_DENSITY
-			)
-		);
+				image,
+				frame * PLAYER_CELL,
+				row * PLAYER_CELL,
+				PLAYER_CELL,
+				PLAYER_CELL,
+				(20 - PLAYER_FOOT.x * scale) * ART_DENSITY,
+				(36 - PLAYER_FOOT.y * scale) * ART_DENSITY,
+				PLAYER_CELL * scale * ART_DENSITY,
+				PLAYER_CELL * scale * ART_DENSITY
+			);
+		});
 	}
+
 	destroy() {
 		for (const texture of this.textures.values()) texture.destroy(true);
 		this.textures.clear();
 		this.atlas = null;
-		this.farmer = null;
+		this.heroine = {};
 		this.crops = null;
 	}
 }

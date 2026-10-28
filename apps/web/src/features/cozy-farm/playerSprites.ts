@@ -1,21 +1,13 @@
-import { ANIMATIONS, type AnimationName } from "./animation";
+import { CHARACTER_SHEETS, FRAME_COUNTS, type CharacterState } from "./character";
 
 export const PLAYER_CELL = 96;
 export const PLAYER_BODY_HEIGHT = 86;
 export const PLAYER_HEAD_WIDTH = 34;
 export const PLAYER_FOOT = { x: 48, y: 92 } as const;
-export const WALK_SOURCES = {
-	front: "/images/hearthwild/aiko-walk-front-v2.png",
-	back: "/images/hearthwild/aiko-walk-back-v2.png",
-	side: "/images/hearthwild/aiko-walk-side-v2.png"
-} as const;
-export const RUN_SOURCES = {
-	front: "/images/hearthwild/aiko-run-front-v2.png",
-	back: "/images/hearthwild/aiko-run-back-v2.png",
-	side: "/images/hearthwild/aiko-run-side-v2.png"
-} as const;
+export const WALK_SOURCES = CHARACTER_SHEETS.walk;
+export const RUN_SOURCES = CHARACTER_SHEETS.run;
 export type PlayerSheet = HTMLImageElement | HTMLCanvasElement;
-export type PlayerSheets = Record<AnimationName, PlayerSheet>;
+export type PlayerSheets = Record<CharacterState, HTMLCanvasElement>;
 export type SourceCell = { x: number; y: number; width: number; height: number };
 export type SpriteBounds = SourceCell & { anchorX: number; anchorY: number; headWidth: number };
 
@@ -320,8 +312,8 @@ function prepareStride(
 	return canvas;
 }
 export function prepareWalk(images: StrideImages) {
-	return prepareStride(images, ANIMATIONS.walk.frames, { front: [0, 650, 1254] });
+	return prepareStride(images, FRAME_COUNTS.walk, { front: [0, 650, 1254] });
 }
 export function prepareRun(images: StrideImages) {
-	return prepareStride(images, ANIMATIONS.run.frames);
+	return prepareStride(images, FRAME_COUNTS.run);
 }

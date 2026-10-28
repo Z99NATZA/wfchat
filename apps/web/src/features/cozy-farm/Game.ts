@@ -4,6 +4,8 @@ import "pixi.js/unsafe-eval";
 import { Application, Container, Graphics, Sprite } from "pixi.js";
 import { Art } from "./art";
 import { forestStyle } from "./composition";
+import { CharacterAnimation, facingFor, PlayerMotion } from "./character";
+import { CharacterSprite } from "./CharacterSprite";
 import { ART_DENSITY, hash, Landscape } from "./landscape";
 import {
 	act,
@@ -14,7 +16,6 @@ import {
 	grow,
 	HEIGHT,
 	index,
-	move,
 	objectsAt,
 	SAVE_KEY,
 	serialize,
@@ -51,7 +52,10 @@ export class Game {
 	private shadows = new Graphics();
 	private effects = new Graphics();
 	private overlay = new Graphics();
-	private player = new Sprite();
+	private player = new CharacterSprite(this.art);
+	private contactShadow = new Graphics();
+	private motion = new PlayerMotion();
+	private animation = new CharacterAnimation();
 	private keys = new Set<string>();
 	private hover: { x: number; y: number } | null = null;
 	private zoom = 1;
@@ -116,8 +120,10 @@ export class Game {
 		);
 		this.actors.sortableChildren = true;
 		this.app.stage.addChild(this.root);
-		this.player.scale.set(TILE_SIZE / (16 * ART_DENSITY));
-		this.player.anchor.set(0.5, 0.94);
+		this.animation.pose.facing = facingFor(this.world.player.dx, this.world.player.dy);
+		this.player.update(this.animation.pose, this.world.player.x, this.world.player.y);
+		this.contactShadow.ellipse(0, -1, 4.5, 1.6).fill({ color: 0x102820, alpha: 0.27 });
+		this.root.addChildAt(this.contactShadow, this.root.getChildIndex(this.actors));
 		this.rebuild();
 		this.host.addEventListener("keydown", this.keydown);
 		this.host.addEventListener("keyup", this.keyup);
@@ -355,6 +361,7 @@ export class Game {
 	togglePause() {
 		this.paused = !this.paused;
 		this.keys.clear();
+		this.motion.stop();
 		this.save();
 		this.publish();
 	}
@@ -421,9 +428,11 @@ export class Game {
 	};
 	private blur = () => {
 		this.keys.clear();
+		this.motion.stop();
 	};
 	private visibility = () => {
 		this.keys.clear();
+		this.motion.stop();
 		if (document.hidden) this.save();
 	};
 	private pointermove = (e: PointerEvent) => {
@@ -482,24 +491,11 @@ export class Game {
 				dy =
 					+(this.keys.has("s") || this.keys.has("arrowdown")) -
 					+(this.keys.has("w") || this.keys.has("arrowup"));
-			move(this.world, dx, dy, dt);
+			const running = this.keys.has("shift");
+			const travel = this.motion.update(this.world, dx, dy, running, dt);
+			const pose = this.animation.update(dt, travel.dx, travel.dy, running, dx, dy);
+			this.player.update(pose, this.world.player.x, this.world.player.y);
 			grow(this.world, dt);
-			const p = this.world.player,
-				walking = !!(dx || dy),
-				step = Math.floor(this.clock * 7) % 2;
-			const frame =
-				Math.abs(p.dx) > 0.7
-					? p.dx > 0
-						? 6
-						: 7
-					: p.dy < 0
-						? walking
-							? 4 + step
-							: 3
-						: walking
-							? 1 + step
-							: 0;
-			this.player.texture = this.art.player(frame);
 			const revision = Object.values(this.world.crops)
 				.map((c) => Math.floor(c.growth * 3))
 				.join("");
@@ -512,8 +508,9 @@ export class Game {
 				this.save();
 			}
 		}
-		this.player.position.set(this.world.player.x, this.world.player.y + 3);
-		this.player.zIndex = this.world.player.y + 3;
+		this.player.position.set(this.world.player.x, this.world.player.y);
+		this.player.zIndex = this.world.player.y;
+		this.contactShadow.position.copyFrom(this.player.position);
 		this.updateCamera(dt);
 		this.drawEffects();
 		this.drawOverlay();
