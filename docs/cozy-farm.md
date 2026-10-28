@@ -18,8 +18,9 @@ framed assets. The original PNG alpha is preserved; the runtime isolates each
 frame's main alpha region to exclude neighboring fragments. The asset manifest
 normalizes frames onto a common two-texel/world-pixel grid, with nearest filtering
 and a shared render scale. Object sprites extend beyond their logical footprints.
-`details.ts` draws the small two-way fish/sprout sign, pier posts and decorative
-fishing tackle on the same pixel grid; light and particle effects are code-drawn.
+`details.ts` draws the small two-way fish/sprout sign, pier posts, rope fenders
+and decorative fishing tackle on the same pixel grid; light and particle effects
+are code-drawn.
 `garden-props-v1.png` supplies the bench, mailbox, flower pot, produce crate,
 watering can, basket and woodland mushrooms. `environment.ts` owns their authored
 positions and checks complete artwork bounds against terrain, crops and objects.
@@ -29,6 +30,15 @@ Pier posts and sagging ropes follow contiguous water-facing dock edges, leaving
 land entrances, joined modules and boat moorings open. Fishing tackle appears
 only where its complete image clears other objects. These accents use existing
 world data and add no fishing mechanic or save migration.
+
+`harbor.ts` owns boat artwork dimensions and mooring composition. Rowboats beside
+a complete pier sit clear of the planks when their whole animation envelope is
+open water. Two ropes attach measured gunnel points to actual pier posts; rope
+fenders, weathered edge boards and visible end beams join the boat to the dock.
+Hull shadows and expanding water rings sit underneath the boat. Gentle bobbing
+and its attached ropes use the paused game clock. Saved boat/dock positions and
+collision are retained, with no save migration. Mooring accents require those
+posts and clear water.
 
 `character.ts` separates transient player velocity from animation playback. Aiko
 uses four idle poses and eight complete walking/running poses per direction.

@@ -3,6 +3,7 @@
 export const DETAILS = {
 	waymarker: { width: 28, height: 32, paint: paintWaymarker },
 	pierPost: { width: 8, height: 18, paint: paintPierPost },
+	fender: { width: 5, height: 12, paint: paintFender },
 	tackle: { width: 25, height: 33, paint: paintTackle }
 } as const;
 export type Detail = keyof typeof DETAILS;
@@ -152,4 +153,21 @@ function paintTackle(c: CanvasRenderingContext2D) {
 	c.lineTo(23, 29);
 	c.lineTo(24, 27);
 	c.stroke();
+}
+
+function paintFender(c: CanvasRenderingContext2D) {
+	c.fillStyle = "#594d36";
+	c.fillRect(2, 0, 1, 3);
+	c.fillRect(1, 3, 3, 8);
+	c.fillRect(0.5, 5, 4, 4);
+	c.fillStyle = "#aa9468";
+	c.fillRect(1, 4, 3, 6);
+	c.fillRect(1.5, 10, 2, 1);
+	c.fillStyle = "#dbc999";
+	c.fillRect(1, 4, 1, 5);
+	c.fillStyle = "#78684a";
+	for (let y = 4; y < 10; y += 1.5) c.fillRect(1, y, 3, 0.5);
+	c.fillStyle = "#ebd9aa";
+	c.fillRect(1.5, 3.5, 1.5, 0.5);
+	c.fillRect(2, 0, 0.5, 2);
 }

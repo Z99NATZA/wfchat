@@ -2,6 +2,7 @@ import { Texture } from "pixi.js";
 import { ART_DENSITY } from "./landscape";
 import { GARDEN_PROPS } from "./gardenProps";
 import { DETAILS, type Detail } from "./details";
+import { BOAT_ART } from "./harbor";
 import type { ObjectKind } from "./world";
 import type { CharacterPose } from "./character";
 import { CHARACTER_SHEETS, CHARACTER_ROWS } from "./character";
@@ -37,7 +38,7 @@ const environment: Record<string, Asset> = {
 	fence: { frame: [326, 762, 203, 133], width: 18 },
 	// Use the uninterrupted plank surface from the dock asset for connected modules.
 	dock: { frame: [699, 792, 154, 78], width: 32, height: 16 },
-	boat: { frame: [969, 738, 244, 179], width: 44 },
+	boat: BOAT_ART,
 	waterfall: { frame: [17, 920, 369, 319], width: 105 },
 	lilies: { frame: [421, 1022, 210, 141], width: 31 },
 	scarecrow: { frame: [681, 949, 200, 282], width: 28 },

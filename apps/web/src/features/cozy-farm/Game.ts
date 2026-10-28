@@ -5,6 +5,7 @@ import { Application, Container, Graphics, Sprite } from "pixi.js";
 import { Art, COTTAGE_CHIMNEY } from "./art";
 import { forestStyle } from "./composition";
 import { BUTTERFLY_MEADOWS, GARDEN_ACCENTS, pierEdges, sceneryFits } from "./environment";
+import { boatMoorings, type Mooring } from "./harbor";
 import { onSouthBank, SOUTH_BANK_ACCENTS, southBankRockStyle } from "./shoreline";
 import { CharacterAnimation, facingFor, PlayerMotion } from "./character";
 import { CharacterSprite } from "./CharacterSprite";
@@ -53,6 +54,8 @@ export class Game {
 	private landscape = new Landscape();
 	private scenery = new Container();
 	private floatingScenery: { sprite: Sprite; y: number; phase: number }[] = [];
+	private moorings: Mooring[] = [];
+	private boats: { sprite: Sprite; mooring: Mooring; ropes: Graphics; wake: Graphics }[] = [];
 	private butterflies: { x: number; y: number; color: number; phase: number }[] = [];
 	private feedback: { x: number; y: number; started: number; kind: string }[] = [];
 	private shadows = new Graphics();
@@ -163,6 +166,8 @@ export class Game {
 		for (const child of this.actors.removeChildren()) child.destroy();
 		for (const child of this.scenery.removeChildren()) child.destroy();
 		this.floatingScenery = [];
+		this.moorings = boatMoorings(this.world);
+		this.boats = [];
 		this.butterflies = [];
 		this.shadows.clear();
 		this.decorate();
@@ -202,6 +207,24 @@ export class Game {
 				sprite.x += bankStyle.offsetX;
 				sprite.y += bankStyle.offsetY;
 			}
+			if (object.kind === "boat") {
+				const mooring = this.moorings.find((m) => m.id === object.id);
+				if (mooring) {
+					sprite.position.set(mooring.x, mooring.y);
+					sprite.scale.x *= mooring.side;
+					const ropes = new Graphics(),
+						wake = new Graphics();
+					ropes.zIndex = mooring.y + 0.5;
+					wake.position.set(mooring.x, mooring.y - 13);
+					wake.rotation = -0.4 * mooring.side;
+					this.actors.addChild(ropes);
+					this.scenery.addChild(wake);
+					this.boats.push({ sprite, mooring, ropes, wake });
+				}
+				this.shadows
+					.ellipse(sprite.x, sprite.y - 12, 20, 5)
+					.fill({ color: 0x092b37, alpha: 0.26 });
+			}
 			if (
 				(object.kind === "tree" || object.kind === "rock" || object.kind === "flowers") &&
 				object.id % 2
@@ -220,7 +243,7 @@ export class Game {
 				submerged.tint = 0x418f96;
 				submerged.alpha = 0.37;
 			}
-			if (object.kind !== "dock" && object.kind !== "flowers") {
+			if (object.kind !== "dock" && object.kind !== "flowers" && object.kind !== "boat") {
 				this.shadows
 					.ellipse(sprite.x, sprite.zIndex - 3, def.w * TILE_SIZE * 0.48, 4 + def.h)
 					.fill({ color: 0x112d28, alpha: object.kind === "tree" ? 0.18 : 0.27 });
@@ -442,6 +465,55 @@ export class Game {
 		}
 	}
 	private decoratePier() {
+		const rim = new Graphics();
+		this.scenery.addChild(rim);
+		for (const dock of this.world.objects) {
+			if (dock.kind !== "dock") continue;
+			const { w, h } = DEFINITIONS.dock,
+				y = dock.y * TILE_SIZE,
+				bottom = (dock.y + h) * TILE_SIZE;
+			const openWater = (x: number, y: number) =>
+				cell(this.world, x, y) === "water" &&
+				!objectsAt(this.world, x, y).some((o) => o.kind === "dock");
+			for (const side of [-1, 1]) {
+				const outsideX = side > 0 ? dock.x + w : dock.x - 1,
+					x = (side > 0 ? dock.x + w : dock.x) * TILE_SIZE;
+				if (!openWater(outsideX, dock.y)) continue;
+				rim.rect(x - 1, y, 3, TILE_SIZE)
+					.fill({ color: 0x59402c })
+					.rect(x + side * 2, y + 2, 2, TILE_SIZE - 2)
+					.fill({ color: 0x103337, alpha: 0.2 })
+					.rect(x - 0.5, y, 0.5, TILE_SIZE)
+					.fill({ color: 0xb48a53 });
+				if (openWater(outsideX - side, dock.y + h))
+					rim.rect(x - side * 4, bottom, 3, 8)
+						.fill({ color: 0x503b2b })
+						.rect(x - side * 4, bottom, 1, 6)
+						.fill({ color: 0x947448 });
+			}
+			for (let cx = dock.x; cx < dock.x + w; cx++) {
+				if (!openWater(cx, dock.y + h)) continue;
+				rim.rect(cx * TILE_SIZE, bottom - 1, TILE_SIZE, 4)
+					.fill({ color: 0x67462f })
+					.rect(cx * TILE_SIZE, bottom, TILE_SIZE, 0.5)
+					.fill({ color: 0xbb915a })
+					.rect(cx * TILE_SIZE + 1, bottom + 3, TILE_SIZE - 2, 2)
+					.fill({ color: 0x12363a, alpha: 0.23 });
+			}
+		}
+		for (const mooring of this.moorings) {
+			for (const y of [mooring.y - 18, mooring.y - 5]) {
+				const fender = new Sprite(this.art.detail("fender"));
+				fender.anchor.set(0.5, 1);
+				fender.scale.set(1 / ART_DENSITY);
+				fender.position.set(mooring.pierX + mooring.side * 3, y);
+				fender.zIndex = y;
+				this.actors.addChild(fender);
+				rim.moveTo(mooring.pierX, y - 15)
+					.lineTo(fender.x, y - 10)
+					.stroke({ color: 0xc6af7b, width: 0.65 });
+			}
+		}
 		let tacklePlaced = false;
 		for (const edge of pierEdges(this.world)) {
 			const rope = new Graphics();
@@ -783,6 +855,32 @@ export class Game {
 		const t = this.clock;
 		for (const floating of this.floatingScenery)
 			floating.sprite.y = floating.y + Math.sin(t * 0.7 + floating.phase) * 0.6;
+		for (const { sprite, mooring, ropes, wake } of this.boats) {
+			const bob = Math.sin(t * 0.8 + mooring.id) * 0.55,
+				phase = (t * 0.18 + mooring.id * 0.13) % 1;
+			sprite.y = mooring.y + bob;
+			ropes.clear();
+			for (const tie of mooring.ties) {
+				const x = mooring.x + tie.dx,
+					y = sprite.y + tie.dy,
+					mx = (mooring.pierX + x) / 2,
+					my = (tie.y + y) / 2 + 2;
+				ropes
+					.moveTo(mooring.pierX, tie.y)
+					.quadraticCurveTo(mx, my, x, y)
+					.stroke({ color: 0x4e4630, width: 1.4 })
+					.moveTo(mooring.pierX, tie.y - 0.3)
+					.quadraticCurveTo(mx, my - 0.3, x, y - 0.3)
+					.stroke({ color: 0xc8b184, width: 0.6 })
+					.rect(x - 0.5, y - 0.5, 1.5, 1)
+					.fill({ color: 0xd9c398 });
+			}
+			wake.clear()
+				.ellipse(0, bob, 23 + phase * 3, 8 + phase)
+				.stroke({ color: 0x91c8c4, width: 0.5, alpha: (1 - phase) * 0.16 })
+				.ellipse(1, bob + 2, 21, 7)
+				.stroke({ color: 0x123849, width: 0.7, alpha: 0.2 });
+		}
 		for (const building of this.world.objects)
 			if (building.kind === "cottage" || building.kind === "shed") {
 				const def = DEFINITIONS[building.kind],
