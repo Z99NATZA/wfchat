@@ -4,7 +4,8 @@ import "pixi.js/unsafe-eval";
 import { Application, Container, Graphics, Sprite } from "pixi.js";
 import { Art, COTTAGE_CHIMNEY } from "./art";
 import { forestStyle } from "./composition";
-import { GARDEN_ACCENTS, sceneryFits } from "./environment";
+import { BUTTERFLY_MEADOWS, GARDEN_ACCENTS, pierEdges, sceneryFits } from "./environment";
+import { onSouthBank, SOUTH_BANK_ACCENTS, southBankRockStyle } from "./shoreline";
 import { CharacterAnimation, facingFor, PlayerMotion } from "./character";
 import { CharacterSprite } from "./CharacterSprite";
 import { ART_DENSITY, hash, Landscape } from "./landscape";
@@ -52,6 +53,8 @@ export class Game {
 	private landscape = new Landscape();
 	private scenery = new Container();
 	private floatingScenery: { sprite: Sprite; y: number; phase: number }[] = [];
+	private butterflies: { x: number; y: number; color: number; phase: number }[] = [];
+	private feedback: { x: number; y: number; started: number; kind: string }[] = [];
 	private shadows = new Graphics();
 	private effects = new Graphics();
 	private overlay = new Graphics();
@@ -160,11 +163,16 @@ export class Game {
 		for (const child of this.actors.removeChildren()) child.destroy();
 		for (const child of this.scenery.removeChildren()) child.destroy();
 		this.floatingScenery = [];
+		this.butterflies = [];
 		this.shadows.clear();
 		this.decorate();
 		for (const object of this.world.objects) {
 			const def = DEFINITIONS[object.kind],
 				treeStyle = object.kind === "tree" ? forestStyle(object.x, object.y) : null,
+				bankStyle =
+					object.kind === "rock"
+						? southBankRockStyle(this.world, object.x, object.y)
+						: null,
 				shoreRock =
 					object.kind === "rock" &&
 					[
@@ -177,7 +185,9 @@ export class Game {
 					),
 				sprite = new Sprite(
 					shoreRock
-						? this.art.shoreRock(Math.floor(hash(object.x, object.y) * 4))
+						? this.art.shoreRock(
+								bankStyle?.variant ?? Math.floor(hash(object.x, object.y) * 4)
+							)
 						: this.art.object(object.kind, treeStyle?.variant ?? object.id)
 				);
 			sprite.scale.set(TILE_SIZE / (16 * ART_DENSITY));
@@ -187,6 +197,10 @@ export class Game {
 				sprite.scale.set(sprite.scale.x * treeStyle.scale);
 				sprite.x += treeStyle.offsetX;
 				sprite.y += treeStyle.offsetY;
+			}
+			if (bankStyle) {
+				sprite.x += bankStyle.offsetX;
+				sprite.y += bankStyle.offsetY;
 			}
 			if (
 				(object.kind === "tree" || object.kind === "rock" || object.kind === "flowers") &&
@@ -210,6 +224,23 @@ export class Game {
 				this.shadows
 					.ellipse(sprite.x, sprite.zIndex - 3, def.w * TILE_SIZE * 0.48, 4 + def.h)
 					.fill({ color: 0x112d28, alpha: object.kind === "tree" ? 0.18 : 0.27 });
+			}
+			if (treeStyle) {
+				// A broken canopy shadow extends beyond the contact patch. Small gaps
+				// let meadow light show through, with no filter or per-frame repaint.
+				for (let i = 0; i < 11; i++) {
+					const x = sprite.x + 8 + hash(object.x, i, 61) * 25,
+						y = sprite.zIndex + hash(object.y, i, 67) * 11;
+					if (
+						cell(this.world, Math.floor(x / TILE_SIZE), Math.floor(y / TILE_SIZE)) ===
+						"water"
+					)
+						continue;
+					this.shadows.ellipse(x, y, 4 + hash(i, object.id, 71) * 6, 2.4).fill({
+						color: 0x17392e,
+						alpha: 0.065
+					});
+				}
 			}
 			if (object.kind === "cottage" || object.kind === "shed") {
 				this.shadows
@@ -265,11 +296,15 @@ export class Game {
 		return sprite;
 	}
 	private decorate() {
+		this.decoratePier();
+		this.decorateMeadow();
+		this.decorateSouthShore();
 		// Clusters around the forest margin and lake, keeping the walking/farming area clear.
 		for (let y = 2; y < HEIGHT - 1; y += 2)
 			for (let x = 2; x < WIDTH - 1; x += 2) {
 				const kind = cell(this.world, x, y),
 					r = hash(x, y);
+				if (onSouthBank(this.world, x, y)) continue;
 				if (kind === "water") {
 					if (
 						r > 0.65 &&
@@ -329,6 +364,12 @@ export class Game {
 		this.decoration("waterfall", 44 * TILE_SIZE, 15 * TILE_SIZE);
 		for (const prop of GARDEN_ACCENTS)
 			this.accent(prop.name, prop.x * TILE_SIZE, prop.y * TILE_SIZE);
+		for (const [i, meadow] of BUTTERFLY_MEADOWS.entries()) {
+			const x = meadow.x * TILE_SIZE,
+				y = meadow.y * TILE_SIZE;
+			if (sceneryFits(this.world, x, y + 6, 30, 26, "grass", 0))
+				this.butterflies.push({ x, y, color: meadow.color, phase: i * 2.4 });
+		}
 		// Small woodland accents stay inside clear grass, away from the garden lanes.
 		for (let y = 5; y < HEIGHT - 2; y += 3)
 			for (const x of [3, 30, 34, 38])
@@ -346,6 +387,165 @@ export class Game {
 				.fill({ color: i % 2 ? 0x999d80 : 0xb7b49a, alpha: 0.8 })
 				.rect(x - 3, y - 1, 4, 0.5)
 				.fill({ color: 0xd1c9a7, alpha: 0.55 });
+		}
+	}
+	private decorateSouthShore() {
+		const fringe = new Graphics();
+		this.scenery.addChild(fringe);
+		for (const p of this.landscape.shore) {
+			if (
+				!onSouthBank(this.world, p.x / TILE_SIZE, p.y / TILE_SIZE) ||
+				hash(p.x, p.y, 307) < 0.55
+			)
+				continue;
+			const x = Math.round(p.x + Math.cos(p.angle + Math.PI / 2) * 2),
+				y = Math.round(p.y + Math.sin(p.angle + Math.PI / 2) * 2);
+			if (!sceneryFits(this.world, x, y, 4, 3, "grass", 0)) continue;
+			fringe.rect(x - 2, y, 4, 1).fill({ color: 0x233f34, alpha: 0.6 });
+			fringe
+				.rect(x - 1, y - 2, 0.5, 3)
+				.rect(x, y - 3, 0.5, 4)
+				.rect(x + 1, y - 1, 0.5, 2)
+				.fill({ color: 0x809354, alpha: 0.8 });
+		}
+		for (const prop of SOUTH_BANK_ACCENTS) {
+			const texture = this.art.scenery(prop.name),
+				x = prop.x * TILE_SIZE,
+				y = prop.y * TILE_SIZE,
+				width = (texture.width / ART_DENSITY) * prop.scale,
+				height = (texture.height / ART_DENSITY) * prop.scale;
+			if (
+				!sceneryFits(
+					this.world,
+					x,
+					y,
+					width,
+					height,
+					prop.water ? "water" : prop.name === "rock" ? "grass" : ["grass", "water"],
+					1
+				)
+			)
+				continue;
+			const sprite = this.decoration(prop.name, x, y, !prop.water);
+			sprite.scale.set(prop.scale / ART_DENSITY);
+			if (prop.mirror) sprite.scale.x *= -1;
+			if (prop.name === "rock" && prop.water) {
+				sprite.tint = 0x559b99;
+				sprite.alpha = 0.46;
+			} else if (prop.name === "lilies") {
+				this.floatingScenery.push({ sprite, y, phase: prop.x });
+			} else {
+				this.shadows
+					.ellipse(x, y - 1, width * 0.4, 2)
+					.fill({ color: 0x214b43, alpha: 0.28 });
+			}
+		}
+	}
+	private decoratePier() {
+		let tacklePlaced = false;
+		for (const edge of pierEdges(this.world)) {
+			const rope = new Graphics();
+			const spans = Math.ceil((edge.to - edge.from) / (TILE_SIZE * 3));
+			for (let i = 0; i <= spans; i++) {
+				const y = edge.from + ((edge.to - edge.from) * i) / spans;
+				const post = new Sprite(this.art.detail("pierPost"));
+				post.scale.set(1 / ART_DENSITY);
+				post.anchor.set(0.5, 1);
+				post.position.set(edge.x, y);
+				post.zIndex = y;
+				this.actors.addChild(post);
+				this.shadows.ellipse(edge.x + 2, y, 4, 1.5).fill({ color: 0x26372c, alpha: 0.32 });
+				if (!i) continue;
+				const previous = edge.from + ((edge.to - edge.from) * (i - 1)) / spans;
+				rope.moveTo(edge.x, previous - 10)
+					.quadraticCurveTo(edge.x + 3, (previous + y) / 2 - 6, edge.x, y - 10)
+					.stroke({ color: 0x524632, width: 1.8 })
+					.moveTo(edge.x - 0.4, previous - 10.5)
+					.quadraticCurveTo(
+						edge.x + 2.6,
+						(previous + y) / 2 - 6.5,
+						edge.x - 0.4,
+						y - 10.5
+					)
+					.stroke({ color: 0xc7ae7d, width: 0.65 });
+			}
+			rope.zIndex = edge.to - 1;
+			this.actors.addChild(rope);
+			// One quiet fishing spot, only when its complete image clears objects.
+			const x = edge.x - 14,
+				y = edge.to - 2;
+			if (
+				tacklePlaced ||
+				edge.to - edge.from < 24 ||
+				!objectsAt(this.world, Math.floor(x / TILE_SIZE), Math.floor(y / TILE_SIZE)).some(
+					(o) => o.kind === "dock"
+				)
+			)
+				continue;
+			let fits = true;
+			for (let cy = Math.floor((y - 33) / TILE_SIZE); cy <= Math.floor(y / TILE_SIZE); cy++)
+				for (
+					let cx = Math.floor((x - 12.5) / TILE_SIZE);
+					cx <= Math.floor((x + 12.5) / TILE_SIZE);
+					cx++
+				)
+					if (
+						objectsAt(this.world, cx, cy).some((o) => o.kind !== "dock") ||
+						!(["grass", "water"] as (Terrain | undefined)[]).includes(
+							cell(this.world, cx, cy)
+						)
+					)
+						fits = false;
+			if (!fits) continue;
+			const tackle = new Sprite(this.art.detail("tackle"));
+			tackle.anchor.set(0.5, 1);
+			tackle.scale.set(1 / ART_DENSITY);
+			tackle.position.set(x, y);
+			tackle.zIndex = y;
+			this.actors.addChild(tackle);
+			tacklePlaced = true;
+		}
+	}
+	private decorateMeadow() {
+		const detail = new Graphics();
+		this.scenery.addChild(detail);
+		// Small stones collect along path shoulders, rather than covering the lane.
+		for (let y = 7; y < HEIGHT - 3; y++)
+			for (let x = 3; x < WIDTH - 3; x++) {
+				if (cell(this.world, x, y) !== "grass" || hash(x, y, 231) < 0.65) continue;
+				const neighbor = [
+					[-1, 0],
+					[1, 0],
+					[0, -1],
+					[0, 1]
+				].find(([dx, dy]) => cell(this.world, x + dx, y + dy) === "path");
+				if (!neighbor) continue;
+				const px = (x + 0.5 + neighbor[0] * 0.3) * TILE_SIZE,
+					py = (y + 0.5 + neighbor[1] * 0.3) * TILE_SIZE;
+				if (!sceneryFits(this.world, px, py + 2, 7, 5, ["grass", "path"], 0)) continue;
+				for (let i = 0; i < 3; i++) {
+					const sx = Math.round(px + (hash(x, i, 241) - 0.5) * 7),
+						sy = Math.round(py + (hash(y, i, 251) - 0.5) * 4),
+						w = 1 + hash(x, i, 257) * 1.5;
+					detail
+						.rect(sx, sy, w, 1.5)
+						.fill({ color: 0x304332, alpha: 0.5 })
+						.rect(sx, sy - 0.5, w, 1)
+						.fill({ color: i % 2 ? 0x91927a : 0xb0a688, alpha: 0.7 });
+				}
+			}
+		// A little fallen foliage at tree roots links the atlas sprites to the ground.
+		for (const tree of this.world.objects) {
+			if (tree.kind !== "tree") continue;
+			for (let i = 0; i < 7; i++) {
+				const x = (tree.x + 1) * TILE_SIZE + (hash(tree.id, i, 263) - 0.5) * 44,
+					y = (tree.y + 2) * TILE_SIZE + (hash(tree.id, i, 269) - 0.4) * 15;
+				if (!sceneryFits(this.world, x, y, 3, 2, "grass", 0)) continue;
+				detail
+					.rect(Math.round(x), Math.round(y), 2, 0.5)
+					.rect(Math.round(x) + 0.5, Math.round(y) - 0.5, 1, 0.5)
+					.fill({ color: [0x89924a, 0xa69a57, 0x67783b][i % 3], alpha: 0.7 });
+			}
 		}
 	}
 	private target() {
@@ -416,9 +616,25 @@ export class Game {
 		if (this.paused) return;
 		const { x, y } = this.target();
 		this.message = act(this.world, this.tool, x, y);
+		this.recordFeedback(x, y);
 		this.rebuild();
 		this.save();
 		this.publish();
+	}
+	private recordFeedback(x: number, y: number) {
+		if (
+			!["watered", "harvested", "planted", "changed", "placed", "removed"].includes(
+				this.message
+			)
+		)
+			return;
+		this.feedback.push({
+			x: (x + 0.5) * TILE_SIZE,
+			y: (y + 0.8) * TILE_SIZE,
+			started: this.clock,
+			kind: this.message
+		});
+		if (this.feedback.length > 12) this.feedback.shift();
 	}
 	private save = () => {
 		if (this.disposed) return;
@@ -488,6 +704,7 @@ export class Game {
 		this.pointermove(e);
 		if (!this.paused && this.hover) {
 			this.message = act(this.world, this.tool, this.hover.x, this.hover.y);
+			this.recordFeedback(this.hover.x, this.hover.y);
 			this.rebuild();
 			this.save();
 			this.publish();
@@ -655,10 +872,42 @@ export class Game {
 							alpha: 0.28 - i * 0.024
 						});
 			}
-		for (let i = 0; i < 10; i++) {
-			const x = 170 + i * 39 + Math.sin(t * 0.3 + i) * 12,
-				y = 120 + ((i * 57) % 270) + Math.cos(t * 0.5 + i) * 8;
-			g.rect(x, y, 1, 1).fill({ color: 0xffe4a2, alpha: (Math.sin(t + i) + 1) * 0.35 });
+		for (const butterfly of this.butterflies) {
+			const phase = butterfly.phase,
+				x = Math.round(butterfly.x + Math.sin(t * 0.65 + phase) * 8),
+				y = Math.round(butterfly.y - 7 + Math.cos(t * 0.9 + phase) * 4),
+				wing = 0.5 + Math.abs(Math.sin(t * 9 + phase)) * 2;
+			g.ellipse(x, butterfly.y + 3, 2, 0.7).fill({ color: 0x193a2e, alpha: 0.17 });
+			g.rect(x - wing - 0.5, y - 1.5, wing, 3)
+				.rect(x + 0.5, y - 1.5, wing, 3)
+				.fill({ color: 0x514c36, alpha: 0.8 });
+			g.rect(x - wing, y - 1.5, wing - 0.3, 2)
+				.rect(x + 0.8, y - 1.5, wing - 0.3, 2)
+				.fill({ color: butterfly.color, alpha: 0.95 });
+			g.rect(x - 0.25, y - 1.5, 0.5, 3).fill({ color: 0x4b4a35 });
+		}
+		this.feedback = this.feedback.filter((burst) => t - burst.started < 0.8);
+		for (const burst of this.feedback) {
+			const age = (t - burst.started) / 0.8,
+				water = burst.kind === "watered",
+				harvest = burst.kind === "harvested",
+				plant = burst.kind === "planted",
+				color = water ? 0x9de1e3 : harvest ? 0xf4d58c : plant ? 0xaccd76 : 0xc2a377;
+			for (let i = 0; i < 8; i++) {
+				const spread = (hash(i, 17, 283) - 0.5) * 20,
+					x = burst.x + spread * age,
+					y = burst.y - Math.sin(age * Math.PI) * (5 + hash(i, 29, 293) * 10) + age * 3;
+				g.rect(Math.round(x), Math.round(y), water ? 0.7 : 1.2, water ? 1.8 : 0.8).fill({
+					color,
+					alpha: (1 - age) * 0.85
+				});
+			}
+			if (water)
+				g.ellipse(burst.x, burst.y + 1, 3 + age * 7, 1 + age * 2).stroke({
+					color,
+					width: 0.5,
+					alpha: (1 - age) * 0.5
+				});
 		}
 		for (const cottage of this.world.objects) {
 			if (cottage.kind !== "cottage") continue;

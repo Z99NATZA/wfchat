@@ -1,4 +1,4 @@
-import { cell, index, objectsAt, TILE_SIZE, type Terrain, type World } from "./world";
+import { cell, DEFINITIONS, index, objectsAt, TILE_SIZE, type Terrain, type World } from "./world";
 import { GARDEN_PROPS } from "./gardenProps";
 
 // Bottom-centered artwork bounds, including a small walking/planting clearance.
@@ -48,3 +48,45 @@ export const GARDEN_ACCENTS = (
 	...prop,
 	...(prop.name === "cart" ? { width: 43, height: 35 } : GARDEN_PROPS[prop.name])
 }));
+
+// Only the outside water-facing sides receive ropes. A boat leaves a mooring gap;
+// land-facing entrances and the middle of a joined pier stay open.
+export function pierEdges(world: World) {
+	const rows = new Map<number, Set<number>>();
+	for (const dock of world.objects) {
+		if (dock.kind !== "dock") continue;
+		const { w, h } = DEFINITIONS.dock;
+		for (const side of [-1, 1]) {
+			const outsideX = side < 0 ? dock.x - 1 : dock.x + w,
+				edgeX = (side < 0 ? dock.x : dock.x + w) * TILE_SIZE - side * 2;
+			for (let y = dock.y; y < dock.y + h; y++) {
+				if (cell(world, outsideX, y) !== "water" || objectsAt(world, outsideX, y).length)
+					continue;
+				if (!rows.has(edgeX)) rows.set(edgeX, new Set());
+				rows.get(edgeX)!.add(y);
+			}
+		}
+	}
+	const edges: { x: number; from: number; to: number }[] = [];
+	for (const [x, occupied] of rows) {
+		const sorted = [...occupied].sort((a, b) => a - b);
+		let first = sorted[0],
+			previous = first;
+		for (let i = 1; i <= sorted.length; i++) {
+			const next = sorted[i];
+			if (next !== previous + 1) {
+				edges.push({ x, from: first * TILE_SIZE + 3, to: (previous + 1) * TILE_SIZE - 3 });
+				first = next;
+			}
+			previous = next;
+		}
+	}
+	return edges;
+}
+
+export const BUTTERFLY_MEADOWS = [
+	{ x: 11, y: 12.3, color: 0xffd280 },
+	{ x: 26.95, y: 11.4, color: 0xf2dfb5 },
+	{ x: 25.7, y: 22.5, color: 0x9ec8dd },
+	{ x: 7.5, y: 16.4, color: 0xffd280 }
+] as const;

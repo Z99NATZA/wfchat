@@ -1,6 +1,7 @@
 import { Texture } from "pixi.js";
 import { ART_DENSITY } from "./landscape";
 import { GARDEN_PROPS } from "./gardenProps";
+import { DETAILS, type Detail } from "./details";
 import type { ObjectKind } from "./world";
 import type { CharacterPose } from "./character";
 import { CHARACTER_SHEETS, CHARACTER_ROWS } from "./character";
@@ -169,20 +170,15 @@ export class Art {
 
 	object(kind: ObjectKind, variant = 0) {
 		if (kind === "tree") return this.scenery(variant % 3 === 0 ? "pine" : "oak");
-		if (kind === "sign")
-			return this.make("sign", 22, 28, (c) => {
-				c.scale(ART_DENSITY, ART_DENSITY);
-				c.fillStyle = "#533d2d";
-				c.fillRect(10, 7, 3, 21);
-				c.fillStyle = "#a97b43";
-				c.fillRect(1, 3, 20, 10);
-				c.fillStyle = "#d0a765";
-				c.fillRect(2, 3, 18, 1);
-				c.fillStyle = "#614529";
-				c.fillRect(4, 7, 11, 1);
-				c.fillRect(7, 9, 10, 1);
-			});
+		if (kind === "sign") return this.detail("waymarker");
 		return this.scenery(kind);
+	}
+	detail(name: Detail) {
+		const { width, height, paint } = DETAILS[name];
+		return this.make(`detail:${name}`, width, height, (c) => {
+			c.scale(ART_DENSITY, ART_DENSITY);
+			paint(c);
+		});
 	}
 	crop(kind: "turnip" | "berry", stage: number) {
 		if (!this.crops) throw new Error("Crops not loaded");

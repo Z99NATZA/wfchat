@@ -1,8 +1,49 @@
 import { describe, expect, it } from "vitest";
-import { GARDEN_ACCENTS, sceneryFits } from "./environment";
+import { GARDEN_ACCENTS, pierEdges, sceneryFits } from "./environment";
 import { blocked, createWorld, index, serialize, TILE_SIZE, WIDTH, HEIGHT } from "./world";
 
 describe("nonblocking environmental scenery", () => {
+	it("joins pier modules without ropes across the deck or land-facing entrances", () => {
+		const world = createWorld();
+		world.terrain.fill("water");
+		world.objects = [
+			{ id: 1, kind: "dock", x: 10, y: 10 },
+			{ id: 2, kind: "dock", x: 12, y: 10 },
+			{ id: 3, kind: "dock", x: 10, y: 11 },
+			{ id: 4, kind: "dock", x: 12, y: 11 }
+		];
+		const before = serialize(world);
+		expect(pierEdges(world)).toEqual([
+			{ x: 162, from: 163, to: 189 },
+			{ x: 222, from: 163, to: 189 }
+		]);
+		expect(serialize(world)).toBe(before);
+		world.terrain[index(9, 10)] = "grass";
+		world.terrain[index(9, 11)] = "grass";
+		expect(pierEdges(world)).toEqual([{ x: 222, from: 163, to: 189 }]);
+	});
+	it("opens mooring gaps and follows edited pier edges regardless of object order", () => {
+		const world = createWorld();
+		world.terrain.fill("water");
+		world.objects = [0, 1, 2, 3, 4].map((i) => ({
+			id: i + 1,
+			kind: "dock",
+			x: 10,
+			y: 10 + i
+		}));
+		world.objects.push({ id: 6, kind: "boat", x: 12, y: 11 });
+		const edges = pierEdges(world);
+		expect(edges.filter((edge) => edge.x === 190)).toEqual([
+			{ x: 190, from: 163, to: 173 },
+			{ x: 190, from: 211, to: 237 }
+		]);
+		world.objects.reverse();
+		expect(pierEdges(world).sort((a, b) => a.x - b.x || a.from - b.from)).toEqual(
+			edges.sort((a, b) => a.x - b.x || a.from - b.from)
+		);
+		world.objects = [];
+		expect(pierEdges(world)).toEqual([]);
+	});
 	it("keeps all authored accents off paths, planting soil and gameplay objects", () => {
 		const world = createWorld(),
 			before = serialize(world);

@@ -1,4 +1,5 @@
 import { applyPathComposition } from "./composition";
+import { applySouthShore, applyTreeBanks } from "./shoreline";
 export const TILE_SIZE = 16;
 export const WIDTH = 48;
 export const HEIGHT = 36;
@@ -46,6 +47,8 @@ export interface Crop {
 export interface World {
 	version: 1;
 	pathComposition?: 1;
+	southShoreComposition?: 1;
+	treeBankComposition?: 1;
 	terrain: Terrain[];
 	objects: WorldObject[];
 	crops: Record<string, Crop>;
@@ -118,7 +121,7 @@ export function waterMask(world: World, x: number, y: number) {
 		(+(w && n && water(-1, -1)) << 7)
 	);
 }
-export function createWorld(): World {
+function seedWorld(): World {
 	const world: World = {
 		version: 1,
 		terrain: [],
@@ -200,6 +203,12 @@ export function createWorld(): World {
 			}
 		}
 	applyPathComposition(world, WIDTH, HEIGHT);
+	return world;
+}
+export function createWorld(): World {
+	const world = seedWorld();
+	applySouthShore(world, world);
+	applyTreeBanks(world, world);
 	return world;
 }
 export type Tool =
@@ -325,6 +334,8 @@ export function deserialize(raw: string): World | null {
 			!w ||
 			w.version !== 1 ||
 			(w.pathComposition !== undefined && w.pathComposition !== 1) ||
+			(w.southShoreComposition !== undefined && w.southShoreComposition !== 1) ||
+			(w.treeBankComposition !== undefined && w.treeBankComposition !== 1) ||
 			!Array.isArray(w.terrain) ||
 			w.terrain.length !== WIDTH * HEIGHT ||
 			!w.terrain.every((t) => ["grass", "path", "water", "soil"].includes(t)) ||
@@ -373,6 +384,9 @@ export function deserialize(raw: string): World | null {
 		)
 			return null;
 		applyPathComposition(w, WIDTH, HEIGHT);
+		const seed = seedWorld();
+		applySouthShore(w, seed);
+		applyTreeBanks(w, seed);
 		return w;
 	} catch {
 		return null;

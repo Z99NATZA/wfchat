@@ -18,12 +18,17 @@ framed assets. The original PNG alpha is preserved; the runtime isolates each
 frame's main alpha region to exclude neighboring fragments. The asset manifest
 normalizes frames onto a common two-texel/world-pixel grid, with nearest filtering
 and a shared render scale. Object sprites extend beyond their logical footprints.
-The small sign and light/particle effects remain code-drawn.
+`details.ts` draws the small two-way fish/sprout sign, pier posts and decorative
+fishing tackle on the same pixel grid; light and particle effects are code-drawn.
 `garden-props-v1.png` supplies the bench, mailbox, flower pot, produce crate,
 watering can, basket and woodland mushrooms. `environment.ts` owns their authored
 positions and checks complete artwork bounds against terrain, crops and objects.
 Decorative props disappear when player edits occupy that space; they add no
 collision, interactions or saved state. The produce cart sits beside the shed.
+Pier posts and sagging ropes follow contiguous water-facing dock edges, leaving
+land entrances, joined modules and boat moorings open. Fishing tackle appears
+only where its complete image clears other objects. These accents use existing
+world data and add no fishing mechanic or save migration.
 
 `character.ts` separates transient player velocity from animation playback. Aiko
 uses four idle poses and eight complete walking/running poses per direction.
@@ -61,6 +66,21 @@ Older saves receive this path composition once, only in cells matching the origi
 seeded grass/path layout. Divergent terrain and crops are retained; the
 `pathComposition` marker prevents later player edits from being reapplied.
 
+`shoreline.ts` shapes the southwest bank into a shallow cove and uneven grassy
+headlands, with clustered rocks, smaller bank-rooted reeds, submerged stones
+and a small lily pocket. The one-time `southShoreComposition` upgrade changes
+only untouched seeded cells in columns 3–21, rows 31–32, and moves or removes
+only matching original rock identities. Edited terrain, crops, placed objects,
+removed rocks and ground beneath the player's feet are retained. Later edits
+are not reapplied. Corner trees, the farm lane and the dock stay in place.
+
+The separate one-time `treeBankComposition` upgrade extends connected grass
+headlands beneath the two southern corner trees, with room beyond their visible
+roots. Matching original edge rocks follow the expanded bank. It retains the
+dock surface, skips occupied/edited banks and absent trees, preserves removed
+rocks, and never moves a blocking rock onto the player. Dry mossy accents line
+the bank; procedural offshore reeds are excluded from this authored area.
+
 A symmetric
 eight-direction distance field supplies variable-depth turquoise shelves and
 blue/teal basins. Warped cellular light fragments replace repeating wave stripes;
@@ -73,14 +93,19 @@ This cached surface is not an illustration or reference-image background.
 Environment sprites, underwater rocks, reeds and lilies overlap the visual shore.
 Four cached shore-rock compositions reuse the original rock texture, alternating
 low mossy stones and larger groups. Every blocking rock remains visible at its
-existing cell. Underwater stones and reeds occur in sparse patches; lily pads
-occupy four authored pockets, leaving the central lake open. Dock/rock ripples,
+logical cell. Underwater stones and reeds occur in sparse patches; lily pads
+occupy authored pockets, leaving the central lake open. Dock/rock ripples,
 short wavelets, sparse fish and broken lantern reflections animate independently.
 Trees use existing oak/fir art with authored foreground openings, species groups,
 and smaller young trees in selected pockets. Bounded trunk offsets and staggered
 canopy heights expose background trees without moving or removing blocking
 footprints. Tree appearance is deterministic across reloads. Decorative clusters stay near forest and lake margins. Contact
 shadows, window light pools, lamp halos and reflections add depth without blur.
+Broken canopy shadows, fallen leaves and sparse path-shoulder pebbles connect the
+sprites to the ground. Butterfly flight envelopes occupy clear authored meadows
+and disappear when edits occupy that space. Successful watering, planting,
+harvesting and building actions produce short, bounded pixel bursts; failed
+actions produce none. Butterflies and action effects use the paused game clock.
 Waterfall highlights, surface glints, fish, foam and ripples animate separately.
 Lily pads bob within a reserved water envelope. Fading pixel smoke rises from
 the measured cottage chimney; both animations use the existing paused game clock.
