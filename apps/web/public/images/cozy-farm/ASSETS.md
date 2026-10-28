@@ -2,6 +2,17 @@
 
 Environment and crop PNGs are original transparent atlases generated with the built-in image_gen tool for this project. Source alpha is preserved; runtime textures use two texels per world pixel with nearest filtering.
 
+## Garden props
+
+`garden-props-v1.png` is an original transparent atlas generated with the built-in
+image_gen tool, using `environment-v1.png` as a style reference. The
+[generation prompt](garden-props-v1-prompt.txt) specifies a three-column layout:
+bench, mailbox and flower pot on the first row; produce crate, watering can and
+basket on the second; mushrooms in the first cell of the third row. Remaining
+cells are empty. `gardenProps.ts` owns measured source frames and world sizes;
+`art.ts` normalizes the sprites to the shared sampling density.
+No external asset host is required.
+
 ## Aiko character
 
 The active character uses the original Aiko v2 PNGs and registration code moved from the removed garden adventure. Image files were moved byte-for-byte; no new images were generated for this transfer. `playerSprites.ts` measures each pose, applies shared scale and bounded width correction per facing, removes isolated specks, and registers the head and foot baseline into 96-pixel cells. Idle preserves planted feet; leftward locomotion mirrors the right profile. `art.ts` scales these canvases to Cozy's 30-world-pixel character height.

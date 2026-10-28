@@ -2,8 +2,9 @@
 // This supports nginx CSP without allowing dynamic code evaluation.
 import "pixi.js/unsafe-eval";
 import { Application, Container, Graphics, Sprite } from "pixi.js";
-import { Art } from "./art";
+import { Art, COTTAGE_CHIMNEY } from "./art";
 import { forestStyle } from "./composition";
+import { GARDEN_ACCENTS, sceneryFits } from "./environment";
 import { CharacterAnimation, facingFor, PlayerMotion } from "./character";
 import { CharacterSprite } from "./CharacterSprite";
 import { ART_DENSITY, hash, Landscape } from "./landscape";
@@ -24,6 +25,7 @@ import {
 	validTarget,
 	WIDTH,
 	type Tool,
+	type Terrain,
 	type World
 } from "./world";
 export interface Snapshot {
@@ -49,6 +51,7 @@ export class Game {
 	private actors = new Container();
 	private landscape = new Landscape();
 	private scenery = new Container();
+	private floatingScenery: { sprite: Sprite; y: number; phase: number }[] = [];
 	private shadows = new Graphics();
 	private effects = new Graphics();
 	private overlay = new Graphics();
@@ -156,6 +159,7 @@ export class Game {
 		this.actors.removeChild(this.player);
 		for (const child of this.actors.removeChildren()) child.destroy();
 		for (const child of this.scenery.removeChildren()) child.destroy();
+		this.floatingScenery = [];
 		this.shadows.clear();
 		this.decorate();
 		for (const object of this.world.objects) {
@@ -241,6 +245,25 @@ export class Game {
 		(depth ? this.actors : this.scenery).addChild(sprite);
 		return sprite;
 	}
+	private accent(
+		name: string,
+		x: number,
+		y: number,
+		terrain: Terrain | readonly Terrain[] = "grass",
+		depth = true,
+		clearance = 2
+	) {
+		const texture = this.art.scenery(name),
+			width = texture.width / ART_DENSITY,
+			height = texture.height / ART_DENSITY;
+		if (!sceneryFits(this.world, x, y, width, height, terrain, clearance)) return;
+		const sprite = this.decoration(name, x, y, depth);
+		if (terrain === "grass")
+			this.shadows
+				.ellipse(x, y - 1, width * 0.38, Math.min(3, width * 0.1))
+				.fill({ color: 0x17352b, alpha: 0.22 });
+		return sprite;
+	}
 	private decorate() {
 		// Clusters around the forest margin and lake, keeping the walking/farming area clear.
 		for (let y = 2; y < HEIGHT - 1; y += 2)
@@ -277,35 +300,52 @@ export class Game {
 		// Authored pockets leave the central lake open. Saved terrain/placed objects
 		// are checked so decoration never forces a change to the world model.
 		for (const [cx, cy, count] of [
-			[32, 18.2, 3],
-			[28.4, 33, 4],
+			[33, 19.3, 3],
+			[29.6, 33.4, 4],
 			[44.5, 27.5, 3],
-			[40, 15.7, 2]
+			[40, 16.2, 2]
 		]) {
 			for (let i = 0; i < count; i++) {
 				const x = cx + (hash(i, cx, 9) - 0.5) * 2.2,
 					y = cy + (hash(i, cy, 54) - 0.5) * 1.4;
-				if (
-					cell(this.world, Math.floor(x), Math.floor(y)) === "water" &&
-					!objectsAt(this.world, Math.floor(x), Math.floor(y)).length
-				) {
-					this.decoration("lilies", x * TILE_SIZE, y * TILE_SIZE, false);
-				}
+				// Reserve the full image and its gentle bob, including player-built docks.
+				const sprite = this.accent(
+					"lilies",
+					x * TILE_SIZE,
+					y * TILE_SIZE,
+					"water",
+					false,
+					1
+				);
+				if (sprite)
+					this.floatingScenery.push({
+						sprite,
+						y: sprite.y,
+						phase: hash(i, cx, 82) * Math.PI * 2
+					});
 			}
 		}
 
 		this.decoration("waterfall", 44 * TILE_SIZE, 15 * TILE_SIZE);
-		this.decoration("cart", 4 * TILE_SIZE, 29.3 * TILE_SIZE);
+		for (const prop of GARDEN_ACCENTS)
+			this.accent(prop.name, prop.x * TILE_SIZE, prop.y * TILE_SIZE);
+		// Small woodland accents stay inside clear grass, away from the garden lanes.
+		for (let y = 5; y < HEIGHT - 2; y += 3)
+			for (const x of [3, 30, 34, 38])
+				if (hash(x, y, 51) > 0.6)
+					this.accent("mushrooms", (x + 0.4) * TILE_SIZE, (y + 0.8) * TILE_SIZE);
 		// Worn stepping stones connect the door to the main path without adding blockers.
 		for (let i = 0; i < 6; i++) {
+			const x = (16.7 + Math.sin(i * 2) * 0.35) * TILE_SIZE,
+				y = (11.2 + i * 0.47) * TILE_SIZE;
+			if (!sceneryFits(this.world, x, y + 2, 10, 5, ["grass", "path"], 0)) continue;
 			this.shadows
-				.ellipse(
-					(16.7 + Math.sin(i * 2) * 0.35) * TILE_SIZE,
-					(11.2 + i * 0.47) * TILE_SIZE,
-					5,
-					2
-				)
-				.fill({ color: 0xb7b49a, alpha: 0.65 });
+				.ellipse(x, y + 1, 5, 2)
+				.fill({ color: 0x364b37, alpha: 0.4 })
+				.ellipse(x, y, 5, 2)
+				.fill({ color: i % 2 ? 0x999d80 : 0xb7b49a, alpha: 0.8 })
+				.rect(x - 3, y - 1, 4, 0.5)
+				.fill({ color: 0xd1c9a7, alpha: 0.55 });
 		}
 	}
 	private target() {
@@ -524,6 +564,8 @@ export class Game {
 		const g = this.effects;
 		g.clear();
 		const t = this.clock;
+		for (const floating of this.floatingScenery)
+			floating.sprite.y = floating.y + Math.sin(t * 0.7 + floating.phase) * 0.6;
 		for (const building of this.world.objects)
 			if (building.kind === "cottage" || building.kind === "shed") {
 				const def = DEFINITIONS[building.kind],
@@ -618,12 +660,23 @@ export class Game {
 				y = 120 + ((i * 57) % 270) + Math.cos(t * 0.5 + i) * 8;
 			g.rect(x, y, 1, 1).fill({ color: 0xffe4a2, alpha: (Math.sin(t + i) + 1) * 0.35 });
 		}
-		for (let i = 0; i < 4; i++)
-			g.circle(
-				13 * TILE_SIZE + 93 + Math.sin(t + i) * 3,
-				7 * TILE_SIZE - 100 - ((t * 5 + i * 8) % 30),
-				3 + i
-			).fill({ color: 0xd2c9ae, alpha: 0.12 });
+		for (const cottage of this.world.objects) {
+			if (cottage.kind !== "cottage") continue;
+			const def = DEFINITIONS.cottage,
+				chimneyX = (cottage.x + def.w / 2) * TILE_SIZE + COTTAGE_CHIMNEY.x,
+				chimneyY = (cottage.y + def.h) * TILE_SIZE + COTTAGE_CHIMNEY.y;
+			// Staggered pixel wisps grow and fade as they rise from the actual chimney.
+			for (let i = 0; i < 7; i++) {
+				const age = (t * 0.095 + i / 7) % 1,
+					x = Math.round(chimneyX + age * 10 + Math.sin(age * 5 + t * 0.3) * 2),
+					y = Math.round(chimneyY - age * 30),
+					size = 2 + Math.floor(age * 4),
+					alpha = Math.sin(age * Math.PI) * 0.19;
+				g.rect(x - size, y - 1, size * 2, size)
+					.rect(x - size + 1, y - 2, size * 2 - 2, size + 2)
+					.fill({ color: 0xcac6ae, alpha });
+			}
+		}
 	}
 	private drawOverlay() {
 		const g = this.overlay;

@@ -1,5 +1,6 @@
 import { Texture } from "pixi.js";
 import { ART_DENSITY } from "./landscape";
+import { GARDEN_PROPS } from "./gardenProps";
 import type { ObjectKind } from "./world";
 import type { CharacterPose } from "./character";
 import { CHARACTER_SHEETS, CHARACTER_ROWS } from "./character";
@@ -41,6 +42,11 @@ const environment: Record<string, Asset> = {
 	scarecrow: { frame: [681, 949, 200, 282], width: 28 },
 	cart: { frame: [939, 980, 290, 234], width: 43 }
 };
+// Chimney mouth measured in the cottage's source frame, relative to its foot anchor.
+export const COTTAGE_CHIMNEY = {
+	x: ((160 - 8) / 470 - 0.5) * 144,
+	y: ((25 - 12 - 440) / 470) * 144
+};
 function loadImage(src: string) {
 	return new Promise<HTMLImageElement>((resolve, reject) => {
 		const image = document.createElement("img");
@@ -52,12 +58,14 @@ function loadImage(src: string) {
 export class Art {
 	private textures = new Map<string, Texture>();
 	private atlas: HTMLImageElement | null = null;
+	private garden: HTMLImageElement | null = null;
 	private heroine: Partial<PlayerSheets> = {};
 	private crops: HTMLImageElement | null = null;
 	async load() {
 		const [
 			environment,
 			crops,
+			garden,
 			idle,
 			walkFront,
 			walkBack,
@@ -69,6 +77,7 @@ export class Art {
 			[
 				"environment-v1.png",
 				"crops-v1.png",
+				"garden-props-v1.png",
 				CHARACTER_SHEETS.idle,
 				...Object.values(CHARACTER_SHEETS.walk),
 				...Object.values(CHARACTER_SHEETS.run)
@@ -76,6 +85,7 @@ export class Art {
 		);
 		this.atlas = environment;
 		this.crops = crops;
+		this.garden = garden;
 		this.heroine = {
 			idle: prepareIdle(idle),
 			walk: prepareWalk({ front: walkFront, back: walkBack, side: walkSide }),
@@ -103,8 +113,12 @@ export class Art {
 		return texture;
 	}
 	scenery(name: string) {
-		const asset = environment[name];
-		if (!asset || !this.atlas) throw new Error(`Missing scenery: ${name}`);
+		const garden = Object.hasOwn(GARDEN_PROPS, name),
+			asset: Asset = garden
+				? GARDEN_PROPS[name as keyof typeof GARDEN_PROPS]
+				: environment[name],
+			atlas = garden ? this.garden : this.atlas;
+		if (!asset || !atlas) throw new Error(`Missing scenery: ${name}`);
 		const [x, y, w, h] = asset.frame,
 			height = asset.height ?? (asset.width * h) / w;
 		return this.make(name, asset.width, height, (c) => {
@@ -112,7 +126,7 @@ export class Art {
 			isolated.width = w;
 			isolated.height = h;
 			const source = isolated.getContext("2d")!;
-			source.drawImage(this.atlas!, x, y, w, h, 0, 0, w, h);
+			source.drawImage(atlas, x, y, w, h, 0, 0, w, h);
 			// Atlas rectangles can contain the tips of adjacent disconnected sprites.
 			// Keep the main alpha island before sampling to native resolution.
 			if (name !== "dock") {
@@ -214,6 +228,7 @@ export class Art {
 		for (const texture of this.textures.values()) texture.destroy(true);
 		this.textures.clear();
 		this.atlas = null;
+		this.garden = null;
 		this.heroine = {};
 		this.crops = null;
 	}

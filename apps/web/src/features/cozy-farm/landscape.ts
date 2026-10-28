@@ -184,15 +184,16 @@ export class Landscape {
 					g = 66 + n * 26 + detail * 10 + patch * 12;
 					b = 37 + n * 13 + detail * 5;
 					if (tilled) {
+						const shoulder = (1 - soilMix) * 9;
 						const furrow =
 							Math.floor(wy + Math.sin(wx * 0.13) * 0.3) % 4 === 0
 								? -1
 								: Math.floor(wy) % 4 === 1
 									? 0.7
 									: 0;
-						r = 69 + n * 22 + furrow * 7;
-						g = 46 + n * 13 + furrow * 4;
-						b = 31 + n * 8;
+						r = 69 + n * 22 + furrow * 7 - shoulder;
+						g = 46 + n * 13 + furrow * 4 - shoulder * 0.7;
+						b = 31 + n * 8 - shoulder * 0.4;
 					} else if (dirt) {
 						const worn = Math.min(1, path * 1.2),
 							pebble = fine > 0.994 ? 16 : 0;
@@ -220,15 +221,21 @@ export class Landscape {
 				image.data[p + 3] = 255;
 			}
 		context.putImageData(image, 0, 0);
-		// Fine grass blades occur in patches; the center paths stay quiet and readable.
-		for (let y = 2; y < height - 2; y += 2)
-			for (let x = 2; x < width - 2; x += 2) {
+		// Small rooted fans replace isolated bright strokes. Jittered placement and
+		// patch-sized pigment changes keep the meadow organic at gameplay scale.
+		for (let gy = 4; gy < height - 4; gy += 3)
+			for (let gx = 4; gx < width - 4; gx += 3) {
+				const x = gx + Math.floor(hash(gx, gy, 421) * 3),
+					y = gy + Math.floor(hash(gx, gy, 433) * 3);
 				if (
 					!(["grass", "path"] as (Terrain | undefined)[]).includes(
 						cell(world, Math.floor(x / TILE_SIZE), Math.floor(y / TILE_SIZE))
 					) ||
 					visualCoverage(world, x, y, "path") > 0.75 ||
-					water[y * width + x] > 0.2
+					coverage(world, x, y - 2, "soil") > 0.08 ||
+					coverage(world, x, y, "soil") > 0.08 ||
+					water[y * width + x] > 0.2 ||
+					water[(y - 3) * width + x] > 0.2
 				)
 					continue;
 				const r = hash(x, y, 413),
@@ -236,13 +243,25 @@ export class Landscape {
 				const edge = visualCoverage(world, x, y, "path");
 				if (r < 0.985 - patch * 0.07 - (edge > 0.08 ? 0.14 : 0)) continue;
 				const px = x * ART_DENSITY,
-					py = y * ART_DENSITY;
-				context.fillStyle = patch > 0.6 ? "#71864b" : "#4b713e";
-				context.fillRect(px, py, 1, 2 + ((r * 7) % 4));
-				context.fillRect(px - 2, py + 2, 1, 2);
-				if (r > 0.985) {
-					context.fillStyle = "#a6a363";
-					context.fillRect(px + 1, py, 1, 1);
+					py = y * ART_DENSITY,
+					blade = 3 + Math.floor(hash(x, y, 439) * 4);
+				context.fillStyle = "#344e31";
+				context.fillRect(px - 2, py, 5, 1);
+				context.fillStyle = patch > 0.6 ? "#6e8347" : "#52723c";
+				context.fillRect(px, py - blade, 1, blade);
+				context.fillRect(px - 1, py - 2, 1, 2);
+				context.fillRect(px - 2, py - 4, 1, 2);
+				context.fillRect(px + 1, py - 3, 1, 3);
+				context.fillRect(px + 2, py - 4, 1, 2);
+				context.fillStyle = patch > 0.6 ? "#94a05d" : "#7e9150";
+				context.fillRect(px, py - blade, 1, 1);
+				if (r > 0.986 && patch > 0.56 && edge < 0.08) {
+					// Occasional clover rosettes and pale seed heads stay in the meadow.
+					context.fillStyle = "#7c9250";
+					context.fillRect(px - 3, py - 2, 2, 1);
+					context.fillRect(px + 2, py - 2, 2, 1);
+					context.fillStyle = "#b7b17a";
+					context.fillRect(px, py - blade - 1, 1, 1);
 				}
 			}
 		// Sparse worn stones cluster at path junctions and the cottage, not on a lattice.

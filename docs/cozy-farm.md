@@ -19,6 +19,11 @@ frame's main alpha region to exclude neighboring fragments. The asset manifest
 normalizes frames onto a common two-texel/world-pixel grid, with nearest filtering
 and a shared render scale. Object sprites extend beyond their logical footprints.
 The small sign and light/particle effects remain code-drawn.
+`garden-props-v1.png` supplies the bench, mailbox, flower pot, produce crate,
+watering can, basket and woodland mushrooms. `environment.ts` owns their authored
+positions and checks complete artwork bounds against terrain, crops and objects.
+Decorative props disappear when player edits occupy that space; they add no
+collision, interactions or saved state. The produce cart sits beside the shed.
 
 `character.ts` separates transient player velocity from animation playback. Aiko
 uses four idle poses and eight complete walking/running poses per direction.
@@ -77,6 +82,8 @@ canopy heights expose background trees without moving or removing blocking
 footprints. Tree appearance is deterministic across reloads. Decorative clusters stay near forest and lake margins. Contact
 shadows, window light pools, lamp halos and reflections add depth without blur.
 Waterfall highlights, surface glints, fish, foam and ripples animate separately.
+Lily pads bob within a reserved water envelope. Fading pixel smoke rises from
+the measured cottage chimney; both animations use the existing paused game clock.
 Actors still sort by logical feet position, and the camera/placement grid use
 world coordinates. The small map renders in full without chunk streaming.
 

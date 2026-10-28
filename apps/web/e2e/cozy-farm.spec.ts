@@ -46,7 +46,8 @@ test("independent Pixi world supports farming, placement, movement, pause and sa
 		"/images/cozy-farm/aiko-walk-front-v2.png",
 		"/images/cozy-farm/aiko-walk-side-v2.png",
 		"/images/cozy-farm/crops-v1.png",
-		"/images/cozy-farm/environment-v1.png"
+		"/images/cozy-farm/environment-v1.png",
+		"/images/cozy-farm/garden-props-v1.png"
 	]);
 	const canvas = page.locator(".cozy-canvas canvas"),
 		host = page.locator(".cozy-canvas");
@@ -104,24 +105,24 @@ test("independent Pixi world supports farming, placement, movement, pause and sa
 	expect(errors).toEqual([]);
 });
 
-test("missing artwork shows an explicit error instead of a partial placeholder world", async ({
-	page
-}) => {
-	await page.route("**/images/cozy-farm/environment-v1.png", (route) => route.abort());
-	await page.route("**/api/**", (route) =>
-		route.fulfill({
-			status: 200,
-			contentType: "application/json",
-			body: JSON.stringify({ user_id: "guest", session_id: "guest", kind: "guest" })
-		})
-	);
-	await page.addInitScript(() => localStorage.setItem("wfchat.locale", "en"));
-	await page.goto("/cozy-farm");
-	await expect(page.locator('.cozy-loading[role="alert"]')).toContainText(
-		"The game could not start"
-	);
-	await expect(page.locator(".cozy-canvas canvas")).toHaveCount(0);
-});
+for (const asset of ["environment-v1.png", "garden-props-v1.png"]) {
+	test(`missing ${asset} shows an explicit artwork error`, async ({ page }) => {
+		await page.route(`**/images/cozy-farm/${asset}`, (route) => route.abort());
+		await page.route("**/api/**", (route) =>
+			route.fulfill({
+				status: 200,
+				contentType: "application/json",
+				body: JSON.stringify({ user_id: "guest", session_id: "guest", kind: "guest" })
+			})
+		);
+		await page.addInitScript(() => localStorage.setItem("wfchat.locale", "en"));
+		await page.goto("/cozy-farm");
+		await expect(page.locator('.cozy-loading[role="alert"]')).toContainText(
+			"The game could not start"
+		);
+		await expect(page.locator(".cozy-canvas canvas")).toHaveCount(0);
+	});
+}
 
 test("Shift runs faster and releasing movement settles before saving", async ({ page }) => {
 	const world = createWorld();
