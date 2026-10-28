@@ -28,11 +28,11 @@ No external asset host is required.
 
 The active character uses the original Aiko v2 PNGs and registration code moved from the removed garden adventure. Image files were moved byte-for-byte; no new images were generated for this transfer. `playerSprites.ts` measures each pose, applies shared scale and bounded width correction per facing, removes isolated specks, and registers the head and foot baseline into 96-pixel cells. Idle preserves planted feet; leftward locomotion mirrors the right profile. `art.ts` scales these canvases to Cozy's 30-world-pixel character height.
 
-| State | Sources | Runtime frames per direction | Generation prompts |
-| --- | --- | --- | --- |
-| Idle | `aiko-idle-v2.png` | 4 | [Idle](aiko-idle-v2-prompt.txt) |
-| Walk | `aiko-walk-{front,back,side}-v2.png` | 8 | [Front](aiko-walk-front-v2-prompt.txt), [back](aiko-walk-back-v2-prompt.txt), [side](aiko-walk-side-v2-prompt.txt) |
-| Run | `aiko-run-{front,back,side}-v2.png` | 8 | [Front](aiko-run-front-v2-prompt.txt), [back](aiko-run-back-v2-prompt.txt), [side](aiko-run-side-v2-prompt.txt) |
+| State | Sources                              | Runtime frames per direction | Generation prompts                                                                                                 |
+| ----- | ------------------------------------ | ---------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| Idle  | `aiko-idle-v2.png`                   | 4                            | [Idle](aiko-idle-v2-prompt.txt)                                                                                    |
+| Walk  | `aiko-walk-{front,back,side}-v2.png` | 8                            | [Front](aiko-walk-front-v2-prompt.txt), [back](aiko-walk-back-v2-prompt.txt), [side](aiko-walk-side-v2-prompt.txt) |
+| Run   | `aiko-run-{front,back,side}-v2.png`  | 8                            | [Front](aiko-run-front-v2-prompt.txt), [back](aiko-run-back-v2-prompt.txt), [side](aiko-run-side-v2-prompt.txt)    |
 
 The adjacent prompts record the original built-in image_gen requests. All source sheets load before gameplay; loading or empty-frame failures use the game's artwork error state. No external asset host is required.
 
