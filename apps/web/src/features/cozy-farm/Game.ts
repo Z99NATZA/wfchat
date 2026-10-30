@@ -4,6 +4,7 @@ import "pixi.js/unsafe-eval";
 import { Application, Container, Graphics, Sprite } from "pixi.js";
 import { Art, BUILDING_ART, COTTAGE_CHIMNEY } from "./art";
 import { forestStyle } from "./composition";
+import { RICE_FIELD } from "./riceFields";
 import { BUTTERFLY_MEADOWS, GARDEN_ACCENTS, pierEdges, sceneryFits } from "./environment";
 import { boatMoorings, type Mooring } from "./harbor";
 import { onSouthBank, SOUTH_BANK_ACCENTS, southBankRockStyle } from "./shoreline";
@@ -278,16 +279,30 @@ export class Game {
 			const x = +key % WIDTH,
 				y = Math.floor(+key / WIDTH),
 				sprite = new Sprite(
-					this.art.crop(crop.kind, Math.min(3, Math.floor(crop.growth * 3)))
+					this.art.crop(
+						crop.kind,
+						Math.min(3, Math.floor(crop.growth * 3)),
+						(x * 7 + y * 3) % 4
+					)
 				);
 			sprite.scale.set(TILE_SIZE / (16 * ART_DENSITY));
 			sprite.anchor.set(0.5, 1);
 			sprite.position.set((x + 0.5) * TILE_SIZE, (y + 1) * TILE_SIZE);
+			if (crop.kind === "rice") {
+				sprite.x -= 3;
+				sprite.y -= 2.5;
+				sprite.tint = crop.growth >= 1 ? 0xfff6dc : 0xf2edcf;
+			}
 			sprite.zIndex = sprite.y;
 			if (crop.watered)
 				this.shadows
-					.ellipse(sprite.x, sprite.y - 3, 7, 4)
-					.fill({ color: 0x1b2928, alpha: 0.28 });
+					.ellipse(
+						sprite.x,
+						sprite.y - (crop.kind === "rice" ? 2 : 3),
+						crop.kind === "rice" ? 3.5 : 7,
+						crop.kind === "rice" ? 1.3 : 4
+					)
+					.fill({ color: 0x1b2928, alpha: crop.kind === "rice" ? 0.18 : 0.28 });
 			this.actors.addChild(sprite);
 		}
 		this.actors.addChild(this.player);
@@ -349,12 +364,13 @@ export class Game {
 						(x > 32 && y < 13) ||
 						cell(this.world, x + 1, y) === "water" ||
 						cell(this.world, x, y + 1) === "water";
-					if (edge && r > 0.58 && hash(Math.floor(x / 5), Math.floor(y / 4), 22) > 0.3)
-						this.decoration(
-							r > 0.72 ? "shrub" : "flowers",
-							(x + 0.5) * TILE_SIZE + (r - 0.5) * 9,
-							(y + 1) * TILE_SIZE
-						);
+					if (edge && r > 0.58 && hash(Math.floor(x / 5), Math.floor(y / 4), 22) > 0.3) {
+						const name = r > 0.72 ? "shrub" : "flowers",
+							px = (x + 0.5) * TILE_SIZE + (r - 0.5) * 9,
+							py = (y + 1) * TILE_SIZE;
+						if (x >= 28 && x <= 44 && y <= 14) this.accent(name, px, py);
+						else this.decoration(name, px, py);
+					}
 				}
 			}
 		// Authored pockets leave the central lake open. Saved terrain/placed objects
@@ -386,7 +402,8 @@ export class Game {
 			}
 		}
 
-		this.decoration("waterfall", 44 * TILE_SIZE, 15 * TILE_SIZE);
+		// Keep the waterfall's full artwork east of the rectangular paddy.
+		this.decoration("waterfall", 45 * TILE_SIZE, 15 * TILE_SIZE).scale.set(0.9 / ART_DENSITY);
 		for (const prop of GARDEN_ACCENTS)
 			this.accent(prop.name, prop.x * TILE_SIZE, prop.y * TILE_SIZE);
 		for (const [i, meadow] of BUTTERFLY_MEADOWS.entries()) {
@@ -398,7 +415,14 @@ export class Game {
 		// Small woodland accents stay inside clear grass, away from the garden lanes.
 		for (let y = 5; y < HEIGHT - 2; y += 3)
 			for (const x of [3, 30, 34, 38])
-				if (hash(x, y, 51) > 0.6)
+				if (
+					!(
+						y === RICE_FIELD.y - 1 &&
+						x >= RICE_FIELD.x &&
+						x < RICE_FIELD.x + RICE_FIELD.w
+					) &&
+					hash(x, y, 51) > 0.6
+				)
 					this.accent("mushrooms", (x + 0.4) * TILE_SIZE, (y + 0.8) * TILE_SIZE);
 		// Worn stepping stones connect the door to the main path without adding blockers.
 		for (let i = 0; i < 6; i++) {
@@ -942,13 +966,13 @@ export class Game {
 		}
 		// Highlights drift down the waterfall sprite; its stone/water artwork stays independent.
 		for (let i = 0; i < 9; i++) {
-			const x = 44 * TILE_SIZE - 9 + (i % 5) * 3,
-				y = 12 * TILE_SIZE + ((t * 25 + i * 11) % 38);
+			const x = 45 * TILE_SIZE - 8 + (i % 5) * 2.7,
+				y = 15 * TILE_SIZE - 0.9 * (3 * TILE_SIZE - ((t * 25 + i * 11) % 38));
 			g.rect(x, y, 0.7, 3 + (i % 3)).fill({ color: 0xe9ffff, alpha: 0.32 });
 		}
 		for (let i = 0; i < 3; i++)
 			g.ellipse(
-				44 * TILE_SIZE,
+				45 * TILE_SIZE,
 				15 * TILE_SIZE - 7,
 				8 + ((t * 4 + i * 7) % 20),
 				2 + ((t + i) % 3)

@@ -24,6 +24,18 @@ cells are empty. `gardenProps.ts` owns measured source frames and world sizes;
 `art.ts` normalizes the sprites to the shared sampling density.
 No external asset host is required.
 
+## Rice
+
+`rice-growth-v3.png` is an original transparent rice growth atlas generated with
+the built-in image_gen tool from the user's golden rice sprig reference.
+The [generation prompt](rice-growth-v3-prompt.txt)
+specifies seedlings and young rice above, heading rice and fully ripe yellow
+rice below. The mature artwork has sparse, rightward-arching golden sprigs with
+distinct oval grains and slim straw stems. `art.ts` registers measured stem
+anchors, retains complete panicles and caches slightly varied sizes.
+`riceFields.ts` owns the single eastern field; the image adds no baked
+ground or water. Source alpha is preserved.
+
 ## Aiko character
 
 The active character uses the original Aiko v2 PNGs and registration code moved from the removed garden adventure. Image files were moved byte-for-byte; no new images were generated for this transfer. `playerSprites.ts` measures each pose, applies shared scale and bounded width correction per facing, removes isolated specks, and registers the head and foot baseline into 96-pixel cells. Idle preserves planted feet; leftward locomotion mirrors the right profile. `art.ts` scales these canvases to Cozy's 30-world-pixel character height.

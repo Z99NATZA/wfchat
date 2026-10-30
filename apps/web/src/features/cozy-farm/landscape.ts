@@ -1,5 +1,6 @@
 import { Texture } from "pixi.js";
 import { cell, HEIGHT, TILE_SIZE, WIDTH, type Terrain, type World } from "./world";
+import { paddyEdges } from "./riceFields";
 
 export const ART_DENSITY = 2;
 export function hash(x: number, y: number, seed = 71) {
@@ -77,6 +78,41 @@ export interface ShorePoint {
 	y: number;
 	angle: number;
 }
+
+function paintPaddyBanks(c: CanvasRenderingContext2D, world: World) {
+	c.save();
+	c.scale(ART_DENSITY, ART_DENSITY);
+	for (const { x, y, side } of paddyEdges(world)) {
+		c.save();
+		c.translate(x * TILE_SIZE, y * TILE_SIZE);
+		if (side === "south") {
+			c.translate(TILE_SIZE, TILE_SIZE);
+			c.rotate(Math.PI);
+		} else if (side === "west") {
+			c.translate(0, TILE_SIZE);
+			c.rotate(-Math.PI / 2);
+		} else if (side === "east") {
+			c.translate(TILE_SIZE, 0);
+			c.rotate(Math.PI / 2);
+		}
+		// Raised earth and a darker wet face keep the water inside a tended bed.
+		c.fillStyle = "#344b38";
+		c.fillRect(0, 0, TILE_SIZE, 4);
+		c.fillStyle = "#6e5c3f";
+		c.fillRect(0, 0, TILE_SIZE, 3);
+		c.fillStyle = "#a08a59";
+		c.fillRect(0, 0, TILE_SIZE, 1);
+		for (let i = 0; i < 13; i++) {
+			const px = Math.floor(hash(x + i, y, side.length) * 30) / 2,
+				py = 0.5 + Math.floor(hash(y + i, x, 829) * 4) / 2;
+			c.fillStyle = ["#819052", "#baa36e", "#4f5835", "#91784c"][i % 4];
+			c.fillRect(px, py, i % 3 ? 0.5 : 1, 0.5);
+		}
+		c.restore();
+	}
+	c.restore();
+}
+
 export class Landscape {
 	texture: Texture | null = null;
 	shore: ShorePoint[] = [];
@@ -169,7 +205,8 @@ export class Landscape {
 					}
 				} else {
 					const path = visualCoverage(world, wx, wy, "path"),
-						soil = visualCoverage(world, wx, wy, "soil");
+						soil = visualCoverage(world, wx, wy, "soil"),
+						paddy = visualCoverage(world, wx, wy, "paddy");
 					const patch = noise(wx, wy, 67),
 						edge = 0.48 + (noise(wx, wy, 23) - 0.5) * 0.32 + (detail - 0.5) * 0.15;
 					// A narrow stippled ecotone reads as earth between grass tufts, not blur.
@@ -183,7 +220,19 @@ export class Landscape {
 					r = 39 + n * 19 + detail * 6 + patch * 10;
 					g = 66 + n * 26 + detail * 10 + patch * 12;
 					b = 37 + n * 13 + detail * 5;
-					if (tilled) {
+					if (paddy > 0.46 + (detail - 0.5) * 0.08) {
+						// Shallow jade irrigation water, with a dark earthen lip and
+						// broken reflections between the planted rows.
+						const rim = Math.max(0, 1 - (paddy - 0.46) * 5),
+							glint =
+								Math.sin(wy * 1.2 + noise(wx, wy, 19) * 4) > 0.92 && fine > 0.55
+									? 16
+									: 0;
+						const channel = Math.max(0, 1 - Math.abs((wy % TILE_SIZE) - 3.5) / 2.5);
+						r = 66 + n * 13 + glint + channel * 5 - rim * 24;
+						g = 100 + n * 18 + glint + channel * 14 - rim * 35;
+						b = 78 + n * 15 + glint + channel * 17 - rim * 35;
+					} else if (tilled) {
 						const shoulder = (1 - soilMix) * 9;
 						const furrow =
 							Math.floor(wy + Math.sin(wx * 0.13) * 0.3) % 4 === 0
@@ -221,6 +270,7 @@ export class Landscape {
 				image.data[p + 3] = 255;
 			}
 		context.putImageData(image, 0, 0);
+		paintPaddyBanks(context, world);
 		// Small rooted fans replace isolated bright strokes. Jittered placement and
 		// patch-sized pigment changes keep the meadow organic at gameplay scale.
 		for (let gy = 4; gy < height - 4; gy += 3)
@@ -234,6 +284,8 @@ export class Landscape {
 					visualCoverage(world, x, y, "path") > 0.75 ||
 					coverage(world, x, y - 2, "soil") > 0.08 ||
 					coverage(world, x, y, "soil") > 0.08 ||
+					coverage(world, x, y, "paddy") > 0.08 ||
+					coverage(world, x, y - 2, "paddy") > 0.08 ||
 					water[y * width + x] > 0.2 ||
 					water[(y - 3) * width + x] > 0.2
 				)

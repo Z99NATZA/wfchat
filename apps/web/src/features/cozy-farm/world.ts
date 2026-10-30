@@ -1,10 +1,11 @@
 import { applyPathComposition } from "./composition";
 import { applySouthShore, applyTreeBanks } from "./shoreline";
+import { applyRiceFields } from "./riceFields";
 export const TILE_SIZE = 16;
 export const WIDTH = 48;
 export const HEIGHT = 36;
 export const SAVE_KEY = "wfchat.cozy-farm.v1";
-export type Terrain = "grass" | "path" | "water" | "soil";
+export type Terrain = "grass" | "path" | "water" | "soil" | "paddy";
 export type ObjectKind =
 	| "cottage"
 	| "shed"
@@ -39,8 +40,9 @@ export interface WorldObject {
 	x: number;
 	y: number;
 }
+export type CropKind = "turnip" | "berry" | "rice";
 export interface Crop {
-	kind: "turnip" | "berry";
+	kind: CropKind;
 	watered: boolean;
 	growth: number;
 }
@@ -49,6 +51,7 @@ export interface World {
 	pathComposition?: 1;
 	southShoreComposition?: 1;
 	treeBankComposition?: 1;
+	riceComposition?: 1 | 2 | 3 | 4 | 5;
 	terrain: Terrain[];
 	objects: WorldObject[];
 	crops: Record<string, Crop>;
@@ -209,6 +212,7 @@ export function createWorld(): World {
 	const world = seedWorld();
 	applySouthShore(world, world);
 	applyTreeBanks(world, world);
+	applyRiceFields(world, world);
 	return world;
 }
 export type Tool =
@@ -223,7 +227,8 @@ export type Tool =
 	| "remove"
 	| "path"
 	| "grass"
-	| "flowers";
+	| "flowers"
+	| "rice";
 export const TOOLS: Tool[] = [
 	"hand",
 	"hoe",
@@ -236,7 +241,8 @@ export const TOOLS: Tool[] = [
 	"remove",
 	"path",
 	"grass",
-	"flowers"
+	"flowers",
+	"rice"
 ];
 export function validTarget(world: World, tool: Tool, x: number, y: number): boolean {
 	if (
@@ -253,6 +259,8 @@ export function validTarget(world: World, tool: Tool, x: number, y: number): boo
 	if (terrain === "water" || objects.length) return false;
 	if (tool === "turnip" || tool === "berry")
 		return terrain === "soil" && !crop && world.seeds > 0;
+	if (tool === "rice")
+		return (terrain === "soil" || terrain === "paddy") && !crop && world.seeds > 0;
 	if (tool === "water") return !!crop && !crop.watered;
 	if (tool === "hoe" || tool === "path" || tool === "grass") return !crop;
 	const def = DEFINITIONS[tool];
@@ -297,8 +305,8 @@ export function act(world: World, tool: Tool, x: number, y: number): string {
 		);
 		return "removed";
 	}
-	if (tool === "turnip" || tool === "berry") {
-		world.crops[key] = { kind: tool, watered: false, growth: 0 };
+	if (tool === "turnip" || tool === "berry" || tool === "rice") {
+		world.crops[key] = { kind: tool, watered: cell(world, x, y) === "paddy", growth: 0 };
 		world.seeds--;
 		return "planted";
 	}
@@ -322,7 +330,10 @@ export function grow(world: World, dt: number) {
 	world.elapsed += dt;
 	for (const crop of Object.values(world.crops))
 		if (crop.watered)
-			crop.growth = Math.min(1, crop.growth + dt / (crop.kind === "turnip" ? 45 : 70));
+			crop.growth = Math.min(
+				1,
+				crop.growth + dt / (crop.kind === "turnip" ? 45 : crop.kind === "rice" ? 90 : 70)
+			);
 }
 export function serialize(world: World) {
 	return JSON.stringify(world);
@@ -336,9 +347,15 @@ export function deserialize(raw: string): World | null {
 			(w.pathComposition !== undefined && w.pathComposition !== 1) ||
 			(w.southShoreComposition !== undefined && w.southShoreComposition !== 1) ||
 			(w.treeBankComposition !== undefined && w.treeBankComposition !== 1) ||
+			(w.riceComposition !== undefined &&
+				w.riceComposition !== 1 &&
+				w.riceComposition !== 2 &&
+				w.riceComposition !== 3 &&
+				w.riceComposition !== 4 &&
+				w.riceComposition !== 5) ||
 			!Array.isArray(w.terrain) ||
 			w.terrain.length !== WIDTH * HEIGHT ||
-			!w.terrain.every((t) => ["grass", "path", "water", "soil"].includes(t)) ||
+			!w.terrain.every((t) => ["grass", "path", "water", "soil", "paddy"].includes(t)) ||
 			!Array.isArray(w.objects) ||
 			w.objects.length > WIDTH * HEIGHT ||
 			!w.crops ||
@@ -364,9 +381,10 @@ export function deserialize(raw: string): World | null {
 				([key, c]) =>
 					/^\d+$/.test(key) &&
 					+key < WIDTH * HEIGHT &&
-					w.terrain[+key] === "soil" &&
 					c &&
-					["turnip", "berry"].includes(c.kind) &&
+					(w.terrain[+key] === "soil" ||
+						(w.terrain[+key] === "paddy" && c.kind === "rice")) &&
+					["turnip", "berry", "rice"].includes(c.kind) &&
 					typeof c.watered === "boolean" &&
 					Number.isFinite(c.growth) &&
 					c.growth >= 0 &&
@@ -387,6 +405,7 @@ export function deserialize(raw: string): World | null {
 		const seed = seedWorld();
 		applySouthShore(w, seed);
 		applyTreeBanks(w, seed);
+		applyRiceFields(w, seed);
 		return w;
 	} catch {
 		return null;

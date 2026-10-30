@@ -83,6 +83,31 @@ Older saves receive this path composition once, only in cells matching the origi
 seeded grass/path layout. Divergent terrain and crops are retained; the
 `pathComposition` marker prevents later player edits from being reapplied.
 
+`riceFields.ts` opens the eastern forest into one large rectangular rice field
+spanning both former plots and their middle lane. It uses the same tilled soil
+and furrows as the southwestern garden, with no fences, timber edging, water
+surface or raised paddy banks. A walking lane from the sign approach follows
+its western edge. The northern canopy, eastern woodland, lantern and shoreline
+remain around the clearing. A watering can and basket sit beside the field
+under the normal scenery clearance rules.
+`rice-growth-v3.png` supplies four growth stages with sparse golden sprigs,
+individually shaded oval grains and a shared rightward arc. Measured stem
+anchors and deterministic size variations retain visible gaps between planting
+columns. The seeded field starts ripe; replanted rice needs watering and follows
+the normal growth cycle. For original forest saves, the one-time
+`riceComposition` upgrade applies only when the clearing's terrain and original
+objects are untouched; player edits retain the existing clearing and immediate
+footing stays walkable. Earlier rice layouts upgrade to marker `5` by expanding
+into the former upper plot, converting paddy cells and the middle lane to soil,
+and filling all four corners. Existing crops retain their watering and growth
+state, harvested spaces stay empty, and fences inside the field are removed.
+The authored lamp moves east and the northern front trees move
+back when their destinations are clear of blocking objects, crops and the
+player. Removable obstacles inside the rectangle are cleared once. Nearby
+shrubs and flowers require full artwork clearance; the waterfall and its
+highlights sit beyond the eastern edge. Other crops, edited soil,
+objects outside the field and inventory are preserved. The upgrade does not reapply.
+
 `shoreline.ts` shapes the southwest bank into a shallow cove and uneven grassy
 headlands, with clustered rocks, smaller bank-rooted reeds, submerged stones
 and a small lily pocket. The one-time `southShoreComposition` upgrade changes
@@ -142,8 +167,9 @@ from other WFChat games.
 - 1–8 select tools. Click within four cells or press E for the nearby pointed cell
   or cell ahead. G toggles the grid; Escape pauses. Touch devices show movement buttons.
 - Till, plant, water, then use the hand to harvest. Watered turnips take 45 active
-  seconds; berries take 70. Harvest yields one produce and two seeds.
-- The hammer menu adds paths, grass, flowers and removal. Placement validates
+  seconds; berries take 70 and rice takes 90. Rice grows in soil and needs
+  watering after planting. Harvest yields one produce and two seeds.
+- The hammer menu adds rice planting, paths, grass, flowers and removal. Placement validates
   entire footprints, terrain, crops, objects and the player's cell.
 - Trees, fences, lamps and flowers have no material cost. Buildings and docks are
   fixed. The cottage offers flavor text without an interior. There is no fishing

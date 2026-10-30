@@ -3,7 +3,7 @@ import { ART_DENSITY } from "./landscape";
 import { GARDEN_PROPS } from "./gardenProps";
 import { DETAILS, type Detail } from "./details";
 import { BOAT_ART } from "./harbor";
-import type { ObjectKind } from "./world";
+import type { CropKind, ObjectKind } from "./world";
 import type { CharacterPose } from "./character";
 import { CHARACTER_SHEETS, CHARACTER_ROWS } from "./character";
 import {
@@ -22,6 +22,14 @@ interface Asset {
 	width: number;
 	height?: number;
 }
+// Measured alpha bounds; the generated rows have different heights.
+const riceFrames: readonly Frame[] = [
+	[254, 392, 111, 172],
+	[885, 186, 165, 378],
+	[222, 745, 339, 447],
+	[793, 643, 397, 549]
+];
+const riceRoots = [320, 932, 280, 845];
 // Foundation edges, rather than projecting doorstep/foliage tips, sit on the
 // collision rectangle's south edge. Roof overhangs do not enlarge collision.
 export const BUILDING_ART = {
@@ -83,10 +91,12 @@ export class Art {
 	private buildings: HTMLImageElement | null = null;
 	private heroine: Partial<PlayerSheets> = {};
 	private crops: HTMLImageElement | null = null;
+	private rice: HTMLImageElement | null = null;
 	async load() {
 		const [
 			environment,
 			crops,
+			rice,
 			garden,
 			buildings,
 			idle,
@@ -100,6 +110,7 @@ export class Art {
 			[
 				"environment-v1.png",
 				"crops-v1.png",
+				"rice-growth-v3.png",
 				"garden-props-v1.png",
 				"buildings-front-v2.png",
 				CHARACTER_SHEETS.idle,
@@ -109,6 +120,7 @@ export class Art {
 		);
 		this.atlas = environment;
 		this.crops = crops;
+		this.rice = rice;
 		this.garden = garden;
 		this.buildings = buildings;
 		this.heroine = {
@@ -207,7 +219,30 @@ export class Art {
 			paint(c);
 		});
 	}
-	crop(kind: "turnip" | "berry", stage: number) {
+	crop(kind: CropKind, stage: number, variant = 0) {
+		if (kind === "rice") {
+			if (!this.rice) throw new Error("Rice crops not loaded");
+			const image = this.rice,
+				[x, y, w, h] = riceFrames[stage];
+			return this.make(`crop:rice:${stage}:${variant}`, 28, 28, (c) => {
+				// Sparse sprigs share the reference's rightward arc. Register the
+				// stem rather than the off-center panicles, keeping all grains intact.
+				const scale = (22 / 549) * (1 - variant * 0.025),
+					dw = Math.min(13.5, w * scale),
+					dh = h * scale;
+				c.drawImage(
+					image,
+					x,
+					y,
+					w,
+					h,
+					(14 - ((riceRoots[stage] - x) * dw) / w) * ART_DENSITY,
+					(28 - dh) * ART_DENSITY,
+					dw * ART_DENSITY,
+					dh * ART_DENSITY
+				);
+			});
+		}
 		if (!this.crops) throw new Error("Crops not loaded");
 		const image = this.crops,
 			w = image.width / 4,
@@ -255,6 +290,7 @@ export class Art {
 		this.buildings = null;
 		this.heroine = {};
 		this.crops = null;
+		this.rice = null;
 	}
 }
 

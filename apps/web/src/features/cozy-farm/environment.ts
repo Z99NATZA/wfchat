@@ -42,7 +42,9 @@ export const GARDEN_ACCENTS = (
 		{ name: "crate", x: 25.8, y: 10.8 },
 		{ name: "wateringCan", x: 27.5, y: 10.8 },
 		{ name: "basket", x: 6.2, y: 17.5 },
-		{ name: "wateringCan", x: 14, y: 17.5 }
+		{ name: "wateringCan", x: 14, y: 17.5 },
+		{ name: "wateringCan", x: 29.1, y: 10.8 },
+		{ name: "basket", x: 29, y: 7.6 }
 	] as const
 ).map((prop) => ({
 	...prop,
@@ -88,5 +90,6 @@ export const BUTTERFLY_MEADOWS = [
 	{ x: 11, y: 12.3, color: 0xffd280 },
 	{ x: 26.95, y: 11.4, color: 0xf2dfb5 },
 	{ x: 25.7, y: 22.5, color: 0x9ec8dd },
-	{ x: 7.5, y: 16.4, color: 0xffd280 }
+	{ x: 7.5, y: 16.4, color: 0xffd280 },
+	{ x: 31.5, y: 7.6, color: 0xf3d389 }
 ] as const;

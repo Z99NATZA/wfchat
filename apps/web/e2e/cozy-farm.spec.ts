@@ -48,7 +48,8 @@ test("independent Pixi world supports farming, placement, movement, pause and sa
 		"/images/cozy-farm/buildings-front-v2.png",
 		"/images/cozy-farm/crops-v1.png",
 		"/images/cozy-farm/environment-v1.png",
-		"/images/cozy-farm/garden-props-v1.png"
+		"/images/cozy-farm/garden-props-v1.png",
+		"/images/cozy-farm/rice-growth-v3.png"
 	]);
 	const canvas = page.locator(".cozy-canvas canvas"),
 		host = page.locator(".cozy-canvas");
@@ -174,7 +175,12 @@ for (const kind of ["cottage", "shed"] as const) {
 	});
 }
 
-for (const asset of ["environment-v1.png", "garden-props-v1.png", "buildings-front-v2.png"]) {
+for (const asset of [
+	"environment-v1.png",
+	"garden-props-v1.png",
+	"buildings-front-v2.png",
+	"rice-growth-v3.png"
+]) {
 	test(`missing ${asset} shows an explicit artwork error`, async ({ page }) => {
 		await page.route(`**/images/cozy-farm/${asset}`, (route) => route.abort());
 		await page.route("**/api/**", (route) =>
@@ -192,6 +198,70 @@ for (const asset of ["environment-v1.png", "garden-props-v1.png", "buildings-fro
 		await expect(page.locator(".cozy-canvas canvas")).toHaveCount(0);
 	});
 }
+
+test("the large continuous rice field supports harvest, replanting and saved reload", async ({
+	page
+}) => {
+	const world = createWorld();
+	world.player = { x: 32.5 * TILE_SIZE, y: 9.5 * TILE_SIZE, dx: 0, dy: -1 };
+	const errors: string[] = [];
+	page.on("pageerror", (error) => errors.push(error.message));
+	await page.route("**/api/**", (route) =>
+		route.fulfill({
+			status: 200,
+			contentType: "application/json",
+			body: JSON.stringify({ user_id: "guest", session_id: "guest", kind: "guest" })
+		})
+	);
+	await page.addInitScript(
+		({ key, world }) => {
+			localStorage.setItem("wfchat.locale", "en");
+			if (!localStorage.getItem(key)) localStorage.setItem(key, JSON.stringify(world));
+		},
+		{ key: SAVE_KEY, world }
+	);
+	await page.goto("/cozy-farm");
+	const canvas = page.locator(".cozy-canvas canvas");
+	await expect(canvas).toBeVisible();
+	await expect(page.getByText("Opening your garden…")).toBeHidden();
+	await page.screenshot({ path: "test-results/cozy-farm-rice-fields.png" });
+	const box = (await canvas.boundingBox())!,
+		scale = Math.min(box.width / (48 * 16), box.height / (36 * 16)),
+		position = {
+			x: (box.width - 48 * 16 * scale) / 2 + 33.5 * 16 * scale,
+			y: (box.height - 36 * 16 * scale) / 2 + 11.5 * 16 * scale
+		};
+	await canvas.click({ position });
+	await expect(page.getByRole("status")).toContainText("Fresh harvest!");
+	await page.getByRole("button", { name: "Garden tools", exact: true }).click();
+	await page.getByRole("button", { name: "Plant rice", exact: true }).click();
+	await canvas.click({ position });
+	await expect(page.getByRole("status")).toContainText("A new beginning");
+	const saved = () => page.evaluate((key) => JSON.parse(localStorage.getItem(key)!), SAVE_KEY);
+	expect((await saved()).seeds).toBe(25);
+	expect((await saved()).harvest).toBe(1);
+	expect((await saved()).riceComposition).toBe(5);
+	for (let y = 6; y <= 12; y++)
+		for (let x = 31; x <= 40; x++) expect((await saved()).terrain[y * 48 + x]).toBe("soil");
+	expect((await saved()).crops[11 * 48 + 33]).toMatchObject({ kind: "rice", watered: false });
+	await page.getByRole("button", { name: "Water crops", exact: true }).click();
+	await canvas.click({ position });
+	await expect(page.getByRole("status")).toContainText("A cool drink");
+	expect((await saved()).crops[11 * 48 + 33]).toMatchObject({ kind: "rice", watered: true });
+	await page.reload();
+	await expect(canvas).toBeVisible();
+	await expect(page.getByText("Opening your garden…")).toBeHidden();
+	expect((await saved()).seeds).toBe(25);
+	expect((await saved()).crops[11 * 48 + 33]).toMatchObject({ kind: "rice", watered: true });
+	await page.setViewportSize({ width: 390, height: 844 });
+	await page.getByRole("button", { name: "Garden tools", exact: true }).click();
+	const tools = (await page.locator(".cozy-build").boundingBox())!;
+	expect(tools.x).toBeGreaterThanOrEqual(48);
+	expect(tools.x + tools.width).toBeLessThanOrEqual(390);
+	await expect(page.getByRole("button", { name: "Plant rice", exact: true })).toBeVisible();
+	await page.screenshot({ path: "test-results/cozy-farm-rice-mobile.png" });
+	expect(errors).toEqual([]);
+});
 
 test("Shift runs faster and releasing movement settles before saving", async ({ page }) => {
 	const world = createWorld();
